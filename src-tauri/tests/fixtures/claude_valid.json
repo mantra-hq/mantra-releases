@@ -1,0 +1,68 @@
+{
+    "id": "fixture_conv_001",
+    "cwd": "/home/user/my-project",
+    "created_at": "2025-12-30T10:00:00Z",
+    "updated_at": "2025-12-30T10:30:00Z",
+    "model": "claude-3-5-sonnet",
+    "title": "Feature Implementation Session",
+    "messages": [
+        {
+            "role": "user",
+            "content": "Please help me implement a login feature",
+            "timestamp": "2025-12-30T10:00:00Z"
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "The user wants a login feature. I should consider security best practices..."
+                },
+                {
+                    "type": "text",
+                    "text": "I'll help you implement a secure login feature. Let me first read your existing code."
+                },
+                {
+                    "type": "tool_use",
+                    "id": "tool_001",
+                    "name": "read_file",
+                    "input": {
+                        "path": "src/auth.rs"
+                    }
+                }
+            ],
+            "timestamp": "2025-12-30T10:01:00Z"
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tool_001",
+                    "content": "pub fn login() {\n    // TODO\n}",
+                    "is_error": false
+                }
+            ],
+            "timestamp": "2025-12-30T10:01:05Z"
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "I see the auth module. Let me implement the login function."
+                },
+                {
+                    "type": "tool_use",
+                    "id": "tool_002",
+                    "name": "write_file",
+                    "input": {
+                        "path": "src/auth.rs",
+                        "content": "pub fn login(username: &str, password: &str) -> Result<Session, AuthError> {\n    // Implementation\n}"
+                    }
+                }
+            ],
+            "timestamp": "2025-12-30T10:02:00Z"
+        }
+    ]
+}
