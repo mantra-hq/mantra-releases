@@ -6,6 +6,7 @@
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::git::GitError;
 use crate::parsers::ParseError;
 
 /// Application-level error type
@@ -22,6 +23,10 @@ pub enum AppError {
     /// Internal error
     #[error("内部错误: {0}")]
     Internal(String),
+
+    /// Git operation error
+    #[error("Git 错误: {0}")]
+    Git(#[from] GitError),
 }
 
 /// Serializable error response for Tauri IPC
@@ -39,6 +44,7 @@ impl From<AppError> for ErrorResponse {
             AppError::Parse(e) => ("PARSE_ERROR".to_string(), e.to_string()),
             AppError::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             AppError::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
+            AppError::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
         };
         Self { code, message }
     }
@@ -55,6 +61,7 @@ impl Serialize for AppError {
             Self::Parse(e) => ("PARSE_ERROR".to_string(), e.to_string()),
             Self::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             Self::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
+            Self::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
         };
         ErrorResponse { code, message }.serialize(serializer)
     }
