@@ -1,9 +1,11 @@
 /**
  * DualStreamLayout - 双流分栏布局组件
  * Story 2.2: AC #1, #2, #3, #6
+ * Story 2.6: 集成 TimberLine 时间轴控制器
  *
  * 左侧: NarrativePanel (对话流) - 默认 40%
  * 右侧: CodePanel (代码快照) - 默认 60%
+ * 底部: TimberLine (时间轴控制器)
  *
  * Note: Uses react-resizable-panels v4.x API
  */
@@ -20,6 +22,8 @@ import { NarrativePanel, type NarrativePanelRef } from "./NarrativePanel";
 import { CodePanel } from "./CodePanel";
 import { cn } from "@/lib/utils";
 import type { NarrativeMessage } from "@/types/message";
+import type { TimelineEvent } from "@/types/timeline";
+import { TimberLine } from "@/components/timeline";
 
 // 响应式 Tab 组件 (Tablet/Mobile 模式)
 import { MessageSquare, Code2 } from "lucide-react";
@@ -49,6 +53,22 @@ export interface DualStreamLayoutProps {
   forceMode?: LayoutMode;
   /** 自定义 className */
   className?: string;
+
+  // TimberLine 时间轴 Props (Story 2.6)
+  /** 是否显示时间轴 */
+  showTimeline?: boolean;
+  /** 会话开始时间 (Unix ms) */
+  timelineStartTime?: number;
+  /** 会话结束时间 (Unix ms) */
+  timelineEndTime?: number;
+  /** 当前播放位置 (Unix ms) */
+  timelineCurrentTime?: number;
+  /** 时间轴事件列表 */
+  timelineEvents?: TimelineEvent[];
+  /** 时间轴位置变化回调 */
+  onTimelineSeek?: (timestamp: number) => void;
+  /** 时间轴悬停回调 */
+  onTimelineHover?: (timestamp: number | null) => void;
 }
 
 /**
@@ -101,6 +121,14 @@ export const DualStreamLayout = React.forwardRef<
       onLayoutChange,
       forceMode,
       className,
+      // TimberLine props
+      showTimeline = false,
+      timelineStartTime,
+      timelineEndTime,
+      timelineCurrentTime,
+      timelineEvents = [],
+      onTimelineSeek,
+      onTimelineHover,
     },
     ref
   ) => {
@@ -158,48 +186,69 @@ export const DualStreamLayout = React.forwardRef<
     );
     const renderCodeContent = codeContent ?? <CodePanel />;
 
-    // Desktop 模式: 双流分栏
+    // 渲染 TimberLine 时间轴
+    const renderTimeline = showTimeline &&
+      timelineStartTime !== undefined &&
+      timelineEndTime !== undefined &&
+      timelineCurrentTime !== undefined &&
+      onTimelineSeek && (
+        <TimberLine
+          startTime={timelineStartTime}
+          endTime={timelineEndTime}
+          currentTime={timelineCurrentTime}
+          events={timelineEvents}
+          onSeek={onTimelineSeek}
+          onHover={onTimelineHover}
+        />
+      );
+
+    // Desktop 模式: 双流分栏 + 底部时间轴
     if (layoutMode === "desktop") {
       return (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          defaultLayout={toLayoutObject(layout)}
-          onLayoutChange={handleLayoutChange}
-          className={cn("h-full w-full", className)}
-        >
-          {/* 左侧面板: 对话流 */}
-          <ResizablePanel
-            id={NARRATIVE_PANEL_ID}
-            minSize={minSizes[0]}
-            className="narrative-panel bg-background"
+        <div className={cn("h-full w-full flex flex-col", className)}>
+          <ResizablePanelGroup
+            orientation="horizontal"
+            defaultLayout={toLayoutObject(layout)}
+            onLayoutChange={handleLayoutChange}
+            className="flex-1"
           >
-            {renderNarrativeContent}
-          </ResizablePanel>
+            {/* 左侧面板: 对话流 */}
+            <ResizablePanel
+              id={NARRATIVE_PANEL_ID}
+              minSize={minSizes[0]}
+              className="narrative-panel bg-background"
+            >
+              {renderNarrativeContent}
+            </ResizablePanel>
 
-          {/* 拖拽把手 */}
-          <ResizableHandle
-            withHandle
-            className={cn(
-              "w-1 transition-colors duration-150",
-              "bg-transparent hover:bg-muted",
-              "data-[resize-handle-state=drag]:bg-primary",
-              "data-[resize-handle-active]:bg-primary/80"
-            )}
-          />
+            {/* 拖拽把手 */}
+            <ResizableHandle
+              withHandle
+              className={cn(
+                "w-1 transition-colors duration-150",
+                "bg-transparent hover:bg-muted",
+                "data-[resize-handle-state=drag]:bg-primary",
+                "data-[resize-handle-active]:bg-primary/80"
+              )}
+            />
 
-          {/* 右侧面板: 代码快照 */}
-          <ResizablePanel
-            id={CODE_PANEL_ID}
-            minSize={minSizes[1]}
-            className="code-panel bg-card"
-          >
-            {renderCodeContent}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            {/* 右侧面板: 代码快照 */}
+            <ResizablePanel
+              id={CODE_PANEL_ID}
+              minSize={minSizes[1]}
+              className="code-panel bg-card"
+            >
+              {renderCodeContent}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+
+          {/* 底部时间轴 */}
+          {renderTimeline}
+        </div>
       );
     }
 
-    // Tablet 模式: Tab 切换
+    // Tablet 模式: Tab 切换 + 底部时间轴
     if (layoutMode === "tablet") {
       return (
         <div className={cn("h-full w-full flex flex-col", className)}>
@@ -238,11 +287,14 @@ export const DualStreamLayout = React.forwardRef<
               {renderCodeContent}
             </div>
           </div>
+
+          {/* 底部时间轴 */}
+          {renderTimeline}
         </div>
       );
     }
 
-    // Mobile 模式: 单视图 + 底部 Tab Bar
+    // Mobile 模式: 单视图 + 底部 Tab Bar + 时间轴
     return (
       <div className={cn("h-full w-full flex flex-col", className)}>
         {/* 内容区域 */}
@@ -264,6 +316,9 @@ export const DualStreamLayout = React.forwardRef<
             {renderCodeContent}
           </div>
         </div>
+
+        {/* 时间轴 (在 Tab Bar 上方) */}
+        {renderTimeline}
 
         {/* 底部 Tab Bar */}
         <div className="flex border-t border-border bg-background">
@@ -314,17 +369,17 @@ function TabButton({
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         isBottom
           ? cn(
-              "flex-col py-2",
-              active
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )
+            "flex-col py-2",
+            active
+              ? "text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          )
           : cn(
-              "px-4 py-3",
-              active
-                ? "text-primary border-b-2 border-primary -mb-px"
-                : "text-muted-foreground hover:text-foreground"
-            )
+            "px-4 py-3",
+            active
+              ? "text-primary border-b-2 border-primary -mb-px"
+              : "text-muted-foreground hover:text-foreground"
+          )
       )}
       aria-pressed={active}
     >
