@@ -1,13 +1,15 @@
 /**
  * MessageBubble - 消息气泡组件
- * Story 2.3: Task 3
+ * Story 2.3: Task 3, Story 2.4: Task 5
  *
  * 支持 User 和 AI 两种消息样式变体
+ * 使用 ContentBlockRenderer 渲染所有内容块类型
  */
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import type { NarrativeMessage } from "@/types/message";
+import { ContentBlockRenderer } from "./ContentBlockRenderer";
 
 export interface MessageBubbleProps {
   /** 消息数据 */
@@ -22,17 +24,6 @@ export interface MessageBubbleProps {
   index?: number;
   /** 自定义 className */
   className?: string;
-}
-
-/**
- * 提取消息的纯文本内容用于显示
- * 仅渲染 text 类型的内容块
- */
-function getTextContent(message: NarrativeMessage): string {
-  return message.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.content)
-    .join("\n");
 }
 
 /**
@@ -56,7 +47,6 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
     ref
   ) => {
     const isUser = message.role === "user";
-    const textContent = getTextContent(message);
     const timestamp = formatTimestamp(message.timestamp);
 
     // 合并 ref 用于虚拟化测量
@@ -136,8 +126,15 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
             onClick && "hover:opacity-90"
           )}
         >
-          {/* 消息内容 */}
-          <div className="whitespace-pre-wrap break-words">{textContent}</div>
+          {/* 消息内容块 - 使用 ContentBlockRenderer 渲染所有类型 */}
+          <div className="space-y-1">
+            {message.content.map((block, blockIndex) => (
+              <ContentBlockRenderer
+                key={`${message.id}-block-${blockIndex}`}
+                block={block}
+              />
+            ))}
+          </div>
 
           {/* 时间戳 */}
           {timestamp && (

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { MOCK_MESSAGES } from "@/lib/mock-messages";
+import { MOCK_MESSAGES_WITH_ALL_TYPES } from "@/lib/mock-messages";
 import type { NarrativeMessage } from "@/types/message";
 
 function App() {
@@ -50,7 +50,7 @@ function App() {
       <main className="flex-1 min-h-0 overflow-hidden">
         <DualStreamLayout
           ref={layoutRef}
-          messages={MOCK_MESSAGES}
+          messages={MOCK_MESSAGES_WITH_ALL_TYPES}
           selectedMessageId={selectedMessageId}
           onMessageSelect={handleMessageSelect}
         />

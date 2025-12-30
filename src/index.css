@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -56,6 +57,10 @@
   --color-timeline-track: var(--timeline-track);
   --color-user-bubble: var(--user-bubble);
   --color-ai-bubble: var(--ai-bubble);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
 }
 
 /* ============================================
@@ -302,4 +307,58 @@ body,
 .scrollbar-thin.scrollbar-thumb-border.scrollbar-track-transparent {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border)) transparent;
+}
+
+/* ============================================
+   Collapsible Animations
+   Story 2.4: AC#5 - 150ms ease-out
+   ============================================ */
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+.animate-collapsible-down {
+  animation: collapsible-down 150ms ease-out;
+}
+
+.animate-collapsible-up {
+  animation: collapsible-up 150ms ease-out;
+}
+
+/* ============================================
+   Success/Error Colors
+   Story 2.4: ToolOutput states
+   ============================================ */
+
+:root {
+  --success: hsl(142, 76%, 36%);
+  --success-foreground: hsl(0, 0%, 100%);
+  --error: hsl(0, 84%, 60%);
+  --error-foreground: hsl(0, 0%, 100%);
+}
+
+.dark {
+  --success: hsl(142, 76%, 36%);
+  --success-foreground: hsl(0, 0%, 100%);
+  --error: hsl(0, 62%, 50%);
+  --error-foreground: hsl(0, 0%, 100%);
 }
