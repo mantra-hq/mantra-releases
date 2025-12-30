@@ -16,3 +16,5 @@ export {
     useDiffFadeOut,
     type UseDiffFadeOutResult,
 } from "./useDiffFadeOut";
+export { useProjects, type UseProjectsResult } from "./useProjects";
+export { useDebouncedValue } from "./useDebouncedValue";

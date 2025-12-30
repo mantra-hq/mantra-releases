@@ -1,0 +1,129 @@
+/**
+ * Player Page - 会话回放页面
+ * Story 2.8: Task 1
+ *
+ * 封装 DualStreamLayout，用于播放会话内容
+ * 
+ * TODO: 实现真实会话数据加载 (依赖 Story 1-5 的 get_session IPC)
+ */
+
+import * as React from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
+import { MOCK_MESSAGES_WITH_ALL_TYPES } from "@/lib/mock-messages";
+import type { NarrativeMessage } from "@/types/message";
+import { ArrowLeft, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+/**
+ * Player 页面组件
+ * 展示会话回放的 DualStreamLayout
+ */
+export default function Player() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
+
+  // DualStreamLayout ref 用于程序化滚动
+  const layoutRef = React.useRef<DualStreamLayoutRef>(null);
+
+  // 选中的消息 ID
+  const [selectedMessageId, setSelectedMessageId] = React.useState<string | undefined>();
+
+  // 消息选中回调
+  const handleMessageSelect = React.useCallback(
+    (messageId: string, _message: NarrativeMessage) => {
+      setSelectedMessageId(messageId);
+      // DEV: 调试时可取消注释查看选中的消息
+      // if (import.meta.env.DEV) console.log("Selected message:", _message);
+    },
+    []
+  );
+
+  // 返回 Dashboard
+  const handleBack = React.useCallback(() => {
+    navigate("/");
+  }, [navigate]);
+
+  // DEV: 滚动到指定消息的调试函数 (可在 DevTools console 中调用 scrollToMessage('id'))
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as unknown as { scrollToMessage: (id: string) => void }).scrollToMessage = (id: string) => {
+        layoutRef.current?.scrollToMessage(id);
+      };
+    }
+    return () => {
+      if (import.meta.env.DEV) {
+        delete (window as unknown as { scrollToMessage?: unknown }).scrollToMessage;
+      }
+    };
+  }, []);
+
+  // 无效 sessionId 错误处理
+  if (!sessionId) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur">
+          <div className="flex h-14 items-center px-4">
+            <Button variant="ghost" size="icon" onClick={handleBack}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <span className="text-xl font-bold text-foreground ml-2">
+              Mantra <span className="text-primary">心法</span>
+            </span>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">会话未找到</h2>
+            <p className="text-sm text-muted-foreground mb-4">请从项目列表中选择一个会话</p>
+            <Button onClick={handleBack}>返回 Dashboard</Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen flex flex-col bg-background">
+      {/* Header with Theme Toggle */}
+      <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleBack}
+              className="mr-2"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <span className="text-xl font-bold text-foreground">
+              Mantra <span className="text-primary">心法</span>
+            </span>
+            {sessionId && (
+              <span className="text-sm text-muted-foreground ml-4">
+                Session: {sessionId}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content - DualStreamLayout */}
+      <main className="flex-1 min-h-0 overflow-hidden">
+        <DualStreamLayout
+          ref={layoutRef}
+          messages={MOCK_MESSAGES_WITH_ALL_TYPES}
+          selectedMessageId={selectedMessageId}
+          onMessageSelect={handleMessageSelect}
+        />
+      </main>
+    </div>
+  );
+}
+

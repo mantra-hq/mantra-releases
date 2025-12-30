@@ -13,3 +13,8 @@ export type { NarrativePanelProps, NarrativePanelRef } from "./NarrativePanel";
 export { CodePanel } from "./CodePanel";
 export type { CodePanelProps } from "./CodePanel";
 
+export { EmptyDashboard } from "./EmptyDashboard";
+export type { EmptyDashboardProps } from "./EmptyDashboard";
+
+export { DashboardHeader } from "./DashboardHeader";
+export type { DashboardHeaderProps } from "./DashboardHeader";

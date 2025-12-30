@@ -46,3 +46,6 @@ export {
   ResizablePanel,
   ResizableHandle,
 } from "./resizable";
+
+export { Input, type InputProps } from "./input";
+export { Skeleton } from "./skeleton";
