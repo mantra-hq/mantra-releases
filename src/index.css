@@ -345,6 +345,24 @@ body,
 }
 
 /* ============================================
+   Fade In Animation
+   Story 2.5: CodeSnapshotView AC#4
+   ============================================ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 150ms ease-out;
+}
+
+/* ============================================
    Success/Error Colors
    Story 2.4: ToolOutput states
    ============================================ */
