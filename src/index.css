@@ -3,18 +3,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  /* Mantra 深色主题色彩系统 */
-  --color-background: #09090b;
-  --color-surface: #18181b;
-  --color-primary: #3b82f6;
-  --color-accent: #10b981;
-  --color-foreground: #fafafa;
-  --color-muted: #71717a;
-  --color-border: #27272a;
-}
+/* ============================================
+   Mantra Design System - CSS Variables
+   ============================================ */
 
 @theme inline {
+  /* Radius Scale */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -22,6 +16,8 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Color Mappings for Tailwind */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -53,82 +49,213 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Mantra Semantic Colors */
+  --color-diff-add: var(--diff-add);
+  --color-diff-remove: var(--diff-remove);
+  --color-timeline-track: var(--timeline-track);
+  --color-user-bubble: var(--user-bubble);
+  --color-ai-bubble: var(--ai-bubble);
 }
 
+/* ============================================
+   Light Theme (Default)
+   ============================================ */
 :root {
+  /* Base radius */
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Core Colors - Light */
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(240, 10%, 4%);
+  --card: hsl(0, 0%, 98%);
+  --card-foreground: hsl(240, 10%, 4%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(240, 10%, 4%);
+
+  /* Brand Colors */
+  --primary: hsl(217, 91%, 50%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(142, 76%, 36%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+
+  /* UI Colors */
+  --muted: hsl(240, 5%, 96%);
+  --muted-foreground: hsl(240, 4%, 46%);
+  --accent: hsl(240, 5%, 96%);
+  --accent-foreground: hsl(240, 10%, 4%);
+  --destructive: hsl(0, 84%, 60%);
+  --border: hsl(240, 6%, 90%);
+  --input: hsl(240, 6%, 90%);
+  --ring: hsl(217, 91%, 50%);
+
+  /* Chart Colors */
+  --chart-1: hsl(217, 91%, 50%);
+  --chart-2: hsl(142, 76%, 36%);
+  --chart-3: hsl(38, 92%, 50%);
+  --chart-4: hsl(262, 83%, 58%);
+  --chart-5: hsl(0, 84%, 60%);
+
+  /* Sidebar */
+  --sidebar: hsl(0, 0%, 98%);
+  --sidebar-foreground: hsl(240, 10%, 4%);
+  --sidebar-primary: hsl(217, 91%, 50%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(240, 5%, 96%);
+  --sidebar-accent-foreground: hsl(240, 10%, 4%);
+  --sidebar-border: hsl(240, 6%, 90%);
+  --sidebar-ring: hsl(217, 91%, 50%);
+
+  /* Mantra Semantic - Light */
+  --diff-add: hsla(142, 76%, 36%, 0.15);
+  --diff-remove: hsla(0, 84%, 60%, 0.15);
+  --timeline-track: hsl(217, 91%, 50%);
+  --timeline-knob: hsl(240, 10%, 4%);
+  --user-bubble: hsl(240, 5%, 96%);
+  --ai-bubble: hsl(0, 0%, 100%);
+
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 
+/* ============================================
+   Dark Theme
+   ============================================ */
 .dark {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #18181b;
-  --popover-foreground: #fafafa;
-  --primary: #3b82f6;
-  --primary-foreground: #fafafa;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #10b981;
-  --accent-foreground: #fafafa;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #3b82f6;
-  --chart-1: #3b82f6;
-  --chart-2: #10b981;
-  --chart-3: #f59e0b;
-  --chart-4: #8b5cf6;
-  --chart-5: #ef4444;
-  --sidebar: #18181b;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #27272a;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #3b82f6;
+  /* Core Colors - Dark (Zinc-950 base) */
+  --background: hsl(240, 10%, 4%);
+  --foreground: hsl(0, 0%, 95%);
+  --card: hsl(240, 4%, 12%);
+  --card-foreground: hsl(0, 0%, 95%);
+  --popover: hsl(240, 4%, 12%);
+  --popover-foreground: hsl(0, 0%, 95%);
+
+  /* Brand Colors */
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(142, 76%, 36%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+
+  /* UI Colors */
+  --muted: hsl(240, 4%, 16%);
+  --muted-foreground: hsl(240, 5%, 65%);
+  --accent: hsl(240, 4%, 16%);
+  --accent-foreground: hsl(0, 0%, 95%);
+  --destructive: hsl(0, 62%, 50%);
+  --border: hsl(240, 4%, 16%);
+  --input: hsl(240, 4%, 16%);
+  --ring: hsl(217, 91%, 60%);
+
+  /* Chart Colors */
+  --chart-1: hsl(217, 91%, 60%);
+  --chart-2: hsl(142, 76%, 36%);
+  --chart-3: hsl(38, 92%, 50%);
+  --chart-4: hsl(262, 83%, 58%);
+  --chart-5: hsl(0, 84%, 60%);
+
+  /* Sidebar */
+  --sidebar: hsl(240, 4%, 10%);
+  --sidebar-foreground: hsl(0, 0%, 95%);
+  --sidebar-primary: hsl(217, 91%, 60%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(240, 4%, 16%);
+  --sidebar-accent-foreground: hsl(0, 0%, 95%);
+  --sidebar-border: hsl(240, 4%, 16%);
+  --sidebar-ring: hsl(217, 91%, 60%);
+
+  /* Mantra Semantic - Dark */
+  --diff-add: hsla(142, 76%, 36%, 0.2);
+  --diff-remove: hsla(0, 84%, 60%, 0.2);
+  --timeline-track: hsl(217, 91%, 60%);
+  --timeline-knob: hsl(0, 0%, 100%);
+  --user-bubble: hsl(240, 4%, 16%);
+  --ai-bubble: transparent;
 }
 
+/* ============================================
+   Theme Transition (AC3 - 150ms smooth)
+   ============================================ */
+
+/* 
+ * Only apply transitions to elements that actually change with theme.
+ * Avoid blanket * selector for performance.
+ */
+:root,
+body,
+.bg-background,
+.bg-card,
+.bg-popover,
+.bg-muted,
+.text-foreground,
+.text-muted-foreground,
+.border-border {
+  transition: 
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+/* Disable transitions on initial load to prevent flash */
+.no-transitions,
+.no-transitions * {
+  transition: none !important;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    font-family: var(--font-sans);
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+/* ============================================
+   Spacing Scale (8px base)
+   ============================================ */
+:root {
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;  /* 4px */
+  --spacing-2: 0.5rem;   /* 8px */
+  --spacing-3: 0.75rem;  /* 12px */
+  --spacing-4: 1rem;     /* 16px */
+  --spacing-5: 1.25rem;  /* 20px */
+  --spacing-6: 1.5rem;   /* 24px */
+  --spacing-8: 2rem;     /* 32px */
+  --spacing-10: 2.5rem;  /* 40px */
+  --spacing-12: 3rem;    /* 48px */
+  --spacing-16: 4rem;    /* 64px */
+  --spacing-20: 5rem;    /* 80px */
+  --spacing-24: 6rem;    /* 96px */
+}
+
+/* ============================================
+   Typography Scale
+   ============================================ */
+:root {
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px - code */
+  --text-base: 0.875rem; /* 14px - body */
+  --text-lg: 1rem;       /* 16px */
+  --text-xl: 1.125rem;   /* 18px */
+  --text-2xl: 1.25rem;   /* 20px */
+  --text-3xl: 1.5rem;    /* 24px */
+  --text-4xl: 2rem;      /* 32px */
+  --text-5xl: 2.5rem;    /* 40px */
 }
