@@ -5,7 +5,6 @@
  * 无项目时显示的引导界面
  */
 
-import * as React from "react";
 import { FolderOpen, Sparkles, MessageSquare, Terminal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

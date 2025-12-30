@@ -11,7 +11,7 @@ import { Folder, ChevronDown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Project, Session } from "@/types/project";
+import type { Project } from "@/types/project";
 import { SessionCard } from "./SessionCard";
 
 /**

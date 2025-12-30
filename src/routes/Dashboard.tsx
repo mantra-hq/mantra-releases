@@ -1,6 +1,7 @@
 /**
  * Dashboard Page - Dashboard 页面
  * Story 2.8: Task 1, Task 8
+ * Story 2.9: Task 8
  *
  * 项目列表主页面，聚合展示所有项目及其会话
  */
@@ -9,6 +10,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardHeader, EmptyDashboard } from "@/components/layout";
 import { ProjectCard } from "@/components/cards";
+import { ImportWizard } from "@/components/import";
 import { useProjects, useDebouncedValue } from "@/hooks";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -76,14 +78,17 @@ function NoSearchResults({ query }: { query: string }) {
  */
 export default function Dashboard() {
   const navigate = useNavigate();
-  
+
   // 项目数据
   const { projects, isLoading, error, refetch } = useProjects();
-  
+
   // 搜索状态
   const [searchQuery, setSearchQuery] = React.useState("");
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
-  
+
+  // 导入向导状态
+  const [importOpen, setImportOpen] = React.useState(false);
+
   // 展开状态 (记录哪些项目被展开)
   const [expandedProjects, setExpandedProjects] = React.useState<Set<string>>(
     new Set()
@@ -105,11 +110,15 @@ export default function Dashboard() {
     setSearchQuery(query);
   }, []);
 
-  // 导入处理 (Story 2-9 实现)
+  // 导入处理 (Story 2-9)
   const handleImport = React.useCallback(() => {
-    // TODO: Story 2-9 实现日志导入功能
-    // 当前为占位符，等待导入界面实现后替换
+    setImportOpen(true);
   }, []);
+
+  // 导入完成回调 - 刷新项目列表
+  const handleImportComplete = React.useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   // 切换项目展开状态
   const toggleProject = React.useCallback((projectId: string) => {
@@ -195,6 +204,13 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* Import Wizard Modal */}
+      <ImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onComplete={handleImportComplete}
+      />
     </div>
   );
 }

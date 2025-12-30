@@ -5,7 +5,6 @@
  * 包含 Logo、搜索框、主题切换和导入按钮
  */
 
-import * as React from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";

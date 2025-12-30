@@ -49,3 +49,5 @@ export {
 
 export { Input, type InputProps } from "./input";
 export { Skeleton } from "./skeleton";
+export { Checkbox } from "./checkbox";
+export { Progress } from "./progress";

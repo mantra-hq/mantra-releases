@@ -1,0 +1,167 @@
+/**
+ * SourceSelector Component - 导入来源选择
+ * Story 2.9: Task 2
+ *
+ * 显示可用的导入来源选项：
+ * - Claude Code (已支持)
+ * - Gemini CLI (Post-MVP)
+ * - Cursor (Post-MVP)
+ */
+
+import * as React from "react";
+import { Sparkles, MessageSquare, Terminal } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/** 导入来源类型 */
+export type ImportSource = "claude" | "gemini" | "cursor";
+
+/** 来源配置 */
+interface SourceConfig {
+  id: ImportSource;
+  name: string;
+  defaultPath: string;
+  icon: React.ComponentType<{ className?: string }>;
+  disabled: boolean;
+  badge?: string;
+}
+
+/** 来源配置列表 */
+const SOURCES: SourceConfig[] = [
+  {
+    id: "claude",
+    name: "Claude Code",
+    defaultPath: "~/.claude/projects",
+    icon: Sparkles,
+    disabled: false,
+  },
+  {
+    id: "gemini",
+    name: "Gemini CLI",
+    defaultPath: "~/.gemini/project_temp/chats",
+    icon: MessageSquare,
+    disabled: true,
+    badge: "即将推出",
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    defaultPath: "~/.cursor/projects",
+    icon: Terminal,
+    disabled: true,
+    badge: "即将推出",
+  },
+];
+
+/** SourceSelector Props */
+export interface SourceSelectorProps {
+  /** 当前选中的来源 */
+  value: ImportSource | null;
+  /** 选择变更回调 */
+  onChange: (source: ImportSource) => void;
+}
+
+/**
+ * 来源卡片组件
+ */
+function SourceCard({
+  source,
+  selected,
+  onClick,
+}: {
+  source: SourceConfig;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const Icon = source.icon;
+
+  const handleClick = () => {
+    if (!source.disabled) {
+      onClick();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === "Enter" || e.key === " ") && !source.disabled) {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  return (
+    <div
+      data-testid={`source-card-${source.id}`}
+      data-selected={selected ? "true" : "false"}
+      data-disabled={source.disabled ? "true" : "false"}
+      role="radio"
+      aria-checked={selected}
+      aria-disabled={source.disabled}
+      tabIndex={source.disabled ? -1 : 0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      className={cn(
+        "flex flex-col items-center p-6 rounded-xl border-2 transition-all cursor-pointer",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        // 默认状态
+        "border-border hover:border-primary/50",
+        // 选中状态
+        selected && "border-primary bg-primary/5",
+        // 禁用状态
+        source.disabled && "opacity-50 cursor-not-allowed hover:border-border"
+      )}
+    >
+      {/* 图标 */}
+      <div
+        data-slot="source-icon"
+        className={cn(
+          "w-12 h-12 rounded-lg flex items-center justify-center mb-3",
+          source.id === "claude" && "bg-orange-500/10 text-orange-500",
+          source.id === "gemini" && "bg-blue-500/10 text-blue-500",
+          source.id === "cursor" && "bg-purple-500/10 text-purple-500"
+        )}
+      >
+        <Icon className="w-6 h-6" />
+      </div>
+
+      {/* 名称 */}
+      <span className="text-sm font-semibold text-foreground mb-1">
+        {source.name}
+      </span>
+
+      {/* 默认路径 */}
+      <span className="text-xs text-muted-foreground font-mono">
+        {source.defaultPath}
+      </span>
+
+      {/* 徽章 */}
+      {source.badge && (
+        <span className="mt-2 px-2 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
+          {source.badge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * SourceSelector 组件
+ * 选择导入来源
+ */
+export function SourceSelector({ value, onChange }: SourceSelectorProps) {
+  return (
+    <div
+      data-testid="source-selector"
+      role="radiogroup"
+      aria-label="选择导入来源"
+      className="grid grid-cols-3 gap-4"
+    >
+      {SOURCES.map((source) => (
+        <SourceCard
+          key={source.id}
+          source={source}
+          selected={value === source.id}
+          onClick={() => onChange(source.id)}
+        />
+      ))}
+    </div>
+  );
+}
