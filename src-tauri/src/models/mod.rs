@@ -3,6 +3,8 @@
 //! This module defines the core data structures for representing
 //! AI conversation sessions from various sources (Claude, Gemini, Cursor).
 
-mod session;
+pub mod project;
+pub mod session;
 
+pub use project::*;
 pub use session::*;

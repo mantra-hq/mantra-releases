@@ -4,6 +4,8 @@
 
 mod git;
 mod parser;
+mod project;
 
 pub use git::*;
 pub use parser::*;
+pub use project::*;

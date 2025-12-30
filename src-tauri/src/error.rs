@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::git::GitError;
 use crate::parsers::ParseError;
+use crate::storage::StorageError;
 
 /// Application-level error type
 #[derive(Error, Debug)]
@@ -27,6 +28,14 @@ pub enum AppError {
     /// Git operation error
     #[error("Git 错误: {0}")]
     Git(#[from] GitError),
+
+    /// Storage/database error
+    #[error("存储错误: {0}")]
+    Storage(#[from] StorageError),
+
+    /// Lock error
+    #[error("锁获取失败")]
+    LockError,
 }
 
 /// Serializable error response for Tauri IPC
@@ -45,6 +54,8 @@ impl From<AppError> for ErrorResponse {
             AppError::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             AppError::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
             AppError::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
+            AppError::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
+            AppError::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
         };
         Self { code, message }
     }
@@ -62,6 +73,8 @@ impl Serialize for AppError {
             Self::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             Self::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
             Self::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
+            Self::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
+            Self::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
         };
         ErrorResponse { code, message }.serialize(serializer)
     }

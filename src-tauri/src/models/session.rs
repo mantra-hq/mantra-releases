@@ -13,6 +13,8 @@ pub enum SessionSource {
     Claude,
     Gemini,
     Cursor,
+    /// Unknown source (fallback for unrecognized sources)
+    Unknown,
 }
 
 /// Role in the conversation
