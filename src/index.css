@@ -380,3 +380,51 @@ body,
   --error: hsl(0, 62%, 50%);
   --error-foreground: hsl(0, 0%, 100%);
 }
+
+/* ============================================
+   Diff 高亮样式
+   Story 2.7: AC #5 - Diff 高亮
+   ============================================ */
+
+/* 新增行背景 */
+.diff-line-added {
+  background: var(--diff-add) !important;
+}
+
+/* 删除行背景 */
+.diff-line-removed {
+  background: var(--diff-remove) !important;
+}
+
+/* Glyph margin 新增标记 */
+.diff-glyph-added {
+  background: hsl(142, 76%, 36%);
+  border-radius: 2px;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+/* Glyph margin 删除标记 */
+.diff-glyph-removed {
+  background: hsl(0, 84%, 60%);
+  border-radius: 2px;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+/* Diff 淡出动画 */
+@keyframes diff-fade-out {
+  0%, 70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.diff-fade-out .diff-line-added,
+.diff-fade-out .diff-line-removed,
+.diff-fade-out .diff-glyph-added,
+.diff-fade-out .diff-glyph-removed {
+  animation: diff-fade-out 3s ease-out forwards;
+}

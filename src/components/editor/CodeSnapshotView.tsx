@@ -1,17 +1,24 @@
 /**
  * CodeSnapshotView - 代码快照视图组件
  * Story 2.5: Task 2
+ * Story 2.7: Task 3 集成 - AC #5 Diff 高亮
  *
  * 使用 Monaco Editor 以只读模式显示历史代码快照
- * 支持语法高亮、主题切换、代码变化动画
+ * 支持语法高亮、主题切换、代码变化动画、Diff 高亮
  */
 
-import { useEffect, useState, useRef, useMemo } from "react";
-import Editor from "@monaco-editor/react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import Editor, { type OnMount } from "@monaco-editor/react";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { CodeSnapshotHeader } from "./CodeSnapshotHeader";
 import { EmptyCodeState } from "./EmptyCodeState";
+import { HistoryBanner } from "./HistoryBanner";
+import {
+  computeDiffDecorations,
+  toMonacoDecorations,
+  useDiffFadeOut,
+} from "./DiffHighlighter";
 
 /**
  * 语言映射表 - 根据文件扩展名识别语言
@@ -58,10 +65,18 @@ export interface CodeSnapshotViewProps {
   code: string;
   /** 文件路径 (用于语言检测和显示) */
   filePath: string;
-  /** 历史时间戳 (ISO 8601) */
-  timestamp?: string;
+  /** 历史时间戳 (ISO 8601 或 Unix ms) */
+  timestamp?: string | number;
   /** Commit Hash (短格式) */
   commitHash?: string;
+  /** Commit 消息 */
+  commitMessage?: string;
+  /** 是否处于历史模式 (Story 2.7 AC #6) */
+  isHistoricalMode?: boolean;
+  /** 返回当前回调 (Story 2.7 AC #6) */
+  onReturnToCurrent?: () => void;
+  /** 前一个代码内容 (用于 Diff 计算, Story 2.7 AC #5) */
+  previousCode?: string | null;
   /** 自定义 className */
   className?: string;
 }
@@ -93,7 +108,9 @@ const EDITOR_OPTIONS = {
   folding: true,
   foldingStrategy: "auto" as const,
   wordWrap: "off" as const,
-} as const;
+  // Diff 高亮需要 glyph margin
+  glyphMargin: true,
+};
 
 /**
  * 代码快照视图组件
@@ -103,19 +120,30 @@ const EDITOR_OPTIONS = {
  * - 自动语法高亮 (基于文件扩展名)
  * - 深色/浅色主题自动切换
  * - 代码变化时的淡入动画 (150ms)
+ * - Diff 高亮 (新增绿色，删除红色，3秒淡出)
  * - 空代码状态处理
  * - 历史快照信息显示
+ * - 历史模式 Banner
  */
 export function CodeSnapshotView({
   code,
   filePath,
   timestamp,
   commitHash,
+  commitMessage,
+  isHistoricalMode = false,
+  onReturnToCurrent,
+  previousCode,
   className,
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
   const [isTransitioning, setIsTransitioning] = useState(false);
   const previousCodeRef = useRef(code);
+  const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]);
+
+  // Diff 淡出控制 (Story 2.7 AC #5)
+  const { shouldShow: shouldShowDiff, triggerFadeOut } = useDiffFadeOut(3000);
 
   // 根据应用主题映射 Monaco 主题 (AC5)
   const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "light";
@@ -123,26 +151,101 @@ export function CodeSnapshotView({
   // 检测语言 (AC2)
   const language = useMemo(() => getLanguageFromPath(filePath), [filePath]);
 
-  // 是否为历史快照 (AC7)
-  const isHistorical = !!(timestamp || commitHash);
+  // 计算时间戳
+  const timestampMs = useMemo(() => {
+    if (typeof timestamp === "number") return timestamp;
+    if (typeof timestamp === "string") {
+      const parsed = Date.parse(timestamp);
+      return isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  }, [timestamp]);
 
-  // 代码变化动画 (AC4)
+  // 是否为历史快照
+  const isHistorical = isHistoricalMode || !!(timestamp || commitHash);
+
+  // 格式化时间戳显示
+  const formattedTimestamp = useMemo(() => {
+    if (!timestamp) return undefined;
+    if (typeof timestamp === "string") return timestamp;
+    try {
+      return new Date(timestamp).toISOString();
+    } catch {
+      return undefined;
+    }
+  }, [timestamp]);
+
+  // 编辑器挂载回调
+  const handleEditorMount: OnMount = useCallback((editor, _monaco) => {
+    editorRef.current = editor;
+  }, []);
+
+  // 代码变化处理 (动画 + Diff 高亮)
   useEffect(() => {
-    if (previousCodeRef.current !== code) {
+    const prevCode = previousCodeRef.current;
+
+    if (prevCode !== code) {
+      // 触发过渡动画
       setIsTransitioning(true);
       const timer = setTimeout(() => setIsTransitioning(false), 150);
       previousCodeRef.current = code;
+
+      // 计算 Diff 装饰器 (Story 2.7 AC #5)
+      if (editorRef.current && previousCode) {
+        const diffDecorations = computeDiffDecorations(previousCode, code);
+
+        if (diffDecorations.length > 0) {
+          const monacoDecorations = toMonacoDecorations(diffDecorations);
+
+          // 应用装饰器
+          decorationsRef.current = editorRef.current.deltaDecorations(
+            decorationsRef.current,
+            monacoDecorations.map((d) => ({
+              range: new (window as any).monaco.Range(
+                d.range.startLineNumber,
+                d.range.startColumn,
+                d.range.endLineNumber,
+                d.range.endColumn
+              ),
+              options: d.options,
+            }))
+          );
+
+          // 触发淡出
+          triggerFadeOut();
+        }
+      }
+
       return () => clearTimeout(timer);
     }
-  }, [code]);
+  }, [code, previousCode, triggerFadeOut]);
+
+  // 清除 Diff 装饰器 (淡出后)
+  useEffect(() => {
+    if (!shouldShowDiff && editorRef.current && decorationsRef.current.length > 0) {
+      decorationsRef.current = editorRef.current.deltaDecorations(
+        decorationsRef.current,
+        []
+      );
+    }
+  }, [shouldShowDiff]);
 
   // 空状态处理 (AC6)
   if (!code) {
     return (
       <div className={cn("flex h-full flex-col", className)}>
+        {/* 历史模式 Banner */}
+        {isHistoricalMode && timestampMs && onReturnToCurrent && (
+          <HistoryBanner
+            timestamp={timestampMs}
+            commitHash={commitHash}
+            commitMessage={commitMessage}
+            onReturnToCurrent={onReturnToCurrent}
+          />
+        )}
         <CodeSnapshotHeader
           filePath={filePath || ""}
-          timestamp={timestamp}
+          timestamp={formattedTimestamp}
           commitHash={commitHash}
           isHistorical={isHistorical}
         />
@@ -152,11 +255,27 @@ export function CodeSnapshotView({
   }
 
   return (
-    <div className={cn("flex h-full flex-col bg-background", className)}>
+    <div
+      className={cn(
+        "flex h-full flex-col bg-background",
+        shouldShowDiff && "diff-fade-out",
+        className
+      )}
+    >
+      {/* 历史模式 Banner (Story 2.7 AC #6) */}
+      {isHistoricalMode && timestampMs && onReturnToCurrent && (
+        <HistoryBanner
+          timestamp={timestampMs}
+          commitHash={commitHash}
+          commitMessage={commitMessage}
+          onReturnToCurrent={onReturnToCurrent}
+        />
+      )}
+
       {/* 头部: 文件路径 + 历史状态指示器 (AC3, AC7) */}
       <CodeSnapshotHeader
         filePath={filePath}
-        timestamp={timestamp}
+        timestamp={formattedTimestamp}
         commitHash={commitHash}
         isHistorical={isHistorical}
       />
@@ -174,6 +293,7 @@ export function CodeSnapshotView({
           value={code}
           theme={monacoTheme}
           options={EDITOR_OPTIONS}
+          onMount={handleEditorMount}
           loading={
             <div className="flex h-full items-center justify-center text-muted-foreground">
               加载编辑器中...
@@ -186,4 +306,3 @@ export function CodeSnapshotView({
 }
 
 export default CodeSnapshotView;
-
