@@ -5,7 +5,7 @@
  * 提供导入功能的 Tauri IPC 调用封装：
  * - scanLogDirectory - 扫描默认路径
  * - parseLogFiles - 解析日志文件
- * - selectLogFiles - 文件选择对话框
+ * - selectLogDirectory - 目录选择对话框
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -46,21 +46,20 @@ export async function parseLogFiles(
 }
 
 /**
- * 打开文件选择对话框
+ * 打开目录选择对话框并扫描选中目录的日志文件
  *
- * @returns 选择的文件路径列表
+ * @returns 发现的文件列表
  */
-export async function selectLogFiles(): Promise<string[]> {
+export async function selectLogFiles(): Promise<DiscoveredFile[]> {
   const selected = await open({
-    multiple: true,
-    filters: [
-      {
-        name: "JSON Logs",
-        extensions: ["json"],
-      },
-    ],
+    directory: true,
+    multiple: false,
+    title: "选择日志目录",
   });
 
-  if (!selected) return [];
-  return Array.isArray(selected) ? selected : [selected];
+  if (!selected || typeof selected !== "string") return [];
+
+  // 调用后端扫描选中的目录
+  return invoke<DiscoveredFile[]>("scan_custom_directory", { path: selected });
 }
+

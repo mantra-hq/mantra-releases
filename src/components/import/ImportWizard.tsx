@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, parseLogFiles } from "@/lib/import-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
-import { FileSelector, type DiscoveredFile } from "./FileSelector";
+import { FileSelector } from "./FileSelector";
 import { ImportProgress, type ImportProgressData } from "./ImportProgress";
 import { ImportComplete } from "./ImportComplete";
 
@@ -192,29 +192,18 @@ export function ImportWizard({
   }, [source, setLoading, setDiscoveredFiles]);
 
   /**
-   * 手动选择文件
+   * 手动选择目录
    */
   const handleSelectFiles = React.useCallback(async () => {
     setLoading(true);
     try {
-      const paths = await selectLogFiles();
-      if (paths.length > 0) {
-        // 将路径转换为 DiscoveredFile 格式
-        const files: DiscoveredFile[] = paths.map((path) => {
-          const parts = path.split("/");
-          const name = parts[parts.length - 1] || path;
-          return {
-            path,
-            name,
-            size: 0, // 未知大小
-            modifiedAt: Date.now(),
-            projectPath: parts.slice(0, -1).join("/"),
-          };
-        });
+      // selectLogFiles 现在返回 DiscoveredFile[] (扫描用户选择的目录)
+      const files = await selectLogFiles();
+      if (files.length > 0) {
         setDiscoveredFiles(files);
       }
     } catch (err) {
-      console.error("选择文件失败:", err);
+      console.error("选择目录失败:", err);
     } finally {
       setLoading(false);
     }

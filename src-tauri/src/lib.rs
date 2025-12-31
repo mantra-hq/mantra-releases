@@ -16,7 +16,7 @@ use tauri::Manager;
 use commands::{
     find_commit_at_time, get_commit_info, get_file_snapshot, get_project_sessions,
     import_parsed_sessions, import_sessions, list_projects, parse_claude_log,
-    parse_claude_log_string, parse_log_files, scan_log_directory, AppState,
+    parse_claude_log_string, parse_log_files, scan_custom_directory, scan_log_directory, AppState,
 };
 use storage::Database;
 
@@ -65,6 +65,7 @@ pub fn run() {
             import_sessions,
             import_parsed_sessions,
             scan_log_directory,
+            scan_custom_directory,
             parse_log_files
         ])
         .run(tauri::generate_context!())

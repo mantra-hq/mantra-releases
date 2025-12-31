@@ -1,9 +1,9 @@
 //! Claude Code log parser
 //!
 //! Parses conversation logs exported from Claude Code into MantraSession format.
-//! Claude Code stores conversations in JSON files typically located at:
-//! - macOS: ~/.claude/conversations/
-//! - The structure contains conversation metadata and message arrays
+//! Claude Code stores conversations in JSONL files located at:
+//! - ~/.claude/projects/<project-path>/<session-id>.jsonl
+//! - Each line is a JSON object with message data
 
 use std::fs;
 
@@ -22,11 +22,166 @@ impl ClaudeParser {
     pub fn new() -> Self {
         Self
     }
+
+    /// Parse JSONL format (one JSON object per line)
+    fn parse_jsonl(&self, content: &str) -> Result<MantraSession, ParseError> {
+        let mut session_id: Option<String> = None;
+        let mut cwd: Option<String> = None;
+        let mut messages: Vec<Message> = Vec::new();
+        let mut first_timestamp: Option<DateTime<Utc>> = None;
+        let mut last_timestamp: Option<DateTime<Utc>> = None;
+        let mut version: Option<String> = None;
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Parse the line as a JSONL record
+            let record: serde_json::Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue, // Skip invalid lines
+            };
+
+            // Skip non-message records (file-history-snapshot, etc.)
+            let record_type = record.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            if record_type != "user" && record_type != "assistant" {
+                continue;
+            }
+
+            // Extract session metadata from first valid record
+            if session_id.is_none() {
+                session_id = record.get("sessionId").and_then(|s| s.as_str()).map(|s| s.to_string());
+                cwd = record.get("cwd").and_then(|s| s.as_str()).map(|s| s.to_string());
+                version = record.get("version").and_then(|s| s.as_str()).map(|s| s.to_string());
+            }
+
+            // Parse timestamp
+            let timestamp = record
+                .get("timestamp")
+                .and_then(|t| t.as_str())
+                .and_then(|t| t.parse::<DateTime<Utc>>().ok());
+
+            if timestamp.is_some() {
+                if first_timestamp.is_none() {
+                    first_timestamp = timestamp;
+                }
+                last_timestamp = timestamp;
+            }
+
+            // Parse message
+            if let Some(msg_obj) = record.get("message") {
+                let role_str = msg_obj.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                let role = match role_str {
+                    "user" => Role::User,
+                    "assistant" => Role::Assistant,
+                    _ => continue,
+                };
+
+                // Parse content
+                let content_blocks = if let Some(content) = msg_obj.get("content") {
+                    parse_jsonl_content(content)
+                } else {
+                    Vec::new()
+                };
+
+                // Skip messages with no content or only meta content
+                let is_meta = record.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false);
+                if is_meta || content_blocks.is_empty() {
+                    continue;
+                }
+
+                messages.push(Message {
+                    role,
+                    content_blocks,
+                    timestamp,
+                });
+            }
+        }
+
+        // Validate we got a session ID
+        let id = session_id.ok_or_else(|| ParseError::missing_field("sessionId"))?;
+
+        // Build the session
+        let mut session = MantraSession::new(
+            id.clone(),
+            SessionSource::Claude,
+            cwd.unwrap_or_default(),
+        );
+
+        if let Some(ts) = first_timestamp {
+            session.created_at = ts;
+        }
+        if let Some(ts) = last_timestamp {
+            session.updated_at = ts;
+        }
+
+        session.messages = messages;
+        session.metadata = SessionMetadata {
+            model: version, // Use version as model info for now
+            title: None,
+            total_tokens: None,
+            original_path: None,
+        };
+
+        Ok(session)
+    }
 }
 
-// Internal structures for deserializing Claude's JSON format
+/// Parse content from JSONL message
+fn parse_jsonl_content(content: &serde_json::Value) -> Vec<ContentBlock> {
+    match content {
+        serde_json::Value::String(s) => {
+            vec![ContentBlock::Text { text: s.clone() }]
+        }
+        serde_json::Value::Array(arr) => {
+            arr.iter().filter_map(parse_jsonl_content_block).collect()
+        }
+        _ => Vec::new(),
+    }
+}
 
-/// Claude conversation file structure
+/// Parse a single content block from JSONL
+fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> {
+    let block_type = block.get("type")?.as_str()?;
+
+    match block_type {
+        "text" => {
+            let text = block.get("text")?.as_str()?.to_string();
+            Some(ContentBlock::Text { text })
+        }
+        "thinking" => {
+            let thinking = block.get("thinking")?.as_str()?.to_string();
+            Some(ContentBlock::Thinking { thinking })
+        }
+        "tool_use" => {
+            let id = block.get("id")?.as_str()?.to_string();
+            let name = block.get("name")?.as_str()?.to_string();
+            let input = block.get("input")?.clone();
+            Some(ContentBlock::ToolUse { id, name, input })
+        }
+        "tool_result" => {
+            let tool_use_id = block.get("tool_use_id")?.as_str()?.to_string();
+            let content = if let Some(c) = block.get("content") {
+                if let Some(s) = c.as_str() {
+                    s.to_string()
+                } else {
+                    c.to_string()
+                }
+            } else {
+                String::new()
+            };
+            let is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
+            Some(ContentBlock::ToolResult { tool_use_id, content, is_error })
+        }
+        _ => None,
+    }
+}
+
+// Internal structures for deserializing Claude's legacy JSON format
+
+/// Claude conversation file structure (legacy JSON format)
 #[derive(Debug, Deserialize)]
 struct ClaudeConversation {
     /// Unique conversation ID
@@ -127,7 +282,17 @@ impl ClaudeToolResultContent {
 impl LogParser for ClaudeParser {
     fn parse_file(&self, path: &str) -> Result<MantraSession, ParseError> {
         let content = fs::read_to_string(path)?;
-        self.parse_string(&content)
+        
+        // Detect format: JSONL (lines) vs JSON (single object)
+        // JSONL files typically start with { on first line and have multiple lines
+        let first_line = content.lines().next().unwrap_or("").trim();
+        let is_jsonl = first_line.starts_with('{') && content.lines().count() > 1;
+        
+        if is_jsonl {
+            self.parse_jsonl(&content)
+        } else {
+            self.parse_string(&content)
+        }
     }
 
     fn parse_string(&self, content: &str) -> Result<MantraSession, ParseError> {

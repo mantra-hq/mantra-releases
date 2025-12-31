@@ -59,6 +59,9 @@ pub struct FileImportResult {
 fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
     let home = dirs::home_dir().ok_or_else(|| AppError::internal("无法获取 home 目录"))?;
 
+    // Claude Code 的会话日志存储在 ~/.claude/projects/ 目录下
+    // 每个项目一个子目录，目录名是路径编码的（如 -mnt-disk0-project-newx-mantra）
+    // 会话日志是 JSONL 格式，文件名是 UUID.jsonl
     let path = match source {
         ImportSource::Claude => home.join(".claude").join("projects"),
         ImportSource::Gemini => home
@@ -71,17 +74,26 @@ fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
     Ok(path)
 }
 
-/// Recursively find all JSON files in a directory
-fn find_json_files(dir: &PathBuf) -> Vec<PathBuf> {
+/// Recursively find all JSONL session files in a directory
+/// Claude Code stores sessions as UUID.jsonl files
+fn find_session_files(dir: &PathBuf) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                files.extend(find_json_files(&path));
-            } else if path.extension().map_or(false, |ext| ext == "json") {
-                files.push(path);
+                files.extend(find_session_files(&path));
+            } else if path.extension().map_or(false, |ext| ext == "jsonl") {
+                // Filter out agent- prefixed files (smaller agent logs)
+                // and .timelines directory files
+                if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                    // Only include files that look like session UUIDs
+                    // (36 chars with hyphens) or any non-agent file
+                    if !name.starts_with("agent-") {
+                        files.push(path);
+                    }
+                }
             }
         }
     }
@@ -133,7 +145,36 @@ pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFi
             return Vec::new();
         }
 
-        find_json_files(&dir)
+        find_session_files(&dir)
+            .iter()
+            .filter_map(path_to_discovered_file)
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
+
+    Ok(result)
+}
+
+/// Scan a custom directory for session files
+///
+/// # Arguments
+/// * `path` - Directory path to scan
+///
+/// # Returns
+/// * `Ok(Vec<DiscoveredFile>)` - List of discovered files
+/// * `Err(AppError)` - IO or internal error
+#[tauri::command]
+pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, AppError> {
+    let dir = PathBuf::from(path);
+
+    // Use spawn_blocking for filesystem operations
+    let result = tokio::task::spawn_blocking(move || {
+        if !dir.exists() {
+            return Vec::new();
+        }
+
+        find_session_files(&dir)
             .iter()
             .filter_map(path_to_discovered_file)
             .collect::<Vec<_>>()

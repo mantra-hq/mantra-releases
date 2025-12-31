@@ -161,7 +161,7 @@ export function FileSelector({
           className="gap-2"
         >
           <FolderOpen className="w-4 h-4" />
-          手动选择文件
+          手动选择目录
         </Button>
       </div>
 
