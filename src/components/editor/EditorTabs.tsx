@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { X, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Clock, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorTab } from "@/stores/useEditorStore";
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,16 @@ import {
 export interface EditorTabsProps {
     /** 自定义类名 */
     className?: string;
+    /** 是否处于历史模式 (UX 优化: 显示返回按钮) */
+    isHistoricalMode?: boolean;
+    /** 返回当前回调 */
+    onReturnToCurrent?: () => void;
 }
 
 /**
  * 编辑器标签页组件
  */
-export function EditorTabs({ className }: EditorTabsProps) {
+export function EditorTabs({ className, isHistoricalMode, onReturnToCurrent }: EditorTabsProps) {
     const { tabs, activeTabId, setActiveTab, closeTab, pinTab } = useEditorStore();
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
     const [showLeftArrow, setShowLeftArrow] = React.useState(false);
@@ -186,6 +190,23 @@ export function EditorTabs({ className }: EditorTabsProps) {
                     aria-label="向右滚动"
                 >
                     <ChevronRight className="h-4 w-4" />
+                </Button>
+            )}
+
+            {/* 历史模式: 返回当前按钮 (UX 优化方案 A) */}
+            {isHistoricalMode && onReturnToCurrent && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onReturnToCurrent}
+                    className={cn(
+                        "h-7 px-2 ml-1 flex-shrink-0",
+                        "text-blue-500 hover:text-blue-600",
+                        "hover:bg-blue-500/10"
+                    )}
+                >
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                    <span className="text-xs">返回当前</span>
                 </Button>
             )}
         </div>

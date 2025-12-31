@@ -398,16 +398,29 @@ export function CodePanel({
                         </Button>
                     )}
 
-                    {/* 文件标签页 (AC #1-5) */}
-                    <EditorTabs className="flex-1 border-b-0" />
+                    {/* 文件标签页 (AC #1-5) + UX 优化: 传递历史模式和返回按钮 */}
+                    <EditorTabs
+                        className="flex-1 border-b-0"
+                        isHistoricalMode={isHistoricalMode || !!activeTab?.commitHash}
+                        onReturnToCurrent={onReturnToCurrent}
+                    />
                 </div>
 
-                {/* 面包屑导航 (AC #6, #7, #20) */}
+                {/* 面包屑导航 (UX 优化: 隐藏文件名 + 合并历史信息) */}
                 {displayFilePath && (
                     <Breadcrumbs
                         filePath={displayFilePath}
                         siblings={siblings}
-                        timestamp={isHistoricalMode ? timestampMs : undefined}
+                        hideFileName={true}
+                        historyInfo={
+                            (isHistoricalMode || activeTab?.commitHash) && timestampMs
+                                ? {
+                                    timestamp: timestampMs,
+                                    commitHash: displayCommitHash,
+                                    commitMessage: commitMessage,
+                                }
+                                : undefined
+                        }
                         onNavigate={handleBreadcrumbNavigate}
                     />
                 )}

@@ -51,13 +51,15 @@ describe("Breadcrumbs", () => {
                 />
             );
 
-            expect(screen.getByText(/历史/)).toBeInTheDocument();
+            // UX 优化: 历史指示器现在显示相对时间 (如 "X小时前") 而不是 "历史" 文字
+            expect(screen.getByText(/小时前/)).toBeInTheDocument();
         });
 
         it("没有时间戳时不显示历史指示器", () => {
             render(<Breadcrumbs filePath="src/App.tsx" />);
 
-            expect(screen.queryByText(/历史/)).not.toBeInTheDocument();
+            // 不应显示相对时间指示器
+            expect(screen.queryByText(/小时前|分钟前|天前/)).not.toBeInTheDocument();
         });
     });
 

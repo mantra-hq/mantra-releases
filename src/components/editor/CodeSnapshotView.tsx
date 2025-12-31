@@ -14,9 +14,8 @@ import Editor, { DiffEditor, type OnMount, type DiffOnMount } from "@monaco-edit
 import type { editor } from "monaco-editor";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
-import { CodeSnapshotHeader } from "./CodeSnapshotHeader";
+// UX 优化: 移除 CodeSnapshotHeader 和 HistoryBanner，功能已上移到 EditorTabs/Breadcrumbs
 import { EmptyCodeState } from "./EmptyCodeState";
-import { HistoryBanner } from "./HistoryBanner";
 import { FileNotFoundBanner } from "./FileNotFoundBanner";
 import { DiffModeToggle } from "./DiffModeToggle";
 import {
@@ -173,10 +172,12 @@ export function CodeSnapshotView({
   code,
   filePath,
   timestamp,
-  commitHash,
-  commitMessage,
-  isHistoricalMode = false,
-  onReturnToCurrent,
+  // UX 优化: commitHash/commitMessage/onReturnToCurrent 已上移到 EditorTabs/Breadcrumbs
+  // commitHash,
+  // UX 优化: commitMessage 和 onReturnToCurrent 已上移到 EditorTabs/Breadcrumbs
+  // commitMessage,
+  // isHistoricalMode = false,
+  // onReturnToCurrent,
   previousCode,
   fileNotFound = false,
   notFoundPath,
@@ -212,25 +213,11 @@ export function CodeSnapshotView({
     return null;
   }, [timestamp]);
 
-  // 是否为历史快照
-  const isHistorical = isHistoricalMode || !!(timestamp || commitHash);
-
   // 是否有可用的 Diff 数据
   const hasDiffData = !!(previousCode && previousCode !== code);
 
   // 是否使用并排 Diff 模式
   const useSideBySideDiff = hasDiffData && diffMode === "side-by-side";
-
-  // 格式化时间戳显示
-  const formattedTimestamp = useMemo(() => {
-    if (!timestamp) return undefined;
-    if (typeof timestamp === "string") return timestamp;
-    try {
-      return new Date(timestamp).toISOString();
-    } catch {
-      return undefined;
-    }
-  }, [timestamp]);
 
   // 事件监听器清理引用
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([]);
@@ -366,25 +353,10 @@ export function CodeSnapshotView({
     }
   }, [shouldShowDiff]);
 
-  // 空状态处理 (AC6)
+  // 空状态处理 (AC6) - UX 优化: 移除冗余的 Header 和 Banner
   if (!code) {
     return (
       <div className={cn("flex h-full flex-col", className)}>
-        {/* 历史模式 Banner */}
-        {isHistoricalMode && timestampMs && onReturnToCurrent && (
-          <HistoryBanner
-            timestamp={timestampMs}
-            commitHash={commitHash}
-            commitMessage={commitMessage}
-            onReturnToCurrent={onReturnToCurrent}
-          />
-        )}
-        <CodeSnapshotHeader
-          filePath={filePath || ""}
-          timestamp={formattedTimestamp}
-          commitHash={commitHash}
-          isHistorical={isHistorical}
-        />
         <EmptyCodeState />
       </div>
     );
@@ -398,30 +370,13 @@ export function CodeSnapshotView({
         className
       )}
     >
-      {/* 历史模式 Banner (Story 2.7 AC #6) */}
-      {isHistoricalMode && timestampMs && onReturnToCurrent && (
-        <HistoryBanner
-          timestamp={timestampMs}
-          commitHash={commitHash}
-          commitMessage={commitMessage}
-          onReturnToCurrent={onReturnToCurrent}
-        />
+      {/* UX 优化: 移除 HistoryBanner 和 CodeSnapshotHeader，功能已上移 */}
+      {/* Diff 模式切换按钮 (仅在有 Diff 数据时显示) */}
+      {hasDiffData && (
+        <div className="flex items-center justify-end px-2 py-1 border-b border-border bg-muted/30">
+          <DiffModeToggle visible={hasDiffData} />
+        </div>
       )}
-
-      {/* 头部: 文件路径 + 历史状态指示器 + Diff 模式切换 */}
-      <div className="flex items-center justify-between border-b border-border bg-muted/30">
-        <CodeSnapshotHeader
-          filePath={filePath}
-          timestamp={formattedTimestamp}
-          commitHash={commitHash}
-          isHistorical={isHistorical}
-          className="border-b-0"
-        />
-        {/* Diff 模式切换按钮 (仅在有 Diff 数据时显示) */}
-        {hasDiffData && (
-          <DiffModeToggle className="mr-2" visible={hasDiffData} />
-        )}
-      </div>
 
       {/* 编辑器容器 (AC1) */}
       <div

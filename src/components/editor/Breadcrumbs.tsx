@@ -30,13 +30,27 @@ export interface SiblingItem {
     isDirectory: boolean;
 }
 
+/** 历史信息 (UX 优化: 合并显示) */
+export interface HistoryInfo {
+    /** 时间戳 (Unix ms) */
+    timestamp: number;
+    /** Commit Hash */
+    commitHash?: string;
+    /** Commit 消息 */
+    commitMessage?: string;
+}
+
 export interface BreadcrumbsProps {
     /** 文件路径 */
     filePath: string;
     /** 同级文件列表 (用于导航下拉) */
     siblings?: SiblingItem[];
-    /** 历史模式时间戳 (Unix ms) */
+    /** 历史模式时间戳 (Unix ms) - 向后兼容 */
     timestamp?: number;
+    /** 历史信息 (UX 优化: 合并显示 commit 信息) */
+    historyInfo?: HistoryInfo;
+    /** 是否隐藏文件名 (已在标签页显示时设为 true) */
+    hideFileName?: boolean;
     /** 点击路径段回调 */
     onNavigate?: (path: string) => void;
     /** 自定义类名 */
@@ -50,13 +64,21 @@ export function Breadcrumbs({
     filePath,
     siblings = [],
     timestamp,
+    historyInfo,
+    hideFileName = false,
     onNavigate,
     className,
 }: BreadcrumbsProps) {
+    // 历史信息优先使用 historyInfo，否则回退到 timestamp
+    const effectiveHistoryInfo = historyInfo || (timestamp ? { timestamp } : undefined);
     const segments = React.useMemo(() => {
         if (!filePath) return [];
-        return filePath.split("/").filter(Boolean);
-    }, [filePath]);
+        const allSegments = filePath.split("/").filter(Boolean);
+        // UX 优化: 隐藏最后一段（文件名），因为已在标签页显示
+        return hideFileName && allSegments.length > 1
+            ? allSegments.slice(0, -1)
+            : allSegments;
+    }, [filePath, hideFileName]);
 
     // 预计算每个路径段的同级项 (优化渲染性能和 UX)
     const segmentSiblings = React.useMemo(() => {
@@ -142,13 +164,18 @@ export function Breadcrumbs({
                 );
             })}
 
-            {/* 历史模式时间戳指示器 (AC #20) */}
-            {timestamp && (
-                <div className="ml-auto flex items-center gap-1 text-xs text-amber-500">
+            {/* 历史模式时间戳指示器 (UX 优化: 合并显示 commit 信息) */}
+            {effectiveHistoryInfo && (
+                <div className="ml-auto flex items-center gap-1.5 text-xs text-amber-500">
                     <Clock className="h-3 w-3" />
-                    <span>
-                        历史 ·{" "}
-                        {formatDistanceToNow(new Date(timestamp), {
+                    <span className="flex items-center gap-1">
+                        {effectiveHistoryInfo.commitHash && (
+                            <span className="font-mono opacity-80">
+                                {effectiveHistoryInfo.commitHash.slice(0, 7)}
+                            </span>
+                        )}
+                        {effectiveHistoryInfo.commitHash && <span>·</span>}
+                        {formatDistanceToNow(new Date(effectiveHistoryInfo.timestamp), {
                             addSuffix: true,
                             locale: zhCN,
                         })}

@@ -82,6 +82,9 @@ describe("CodePanel", () => {
         });
 
         it("AC #6: 应该渲染面包屑导航", () => {
+            // 打开标签以显示文件名 (UX 优化后面包屑隐藏文件名)
+            useEditorStore.getState().openTab("src/components/App.tsx");
+
             renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
@@ -89,11 +92,12 @@ describe("CodePanel", () => {
                 />
             );
 
-            // 面包屑应显示路径段
+            // 面包屑应显示路径段 (UX 优化: 文件名已隐藏)
             expect(screen.getByText("src")).toBeInTheDocument();
             expect(screen.getByText("components")).toBeInTheDocument();
-            // App.tsx 会在多处出现 (标签和面包屑)，使用 getAllByText
-            expect(screen.getAllByText("App.tsx").length).toBeGreaterThan(0);
+            // UX 优化: Breadcrumbs 现在隐藏文件名，只在标签页显示
+            // App.tsx 现在只出现在标签页中
+            expect(screen.getByText("App.tsx")).toBeInTheDocument();
         });
 
         it("无 Git 仓库时应显示警告", () => {
@@ -212,13 +216,12 @@ describe("CodePanel", () => {
             );
 
             // Breadcrumbs 组件在历史模式时显示时间指示器
-            // 历史模式会显示 "历史" 或时间相对字符串
-            // 查找面包屑中的时钟图标或历史标识
             const breadcrumbs = screen.getByText("src");
             expect(breadcrumbs).toBeInTheDocument();
-            
-            // 历史模式下，多处会显示 "历史" 字样
-            const historyIndicators = screen.queryAllByText(/历史/i);
+
+            // UX 优化: 历史模式现在显示 commit hash (例如 "abc1234") 而不是 "历史" 文字
+            // 检查 commit hash 或相对时间 (如 "X小时前")
+            const historyIndicators = screen.queryAllByText(/abc1234|小时前|分钟前/i);
             expect(historyIndicators.length).toBeGreaterThan(0);
         });
     });
@@ -356,15 +359,19 @@ describe("CodePanel", () => {
                     const commitHash = args?.commitHash as string | undefined;
                     if (commitHash === "abc1234") {
                         return Promise.resolve([
-                            { name: "src", path: "src", type: "directory", children: [
-                                { name: "old-file.ts", path: "src/old-file.ts", type: "file" }
-                            ]},
+                            {
+                                name: "src", path: "src", type: "directory", children: [
+                                    { name: "old-file.ts", path: "src/old-file.ts", type: "file" }
+                                ]
+                            },
                         ]);
                     }
                     return Promise.resolve([
-                        { name: "src", path: "src", type: "directory", children: [
-                            { name: "new-file.ts", path: "src/new-file.ts", type: "file" }
-                        ]},
+                        {
+                            name: "src", path: "src", type: "directory", children: [
+                                { name: "new-file.ts", path: "src/new-file.ts", type: "file" }
+                            ]
+                        },
                     ]);
                 }
                 if (cmd === "list_files_at_commit") {
