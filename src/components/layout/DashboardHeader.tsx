@@ -1,14 +1,16 @@
 /**
  * DashboardHeader Component - Dashboard 头部组件
  * Story 2.8: Task 7
+ * Story 2.10: Task 2.5 (Global Search Button)
  *
  * 包含 Logo、搜索框、主题切换和导入按钮
  */
 
-import { Upload } from "lucide-react";
+import { Upload, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ProjectSearch } from "@/components/search";
+import { useSearchStore } from "@/stores/useSearchStore";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +28,8 @@ export interface DashboardHeaderProps {
  * Dashboard 页面头部，包含品牌、搜索和操作按钮
  */
 export function DashboardHeader({ onSearch, onImport }: DashboardHeaderProps) {
+  const openSearch = useSearchStore((state) => state.open);
+
   return (
     <header
       data-testid="dashboard-header"
@@ -50,6 +54,16 @@ export function DashboardHeader({ onSearch, onImport }: DashboardHeaderProps) {
 
         {/* 右侧: 操作按钮 */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* 全局搜索按钮 (Story 2.10) */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={openSearch}
+            title="全局搜索 (⌘K)"
+            aria-label="全局搜索"
+          >
+            <Search className="w-4 h-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"

@@ -18,3 +18,4 @@ export {
 } from "./useDiffFadeOut";
 export { useProjects, type UseProjectsResult } from "./useProjects";
 export { useDebouncedValue } from "./useDebouncedValue";
+export { useGlobalShortcut } from "./useGlobalShortcut";

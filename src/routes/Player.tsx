@@ -1,6 +1,7 @@
 /**
  * Player Page - 会话回放页面
  * Story 2.8: Task 1
+ * Story 2.10: Task 6 (Message Navigation from Search)
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
@@ -9,7 +10,7 @@
  */
 
 import * as React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
@@ -24,6 +25,7 @@ import { TimberLine } from "@/components/timeline";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { useSearchStore } from "@/stores/useSearchStore";
 import { useTimeMachine } from "@/hooks/useTimeMachine";
 
 /**
@@ -76,9 +78,16 @@ function findRecentFilePath(
 export default function Player() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // 从 URL 获取 messageId (Story 2.10: 从全局搜索跳转)
+  const targetMessageId = searchParams.get("messageId");
 
   // DualStreamLayout ref 用于程序化滚动
   const layoutRef = React.useRef<DualStreamLayoutRef>(null);
+
+  // 是否已处理初始滚动
+  const hasScrolledToTargetRef = React.useRef(false);
 
   // 选中的消息 ID
   const [selectedMessageId, setSelectedMessageId] = React.useState<string | undefined>();
@@ -160,6 +169,56 @@ export default function Player() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  // 处理从全局搜索跳转的消息定位 (Story 2.10: Task 6)
+  const addRecentSession = useSearchStore((state) => state.addRecentSession);
+
+  React.useEffect(() => {
+    if (
+      !loading &&
+      messages.length > 0 &&
+      targetMessageId &&
+      !hasScrolledToTargetRef.current
+    ) {
+      // 标记已处理
+      hasScrolledToTargetRef.current = true;
+
+      // 滚动到目标消息
+      const targetIndex = messages.findIndex((m) => m.id === targetMessageId);
+      if (targetIndex >= 0) {
+        const targetMessage = messages[targetIndex];
+        setSelectedMessageId(targetMessageId);
+
+        // 延迟滚动，确保 DOM 已渲染
+        setTimeout(() => {
+          layoutRef.current?.scrollToMessage(targetMessageId);
+        }, 100);
+
+        // 更新时间轴
+        const msgTime = new Date(targetMessage.timestamp).getTime();
+        setCurrentTime(msgTime);
+        jumpToMessage(targetIndex, targetMessageId, msgTime);
+      }
+
+      // 清除 URL 参数，避免刷新时重复滚动
+      setSearchParams({}, { replace: true });
+    }
+  }, [loading, messages, targetMessageId, jumpToMessage, setSearchParams]);
+
+  // 记录最近访问的会话 (Story 2.10)
+  React.useEffect(() => {
+    if (sessionId && sessionCwd && !loading && messages.length > 0) {
+      // 从 cwd 提取项目名
+      const projectName = sessionCwd.split("/").pop() || sessionCwd;
+      addRecentSession({
+        projectId: sessionCwd, // 使用 cwd 作为临时 projectId
+        projectName,
+        sessionId,
+        sessionName: `Session ${sessionId.slice(0, 8)}`,
+        accessedAt: Date.now(),
+      });
+    }
+  }, [sessionId, sessionCwd, loading, messages.length, addRecentSession]);
 
   // Git 仓库检测 (FR-GIT-001)
   React.useEffect(() => {

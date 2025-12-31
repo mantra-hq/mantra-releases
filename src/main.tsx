@@ -1,6 +1,7 @@
 /**
  * Main Entry Point - 应用入口
  * Story 2.8: Task 1
+ * Story 2.10: Task 2.4 (Global Search Integration)
  *
  * 配置路由和全局 Providers
  */
@@ -11,6 +12,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Dashboard, Player } from "./routes";
 import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { GlobalSearch } from "./components/search";
+import { useGlobalShortcut } from "./hooks";
 import "./index.css";
 
 // Prevent flash of incorrect theme on initial load
@@ -32,19 +35,32 @@ const initTheme = () => {
 // Run before React hydration
 initTheme();
 
+/**
+ * GlobalShortcutProvider - 全局快捷键 Provider
+ * 在应用根级别注册全局快捷键
+ */
+function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
+  useGlobalShortcut();
+  return <>{children}</>;
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="system">
       <TooltipProvider delayDuration={300}>
         <BrowserRouter>
-          <Routes>
-            {/* Dashboard: 项目列表页 */}
-            <Route path="/" element={<Dashboard />} />
-            {/* Player: 会话回放页 */}
-            <Route path="/session/:sessionId" element={<Player />} />
-            {/* 默认重定向到 Dashboard */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <GlobalShortcutProvider>
+            <Routes>
+              {/* Dashboard: 项目列表页 */}
+              <Route path="/" element={<Dashboard />} />
+              {/* Player: 会话回放页 */}
+              <Route path="/session/:sessionId" element={<Player />} />
+              {/* 默认重定向到 Dashboard */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            {/* 全局搜索 Modal (Story 2.10) */}
+            <GlobalSearch />
+          </GlobalShortcutProvider>
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
