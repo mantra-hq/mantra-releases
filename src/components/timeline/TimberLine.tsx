@@ -264,7 +264,9 @@ export const TimberLine = React.memo(function TimberLine({
             className={cn(
                 "relative w-full h-12 px-4 py-3",
                 "bg-muted/50 border-t border-border",
-                "select-none",
+                "select-none shrink-0",
+                // Focus 样式 - 键盘导航时显示
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                 disabled && "opacity-50 cursor-not-allowed",
                 className
             )}

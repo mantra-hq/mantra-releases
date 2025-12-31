@@ -14,6 +14,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
 import type { NarrativeMessage } from "@/types/message";
+import {
+  messagesToTimelineEvents,
+  getTimelineRange,
+  type TimelineEvent,
+} from "@/types/timeline";
+import { TimberLine } from "@/components/timeline";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -36,6 +42,14 @@ export default function Player() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [sessionCwd, setSessionCwd] = React.useState<string | undefined>();
+
+  // 时间轴状态 (Story 2.6)
+  const [timelineEvents, setTimelineEvents] = React.useState<TimelineEvent[]>([]);
+  const [timelineRange, setTimelineRange] = React.useState<{ startTime: number; endTime: number }>({
+    startTime: Date.now(),
+    endTime: Date.now(),
+  });
+  const [currentTime, setCurrentTime] = React.useState<number>(Date.now());
 
   // 加载会话数据
   React.useEffect(() => {
@@ -64,6 +78,14 @@ export default function Player() {
           const narrativeMessages = convertSessionToMessages(session);
           setMessages(narrativeMessages);
           setSessionCwd(session.cwd);
+
+          // 计算时间轴数据 (Story 2.6)
+          const events = messagesToTimelineEvents(narrativeMessages);
+          setTimelineEvents(events);
+          const range = getTimelineRange(events);
+          setTimelineRange(range);
+          // 初始化当前时间为第一条消息的时间
+          setCurrentTime(range.startTime);
         }
       } catch (err) {
         if (cancelled) return;
@@ -85,12 +107,36 @@ export default function Player() {
 
   // 消息选中回调
   const handleMessageSelect = React.useCallback(
-    (messageId: string, _message: NarrativeMessage) => {
+    (messageId: string, message: NarrativeMessage) => {
       setSelectedMessageId(messageId);
-      // DEV: 调试时可取消注释查看选中的消息
-      // if (import.meta.env.DEV) console.log("Selected message:", _message);
+      // 同步更新时间轴位置
+      const msgTime = new Date(message.timestamp).getTime();
+      setCurrentTime(msgTime);
     },
     []
+  );
+
+  // 时间轴 Seek 回调 (Story 2.6)
+  const handleTimelineSeek = React.useCallback(
+    (timestamp: number) => {
+      setCurrentTime(timestamp);
+      // 找到最近的消息并选中
+      const nearestEvent = timelineEvents.reduce<TimelineEvent | null>((nearest, event) => {
+        if (!nearest) return event;
+        const currentDiff = Math.abs(event.timestamp - timestamp);
+        const nearestDiff = Math.abs(nearest.timestamp - timestamp);
+        return currentDiff < nearestDiff ? event : nearest;
+      }, null);
+
+      if (nearestEvent && nearestEvent.messageIndex !== undefined) {
+        const msg = messages[nearestEvent.messageIndex];
+        if (msg) {
+          setSelectedMessageId(msg.id);
+          layoutRef.current?.scrollToMessage(msg.id);
+        }
+      }
+    },
+    [timelineEvents, messages]
   );
 
   // 返回 Dashboard
@@ -244,13 +290,32 @@ export default function Player() {
       </header>
 
       {/* Main Content - DualStreamLayout */}
-      <main className="flex-1 min-h-0 overflow-hidden">
-        <DualStreamLayout
-          ref={layoutRef}
-          messages={messages}
-          selectedMessageId={selectedMessageId}
-          onMessageSelect={handleMessageSelect}
-        />
+      <main className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <DualStreamLayout
+            ref={layoutRef}
+            messages={messages}
+            selectedMessageId={selectedMessageId}
+            onMessageSelect={handleMessageSelect}
+            // TimberLine 时间轴 Props (Story 2.6)
+            showTimeline={false}
+            timelineStartTime={timelineRange.startTime}
+            timelineEndTime={timelineRange.endTime}
+            timelineCurrentTime={currentTime}
+            timelineEvents={timelineEvents}
+            onTimelineSeek={handleTimelineSeek}
+          />
+        </div>
+        {/* 直接在 Player 层渲染 TimberLine */}
+        {messages.length > 0 && (
+          <TimberLine
+            startTime={timelineRange.startTime}
+            endTime={timelineRange.endTime}
+            currentTime={currentTime}
+            events={timelineEvents}
+            onSeek={handleTimelineSeek}
+          />
+        )}
       </main>
     </div>
   );

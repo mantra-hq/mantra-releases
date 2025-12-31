@@ -106,6 +106,43 @@ export function positionToTime(
 }
 
 /**
+ * 从 NarrativeMessage 数组生成 TimelineEvent 数组
+ */
+export function messagesToTimelineEvents(
+  messages: Array<{ id: string; role: 'user' | 'assistant'; timestamp: string }>
+): TimelineEvent[] {
+  return messages.map((msg, index) => ({
+    timestamp: new Date(msg.timestamp).getTime(),
+    type: msg.role === 'user' ? 'user-message' : 'ai-response' as TimelineEventType,
+    messageIndex: index,
+    label: msg.role === 'user' ? '用户消息' : 'AI 回复',
+  }));
+}
+
+/**
+ * 计算时间轴的起止时间
+ */
+export function getTimelineRange(
+  events: TimelineEvent[]
+): { startTime: number; endTime: number } {
+  if (events.length === 0) {
+    const now = Date.now();
+    return { startTime: now, endTime: now };
+  }
+
+  const timestamps = events.map((e) => e.timestamp);
+  const startTime = Math.min(...timestamps);
+  const endTime = Math.max(...timestamps);
+
+  // 如果只有一个事件，添加一些范围
+  if (startTime === endTime) {
+    return { startTime: startTime - 1000, endTime: endTime + 1000 };
+  }
+
+  return { startTime, endTime };
+}
+
+/**
  * 查找给定时间最近的事件
  */
 export function findNearestEvent(
