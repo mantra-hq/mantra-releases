@@ -1,0 +1,151 @@
+/**
+ * sanitizer-ipc 单元测试 - Story 3-2 Task 8.4
+ * 测试 IPC 封装函数的类型安全和行为
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
+import {
+    sanitizeText,
+    sanitizeSession,
+    createEmptyStats,
+    hasChanges,
+} from './sanitizer-ipc';
+import type { SanitizationResult } from '@/components/sanitizer/types';
+
+// Mock Tauri invoke
+vi.mock('@tauri-apps/api/core', () => ({
+    invoke: vi.fn(),
+}));
+
+const mockResult: SanitizationResult = {
+    sanitized_text: 'const key = "[REDACTED:API_KEY]";',
+    stats: {
+        counts: { api_key: 1 },
+        total: 1,
+    },
+    has_matches: true,
+};
+
+const mockEmptyResult: SanitizationResult = {
+    sanitized_text: 'Hello, World!',
+    stats: {
+        counts: {},
+        total: 0,
+    },
+    has_matches: false,
+};
+
+describe('sanitizer-ipc', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('sanitizeText', () => {
+        it('应该调用正确的 IPC 命令和参数', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockResult);
+
+            const text = 'const key = "sk-1234567890";';
+            await sanitizeText(text);
+
+            expect(invoke).toHaveBeenCalledWith('sanitize_text', {
+                text,
+                custom_patterns: [],
+            });
+        });
+
+        it('应该传递自定义规则', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockResult);
+
+            const text = 'Phone: 123-456-7890';
+            const customPatterns = [
+                { name: 'Phone', pattern: '\\d{3}-\\d{3}-\\d{4}', replacement: '[PHONE]' },
+            ];
+
+            await sanitizeText(text, customPatterns);
+
+            expect(invoke).toHaveBeenCalledWith('sanitize_text', {
+                text,
+                custom_patterns: customPatterns,
+            });
+        });
+
+        it('应该返回脱敏结果', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockResult);
+
+            const result = await sanitizeText('test');
+
+            expect(result).toEqual(mockResult);
+            expect(result.has_matches).toBe(true);
+            expect(result.stats.total).toBe(1);
+        });
+
+        it('应该处理无匹配情况', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockEmptyResult);
+
+            const result = await sanitizeText('Hello, World!');
+
+            expect(result.has_matches).toBe(false);
+            expect(result.stats.total).toBe(0);
+        });
+    });
+
+    describe('sanitizeSession', () => {
+        it('应该调用正确的 IPC 命令和参数', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockResult);
+
+            const sessionId = 'session-123';
+            await sanitizeSession(sessionId);
+
+            expect(invoke).toHaveBeenCalledWith('sanitize_session', {
+                sessionId,
+                custom_patterns: [],
+            });
+        });
+
+        it('应该传递自定义规则', async () => {
+            vi.mocked(invoke).mockResolvedValue(mockResult);
+
+            const sessionId = 'session-456';
+            const customPatterns = [
+                { name: 'Secret', pattern: 'secret_\\w+', replacement: '[SECRET]' },
+            ];
+
+            await sanitizeSession(sessionId, customPatterns);
+
+            expect(invoke).toHaveBeenCalledWith('sanitize_session', {
+                sessionId,
+                custom_patterns: customPatterns,
+            });
+        });
+    });
+
+    describe('createEmptyStats', () => {
+        it('应该返回空的统计对象', () => {
+            const stats = createEmptyStats();
+
+            expect(stats).toEqual({
+                counts: {},
+                total: 0,
+            });
+        });
+
+        it('每次调用应该返回新对象', () => {
+            const stats1 = createEmptyStats();
+            const stats2 = createEmptyStats();
+
+            expect(stats1).not.toBe(stats2);
+            expect(stats1).toEqual(stats2);
+        });
+    });
+
+    describe('hasChanges', () => {
+        it('有匹配时应该返回 true', () => {
+            expect(hasChanges(mockResult)).toBe(true);
+        });
+
+        it('无匹配时应该返回 false', () => {
+            expect(hasChanges(mockEmptyResult)).toBe(false);
+        });
+    });
+});
