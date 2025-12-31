@@ -1,0 +1,257 @@
+/**
+ * useEditorStore - 编辑器状态管理
+ * Story 2.13: Task 1 - AC #1, #2, #3, #5
+ *
+ * 管理编辑器核心状态:
+ * - 文件标签页 (tabs)
+ * - 激活标签 (activeTabId)
+ * - 侧边栏展开状态 (sidebarOpen)
+ * - 文件夹展开状态 (expandedFolders)
+ * - Monaco ViewState 缓存
+ */
+
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { editor } from "monaco-editor";
+
+/**
+ * 文件标签页数据
+ */
+export interface EditorTab {
+    /** 唯一标识 (文件路径 或 commitHash:path) */
+    id: string;
+    /** 文件相对路径 */
+    path: string;
+    /** 显示标签 (文件名) */
+    label: string;
+    /** 是否固定 (非预览模式) */
+    isPinned: boolean;
+    /** 是否预览模式 (单击打开，斜体显示) */
+    isPreview: boolean;
+    /** Monaco ViewState (光标、滚动位置) */
+    viewState: editor.ICodeEditorViewState | null;
+    /** 所属 commit (历史模式) */
+    commitHash?: string;
+}
+
+/**
+ * 编辑器状态
+ */
+export interface EditorState {
+    /** 打开的标签页列表 */
+    tabs: EditorTab[];
+    /** 当前激活的标签 ID */
+    activeTabId: string | null;
+    /** 侧边栏是否展开 */
+    sidebarOpen: boolean;
+    /** 文件树展开状态 */
+    expandedFolders: Set<string>;
+
+    // ======== Actions ========
+
+    /** 打开文件 (双击 = pinned, 单击 = preview) */
+    openTab: (path: string, options?: { preview?: boolean; commitHash?: string }) => void;
+    /** 关闭标签 */
+    closeTab: (tabId: string) => void;
+    /** 设置激活标签 */
+    setActiveTab: (tabId: string) => void;
+    /** 固定预览标签 */
+    pinTab: (tabId: string) => void;
+    /** 更新 ViewState */
+    updateViewState: (tabId: string, viewState: editor.ICodeEditorViewState) => void;
+    /** 切换侧边栏 */
+    toggleSidebar: () => void;
+    /** 展开/折叠文件夹 */
+    toggleFolder: (path: string) => void;
+    /** 切换到下一个标签 */
+    nextTab: () => void;
+    /** 切换到上一个标签 */
+    prevTab: () => void;
+    /** 关闭当前标签 */
+    closeCurrentTab: () => void;
+    /** 清除所有标签 */
+    closeAllTabs: () => void;
+}
+
+/**
+ * 从路径提取文件名
+ */
+function getFileName(path: string): string {
+    return path.split("/").pop() || path;
+}
+
+/**
+ * 编辑器状态 Store
+ */
+export const useEditorStore = create<EditorState>()(
+    persist(
+        (set, get) => ({
+            tabs: [],
+            activeTabId: null,
+            sidebarOpen: false,
+            expandedFolders: new Set<string>(),
+
+            openTab: (path, options = {}) => {
+                const { preview = false, commitHash } = options;
+                const tabId = commitHash ? `${commitHash}:${path}` : path;
+                const state = get();
+
+                // 检查是否已打开
+                const existingTab = state.tabs.find((t) => t.id === tabId);
+                if (existingTab) {
+                    // 如果已存在且当前是预览，双击时固定
+                    if (existingTab.isPreview && !preview) {
+                        set({
+                            tabs: state.tabs.map((t) =>
+                                t.id === tabId ? { ...t, isPinned: true, isPreview: false } : t
+                            ),
+                            activeTabId: tabId,
+                        });
+                    } else {
+                        set({ activeTabId: tabId });
+                    }
+                    return;
+                }
+
+                // 如果是预览模式，替换现有预览标签
+                const previewIndex = state.tabs.findIndex((t) => t.isPreview);
+                const newTab: EditorTab = {
+                    id: tabId,
+                    path,
+                    label: getFileName(path),
+                    isPinned: !preview,
+                    isPreview: preview,
+                    viewState: null,
+                    commitHash,
+                };
+
+                if (preview && previewIndex !== -1) {
+                    // 替换预览标签
+                    const newTabs = [...state.tabs];
+                    newTabs[previewIndex] = newTab;
+                    set({ tabs: newTabs, activeTabId: tabId });
+                } else {
+                    // 添加新标签
+                    set({
+                        tabs: [...state.tabs, newTab],
+                        activeTabId: tabId,
+                    });
+                }
+            },
+
+            closeTab: (tabId) => {
+                const state = get();
+                const tabIndex = state.tabs.findIndex((t) => t.id === tabId);
+                if (tabIndex === -1) return;
+
+                const newTabs = state.tabs.filter((t) => t.id !== tabId);
+
+                // 计算新的激活标签
+                let newActiveId = state.activeTabId;
+                if (state.activeTabId === tabId) {
+                    if (newTabs.length === 0) {
+                        newActiveId = null;
+                    } else if (tabIndex >= newTabs.length) {
+                        newActiveId = newTabs[newTabs.length - 1].id;
+                    } else {
+                        newActiveId = newTabs[tabIndex].id;
+                    }
+                }
+
+                set({ tabs: newTabs, activeTabId: newActiveId });
+            },
+
+            setActiveTab: (tabId) => set({ activeTabId: tabId }),
+
+            pinTab: (tabId) =>
+                set((state) => ({
+                    tabs: state.tabs.map((t) =>
+                        t.id === tabId ? { ...t, isPinned: true, isPreview: false } : t
+                    ),
+                })),
+
+            updateViewState: (tabId, viewState) =>
+                set((state) => ({
+                    tabs: state.tabs.map((t) =>
+                        t.id === tabId ? { ...t, viewState } : t
+                    ),
+                })),
+
+            toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+            toggleFolder: (path) =>
+                set((state) => {
+                    const newExpanded = new Set(state.expandedFolders);
+                    if (newExpanded.has(path)) {
+                        newExpanded.delete(path);
+                    } else {
+                        newExpanded.add(path);
+                    }
+                    return { expandedFolders: newExpanded };
+                }),
+
+            nextTab: () => {
+                const state = get();
+                if (state.tabs.length === 0) return;
+                const currentIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
+                const nextIndex = (currentIndex + 1) % state.tabs.length;
+                set({ activeTabId: state.tabs[nextIndex].id });
+            },
+
+            prevTab: () => {
+                const state = get();
+                if (state.tabs.length === 0) return;
+                const currentIndex = state.tabs.findIndex((t) => t.id === state.activeTabId);
+                const prevIndex = currentIndex <= 0 ? state.tabs.length - 1 : currentIndex - 1;
+                set({ activeTabId: state.tabs[prevIndex].id });
+            },
+
+            closeCurrentTab: () => {
+                const state = get();
+                if (state.activeTabId) {
+                    state.closeTab(state.activeTabId);
+                }
+            },
+
+            closeAllTabs: () => set({ tabs: [], activeTabId: null }),
+        }),
+        {
+            name: "mantra-editor-store",
+            partialize: (state) => ({
+                sidebarOpen: state.sidebarOpen,
+                // 不持久化 tabs 和 viewState (会话级数据)
+            }),
+            // 自定义序列化/反序列化以处理 Set
+            storage: {
+                getItem: (name) => {
+                    const str = localStorage.getItem(name);
+                    if (!str) return null;
+                    const parsed = JSON.parse(str);
+                    return {
+                        ...parsed,
+                        state: {
+                            ...parsed.state,
+                            expandedFolders: new Set(parsed.state.expandedFolders || []),
+                            tabs: [], // 不从持久化恢复 tabs
+                            activeTabId: null,
+                        },
+                    };
+                },
+                setItem: (name, value) => {
+                    const serialized = {
+                        ...value,
+                        state: {
+                            ...value.state,
+                            expandedFolders: Array.from(value.state.expandedFolders || []),
+                        },
+                    };
+                    localStorage.setItem(name, JSON.stringify(serialized));
+                },
+                removeItem: (name) => localStorage.removeItem(name),
+            },
+        }
+    )
+);
+
+export default useEditorStore;
+

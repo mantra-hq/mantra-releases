@@ -11,6 +11,7 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { CodeSnapshotHeader } from "./CodeSnapshotHeader";
@@ -90,6 +91,10 @@ export interface CodeSnapshotViewProps {
   onDismissNotFound?: () => void;
   /** 自定义 className */
   className?: string;
+  /** Monaco ViewState (Story 2.13 AC #5) */
+  viewState?: editor.ICodeEditorViewState | null;
+  /** ViewState 变更回调 (Story 2.13 AC #5) */
+  onViewStateChange?: (viewState: editor.ICodeEditorViewState) => void;
 }
 
 /**
@@ -149,6 +154,8 @@ export function CodeSnapshotView({
   notFoundPath,
   onDismissNotFound,
   className,
+  viewState,
+  onViewStateChange,
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -189,9 +196,59 @@ export function CodeSnapshotView({
     }
   }, [timestamp]);
 
-  // 编辑器挂载回调
+  // 事件监听器清理引用
+  const disposablesRef = useRef<Array<{ dispose: () => void }>>([]);
+  // ViewState 回调 ref (避免依赖变化导致重新绑定)
+  const onViewStateChangeRef = useRef(onViewStateChange);
+  onViewStateChangeRef.current = onViewStateChange;
+  // 跟踪是否需要恢复 ViewState
+  const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null);
+
+  // 编辑器挂载回调 (不依赖 viewState，避免重新挂载)
   const handleEditorMount: OnMount = useCallback((editor, _monaco) => {
     editorRef.current = editor;
+
+    // 清理旧的监听器
+    disposablesRef.current.forEach(d => d.dispose());
+    disposablesRef.current = [];
+
+    // Story 2.13 AC #5: 如果有待恢复的 ViewState，立即恢复
+    if (pendingViewStateRef.current) {
+      editor.restoreViewState(pendingViewStateRef.current);
+      pendingViewStateRef.current = null;
+    }
+
+    // Story 2.13 AC #5: 监听光标/滚动变化，保存 ViewState
+    const saveViewState = () => {
+      const state = editor.saveViewState();
+      if (state && onViewStateChangeRef.current) {
+        onViewStateChangeRef.current(state);
+      }
+    };
+
+    // 监听光标位置变化 (保存 disposable 用于清理)
+    disposablesRef.current.push(editor.onDidChangeCursorPosition(saveViewState));
+    // 监听滚动变化
+    disposablesRef.current.push(editor.onDidScrollChange(saveViewState));
+  }, []);
+
+  // Story 2.13 AC #5: ViewState 变化时恢复 (独立 effect，避免 onMount 重绑定)
+  useEffect(() => {
+    if (viewState && editorRef.current) {
+      // 编辑器已挂载，直接恢复
+      editorRef.current.restoreViewState(viewState);
+    } else if (viewState) {
+      // 编辑器未挂载，存储待恢复状态
+      pendingViewStateRef.current = viewState;
+    }
+  }, [viewState]);
+
+  // 组件卸载时清理事件监听器
+  useEffect(() => {
+    return () => {
+      disposablesRef.current.forEach(d => d.dispose());
+      disposablesRef.current = [];
+    };
   }, []);
 
   // 代码变化处理 (动画 + Diff 高亮)

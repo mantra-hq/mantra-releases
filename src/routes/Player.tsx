@@ -520,6 +520,8 @@ export default function Player() {
             // Story 2.11 AC6: 无 Git 仓库时显示警告
             showNoGitWarning={hasNoGit}
             projectPath={sessionCwd}
+            // Story 2.13: 文件浏览器
+            repoPath={repoPath ?? undefined}
           />
         </div>
         {/* 直接在 Player 层渲染 TimberLine */}

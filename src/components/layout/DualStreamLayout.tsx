@@ -76,6 +76,10 @@ export interface DualStreamLayoutProps {
   showNoGitWarning?: boolean;
   /** 项目路径 (用于无 Git 警告显示) */
   projectPath?: string;
+
+  // Story 2.13: 文件浏览器
+  /** Git 仓库路径 (用于文件树, AC #8-14) */
+  repoPath?: string;
 }
 
 /**
@@ -139,6 +143,8 @@ export const DualStreamLayout = React.forwardRef<
       // Story 2.11 props
       showNoGitWarning = false,
       projectPath,
+      // Story 2.13 props
+      repoPath,
     },
     ref
   ) => {
@@ -219,6 +225,7 @@ export const DualStreamLayout = React.forwardRef<
         onReturnToCurrent={returnToCurrent}
         showNoGitWarning={showNoGitWarning}
         projectPath={projectPath}
+        repoPath={repoPath}
         fileNotFound={fileNotFound}
         notFoundPath={notFoundPath ?? undefined}
         onDismissNotFound={clearFileNotFound}

@@ -19,6 +19,7 @@ use commands::{
     get_session, get_snapshot_at_time, import_parsed_sessions,
     import_sessions, list_projects, parse_claude_log, parse_claude_log_string, parse_log_files,
     scan_custom_directory, scan_log_directory, AppState,
+    list_tree_at_commit, list_files_at_commit,
 };
 use storage::Database;
 
@@ -75,7 +76,9 @@ pub fn run() {
             scan_log_directory,
             scan_custom_directory,
             parse_log_files,
-            get_representative_file
+            get_representative_file,
+            list_tree_at_commit,
+            list_files_at_commit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
