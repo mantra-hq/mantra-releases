@@ -70,21 +70,47 @@ describe("import-ipc", () => {
     });
   });
 
-  // Task 6.3: parseLogFiles
+  // Task 6.3: parseLogFiles (现在调用 import_sessions)
   describe("parseLogFiles", () => {
     it("calls invoke with correct command and paths", async () => {
       const paths = ["/path/file1.json", "/path/file2.json"];
-      const mockResults = [
-        { success: true, filePath: paths[0], projectId: "proj-1", sessionId: "sess-1" },
-        { success: true, filePath: paths[1], projectId: "proj-1", sessionId: "sess-2" },
-      ];
-      vi.mocked(invoke).mockResolvedValue(mockResults);
+      // import_sessions 返回的是 ImportResult 结构，不是逐文件结果
+      const mockBackendResult = {
+        imported_count: 2,
+        skipped_count: 0,
+        new_projects_count: 1,
+        errors: [],
+      };
+      vi.mocked(invoke).mockResolvedValue(mockBackendResult);
 
       const onProgress = vi.fn();
       const result = await parseLogFiles(paths, onProgress);
 
-      expect(invoke).toHaveBeenCalledWith("parse_log_files", { paths });
-      expect(result).toEqual(mockResults);
+      expect(invoke).toHaveBeenCalledWith("import_sessions", { paths });
+      // 验证返回的结果格式正确
+      expect(result).toHaveLength(2);
+      expect(result[0].success).toBe(true);
+      expect(result[0].filePath).toBe(paths[0]);
+      expect(result[1].success).toBe(true);
+      expect(result[1].filePath).toBe(paths[1]);
+    });
+
+    it("handles partial failures", async () => {
+      const paths = ["/path/success.json", "/path/fail.json"];
+      const mockBackendResult = {
+        imported_count: 1,
+        skipped_count: 0,
+        new_projects_count: 1,
+        errors: ["/path/fail.json: 无效的 JSON 格式"],
+      };
+      vi.mocked(invoke).mockResolvedValue(mockBackendResult);
+
+      const result = await parseLogFiles(paths, vi.fn());
+
+      expect(result).toHaveLength(2);
+      expect(result[0].success).toBe(true);
+      expect(result[1].success).toBe(false);
+      expect(result[1].error).toBe("无效的 JSON 格式");
     });
 
     it("propagates errors from invoke", async () => {

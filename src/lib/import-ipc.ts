@@ -23,26 +23,59 @@ export async function scanLogDirectory(source: ImportSource): Promise<Discovered
 }
 
 /**
- * 解析日志文件
+ * 后端 import_sessions 返回的结果类型
+ */
+interface BackendImportResult {
+  imported_count: number;
+  skipped_count: number;
+  new_projects_count: number;
+  errors: string[];
+}
+
+/**
+ * 解析并导入日志文件
  *
- * @param paths - 要解析的文件路径列表
- * @param onProgress - 进度回调
- * @returns 解析结果列表
+ * @param paths - 要导入的文件路径列表
+ * @param onProgress - 进度回调 (当前未使用，后续实现)
+ * @returns 导入结果列表
  */
 export async function parseLogFiles(
   paths: string[],
   _onProgress: (progress: ImportProgressData) => void
 ): Promise<ImportResult[]> {
-  // TODO: 使用 Tauri 事件监听进度
-  // const unlisten = await listen<ImportProgressData>('import-progress', (event) => {
-  //   onProgress(event.payload);
-  // });
+  // 调用 import_sessions 而不是 parse_log_files
+  // import_sessions 会解析文件并将会话保存到数据库
+  const backendResult = await invoke<BackendImportResult>("import_sessions", { paths });
 
-  try {
-    return await invoke<ImportResult[]>("parse_log_files", { paths });
-  } finally {
-    // unlisten();
+  // 将后端结果转换为前端期望的格式
+  // 由于后端返回的是汇总统计，我们为每个路径生成对应结果
+  const results: ImportResult[] = [];
+  const errorPaths = new Set<string>();
+
+  // 解析错误信息获取失败的文件路径
+  for (const errorMsg of backendResult.errors) {
+    // 错误格式: "路径: 错误信息"
+    const colonIdx = errorMsg.indexOf(": ");
+    if (colonIdx > 0) {
+      errorPaths.add(errorMsg.substring(0, colonIdx));
+    }
   }
+
+  // 为每个输入路径生成结果
+  for (const path of paths) {
+    const hasError = errorPaths.has(path);
+    const errorMsg = backendResult.errors.find(e => e.startsWith(path + ": "));
+
+    results.push({
+      success: !hasError,
+      filePath: path,
+      projectId: hasError ? undefined : "imported",
+      sessionId: hasError ? undefined : "imported",
+      error: hasError ? errorMsg?.substring(path.length + 2) : undefined,
+    });
+  }
+
+  return results;
 }
 
 /**
