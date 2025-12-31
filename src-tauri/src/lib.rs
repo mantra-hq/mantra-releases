@@ -16,7 +16,7 @@ use tauri::Manager;
 use commands::{
     find_commit_at_time, get_commit_info, get_file_snapshot, get_project_sessions,
     import_parsed_sessions, import_sessions, list_projects, parse_claude_log,
-    parse_claude_log_string, AppState,
+    parse_claude_log_string, parse_log_files, scan_log_directory, AppState,
 };
 use storage::Database;
 
@@ -33,6 +33,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Get app data directory for database storage
             let app_data_dir = app
@@ -62,7 +63,9 @@ pub fn run() {
             list_projects,
             get_project_sessions,
             import_sessions,
-            import_parsed_sessions
+            import_parsed_sessions,
+            scan_log_directory,
+            parse_log_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
