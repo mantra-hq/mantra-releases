@@ -2,12 +2,101 @@
 //!
 //! 提供前端调用的 Git Time Machine 功能接口。
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
+use serde::Serialize;
 use std::path::PathBuf;
 use tauri::async_runtime::spawn_blocking;
 
 use crate::error::AppError;
 use crate::git::{GitTimeMachine, Snapshot};
+
+/// 前端友好的快照结果（与 useTimeMachine.ts 对齐）
+#[derive(Debug, Clone, Serialize)]
+pub struct SnapshotResult {
+    /// 文件内容
+    pub content: String,
+    /// Commit Hash
+    pub commit_hash: String,
+    /// Commit 消息
+    pub commit_message: String,
+    /// Commit 时间戳 (Unix seconds)
+    pub commit_timestamp: i64,
+}
+
+impl From<Snapshot> for SnapshotResult {
+    fn from(snapshot: Snapshot) -> Self {
+        Self {
+            content: snapshot.content,
+            commit_hash: snapshot.commit_hash,
+            commit_message: snapshot.message,
+            commit_timestamp: snapshot.committed_at.timestamp(),
+        }
+    }
+}
+
+/// 获取指定时间戳的文件快照（前端友好版本）
+///
+/// 接受 Unix 秒级时间戳，返回与前端 useTimeMachine.ts 对齐的格式。
+///
+/// # Arguments
+/// * `repo_path` - Git 仓库路径
+/// * `file_path` - 相对于仓库根目录的文件路径
+/// * `timestamp` - Unix 秒级时间戳
+///
+/// # Returns
+/// 返回包含内容和元数据的 SnapshotResult
+#[tauri::command]
+pub async fn get_snapshot_at_time(
+    repo_path: String,
+    file_path: String,
+    timestamp: i64,
+) -> Result<SnapshotResult, AppError> {
+    let repo_path = PathBuf::from(repo_path);
+    let file_path_clone = file_path.clone();
+
+    spawn_blocking(move || {
+        let tm = GitTimeMachine::new(&repo_path)?;
+        let datetime = Utc
+            .timestamp_opt(timestamp, 0)
+            .single()
+            .ok_or_else(|| AppError::Internal(format!("Invalid timestamp: {}", timestamp)))?;
+        let snapshot = tm.get_snapshot_at_time(datetime, &file_path_clone)?;
+        Ok::<_, AppError>(SnapshotResult::from(snapshot))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))?
+}
+
+/// 检测目录是否为 Git 仓库，返回仓库根路径
+///
+/// 从指定目录向上搜索 .git 目录，找到 Git 仓库根路径。
+///
+/// # Arguments
+/// * `dir_path` - 要检测的目录路径
+///
+/// # Returns
+/// 返回 Git 仓库根路径，如果不是 Git 仓库返回 None
+#[tauri::command]
+pub async fn detect_git_repo(dir_path: String) -> Result<Option<String>, AppError> {
+    let dir_path = PathBuf::from(dir_path);
+
+    spawn_blocking(move || {
+        // 向上搜索 .git 目录
+        let mut current = dir_path.as_path();
+        loop {
+            let git_dir = current.join(".git");
+            if git_dir.exists() {
+                return Some(current.to_string_lossy().to_string());
+            }
+            match current.parent() {
+                Some(parent) => current = parent,
+                None => return None,
+            }
+        }
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))
+}
 
 /// 获取指定时间戳的文件快照
 ///

@@ -3,8 +3,9 @@
  * Story 2.8: Task 1
  *
  * 封装 DualStreamLayout，用于播放会话内容
- * 
+ *
  * 从后端加载真实会话数据并转换为前端格式
+ * 集成 Git Time Machine 实现代码快照功能 (FR-GIT)
  */
 
 import * as React from "react";
@@ -23,6 +24,50 @@ import { TimberLine } from "@/components/timeline";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { useTimeMachine } from "@/hooks/useTimeMachine";
+
+/**
+ * 从消息内容块中提取文件路径
+ * 优先从 tool_use 的 file_path 参数中提取
+ */
+function extractFilePathFromMessage(message: NarrativeMessage): string | null {
+  for (const block of message.content) {
+    // 从 tool_use 提取
+    if (block.type === "tool_use" && block.toolInput) {
+      const input = block.toolInput as Record<string, unknown>;
+      // 常见的文件路径参数名
+      const pathKeys = ["file_path", "filePath", "path", "filename"];
+      for (const key of pathKeys) {
+        if (typeof input[key] === "string" && input[key]) {
+          return input[key] as string;
+        }
+      }
+    }
+    // 从 associatedFilePath 提取
+    if (block.associatedFilePath) {
+      return block.associatedFilePath;
+    }
+  }
+  return null;
+}
+
+/**
+ * 从消息列表中提取最近的文件路径
+ * 从指定索引向前搜索
+ */
+function findRecentFilePath(
+  messages: NarrativeMessage[],
+  fromIndex: number
+): string | null {
+  // 从当前消息向前搜索
+  for (let i = fromIndex; i >= 0; i--) {
+    const filePath = extractFilePathFromMessage(messages[i]);
+    if (filePath) {
+      return filePath;
+    }
+  }
+  return null;
+}
 
 /**
  * Player 页面组件
@@ -44,6 +89,9 @@ export default function Player() {
   const [error, setError] = React.useState<string | null>(null);
   const [sessionCwd, setSessionCwd] = React.useState<string | undefined>();
 
+  // Git 仓库路径状态 (FR-GIT-001)
+  const [repoPath, setRepoPath] = React.useState<string | null>(null);
+
   // 时间轴状态 (Story 2.6)
   const [timelineEvents, setTimelineEvents] = React.useState<TimelineEvent[]>([]);
   const [timelineRange, setTimelineRange] = React.useState<{ startTime: number; endTime: number }>({
@@ -55,6 +103,9 @@ export default function Player() {
   // 时间旅行 Store (Story 2.7 AC #6)
   const jumpToMessage = useTimeTravelStore((state) => state.jumpToMessage);
   const setStoreCurrentTime = useTimeTravelStore((state) => state.setCurrentTime);
+
+  // Git Time Machine Hook (FR-GIT-002, FR-GIT-003)
+  const { fetchSnapshot } = useTimeMachine(repoPath);
 
   // 加载会话数据
   React.useEffect(() => {
@@ -110,7 +161,44 @@ export default function Player() {
     };
   }, [sessionId]);
 
-  // 消息选中回调 (Story 2.7 AC #1, #6)
+  // Git 仓库检测 (FR-GIT-001)
+  React.useEffect(() => {
+    if (!sessionCwd) {
+      setRepoPath(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function detectRepo() {
+      try {
+        const detected = await invoke<string | null>("detect_git_repo", {
+          dir_path: sessionCwd,
+        });
+        if (!cancelled) {
+          setRepoPath(detected);
+          if (detected) {
+            console.log("[Player] Git 仓库检测成功:", detected);
+          } else {
+            console.log("[Player] 未检测到 Git 仓库:", sessionCwd);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[Player] Git 仓库检测失败:", err);
+          setRepoPath(null);
+        }
+      }
+    }
+
+    detectRepo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionCwd]);
+
+  // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002)
   const handleMessageSelect = React.useCallback(
     (messageId: string, message: NarrativeMessage) => {
       setSelectedMessageId(messageId);
@@ -121,11 +209,23 @@ export default function Player() {
       // 更新时间旅行状态，触发 isHistoricalMode = true (Story 2.7 AC #6)
       const messageIndex = messages.findIndex((m) => m.id === messageId);
       jumpToMessage(messageIndex, messageId, msgTime);
+
+      // 提取文件路径并获取代码快照 (FR-GIT-002, FR-GIT-003)
+      if (repoPath) {
+        const filePath = findRecentFilePath(messages, messageIndex);
+        if (filePath) {
+          // 将绝对路径转换为相对路径（相对于仓库根目录）
+          const relativePath = filePath.startsWith(repoPath)
+            ? filePath.slice(repoPath.length).replace(/^[/\\]/, "")
+            : filePath;
+          fetchSnapshot(relativePath, msgTime);
+        }
+      }
     },
-    [messages, jumpToMessage]
+    [messages, jumpToMessage, repoPath, fetchSnapshot]
   );
 
-  // 时间轴 Seek 回调 (Story 2.6, 2.7)
+  // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002)
   const handleTimelineSeek = React.useCallback(
     (timestamp: number) => {
       setCurrentTime(timestamp);
@@ -147,10 +247,21 @@ export default function Player() {
           layoutRef.current?.scrollToMessage(msg.id);
           // 更新时间旅行状态 (Story 2.7 AC #7)
           jumpToMessage(nearestEvent.messageIndex, msg.id, timestamp);
+
+          // 提取文件路径并获取代码快照 (FR-GIT-002, FR-GIT-003)
+          if (repoPath) {
+            const filePath = findRecentFilePath(messages, nearestEvent.messageIndex);
+            if (filePath) {
+              const relativePath = filePath.startsWith(repoPath)
+                ? filePath.slice(repoPath.length).replace(/^[/\\]/, "")
+                : filePath;
+              fetchSnapshot(relativePath, timestamp);
+            }
+          }
         }
       }
     },
-    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage]
+    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot]
   );
 
   // 返回 Dashboard
