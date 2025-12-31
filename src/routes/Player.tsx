@@ -22,6 +22,7 @@ import {
 import { TimberLine } from "@/components/timeline";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 
 /**
  * Player 页面组件
@@ -50,6 +51,10 @@ export default function Player() {
     endTime: Date.now(),
   });
   const [currentTime, setCurrentTime] = React.useState<number>(Date.now());
+
+  // 时间旅行 Store (Story 2.7 AC #6)
+  const jumpToMessage = useTimeTravelStore((state) => state.jumpToMessage);
+  const setStoreCurrentTime = useTimeTravelStore((state) => state.setCurrentTime);
 
   // 加载会话数据
   React.useEffect(() => {
@@ -105,21 +110,28 @@ export default function Player() {
     };
   }, [sessionId]);
 
-  // 消息选中回调
+  // 消息选中回调 (Story 2.7 AC #1, #6)
   const handleMessageSelect = React.useCallback(
     (messageId: string, message: NarrativeMessage) => {
       setSelectedMessageId(messageId);
       // 同步更新时间轴位置
       const msgTime = new Date(message.timestamp).getTime();
       setCurrentTime(msgTime);
+
+      // 更新时间旅行状态，触发 isHistoricalMode = true (Story 2.7 AC #6)
+      const messageIndex = messages.findIndex((m) => m.id === messageId);
+      jumpToMessage(messageIndex, messageId, msgTime);
     },
-    []
+    [messages, jumpToMessage]
   );
 
-  // 时间轴 Seek 回调 (Story 2.6)
+  // 时间轴 Seek 回调 (Story 2.6, 2.7)
   const handleTimelineSeek = React.useCallback(
     (timestamp: number) => {
       setCurrentTime(timestamp);
+      // 更新时间旅行状态 (Story 2.7 AC #2)
+      setStoreCurrentTime(timestamp);
+
       // 找到最近的消息并选中
       const nearestEvent = timelineEvents.reduce<TimelineEvent | null>((nearest, event) => {
         if (!nearest) return event;
@@ -133,10 +145,12 @@ export default function Player() {
         if (msg) {
           setSelectedMessageId(msg.id);
           layoutRef.current?.scrollToMessage(msg.id);
+          // 更新时间旅行状态 (Story 2.7 AC #7)
+          jumpToMessage(nearestEvent.messageIndex, msg.id, timestamp);
         }
       }
     },
-    [timelineEvents, messages]
+    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage]
   );
 
   // 返回 Dashboard

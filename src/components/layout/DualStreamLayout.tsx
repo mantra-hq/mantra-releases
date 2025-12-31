@@ -136,10 +136,14 @@ export const DualStreamLayout = React.forwardRef<
     // NarrativePanel ref
     const narrativePanelRef = React.useRef<NarrativePanelRef>(null);
 
-    // 从 store 订阅代码状态
+    // 从 store 订阅代码状态和时间旅行状态 (Story 2.7 AC #5, #6)
     const currentCode = useTimeTravelStore((state) => state.currentCode);
     const currentFilePath = useTimeTravelStore((state) => state.currentFilePath);
-    // const previousCode = useTimeTravelStore((state) => state.previousCode);
+    const previousCode = useTimeTravelStore((state) => state.previousCode);
+    const isHistoricalMode = useTimeTravelStore((state) => state.isHistoricalMode);
+    const currentTimestamp = useTimeTravelStore((state) => state.currentTimestamp);
+    const commitInfo = useTimeTravelStore((state) => state.commitInfo);
+    const returnToCurrent = useTimeTravelStore((state) => state.returnToCurrent);
 
     // 响应式布局检测
     const detectedMode = useResponsiveLayout();
@@ -194,7 +198,12 @@ export const DualStreamLayout = React.forwardRef<
       <CodePanel
         code={currentCode ?? ""}
         filePath={currentFilePath ?? ""}
-        // previousCode={previousCode ?? undefined} // 用于 diff 显示
+        previousCode={previousCode}
+        isHistoricalMode={isHistoricalMode}
+        timestamp={currentTimestamp ?? undefined}
+        commitHash={commitInfo?.hash}
+        commitMessage={commitInfo?.message}
+        onReturnToCurrent={returnToCurrent}
       />
     );
 

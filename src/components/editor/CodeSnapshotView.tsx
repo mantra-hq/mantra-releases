@@ -19,6 +19,8 @@ import {
   toMonacoDecorations,
   useDiffFadeOut,
 } from "./DiffHighlighter";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /**
  * 语言映射表 - 根据文件扩展名识别语言
@@ -143,7 +145,7 @@ export function CodeSnapshotView({
   const decorationsRef = useRef<string[]>([]);
 
   // Diff 淡出控制 (Story 2.7 AC #5)
-  const { shouldShow: shouldShowDiff, triggerFadeOut } = useDiffFadeOut(3000);
+  const { shouldShow: shouldShowDiff, triggerFadeOut, cancelFadeOut } = useDiffFadeOut(3000);
 
   // 根据应用主题映射 Monaco 主题 (AC5)
   const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "light";
@@ -283,7 +285,7 @@ export function CodeSnapshotView({
       {/* 编辑器容器 (AC1) */}
       <div
         className={cn(
-          "flex-1 overflow-hidden",
+          "flex-1 overflow-hidden relative",
           isTransitioning && "animate-fade-in"
         )}
       >
@@ -300,6 +302,19 @@ export function CodeSnapshotView({
             </div>
           }
         />
+
+        {/* Diff 关闭按钮 (Story 2.7 AC #5) */}
+        {shouldShowDiff && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="absolute top-2 right-2 z-10 h-7 gap-1 text-xs opacity-80 hover:opacity-100"
+            onClick={cancelFadeOut}
+          >
+            <X className="h-3 w-3" />
+            隐藏 Diff
+          </Button>
+        )}
       </div>
     </div>
   );

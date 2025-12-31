@@ -16,10 +16,18 @@ export interface CodePanelProps {
   code?: string;
   /** 文件路径 */
   filePath?: string;
-  /** 历史时间戳 (ISO 8601) */
-  timestamp?: string;
+  /** 历史时间戳 (ISO 8601 或 Unix ms) */
+  timestamp?: string | number;
   /** Commit Hash (短格式) */
   commitHash?: string;
+  /** Commit 消息 (Story 2.7 AC #6) */
+  commitMessage?: string;
+  /** 前一个代码内容 (用于 Diff 高亮, Story 2.7 AC #5) */
+  previousCode?: string | null;
+  /** 是否处于历史模式 (Story 2.7 AC #6) */
+  isHistoricalMode?: boolean;
+  /** 返回当前回调 (Story 2.7 AC #6) */
+  onReturnToCurrent?: () => void;
 }
 
 /**
@@ -28,6 +36,8 @@ export interface CodePanelProps {
  * 功能:
  * - 集成 CodeSnapshotView 显示代码快照
  * - 传递历史状态信息 (时间戳、Commit)
+ * - 支持 Diff 高亮 (Story 2.7 AC #5)
+ * - 支持历史模式 Banner (Story 2.7 AC #6)
  * - 空状态时显示友好提示
  */
 export function CodePanel({
@@ -36,6 +46,10 @@ export function CodePanel({
   filePath = "",
   timestamp,
   commitHash,
+  commitMessage,
+  previousCode,
+  isHistoricalMode,
+  onReturnToCurrent,
 }: CodePanelProps) {
   return (
     <div className={cn("h-full", className)}>
@@ -44,6 +58,10 @@ export function CodePanel({
         filePath={filePath}
         timestamp={timestamp}
         commitHash={commitHash}
+        commitMessage={commitMessage}
+        previousCode={previousCode}
+        isHistoricalMode={isHistoricalMode}
+        onReturnToCurrent={onReturnToCurrent}
       />
     </div>
   );
