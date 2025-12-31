@@ -1,0 +1,92 @@
+/**
+ * project-ipc - Tauri IPC 项目功能封装
+ * Story 2.11: Task 5
+ *
+ * 提供项目和 Git 相关的 Tauri IPC 调用封装：
+ * - getProject - 根据 ID 获取项目
+ * - getProjectByCwd - 根据 cwd 获取项目
+ * - getRepresentativeFile - 获取代表性文件
+ * - getFileAtHead - 获取 HEAD 版本文件内容
+ * - detectGitRepo - 检测 Git 仓库
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+import type { Project, RepresentativeFile, SnapshotResult } from "@/types/project";
+
+/**
+ * 根据 ID 获取项目信息
+ *
+ * @param projectId - 项目 ID
+ * @returns 项目信息，如果不存在返回 null
+ */
+export async function getProject(projectId: string): Promise<Project | null> {
+  return invoke<Project | null>("get_project", { projectId });
+}
+
+/**
+ * 根据 cwd 获取项目信息
+ *
+ * @param cwd - 项目工作目录路径
+ * @returns 项目信息，如果不存在返回 null
+ */
+export async function getProjectByCwd(cwd: string): Promise<Project | null> {
+  return invoke<Project | null>("get_project_by_cwd", { cwd });
+}
+
+/**
+ * 获取项目的代表性文件
+ *
+ * 优先级: README.md → 入口文件 → 任意代码文件
+ *
+ * @param repoPath - Git 仓库路径
+ * @returns 代表性文件信息，如果没有找到返回 null
+ */
+export async function getRepresentativeFile(repoPath: string): Promise<RepresentativeFile | null> {
+  return invoke<RepresentativeFile | null>("get_representative_file", { repoPath });
+}
+
+/**
+ * 获取 HEAD 版本的文件内容
+ *
+ * @param repoPath - Git 仓库路径
+ * @param filePath - 相对于仓库根目录的文件路径
+ * @returns 快照结果，包含文件内容和 commit 信息
+ */
+export async function getFileAtHead(repoPath: string, filePath: string): Promise<SnapshotResult> {
+  return invoke<SnapshotResult>("get_file_at_head", { repoPath, filePath });
+}
+
+/**
+ * 检测目录是否为 Git 仓库
+ *
+ * @param dirPath - 要检测的目录路径
+ * @returns Git 仓库根路径，如果不是 Git 仓库返回 null
+ */
+export async function detectGitRepo(dirPath: string): Promise<string | null> {
+  return invoke<string | null>("detect_git_repo", { dirPath });
+}
+
+/**
+ * 获取指定时间戳的文件快照
+ *
+ * @param repoPath - Git 仓库路径
+ * @param filePath - 相对于仓库根目录的文件路径
+ * @param timestamp - Unix 秒级时间戳
+ * @returns 快照结果
+ */
+export async function getSnapshotAtTime(
+  repoPath: string,
+  filePath: string,
+  timestamp: number
+): Promise<SnapshotResult> {
+  return invoke<SnapshotResult>("get_snapshot_at_time", { repoPath, filePath, timestamp });
+}
+
+/**
+ * 获取项目列表
+ *
+ * @returns 项目列表，按最后活动时间降序排列
+ */
+export async function listProjects(): Promise<Project[]> {
+  return invoke<Project[]>("list_projects");
+}

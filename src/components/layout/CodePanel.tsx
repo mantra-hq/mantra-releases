@@ -2,12 +2,13 @@
  * CodePanel - 代码快照面板
  * Story 2.2: Task 4.2 (初始占位)
  * Story 2.5: Task 5.2 (集成 CodeSnapshotView)
+ * Story 2.11: AC6, AC7 (无 Git 仓库警告)
  *
  * 右侧面板，显示代码变更和文件快照
  */
 
 import { cn } from "@/lib/utils";
-import { CodeSnapshotView } from "@/components/editor";
+import { CodeSnapshotView, NoGitWarning } from "@/components/editor";
 
 export interface CodePanelProps {
   /** 自定义 className */
@@ -28,6 +29,12 @@ export interface CodePanelProps {
   isHistoricalMode?: boolean;
   /** 返回当前回调 (Story 2.7 AC #6) */
   onReturnToCurrent?: () => void;
+  /** 无 Git 仓库警告 (Story 2.11 AC6) */
+  showNoGitWarning?: boolean;
+  /** 项目路径 (用于无 Git 警告显示) */
+  projectPath?: string;
+  /** 了解更多回调 (Story 2.11 AC7) */
+  onLearnMore?: () => void;
 }
 
 /**
@@ -38,6 +45,7 @@ export interface CodePanelProps {
  * - 传递历史状态信息 (时间戳、Commit)
  * - 支持 Diff 高亮 (Story 2.7 AC #5)
  * - 支持历史模式 Banner (Story 2.7 AC #6)
+ * - 无 Git 仓库时显示友好提示 (Story 2.11 AC6, AC7)
  * - 空状态时显示友好提示
  */
 export function CodePanel({
@@ -50,7 +58,19 @@ export function CodePanel({
   previousCode,
   isHistoricalMode,
   onReturnToCurrent,
+  showNoGitWarning = false,
+  projectPath,
+  onLearnMore,
 }: CodePanelProps) {
+  // Story 2.11 AC6: 无 Git 仓库时显示警告
+  if (showNoGitWarning && !code) {
+    return (
+      <div className={cn("h-full", className)}>
+        <NoGitWarning projectPath={projectPath} onLearnMore={onLearnMore} />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("h-full", className)}>
       <CodeSnapshotView

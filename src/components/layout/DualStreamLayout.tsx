@@ -70,6 +70,12 @@ export interface DualStreamLayoutProps {
   onTimelineSeek?: (timestamp: number) => void;
   /** 时间轴悬停回调 */
   onTimelineHover?: (timestamp: number | null) => void;
+
+  // Story 2.11: 无 Git 仓库警告
+  /** 是否显示无 Git 仓库警告 (AC6) */
+  showNoGitWarning?: boolean;
+  /** 项目路径 (用于无 Git 警告显示) */
+  projectPath?: string;
 }
 
 /**
@@ -130,6 +136,9 @@ export const DualStreamLayout = React.forwardRef<
       timelineEvents = [],
       onTimelineSeek,
       onTimelineHover,
+      // Story 2.11 props
+      showNoGitWarning = false,
+      projectPath,
     },
     ref
   ) => {
@@ -204,6 +213,8 @@ export const DualStreamLayout = React.forwardRef<
         commitHash={commitInfo?.hash}
         commitMessage={commitInfo?.message}
         onReturnToCurrent={returnToCurrent}
+        showNoGitWarning={showNoGitWarning}
+        projectPath={projectPath}
       />
     );
 

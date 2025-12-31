@@ -30,7 +30,32 @@ impl Database {
         // Execute schema migration
         conn.execute_batch(include_str!("schema.sql"))?;
 
+        // Run migrations for existing databases
+        Self::run_migrations(&conn)?;
+
         Ok(Self { conn })
+    }
+
+    /// Run database migrations for schema updates
+    fn run_migrations(conn: &Connection) -> Result<(), StorageError> {
+        // Migration: Add git_repo_path and has_git_repo columns (Story 2.11)
+        // SQLite ignores ALTER TABLE if column already exists, but we check to avoid errors
+        let has_git_repo_path: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'git_repo_path'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_git_repo_path {
+            conn.execute_batch(
+                "ALTER TABLE projects ADD COLUMN git_repo_path TEXT;
+                 ALTER TABLE projects ADD COLUMN has_git_repo INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Create an in-memory database for testing
@@ -39,6 +64,7 @@ impl Database {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         conn.execute_batch(include_str!("schema.sql"))?;
+        Self::run_migrations(&conn)?;
         Ok(Self { conn })
     }
 

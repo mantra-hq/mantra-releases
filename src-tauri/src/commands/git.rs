@@ -174,6 +174,62 @@ pub async fn get_commit_info(
     .map_err(AppError::from)
 }
 
+/// 获取 HEAD 版本的文件内容
+///
+/// 读取 Git 仓库 HEAD 指向的最新版本的文件内容。
+///
+/// # Arguments
+/// * `repo_path` - Git 仓库路径
+/// * `file_path` - 相对于仓库根目录的文件路径
+///
+/// # Returns
+/// 返回包含内容和元数据的 SnapshotResult
+#[tauri::command]
+pub async fn get_file_at_head(
+    repo_path: String,
+    file_path: String,
+) -> Result<SnapshotResult, AppError> {
+    use git2::Repository;
+    use std::path::Path;
+
+    let repo_path_buf = PathBuf::from(&repo_path);
+    let file_path_clone = file_path.clone();
+
+    spawn_blocking(move || {
+        let repo = Repository::open(&repo_path_buf)
+            .map_err(|e| AppError::Git(crate::git::GitError::RepositoryError(e)))?;
+        let head = repo.head()
+            .map_err(|e| AppError::Git(crate::git::GitError::RepositoryError(e)))?;
+        let commit = head.peel_to_commit()
+            .map_err(|e| AppError::Git(crate::git::GitError::RepositoryError(e)))?;
+        let tree = commit.tree()
+            .map_err(|e| AppError::Git(crate::git::GitError::RepositoryError(e)))?;
+
+        let entry = tree.get_path(Path::new(&file_path_clone))
+            .map_err(|_| AppError::Git(crate::git::GitError::FileNotFound {
+                commit: commit.id().to_string(),
+                path: file_path_clone.clone(),
+            }))?;
+
+        let blob = repo.find_blob(entry.id())
+            .map_err(|e| AppError::Git(crate::git::GitError::RepositoryError(e)))?;
+
+        let content = std::str::from_utf8(blob.content())
+            .map_err(|_| AppError::Git(crate::git::GitError::InvalidUtf8))?;
+
+        let commit_time = commit.time();
+
+        Ok(SnapshotResult {
+            content: content.to_string(),
+            commit_hash: commit.id().to_string(),
+            commit_message: commit.message().unwrap_or("").to_string(),
+            commit_timestamp: commit_time.seconds(),
+        })
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +275,77 @@ mod tests {
         .await;
 
         assert!(result.is_err());
+    }
+
+    /// 测试 get_file_at_head 无效仓库路径
+    #[tokio::test]
+    async fn test_get_file_at_head_invalid_repo() {
+        let result = get_file_at_head(
+            "/nonexistent/path".to_string(),
+            "test.txt".to_string(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::Git(_)));
+    }
+
+    /// 测试 get_file_at_head 找到文件
+    #[tokio::test]
+    async fn test_get_file_at_head_finds_file() {
+        // Get the Git repo root
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let repo_path = std::path::PathBuf::from(manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| manifest_dir.to_string());
+
+        println!("Testing with repo_path: {}", repo_path);
+
+        // Try to get README.md at HEAD
+        let result = get_file_at_head(repo_path.clone(), "README.md".to_string()).await;
+        println!("Result: {:?}", result);
+
+        match result {
+            Ok(snapshot) => {
+                assert!(!snapshot.content.is_empty());
+                assert!(!snapshot.commit_hash.is_empty());
+            }
+            Err(e) => {
+                // If README.md doesn't exist in Git HEAD, try CLAUDE.md
+                println!("README.md failed: {:?}, trying CLAUDE.md", e);
+                let result2 = get_file_at_head(repo_path, "CLAUDE.md".to_string()).await;
+                match result2 {
+                    Ok(snapshot) => {
+                        assert!(!snapshot.content.is_empty());
+                        assert!(!snapshot.commit_hash.is_empty());
+                    }
+                    Err(e2) => {
+                        panic!("Both README.md and CLAUDE.md failed: {:?}", e2);
+                    }
+                }
+            }
+        }
+    }
+
+    /// 测试 get_file_at_head 文件不存在
+    #[tokio::test]
+    async fn test_get_file_at_head_file_not_found() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let repo_path = std::path::PathBuf::from(manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| manifest_dir.to_string());
+
+        let result = get_file_at_head(repo_path, "nonexistent_file_xyz.txt".to_string()).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::Git(_)));
     }
 }

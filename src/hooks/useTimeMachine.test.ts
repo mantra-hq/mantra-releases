@@ -173,8 +173,8 @@ describe("useTimeMachine", () => {
             });
 
             expect(invoke).toHaveBeenCalledWith("get_snapshot_at_time", {
-                repoPath: "/repo/path",
-                filePath: uniqueFile,
+                repo_path: "/repo/path",
+                file_path: uniqueFile,
                 timestamp: 1735500000, // 毫秒转秒
             });
         });

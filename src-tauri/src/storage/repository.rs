@@ -55,11 +55,13 @@ impl Database {
         // Try to find existing project
         let mut stmt = self
             .connection()
-            .prepare("SELECT id, name, cwd, created_at, last_activity FROM projects WHERE cwd = ?1")?;
+            .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo FROM projects WHERE cwd = ?1")?;
 
         let project_result = stmt.query_row(params![cwd], |row| {
             let created_at_str: String = row.get(3)?;
             let last_activity_str: String = row.get(4)?;
+            let git_repo_path: Option<String> = row.get(5)?;
+            let has_git_repo: i32 = row.get(6)?;
 
             Ok(Project {
                 id: row.get(0)?,
@@ -72,6 +74,8 @@ impl Database {
                 last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
+                git_repo_path,
+                has_git_repo: has_git_repo != 0,
             })
         });
 
@@ -94,8 +98,8 @@ impl Database {
                 let now_str = now.to_rfc3339();
 
                 self.connection().execute(
-                    "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![id, name, cwd, now_str, now_str],
+                    "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![id, name, cwd, now_str, now_str, Option::<String>::None, 0],
                 )?;
 
                 let project = Project {
@@ -105,6 +109,8 @@ impl Database {
                     session_count: 0,
                     created_at: now,
                     last_activity: now,
+                    git_repo_path: None,
+                    has_git_repo: false,
                 };
                 Ok((project, true))
             }
@@ -115,7 +121,7 @@ impl Database {
     /// List all projects ordered by last activity (descending)
     pub fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity,
+            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
              ORDER BY p.last_activity DESC",
@@ -125,18 +131,22 @@ impl Database {
             .query_map([], |row| {
                 let created_at_str: String = row.get(3)?;
                 let last_activity_str: String = row.get(4)?;
+                let git_repo_path: Option<String> = row.get(5)?;
+                let has_git_repo: i32 = row.get(6)?;
 
                 Ok(Project {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     cwd: row.get(2)?,
-                    session_count: row.get::<_, i32>(5)? as u32,
+                    session_count: row.get::<_, i32>(7)? as u32,
                     created_at: DateTime::parse_from_rfc3339(&created_at_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
                     last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
+                    git_repo_path,
+                    has_git_repo: has_git_repo != 0,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -236,6 +246,106 @@ impl Database {
         Ok(())
     }
 
+    /// Update project's Git repository information
+    ///
+    /// # Arguments
+    /// * `cwd` - The project's working directory
+    /// * `git_repo_path` - The Git repository root path (None if no Git repo)
+    pub fn update_project_git_info(
+        &self,
+        cwd: &str,
+        git_repo_path: Option<String>,
+    ) -> Result<(), StorageError> {
+        let has_git_repo = if git_repo_path.is_some() { 1 } else { 0 };
+        self.connection().execute(
+            "UPDATE projects SET git_repo_path = ?1, has_git_repo = ?2 WHERE cwd = ?3",
+            params![git_repo_path, has_git_repo, cwd],
+        )?;
+        Ok(())
+    }
+
+    /// Get a project by ID
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to retrieve
+    pub fn get_project(&self, project_id: &str) -> Result<Option<Project>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+             FROM projects p
+             WHERE id = ?1",
+        )?;
+
+        let result = stmt.query_row(params![project_id], |row| {
+            let created_at_str: String = row.get(3)?;
+            let last_activity_str: String = row.get(4)?;
+            let git_repo_path: Option<String> = row.get(5)?;
+            let has_git_repo: i32 = row.get(6)?;
+
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                cwd: row.get(2)?,
+                session_count: row.get::<_, i32>(7)? as u32,
+                created_at: DateTime::parse_from_rfc3339(&created_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                git_repo_path,
+                has_git_repo: has_git_repo != 0,
+            })
+        });
+
+        match result {
+            Ok(project) => Ok(Some(project)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Get a project by cwd
+    ///
+    /// # Arguments
+    /// * `cwd` - The project's working directory
+    pub fn get_project_by_cwd(&self, cwd: &str) -> Result<Option<Project>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+             FROM projects p
+             WHERE cwd = ?1",
+        )?;
+
+        let result = stmt.query_row(params![cwd], |row| {
+            let created_at_str: String = row.get(3)?;
+            let last_activity_str: String = row.get(4)?;
+            let git_repo_path: Option<String> = row.get(5)?;
+            let has_git_repo: i32 = row.get(6)?;
+
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                cwd: row.get(2)?,
+                session_count: row.get::<_, i32>(7)? as u32,
+                created_at: DateTime::parse_from_rfc3339(&created_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                git_repo_path,
+                has_git_repo: has_git_repo != 0,
+            })
+        });
+
+        match result {
+            Ok(project) => Ok(Some(project)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Import a single session, handling project creation and deduplication
     ///
     /// # Arguments
@@ -304,8 +414,8 @@ impl Database {
                         let now = Utc::now().to_rfc3339();
 
                         tx.execute(
-                            "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES (?1, ?2, ?3, ?4, ?5)",
-                            params![id, name, session.cwd, now, now],
+                            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                            params![id, name, session.cwd, now, now, Option::<String>::None, 0],
                         )?;
                         Ok((id, true))
                     }
@@ -519,5 +629,75 @@ mod tests {
         let projects = db.list_projects().unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].session_count, 2);
+    }
+
+    #[test]
+    fn test_project_git_fields_default() {
+        let db = Database::new_in_memory().unwrap();
+        let (project, _) = db.get_or_create_project("/home/user/test").unwrap();
+
+        assert!(!project.has_git_repo);
+        assert!(project.git_repo_path.is_none());
+    }
+
+    #[test]
+    fn test_update_project_git_info() {
+        let db = Database::new_in_memory().unwrap();
+        db.get_or_create_project("/home/user/test").unwrap();
+
+        // Update Git info
+        db.update_project_git_info("/home/user/test", Some("/home/user/test".to_string()))
+            .unwrap();
+
+        // Verify update
+        let (project, _) = db.get_or_create_project("/home/user/test").unwrap();
+        assert!(project.has_git_repo);
+        assert_eq!(project.git_repo_path, Some("/home/user/test".to_string()));
+
+        // Clear Git info
+        db.update_project_git_info("/home/user/test", None).unwrap();
+
+        let (project, _) = db.get_or_create_project("/home/user/test").unwrap();
+        assert!(!project.has_git_repo);
+        assert!(project.git_repo_path.is_none());
+    }
+
+    #[test]
+    fn test_get_project_by_id() {
+        let db = Database::new_in_memory().unwrap();
+        let (created_project, _) = db.get_or_create_project("/home/user/test").unwrap();
+
+        let project = db.get_project(&created_project.id).unwrap();
+        assert!(project.is_some());
+        assert_eq!(project.unwrap().id, created_project.id);
+
+        let not_found = db.get_project("nonexistent").unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_get_project_by_cwd() {
+        let db = Database::new_in_memory().unwrap();
+        db.get_or_create_project("/home/user/test").unwrap();
+
+        let project = db.get_project_by_cwd("/home/user/test").unwrap();
+        assert!(project.is_some());
+        assert_eq!(project.unwrap().cwd, "/home/user/test");
+
+        let not_found = db.get_project_by_cwd("/nonexistent/path").unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_list_projects_includes_git_fields() {
+        let db = Database::new_in_memory().unwrap();
+        db.get_or_create_project("/home/user/test").unwrap();
+        db.update_project_git_info("/home/user/test", Some("/home/user/test".to_string()))
+            .unwrap();
+
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert!(projects[0].has_git_repo);
+        assert_eq!(projects[0].git_repo_path, Some("/home/user/test".to_string()));
     }
 }

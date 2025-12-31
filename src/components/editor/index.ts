@@ -12,3 +12,6 @@ export type { CodeSnapshotHeaderProps } from "./CodeSnapshotHeader";
 export { EmptyCodeState } from "./EmptyCodeState";
 export type { EmptyCodeStateProps } from "./EmptyCodeState";
 
+export { NoGitWarning } from "./NoGitWarning";
+export type { NoGitWarningProps } from "./NoGitWarning";
+

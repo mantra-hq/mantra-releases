@@ -44,6 +44,38 @@ export interface Project {
   created_at: string;
   /** 最后活动时间 (ISO 8601 字符串) */
   last_activity: string;
+  /** Git 仓库根路径 (如果检测到) */
+  git_repo_path: string | null;
+  /** 是否关联 Git 仓库 */
+  has_git_repo: boolean;
+}
+
+/**
+ * 代表性文件信息 (匹配 Rust: RepresentativeFile)
+ * Story 2.11: 用于显示项目初始代码状态
+ */
+export interface RepresentativeFile {
+  /** 文件路径 (相对于仓库根目录) */
+  path: string;
+  /** 文件内容 */
+  content: string;
+  /** 检测到的编程语言 */
+  language: string;
+}
+
+/**
+ * 快照结果 (匹配 Rust: SnapshotResult)
+ * 用于获取 Git HEAD 版本的文件内容
+ */
+export interface SnapshotResult {
+  /** 文件内容 */
+  content: string;
+  /** Commit Hash */
+  commit_hash: string;
+  /** Commit 消息 */
+  commit_message: string;
+  /** Commit 时间戳 (Unix seconds) */
+  commit_timestamp: number;
 }
 
 /**

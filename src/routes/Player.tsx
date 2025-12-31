@@ -2,11 +2,13 @@
  * Player Page - 会话回放页面
  * Story 2.8: Task 1
  * Story 2.10: Task 6 (Message Navigation from Search)
+ * Story 2.11: Task 6 (Initial Code Display)
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
  * 从后端加载真实会话数据并转换为前端格式
  * 集成 Git Time Machine 实现代码快照功能 (FR-GIT)
+ * 进入时自动显示项目代表性文件 (AC1, AC2)
  */
 
 import * as React from "react";
@@ -15,6 +17,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
+import { getProjectByCwd, getRepresentativeFile, detectGitRepo } from "@/lib/project-ipc";
 import type { NarrativeMessage } from "@/types/message";
 import {
   messagesToTimelineEvents,
@@ -27,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useTimeMachine } from "@/hooks/useTimeMachine";
+
 
 /**
  * 从消息内容块中提取文件路径
@@ -100,6 +104,8 @@ export default function Player() {
 
   // Git 仓库路径状态 (FR-GIT-001)
   const [repoPath, setRepoPath] = React.useState<string | null>(null);
+  // 无 Git 仓库标记 (Story 2.11 AC6)
+  const [hasNoGit, setHasNoGit] = React.useState<boolean>(false);
 
   // 时间轴状态 (Story 2.6)
   const [timelineEvents, setTimelineEvents] = React.useState<TimelineEvent[]>([]);
@@ -220,7 +226,9 @@ export default function Player() {
     }
   }, [sessionId, sessionCwd, loading, messages.length, addRecentSession]);
 
-  // Git 仓库检测 (FR-GIT-001)
+  // Git 仓库检测 + 初始代码加载 (FR-GIT-001, Story 2.11 AC1, AC2)
+  const setCode = useTimeTravelStore((state) => state.setCode);
+
   React.useEffect(() => {
     if (!sessionCwd) {
       setRepoPath(null);
@@ -229,17 +237,53 @@ export default function Player() {
 
     let cancelled = false;
 
-    async function detectRepo() {
+    async function detectRepoAndLoadInitialCode() {
       try {
-        const detected = await invoke<string | null>("detect_git_repo", {
-          dir_path: sessionCwd,
-        });
-        if (!cancelled) {
-          setRepoPath(detected);
-          if (detected) {
-            console.log("[Player] Git 仓库检测成功:", detected);
-          } else {
-            console.log("[Player] 未检测到 Git 仓库:", sessionCwd);
+        // 1. 从 Project 获取 Git 仓库信息 (Story 2.11 AC8 - 避免重复检测)
+        // sessionCwd is guaranteed to be defined here due to early return above
+        const project = await getProjectByCwd(sessionCwd!);
+
+        if (cancelled) return;
+
+        if (project?.has_git_repo && project.git_repo_path) {
+          setRepoPath(project.git_repo_path);
+          console.log("[Player] Git 仓库检测成功 (from Project):", project.git_repo_path);
+
+          // 2. 获取代表性文件作为初始代码 (Story 2.11 AC1, AC2)
+          try {
+            const repFile = await getRepresentativeFile(project.git_repo_path);
+            if (cancelled) return;
+
+            if (repFile) {
+              // 设置初始代码到 store，启用"当前代码"模式
+              setCode(repFile.content, repFile.path);
+              console.log("[Player] 初始代码加载成功:", repFile.path);
+            }
+          } catch (repErr) {
+            console.warn("[Player] 代表性文件加载失败:", repErr);
+          }
+        } else {
+          // 没有 Git 仓库 - 回退到 detect_git_repo 命令 (使用封装的 IPC)
+          const detected = await detectGitRepo(sessionCwd!);
+          if (!cancelled) {
+            setRepoPath(detected);
+            if (detected) {
+              console.log("[Player] Git 仓库检测成功 (from detect):", detected);
+              setHasNoGit(false);
+              // 加载代表性文件
+              try {
+                const repFile = await getRepresentativeFile(detected);
+                if (!cancelled && repFile) {
+                  setCode(repFile.content, repFile.path);
+                  console.log("[Player] 初始代码加载成功:", repFile.path);
+                }
+              } catch (repErr) {
+                console.warn("[Player] 代表性文件加载失败:", repErr);
+              }
+            } else {
+              console.log("[Player] 未检测到 Git 仓库 (AC6):", sessionCwd);
+              setHasNoGit(true); // 触发 NoGitWarning 渲染
+            }
           }
         }
       } catch (err) {
@@ -250,12 +294,12 @@ export default function Player() {
       }
     }
 
-    detectRepo();
+    detectRepoAndLoadInitialCode();
 
     return () => {
       cancelled = true;
     };
-  }, [sessionCwd]);
+  }, [sessionCwd, setCode]);
 
   // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002)
   const handleMessageSelect = React.useCallback(
@@ -488,6 +532,9 @@ export default function Player() {
             timelineCurrentTime={currentTime}
             timelineEvents={timelineEvents}
             onTimelineSeek={handleTimelineSeek}
+            // Story 2.11 AC6: 无 Git 仓库时显示警告
+            showNoGitWarning={hasNoGit}
+            projectPath={sessionCwd}
           />
         </div>
         {/* 直接在 Player 层渲染 TimberLine */}

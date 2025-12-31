@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     cwd TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL,     -- ISO 8601 格式
-    last_activity TEXT NOT NULL
+    last_activity TEXT NOT NULL,
+    git_repo_path TEXT,           -- Git 仓库根路径 (Story 2.11)
+    has_git_repo INTEGER NOT NULL DEFAULT 0  -- 是否关联 Git 仓库 (Story 2.11)
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_cwd ON projects(cwd);

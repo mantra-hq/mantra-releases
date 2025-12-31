@@ -24,6 +24,10 @@ pub struct Project {
     pub created_at: DateTime<Utc>,
     /// Last activity time (latest session's updated_at)
     pub last_activity: DateTime<Utc>,
+    /// Git repository root path (if detected)
+    pub git_repo_path: Option<String>,
+    /// Whether this project has an associated Git repository
+    pub has_git_repo: bool,
 }
 
 /// Lightweight session summary for listings
@@ -68,7 +72,15 @@ impl Project {
             session_count: 0,
             created_at: now,
             last_activity: now,
+            git_repo_path: None,
+            has_git_repo: false,
         }
+    }
+
+    /// Set Git repository information
+    pub fn set_git_repo(&mut self, repo_path: Option<String>) {
+        self.has_git_repo = repo_path.is_some();
+        self.git_repo_path = repo_path;
     }
 }
 
@@ -123,22 +135,52 @@ mod tests {
         assert_eq!(project.name, "myproject");
         assert_eq!(project.cwd, "/home/user/myproject");
         assert_eq!(project.session_count, 0);
+        assert!(project.git_repo_path.is_none());
+        assert!(!project.has_git_repo);
+    }
+
+    #[test]
+    fn test_project_set_git_repo() {
+        let mut project = Project::new(
+            "test-id".to_string(),
+            "/home/user/myproject".to_string(),
+        );
+
+        // Initially no Git repo
+        assert!(!project.has_git_repo);
+        assert!(project.git_repo_path.is_none());
+
+        // Set Git repo
+        project.set_git_repo(Some("/home/user/myproject".to_string()));
+        assert!(project.has_git_repo);
+        assert_eq!(project.git_repo_path, Some("/home/user/myproject".to_string()));
+
+        // Clear Git repo
+        project.set_git_repo(None);
+        assert!(!project.has_git_repo);
+        assert!(project.git_repo_path.is_none());
     }
 
     #[test]
     fn test_project_serialization() {
-        let project = Project::new(
+        let mut project = Project::new(
             "proj_123".to_string(),
             "/home/user/test".to_string(),
         );
+        project.set_git_repo(Some("/home/user/test".to_string()));
+
         let json = serde_json::to_string(&project).unwrap();
         assert!(json.contains(r#""id":"proj_123""#));
         assert!(json.contains(r#""name":"test""#));
         assert!(json.contains(r#""cwd":"/home/user/test""#));
+        assert!(json.contains(r#""git_repo_path":"/home/user/test""#));
+        assert!(json.contains(r#""has_git_repo":true"#));
 
         let deserialized: Project = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, project.id);
         assert_eq!(deserialized.name, project.name);
+        assert_eq!(deserialized.git_repo_path, project.git_repo_path);
+        assert_eq!(deserialized.has_git_repo, project.has_git_repo);
     }
 
     #[test]
