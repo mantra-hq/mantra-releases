@@ -80,6 +80,8 @@ export function ContentBlockRenderer({
         <ToolOutput
           content={block.content}
           isError={block.isError}
+          filePath={block.associatedFilePath}
+          toolName={block.associatedToolName}
           className={className}
         />
       );

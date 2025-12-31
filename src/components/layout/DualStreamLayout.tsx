@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import type { NarrativeMessage } from "@/types/message";
 import type { TimelineEvent } from "@/types/timeline";
 import { TimberLine } from "@/components/timeline";
+import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 
 // 响应式 Tab 组件 (Tablet/Mobile 模式)
 import { MessageSquare, Code2 } from "lucide-react";
@@ -135,6 +136,11 @@ export const DualStreamLayout = React.forwardRef<
     // NarrativePanel ref
     const narrativePanelRef = React.useRef<NarrativePanelRef>(null);
 
+    // 从 store 订阅代码状态
+    const currentCode = useTimeTravelStore((state) => state.currentCode);
+    const currentFilePath = useTimeTravelStore((state) => state.currentFilePath);
+    // const previousCode = useTimeTravelStore((state) => state.previousCode);
+
     // 响应式布局检测
     const detectedMode = useResponsiveLayout();
     const layoutMode = forceMode ?? detectedMode;
@@ -184,7 +190,13 @@ export const DualStreamLayout = React.forwardRef<
         onMessageSelect={onMessageSelect}
       />
     );
-    const renderCodeContent = codeContent ?? <CodePanel />;
+    const renderCodeContent = codeContent ?? (
+      <CodePanel
+        code={currentCode ?? ""}
+        filePath={currentFilePath ?? ""}
+        // previousCode={previousCode ?? undefined} // 用于 diff 显示
+      />
+    );
 
     // 渲染 TimberLine 时间轴
     const renderTimeline = showTimeline &&

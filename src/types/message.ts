@@ -34,8 +34,14 @@ export interface ContentBlock {
   toolName?: string;
   /** 工具输入参数 (tool_use 专用) */
   toolInput?: Record<string, unknown>;
+  /** 工具调用 ID (tool_use 专用) */
+  toolUseId?: string;
   /** 是否为错误结果 (tool_result 专用) */
   isError?: boolean;
+  /** 关联的文件路径 (tool_result 专用，从对应的 tool_use 继承) */
+  associatedFilePath?: string;
+  /** 关联的工具名称 (tool_result 专用，从对应的 tool_use 继承) */
+  associatedToolName?: string;
 }
 
 /**

@@ -8,8 +8,31 @@
 
 import * as React from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { ChevronRight, Check, X } from "lucide-react";
+import { ChevronRight, Check, X, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+
+/**
+ * 去除 Read 工具输出中的行号前缀
+ * 格式: "     1→import ..." 或 "    10→export ..."
+ */
+function stripLineNumbers(content: string): string {
+  // 检测是否包含行号前缀模式
+  const lineNumberPattern = /^\s*\d+→/m;
+  if (!lineNumberPattern.test(content)) {
+    return content;
+  }
+
+  // 逐行处理，去除行号前缀
+  return content
+    .split("\n")
+    .map(line => {
+      // 匹配: 空格* + 数字+ + → + 实际内容
+      const match = line.match(/^\s*\d+→(.*)$/);
+      return match ? match[1] : line;
+    })
+    .join("\n");
+}
 
 export interface ToolOutputProps {
   /** 输出内容 */
@@ -18,8 +41,24 @@ export interface ToolOutputProps {
   isError?: boolean;
   /** 默认是否展开 */
   defaultOpen?: boolean;
+  /** 关联的文件路径 (用于代码面板显示) */
+  filePath?: string;
+  /** 关联的工具名称 (用于推断语言类型) */
+  toolName?: string;
   /** 自定义 className */
   className?: string;
+}
+
+/**
+ * 根据工具名称推断默认文件扩展名
+ */
+function getDefaultExtensionForTool(toolName?: string): string {
+  if (!toolName) return ".txt";
+  const name = toolName.toLowerCase();
+  if (name.includes("bash")) return ".sh";
+  if (name.includes("grep")) return ".txt";
+  if (name.includes("glob")) return ".txt";
+  return ".txt";
 }
 
 /**
@@ -35,16 +74,62 @@ export function ToolOutput({
   content,
   isError = false,
   defaultOpen = false,
+  filePath,
+  toolName,
   className,
 }: ToolOutputProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  
+
+  // 从 store 获取 setCode 方法
+  const setCode = useTimeTravelStore((state) => state.setCode);
+
   // 截断长内容的预览
   const previewLength = 100;
   const isLongContent = content.length > previewLength;
   const previewContent = isLongContent
     ? content.slice(0, previewLength) + "..."
     : content;
+
+  // 检测内容是否看起来像代码或文件内容
+  // 放宽条件：超过 100 字符且包含常见代码特征或行号
+  const looksLikeCode = content.length > 100 && (
+    content.includes("function ") ||
+    content.includes("const ") ||
+    content.includes("let ") ||
+    content.includes("var ") ||
+    content.includes("import ") ||
+    content.includes("export ") ||
+    content.includes("class ") ||
+    content.includes("interface ") ||
+    content.includes("type ") ||
+    content.includes("def ") ||
+    content.includes("fn ") ||
+    content.includes("pub ") ||
+    content.includes("package ") ||
+    content.includes("struct ") ||
+    content.includes("impl ") ||
+    content.includes("use ") ||
+    content.includes("mod ") ||
+    content.includes("→") || // 行号前缀 (Read 工具输出)
+    content.includes("│") || // 可能的表格或代码格式
+    /^\s*\d+[\s→|]/.test(content) // 以行号开头
+  );
+
+  // 处理"查看代码"按钮点击
+  const handleViewCode = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      // 确定文件路径：优先使用传入的 filePath，否则根据工具类型生成默认路径
+      const path = filePath || `tool-output${getDefaultExtensionForTool(toolName)}`;
+      // 去除行号前缀后再显示
+      const cleanContent = stripLineNumbers(content);
+      setCode(cleanContent, path);
+    },
+    [content, filePath, toolName, setCode]
+  );
+
+  // 是否显示查看代码按钮
+  const showViewCodeButton = !isError && (filePath || looksLikeCode);
 
   return (
     <Collapsible.Root
@@ -92,6 +177,23 @@ export function ToolOutput({
         >
           {isOpen ? (isError ? "错误详情" : "执行结果") : previewContent}
         </span>
+
+        {/* 查看代码按钮 */}
+        {showViewCodeButton && (
+          <button
+            type="button"
+            onClick={handleViewCode}
+            className={cn(
+              "p-1 rounded",
+              "text-primary hover:bg-primary/10",
+              "transition-colors duration-150",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
+            title="在代码面板中查看"
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
+        )}
 
         {/* 展开箭头 */}
         <ChevronRight

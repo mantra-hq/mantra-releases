@@ -8,8 +8,47 @@
 
 import * as React from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { ChevronRight, Wrench } from "lucide-react";
+import { ChevronRight, Wrench, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+
+/** 文件操作相关的工具名称 */
+const FILE_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"];
+
+/** 检查是否是文件操作工具 */
+function isFileTool(toolName: string): boolean {
+  return FILE_TOOLS.some(t => toolName.toLowerCase().includes(t.toLowerCase()));
+}
+
+/** 从工具输入中提取文件路径 */
+function extractFilePath(input?: Record<string, unknown>): string | null {
+  if (!input) return null;
+  // 常见的文件路径字段名
+  const pathKeys = ["file_path", "filePath", "path", "file"];
+  for (const key of pathKeys) {
+    if (typeof input[key] === "string") {
+      return input[key] as string;
+    }
+  }
+  return null;
+}
+
+/** 从工具输入中提取代码内容 */
+function extractCodeContent(toolName: string, input?: Record<string, unknown>): string | null {
+  if (!input) return null;
+
+  // Write 工具：content 字段包含代码
+  if (toolName.toLowerCase().includes("write") && typeof input.content === "string") {
+    return input.content as string;
+  }
+
+  // Edit 工具：显示 new_string 作为代码内容
+  if (toolName.toLowerCase().includes("edit") && typeof input.new_string === "string") {
+    return input.new_string as string;
+  }
+
+  return null;
+}
 
 export interface ToolCallProps {
   /** 工具名称 */
@@ -51,6 +90,31 @@ export function ToolCall({
   const formattedInput = formatJson(toolInput);
   const hasInput = toolInput && Object.keys(toolInput).length > 0;
 
+  // 从 store 获取 setCode 方法
+  const setCode = useTimeTravelStore((state) => state.setCode);
+
+  // 检查是否是文件操作工具
+  const isFileOperation = isFileTool(toolName);
+  const filePath = extractFilePath(toolInput);
+  const codeContent = extractCodeContent(toolName, toolInput);
+
+  // 处理"查看代码"按钮点击
+  const handleViewCode = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation(); // 阻止触发折叠
+      if (filePath && codeContent) {
+        setCode(codeContent, filePath);
+      }
+      // 对于 Read 工具，代码在 tool_result 中，用户需要点击结果查看
+      // 不再显示占位文本
+    },
+    [filePath, codeContent, setCode]
+  );
+
+  // 只有当有代码内容时才显示查看按钮 (Write/Edit 工具)
+  // Read 工具的代码在 tool_result 中，用户需要点击结果的查看按钮
+  const showViewCodeButton = isFileOperation && filePath && codeContent;
+
   return (
     <Collapsible.Root
       open={isOpen}
@@ -82,11 +146,29 @@ export function ToolCall({
         {/* 工具名称 */}
         <span className="truncate">{toolName}</span>
 
+        {/* 查看代码按钮 (仅 Write/Edit 工具且有代码内容时显示) */}
+        {showViewCodeButton && (
+          <button
+            type="button"
+            onClick={handleViewCode}
+            className={cn(
+              "ml-auto mr-2 p-1 rounded",
+              "text-primary hover:bg-primary/10",
+              "transition-colors duration-150",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
+            title="在代码面板中查看"
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
+        )}
+
         {/* 展开箭头 */}
         {hasInput && (
           <ChevronRight
             className={cn(
-              "h-3.5 w-3.5 shrink-0 ml-auto text-muted-foreground",
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground",
+              !showViewCodeButton && "ml-auto",
               "transition-transform duration-150 ease-out",
               isOpen && "rotate-90"
             )}
