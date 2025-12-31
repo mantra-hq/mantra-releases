@@ -94,24 +94,31 @@ describe("import-ipc", () => {
     });
   });
 
-  // Task 6.4: selectLogFiles
+  // Task 6.4: selectLogFiles (现在使用目录选择器)
   describe("selectLogFiles", () => {
-    it("calls open with correct options", async () => {
-      const mockPaths = ["/path/file1.json", "/path/file2.json"];
-      vi.mocked(open).mockResolvedValue(mockPaths);
+    it("calls open with directory picker options", async () => {
+      const mockPath = "/path/to/project";
+      const mockFiles: DiscoveredFile[] = [
+        {
+          path: "/path/to/project/file.json",
+          name: "file.json",
+          size: 1024,
+          modifiedAt: Date.now(),
+          projectPath: mockPath,
+        },
+      ];
+      vi.mocked(open).mockResolvedValue(mockPath);
+      vi.mocked(invoke).mockResolvedValue(mockFiles);
 
       const result = await selectLogFiles();
 
       expect(open).toHaveBeenCalledWith({
-        multiple: true,
-        filters: [
-          {
-            name: "JSON Logs",
-            extensions: ["json"],
-          },
-        ],
+        directory: true,
+        multiple: false,
+        title: "选择日志目录",
       });
-      expect(result).toEqual(mockPaths);
+      expect(invoke).toHaveBeenCalledWith("scan_custom_directory", { path: mockPath });
+      expect(result).toEqual(mockFiles);
     });
 
     it("returns empty array when user cancels", async () => {
@@ -120,14 +127,7 @@ describe("import-ipc", () => {
       const result = await selectLogFiles();
 
       expect(result).toEqual([]);
-    });
-
-    it("handles single file selection", async () => {
-      vi.mocked(open).mockResolvedValue("/path/single.json" as unknown as string[]);
-
-      const result = await selectLogFiles();
-
-      expect(result).toEqual(["/path/single.json"]);
+      expect(invoke).not.toHaveBeenCalled();
     });
   });
 });

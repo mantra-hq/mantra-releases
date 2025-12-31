@@ -136,6 +136,8 @@ export function ImportWizard({
     source,
     discoveredFiles,
     selectedFiles,
+    expandedProjects,
+    searchQuery,
     progress,
     results,
     isLoading,
@@ -145,6 +147,9 @@ export function ImportWizard({
     setDiscoveredFiles,
     toggleFile,
     toggleAll,
+    toggleProject,
+    toggleProjectExpand,
+    setSearchQuery,
     setProgress,
     addResult,
     setLoading,
@@ -317,10 +322,15 @@ export function ImportWizard({
           <FileSelector
             files={discoveredFiles}
             selectedFiles={selectedFiles}
+            expandedProjects={expandedProjects}
+            searchQuery={searchQuery}
             onScan={handleScan}
             onSelectFiles={handleSelectFiles}
             onToggleFile={toggleFile}
             onToggleAll={toggleAll}
+            onToggleProject={toggleProject}
+            onToggleProjectExpand={toggleProjectExpand}
+            onSearchChange={setSearchQuery}
             loading={isLoading}
           />
         );

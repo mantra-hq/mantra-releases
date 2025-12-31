@@ -1,12 +1,14 @@
 /**
  * useImportStore - 导入状态管理
- * Story 2.9: Task 7
+ * Story 2.9: Task 7 + UX Redesign
  *
  * 管理导入向导的所有状态:
  * - Modal 开关状态
  * - 当前步骤
  * - 选择的来源
  * - 发现的文件和选择状态
+ * - 项目分组和展开状态
+ * - 搜索过滤
  * - 导入进度
  * - 导入结果
  */
@@ -29,6 +31,10 @@ export interface ImportState {
   discoveredFiles: DiscoveredFile[];
   /** 已选择的文件路径集合 */
   selectedFiles: Set<string>;
+  /** 展开的项目路径集合 */
+  expandedProjects: Set<string>;
+  /** 搜索查询 */
+  searchQuery: string;
   /** 导入进度 */
   progress: ImportProgressData | null;
   /** 导入结果 */
@@ -53,6 +59,12 @@ export interface ImportState {
   toggleFile: (path: string) => void;
   /** 切换全选 */
   toggleAll: () => void;
+  /** 切换项目下所有文件的选择 */
+  toggleProject: (projectPath: string) => void;
+  /** 切换项目展开状态 */
+  toggleProjectExpand: (projectPath: string) => void;
+  /** 设置搜索查询 */
+  setSearchQuery: (query: string) => void;
   /** 设置进度 */
   setProgress: (progress: ImportProgressData) => void;
   /** 添加结果 */
@@ -74,6 +86,8 @@ const initialState = {
   source: null as ImportSource | null,
   discoveredFiles: [] as DiscoveredFile[],
   selectedFiles: new Set<string>(),
+  expandedProjects: new Set<string>(),
+  searchQuery: "",
   progress: null as ImportProgressData | null,
   results: [] as ImportResult[],
   isLoading: false,
@@ -111,6 +125,8 @@ export const useImportStore = create<ImportState>((set) => ({
     set({
       discoveredFiles: files,
       selectedFiles: new Set(files.map((f) => f.path)),
+      expandedProjects: new Set<string>(),
+      searchQuery: "",
     }),
 
   toggleFile: (path) =>
@@ -130,6 +146,51 @@ export const useImportStore = create<ImportState>((set) => ({
         return { selectedFiles: new Set() };
       }
       return { selectedFiles: new Set(state.discoveredFiles.map((f) => f.path)) };
+    }),
+
+  toggleProject: (projectPath) =>
+    set((state) => {
+      const projectFiles = state.discoveredFiles.filter(
+        (f) => f.projectPath === projectPath
+      );
+      const projectFilePaths = projectFiles.map((f) => f.path);
+
+      // 检查项目下所有文件是否都已选中
+      const allSelected = projectFilePaths.every((p) =>
+        state.selectedFiles.has(p)
+      );
+
+      const newSelected = new Set(state.selectedFiles);
+
+      if (allSelected) {
+        // 取消选择项目下所有文件
+        for (const path of projectFilePaths) {
+          newSelected.delete(path);
+        }
+      } else {
+        // 选择项目下所有文件
+        for (const path of projectFilePaths) {
+          newSelected.add(path);
+        }
+      }
+
+      return { selectedFiles: newSelected };
+    }),
+
+  toggleProjectExpand: (projectPath) =>
+    set((state) => {
+      const newExpanded = new Set(state.expandedProjects);
+      if (newExpanded.has(projectPath)) {
+        newExpanded.delete(projectPath);
+      } else {
+        newExpanded.add(projectPath);
+      }
+      return { expandedProjects: newExpanded };
+    }),
+
+  setSearchQuery: (query) =>
+    set({
+      searchQuery: query,
     }),
 
   setProgress: (progress) =>
@@ -158,6 +219,8 @@ export const useImportStore = create<ImportState>((set) => ({
       source: null,
       discoveredFiles: [],
       selectedFiles: new Set(),
+      expandedProjects: new Set(),
+      searchQuery: "",
       progress: null,
       results: [],
       isLoading: false,
@@ -166,3 +229,4 @@ export const useImportStore = create<ImportState>((set) => ({
 }));
 
 export default useImportStore;
+
