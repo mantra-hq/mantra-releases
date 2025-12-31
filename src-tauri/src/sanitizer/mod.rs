@@ -1,0 +1,15 @@
+//! Sanitizer 模块 - 敏感信息脱敏引擎
+//!
+//! 提供正则表达式驱动的敏感信息识别和脱敏功能。
+//! 支持内置规则 (API Key, IP, Token 等) 和自定义规则。
+
+mod engine;
+mod error;
+mod patterns;
+
+pub use engine::{Sanitizer, SanitizationResult, SanitizationStats};
+pub use error::SanitizerError;
+pub use patterns::{SanitizationRule, SensitiveType, BUILTIN_RULES};
+
+#[cfg(test)]
+mod tests;
