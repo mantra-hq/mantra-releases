@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { DiffEditor, type OnMount, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { CodeSnapshotHeader } from "./CodeSnapshotHeader";
 import { EmptyCodeState } from "./EmptyCodeState";
 import { HistoryBanner } from "./HistoryBanner";
 import { FileNotFoundBanner } from "./FileNotFoundBanner";
+import { DiffModeToggle } from "./DiffModeToggle";
 import {
   computeDiffDecorations,
   toMonacoDecorations,
@@ -25,6 +26,7 @@ import {
 } from "./DiffHighlighter";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useEditorStore } from "@/stores/useEditorStore";
 
 /**
  * 语言映射表 - 根据文件扩展名识别语言
@@ -100,7 +102,7 @@ export interface CodeSnapshotViewProps {
 /**
  * Monaco Editor 只读配置
  */
-const EDITOR_OPTIONS = {
+const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   readOnly: true,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
@@ -126,6 +128,32 @@ const EDITOR_OPTIONS = {
   wordWrap: "off" as const,
   // Diff 高亮需要 glyph margin
   glyphMargin: true,
+};
+
+/**
+ * Monaco DiffEditor 配置
+ */
+const DIFF_EDITOR_OPTIONS: editor.IDiffEditorConstructionOptions = {
+  readOnly: true,
+  renderSideBySide: true,
+  enableSplitViewResizing: true,
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  fontSize: 13,
+  lineNumbers: "on" as const,
+  automaticLayout: true,
+  scrollbar: {
+    vertical: "auto" as const,
+    horizontal: "auto" as const,
+  },
+  // 禁用编辑
+  domReadOnly: true,
+  // Diff 特有选项
+  renderIndicators: true,
+  renderMarginRevertIcon: false,
+  ignoreTrimWhitespace: false,
+  renderOverviewRuler: true,
+  diffWordWrap: "off" as const,
 };
 
 /**
@@ -158,9 +186,11 @@ export function CodeSnapshotView({
   onViewStateChange,
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
+  const diffMode = useEditorStore((state) => state.diffMode);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const previousCodeRef = useRef(code);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
 
   // Diff 淡出控制 (Story 2.7 AC #5)
@@ -184,6 +214,12 @@ export function CodeSnapshotView({
 
   // 是否为历史快照
   const isHistorical = isHistoricalMode || !!(timestamp || commitHash);
+
+  // 是否有可用的 Diff 数据
+  const hasDiffData = !!(previousCode && previousCode !== code);
+
+  // 是否使用并排 Diff 模式
+  const useSideBySideDiff = hasDiffData && diffMode === "side-by-side";
 
   // 格式化时间戳显示
   const formattedTimestamp = useMemo(() => {
@@ -230,6 +266,35 @@ export function CodeSnapshotView({
     disposablesRef.current.push(editor.onDidChangeCursorPosition(saveViewState));
     // 监听滚动变化
     disposablesRef.current.push(editor.onDidScrollChange(saveViewState));
+  }, []);
+
+  // DiffEditor 挂载回调
+  const handleDiffEditorMount: DiffOnMount = useCallback((diffEditor, _monaco) => {
+    diffEditorRef.current = diffEditor;
+    // 获取修改后的编辑器 (右侧)
+    const modifiedEditor = diffEditor.getModifiedEditor();
+    editorRef.current = modifiedEditor;
+
+    // 清理旧的监听器
+    disposablesRef.current.forEach(d => d.dispose());
+    disposablesRef.current = [];
+
+    // 恢复 ViewState (如果有)
+    if (pendingViewStateRef.current) {
+      modifiedEditor.restoreViewState(pendingViewStateRef.current);
+      pendingViewStateRef.current = null;
+    }
+
+    // 监听滚动/光标变化
+    const saveViewState = () => {
+      const state = modifiedEditor.saveViewState();
+      if (state && onViewStateChangeRef.current) {
+        onViewStateChangeRef.current(state);
+      }
+    };
+
+    disposablesRef.current.push(modifiedEditor.onDidChangeCursorPosition(saveViewState));
+    disposablesRef.current.push(modifiedEditor.onDidScrollChange(saveViewState));
   }, []);
 
   // Story 2.13 AC #5: ViewState 变化时恢复 (独立 effect，避免 onMount 重绑定)
@@ -343,13 +408,20 @@ export function CodeSnapshotView({
         />
       )}
 
-      {/* 头部: 文件路径 + 历史状态指示器 (AC3, AC7) */}
-      <CodeSnapshotHeader
-        filePath={filePath}
-        timestamp={formattedTimestamp}
-        commitHash={commitHash}
-        isHistorical={isHistorical}
-      />
+      {/* 头部: 文件路径 + 历史状态指示器 + Diff 模式切换 */}
+      <div className="flex items-center justify-between border-b border-border bg-muted/30">
+        <CodeSnapshotHeader
+          filePath={filePath}
+          timestamp={formattedTimestamp}
+          commitHash={commitHash}
+          isHistorical={isHistorical}
+          className="border-b-0"
+        />
+        {/* Diff 模式切换按钮 (仅在有 Diff 数据时显示) */}
+        {hasDiffData && (
+          <DiffModeToggle className="mr-2" visible={hasDiffData} />
+        )}
+      </div>
 
       {/* 编辑器容器 (AC1) */}
       <div
@@ -373,22 +445,41 @@ export function CodeSnapshotView({
           </div>
         )}
 
-        <Editor
-          height="100%"
-          language={language}
-          value={code}
-          theme={monacoTheme}
-          options={EDITOR_OPTIONS}
-          onMount={handleEditorMount}
-          loading={
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              加载编辑器中...
-            </div>
-          }
-        />
+        {/* 并排 Diff 模式 */}
+        {useSideBySideDiff ? (
+          <DiffEditor
+            height="100%"
+            language={language}
+            original={previousCode || ""}
+            modified={code}
+            theme={monacoTheme}
+            options={DIFF_EDITOR_OPTIONS}
+            onMount={handleDiffEditorMount}
+            loading={
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                加载 Diff 编辑器中...
+              </div>
+            }
+          />
+        ) : (
+          /* 普通编辑器 (inline diff 使用装饰器) */
+          <Editor
+            height="100%"
+            language={language}
+            value={code}
+            theme={monacoTheme}
+            options={EDITOR_OPTIONS}
+            onMount={handleEditorMount}
+            loading={
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                加载编辑器中...
+              </div>
+            }
+          />
+        )}
 
-        {/* Diff 关闭按钮 (Story 2.7 AC #5) */}
-        {shouldShowDiff && (
+        {/* Diff 关闭按钮 - 仅在 inline 模式显示 (Story 2.7 AC #5) */}
+        {shouldShowDiff && !useSideBySideDiff && (
           <Button
             variant="secondary"
             size="sm"

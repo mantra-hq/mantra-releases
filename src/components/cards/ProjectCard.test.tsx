@@ -54,6 +54,8 @@ const mockProject: Project = {
   session_count: 2,
   created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
   last_activity: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
+  git_repo_path: "/home/user/projects/my-awesome-project",
+  has_git_repo: true,
 };
 
 describe("ProjectCard", () => {

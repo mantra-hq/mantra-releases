@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { useEditorStore, type EditorTab } from "./useEditorStore";
+import { useEditorStore } from "./useEditorStore";
 import type { editor } from "monaco-editor";
 
 describe("useEditorStore", () => {

@@ -107,8 +107,6 @@ export function CodePanel({
         activeTabId,
         sidebarOpen,
         openTab,
-        closeTab,
-        setActiveTab,
         updateViewState,
         toggleSidebar,
     } = useEditorStore();
@@ -131,22 +129,30 @@ export function CodePanel({
     );
 
     // 确定当前显示的文件路径和内容
+    // 统一从标签读取，如果没有标签则使用 props（初始状态）
     const displayFilePath = activeTab?.path ?? filePath;
     const displayCommitHash = activeTab?.commitHash ?? commitHash;
+    const displayTimestamp = activeTab?.timestamp ?? (typeof timestamp === "number" ? timestamp : undefined);
 
     // 文件内容状态 (支持多标签)
     const [tabContents, setTabContents] = React.useState<Record<string, string>>({});
-    const displayCode = activeTabId ? (tabContents[activeTabId] ?? code) : code;
+
+    // 统一从标签读取内容，标签内容优先于 tabContents 缓存
+    const displayCode = activeTab?.content ?? (activeTabId ? tabContents[activeTabId] : null) ?? code;
+
+    // Diff 用的前一版本内容
+    const displayPreviousCode = activeTab?.previousContent ?? previousCode;
 
     // 计算时间戳
     const timestampMs = React.useMemo(() => {
+        if (displayTimestamp) return displayTimestamp;
         if (typeof timestamp === "number") return timestamp;
         if (typeof timestamp === "string") {
             const parsed = Date.parse(timestamp);
             return isNaN(parsed) ? undefined : parsed;
         }
         return undefined;
-    }, [timestamp]);
+    }, [displayTimestamp, timestamp]);
 
     // 快捷键支持 (AC #15-18)
     useEditorKeyboard({
@@ -155,7 +161,7 @@ export function CodePanel({
     });
 
     // 加载文件树 (AC #9, #19)
-    // 注意: Tauri 2.x 使用 snake_case 参数名
+    // 注意: Tauri 2.x 前端使用 camelCase，会自动转换为 Rust 的 snake_case
     React.useEffect(() => {
         if (!repoPath) return;
 
@@ -163,13 +169,13 @@ export function CodePanel({
             setTreeLoading(true);
             try {
                 const tree = await invoke<TreeNode[]>("list_tree_at_commit", {
-                    repo_path: repoPath,
-                    commit_hash: isHistoricalMode ? displayCommitHash : undefined,
+                    repoPath: repoPath,
+                    commitHash: isHistoricalMode ? displayCommitHash : undefined,
                     subpath: undefined,
                 });
                 setFileTree(tree);
             } catch (err) {
-                console.error("加载文件树失败:", err);
+                console.error("[CodePanel] 加载文件树失败:", err);
                 setFileTree([]);
             } finally {
                 setTreeLoading(false);
@@ -186,8 +192,8 @@ export function CodePanel({
         const loadFiles = async () => {
             try {
                 const files = await invoke<string[]>("list_files_at_commit", {
-                    repo_path: repoPath,
-                    commit_hash: isHistoricalMode ? displayCommitHash : undefined,
+                    repoPath: repoPath,
+                    commitHash: isHistoricalMode ? displayCommitHash : undefined,
                 });
                 setFileList(files);
             } catch (err) {
@@ -233,6 +239,7 @@ export function CodePanel({
             // 使用 ref 检查避免依赖 tabContents
             if (tabContentsRef.current[tabId]) return; // 已加载
 
+            // 优先使用外部提供的加载器，否则直接调用 Tauri 命令
             if (onLoadFileContent) {
                 try {
                     const content = await onLoadFileContent(path, tabCommitHash);
@@ -240,17 +247,29 @@ export function CodePanel({
                 } catch (err) {
                     console.error("加载文件内容失败:", err);
                 }
+            } else if (repoPath) {
+                // 直接调用 Tauri 命令加载文件内容
+                try {
+                    const result = await invoke<{ content: string }>("get_file_at_head", {
+                        repoPath: repoPath,
+                        filePath: path,
+                    });
+                    setTabContents((prev) => ({ ...prev, [tabId]: result.content }));
+                } catch (err) {
+                    console.error("加载文件内容失败:", err);
+                    setTabContents((prev) => ({ ...prev, [tabId]: `// 无法加载文件: ${path}` }));
+                }
             }
         },
-        [onLoadFileContent]
+        [onLoadFileContent, repoPath]
     );
 
     // 当活动标签变化时加载内容
     React.useEffect(() => {
-        if (activeTab && onLoadFileContent) {
+        if (activeTab && (onLoadFileContent || repoPath)) {
             loadTabContent(activeTab.id, activeTab.path, activeTab.commitHash);
         }
-    }, [activeTab, loadTabContent, onLoadFileContent]);
+    }, [activeTab, loadTabContent, onLoadFileContent, repoPath]);
 
     // 文件树单击 (预览, AC #12)
     const handleFileClick = React.useCallback(
@@ -398,11 +417,11 @@ export function CodePanel({
                     <CodeSnapshotView
                         code={displayCode}
                         filePath={displayFilePath}
-                        timestamp={timestamp}
+                        timestamp={timestampMs}
                         commitHash={displayCommitHash}
                         commitMessage={commitMessage}
-                        previousCode={previousCode}
-                        isHistoricalMode={isHistoricalMode}
+                        previousCode={displayPreviousCode}
+                        isHistoricalMode={isHistoricalMode || !!activeTab?.commitHash}
                         onReturnToCurrent={onReturnToCurrent}
                         fileNotFound={fileNotFound}
                         notFoundPath={notFoundPath}

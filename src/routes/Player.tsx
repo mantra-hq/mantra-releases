@@ -11,6 +11,7 @@
  * 集成 Git Time Machine 实现代码快照功能 (FR-GIT)
  * 进入时自动显示项目代表性文件 (AC1, AC2)
  * 智能文件选择：自动显示最相关的代码文件 (Story 2.12)
+ * 统一标签管理：会话点击时打开历史版本标签
  */
 
 import * as React from "react";
@@ -31,6 +32,7 @@ import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { useTimeMachine } from "@/hooks/useTimeMachine";
 // Story 2.12: 使用增强的文件路径提取模块
 import {
@@ -83,11 +85,16 @@ export default function Player() {
   const jumpToMessage = useTimeTravelStore((state) => state.jumpToMessage);
   const setStoreCurrentTime = useTimeTravelStore((state) => state.setCurrentTime);
 
+  // 编辑器标签管理
+  const openTab = useEditorStore((state) => state.openTab);
+
   // Git Time Machine Hook (FR-GIT-002, FR-GIT-003)
   const { fetchSnapshot } = useTimeMachine(repoPath);
 
   // Story 2.12 AC4: 记录最近有效的文件路径，用于无文件路径时保持视图
   const lastValidFileRef = React.useRef<string | null>(null);
+  // 记录上一个文件的内容（用于 Diff）
+  const previousContentRef = React.useRef<string | null>(null);
 
   // 加载会话数据
   React.useEffect(() => {
@@ -269,8 +276,9 @@ export default function Player() {
   }, [sessionCwd, setCode]);
 
   // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002, Story 2.12)
+  // 统一标签管理：会话点击时打开历史版本标签
   const handleMessageSelect = React.useCallback(
-    (messageId: string, message: NarrativeMessage) => {
+    async (messageId: string, message: NarrativeMessage) => {
       setSelectedMessageId(messageId);
       // 同步更新时间轴位置
       const msgTime = new Date(message.timestamp).getTime();
@@ -292,7 +300,21 @@ export default function Player() {
           lastValidFileRef.current = relativePath;
 
           // 获取代码快照 (FR-GIT-002, FR-GIT-003)
-          fetchSnapshot(relativePath, msgTime);
+          const snapshot = await fetchSnapshot(relativePath, msgTime);
+
+          if (snapshot) {
+            // 统一标签管理：打开历史版本标签
+            openTab(relativePath, {
+              preview: true,
+              commitHash: snapshot.commit_hash,
+              timestamp: snapshot.commit_timestamp * 1000,
+              content: snapshot.content,
+              previousContent: previousContentRef.current ?? undefined,
+            });
+
+            // 更新 previousContent 用于下次 Diff
+            previousContentRef.current = snapshot.content;
+          }
 
           console.log(
             `[Player] 文件选择: ${relativePath} (来源: ${fileResult.source}, 置信度: ${fileResult.confidence})`
@@ -304,12 +326,13 @@ export default function Player() {
         }
       }
     },
-    [messages, jumpToMessage, repoPath, fetchSnapshot]
+    [messages, jumpToMessage, repoPath, fetchSnapshot, openTab]
   );
 
   // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002, Story 2.12)
+  // 统一标签管理：时间轴拖动时打开历史版本标签
   const handleTimelineSeek = React.useCallback(
-    (timestamp: number) => {
+    async (timestamp: number) => {
       setCurrentTime(timestamp);
       // 更新时间旅行状态 (Story 2.7 AC #2)
       setStoreCurrentTime(timestamp);
@@ -340,7 +363,19 @@ export default function Player() {
             if (fileResult) {
               const relativePath = toRelativePath(fileResult.path, repoPath);
               lastValidFileRef.current = relativePath;
-              fetchSnapshot(relativePath, timestamp);
+
+              // 获取快照并打开历史标签
+              const snapshot = await fetchSnapshot(relativePath, timestamp);
+              if (snapshot) {
+                openTab(relativePath, {
+                  preview: true,
+                  commitHash: snapshot.commit_hash,
+                  timestamp: snapshot.commit_timestamp * 1000,
+                  content: snapshot.content,
+                  previousContent: previousContentRef.current ?? undefined,
+                });
+                previousContentRef.current = snapshot.content;
+              }
             } else if (lastValidFileRef.current) {
               // AC #4: 无文件路径时保持当前视图
               console.log("[Player] 时间轴 Seek: 无文件路径，保持当前视图");
@@ -349,7 +384,7 @@ export default function Player() {
         }
       }
     },
-    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot]
+    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot, openTab]
   );
 
   // 返回 Dashboard

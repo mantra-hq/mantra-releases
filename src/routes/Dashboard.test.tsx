@@ -53,6 +53,8 @@ const mockProjects: Project[] = [
     session_count: 2,
     created_at: new Date(Date.now() - 86400000).toISOString(),
     last_activity: new Date(Date.now() - 1800000).toISOString(),
+    git_repo_path: "/home/user/projects/my-awesome-project",
+    has_git_repo: true,
   },
   {
     id: "project-2",
@@ -61,6 +63,8 @@ const mockProjects: Project[] = [
     session_count: 0,
     created_at: new Date(Date.now() - 172800000).toISOString(),
     last_activity: new Date(Date.now() - 86400000).toISOString(),
+    git_repo_path: null,
+    has_git_repo: false,
   },
 ];
 

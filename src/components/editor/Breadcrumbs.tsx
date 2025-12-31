@@ -69,11 +69,14 @@ export function Breadcrumbs({
         });
     }, [segments, siblings]);
 
-    const handleSegmentClick = (index: number) => {
-        if (!onNavigate) return;
-        const path = segments.slice(0, index + 1).join("/");
-        onNavigate(path);
-    };
+    const handleSegmentClick = React.useCallback(
+        (index: number) => {
+            if (!onNavigate) return;
+            const path = segments.slice(0, index + 1).join("/");
+            onNavigate(path);
+        },
+        [onNavigate, segments]
+    );
 
     if (segments.length === 0) return null;
 
@@ -125,14 +128,15 @@ export function Breadcrumbs({
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         ) : (
-                            <span
+                            <button
+                                onClick={() => handleSegmentClick(index)}
                                 className={cn(
-                                    "cursor-default",
-                                    isLast && "text-foreground font-medium"
+                                    "hover:text-foreground transition-colors",
+                                    isLast && "text-foreground font-medium cursor-default"
                                 )}
                             >
                                 {segment}
-                            </span>
+                            </button>
                         )}
                     </React.Fragment>
                 );

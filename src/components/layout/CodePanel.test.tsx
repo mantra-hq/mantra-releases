@@ -12,6 +12,7 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { CodePanel } from "./CodePanel";
 import { useEditorStore } from "@/stores/useEditorStore";
 import type { editor } from "monaco-editor";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Mock Tauri invoke
 const mockInvoke = vi.fn();
@@ -36,6 +37,11 @@ vi.mock("@/lib/theme-provider", () => ({
         setTheme: vi.fn(),
     }),
 }));
+
+// 包装组件，提供必要的 Provider
+function renderWithProviders(ui: React.ReactElement) {
+    return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 describe("CodePanel", () => {
     // 每个测试前重置 store
@@ -65,7 +71,7 @@ describe("CodePanel", () => {
 
     describe("基础渲染", () => {
         it("应该渲染代码内容", () => {
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="console.log('Hello');"
                     filePath="src/index.ts"
@@ -76,7 +82,7 @@ describe("CodePanel", () => {
         });
 
         it("AC #6: 应该渲染面包屑导航", () => {
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
                     filePath="src/components/App.tsx"
@@ -91,7 +97,7 @@ describe("CodePanel", () => {
         });
 
         it("无 Git 仓库时应显示警告", () => {
-            render(
+            renderWithProviders(
                 <CodePanel
                     code=""
                     filePath=""
@@ -110,7 +116,7 @@ describe("CodePanel", () => {
             // 打开一个标签
             useEditorStore.getState().openTab("src/App.tsx");
 
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
                     filePath="src/App.tsx"
@@ -126,7 +132,7 @@ describe("CodePanel", () => {
             useEditorStore.getState().openTab("src/a.ts");
             useEditorStore.getState().openTab("src/b.ts");
 
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
                     filePath="src/b.ts"
@@ -141,7 +147,7 @@ describe("CodePanel", () => {
         it("AC #3: 关闭按钮应关闭标签", () => {
             useEditorStore.getState().openTab("src/a.ts");
 
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
                     filePath="src/a.ts"
@@ -158,7 +164,7 @@ describe("CodePanel", () => {
     describe("侧边栏 (AC #8)", () => {
         it("AC #8: 默认侧边栏关闭", async () => {
             await act(async () => {
-                render(
+                renderWithProviders(
                     <CodePanel
                         code="const a = 1;"
                         filePath="src/App.tsx"
@@ -173,7 +179,7 @@ describe("CodePanel", () => {
 
         it("AC #8: 点击按钮应切换侧边栏", async () => {
             await act(async () => {
-                render(
+                renderWithProviders(
                     <CodePanel
                         code="const a = 1;"
                         filePath="src/App.tsx"
@@ -195,7 +201,7 @@ describe("CodePanel", () => {
         it("AC #20: 历史模式时面包屑应显示时间指示器", () => {
             const timestamp = Date.now() - 3600000; // 1小时前
 
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const a = 1;"
                     filePath="src/App.tsx"
@@ -219,7 +225,7 @@ describe("CodePanel", () => {
 
     describe("空状态", () => {
         it("无代码时应显示空状态提示", () => {
-            render(
+            renderWithProviders(
                 <CodePanel
                     code=""
                     filePath=""
@@ -234,7 +240,7 @@ describe("CodePanel", () => {
 
     describe("文件不存在 (Story 2.12 AC #5)", () => {
         it("文件不存在时应显示 Banner", () => {
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="// old code"
                     filePath="src/deleted.ts"
@@ -321,7 +327,7 @@ describe("CodePanel", () => {
             useEditorStore.getState().openTab("src/test.tsx");
             useEditorStore.getState().updateViewState("src/test.tsx", mockViewState);
 
-            render(
+            renderWithProviders(
                 <CodePanel
                     code="const x = 1;"
                     filePath="src/test.tsx"
@@ -343,11 +349,11 @@ describe("CodePanel", () => {
             }
 
             // Mock 文件树和文件列表返回值
-            // 注意: Tauri 2.x 使用 snake_case 参数名
+            // 注意: Tauri 2.x 前端使用 camelCase，会自动转换为 Rust 的 snake_case
             mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
                 if (cmd === "list_tree_at_commit") {
-                    // 历史模式应该传递 commit_hash
-                    const commitHash = args?.commit_hash as string | undefined;
+                    // 历史模式应该传递 commitHash
+                    const commitHash = args?.commitHash as string | undefined;
                     if (commitHash === "abc1234") {
                         return Promise.resolve([
                             { name: "src", path: "src", type: "directory", children: [
@@ -362,7 +368,7 @@ describe("CodePanel", () => {
                     ]);
                 }
                 if (cmd === "list_files_at_commit") {
-                    const commitHash = args?.commit_hash as string | undefined;
+                    const commitHash = args?.commitHash as string | undefined;
                     if (commitHash === "abc1234") {
                         return Promise.resolve(["src/old-file.ts"]);
                     }
@@ -377,7 +383,7 @@ describe("CodePanel", () => {
             useEditorStore.getState().toggleSidebar();
 
             await act(async () => {
-                render(
+                renderWithProviders(
                     <CodePanel
                         code="// historical code"
                         filePath="src/old-file.ts"
@@ -391,8 +397,8 @@ describe("CodePanel", () => {
             // 等待文件树加载
             await waitFor(() => {
                 expect(mockInvoke).toHaveBeenCalledWith("list_tree_at_commit", expect.objectContaining({
-                    repo_path: "/test/repo",
-                    commit_hash: "abc1234",
+                    repoPath: "/test/repo",
+                    commitHash: "abc1234",
                 }));
             });
         });
@@ -401,7 +407,7 @@ describe("CodePanel", () => {
             useEditorStore.getState().toggleSidebar();
 
             await act(async () => {
-                render(
+                renderWithProviders(
                     <CodePanel
                         code="// current code"
                         filePath="src/new-file.ts"
@@ -413,8 +419,8 @@ describe("CodePanel", () => {
 
             await waitFor(() => {
                 expect(mockInvoke).toHaveBeenCalledWith("list_tree_at_commit", expect.objectContaining({
-                    repo_path: "/test/repo",
-                    commit_hash: undefined,
+                    repoPath: "/test/repo",
+                    commitHash: undefined,
                 }));
             });
         });

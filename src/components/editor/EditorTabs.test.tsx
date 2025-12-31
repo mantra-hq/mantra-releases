@@ -4,10 +4,16 @@
  * AC: #1 标签页显示, #2 标签切换, #3 标签关闭, #4 标签溢出, #5 ViewState
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { EditorTabs } from "./EditorTabs";
 import { useEditorStore } from "@/stores/useEditorStore";
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+// 包装组件，提供必要的 Provider
+function renderWithProviders(ui: React.ReactElement) {
+    return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 describe("EditorTabs", () => {
     // 每个测试前重置 store
@@ -17,15 +23,16 @@ describe("EditorTabs", () => {
 
     describe("渲染", () => {
         it("AC #1: 无标签时不渲染", () => {
-            const { container } = render(<EditorTabs />);
-            expect(container.firstChild).toBeNull();
+            const { container } = renderWithProviders(<EditorTabs />);
+            // TooltipProvider 会渲染，但 EditorTabs 返回 null
+            expect(container.querySelector('[role="tablist"]')).toBeNull();
         });
 
         it("AC #1: 应该渲染标签页", () => {
             useEditorStore.getState().openTab("src/App.tsx");
             useEditorStore.getState().openTab("src/index.ts");
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             expect(screen.getByText("App.tsx")).toBeInTheDocument();
             expect(screen.getByText("index.ts")).toBeInTheDocument();
@@ -34,7 +41,7 @@ describe("EditorTabs", () => {
         it("AC #1: 预览模式标签应显示斜体样式", () => {
             useEditorStore.getState().openTab("src/preview.ts", { preview: true });
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             const tab = screen.getByText("preview.ts").closest("[data-tab]");
             expect(tab).toHaveClass("italic");
@@ -44,18 +51,22 @@ describe("EditorTabs", () => {
             useEditorStore.getState().openTab("src/a.ts");
             useEditorStore.getState().openTab("src/b.ts");
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             const activeTab = screen.getByText("b.ts").closest("[data-tab]");
             expect(activeTab).toHaveAttribute("data-active", "true");
         });
 
-        it("应该显示历史模式 commit 标识", () => {
+        it("应该显示历史模式指示器", () => {
             useEditorStore.getState().openTab("src/App.tsx", { commitHash: "abc1234" });
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
-            expect(screen.getByText("abc1234")).toBeInTheDocument();
+            // 历史模式标签应有 data-historical 属性
+            const tab = screen.getByRole("tab");
+            expect(tab).toHaveAttribute("data-historical", "true");
+            // 历史模式标签应有琥珀色背景样式
+            expect(tab).toHaveClass("bg-amber-500/5");
         });
     });
 
@@ -64,7 +75,7 @@ describe("EditorTabs", () => {
             useEditorStore.getState().openTab("src/a.ts");
             useEditorStore.getState().openTab("src/b.ts");
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             // 点击第一个标签
             fireEvent.click(screen.getByText("a.ts"));
@@ -75,7 +86,7 @@ describe("EditorTabs", () => {
         it("AC #2: 双击预览标签应固定", () => {
             useEditorStore.getState().openTab("src/preview.ts", { preview: true });
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             // 双击
             fireEvent.doubleClick(screen.getByText("preview.ts"));
@@ -89,7 +100,7 @@ describe("EditorTabs", () => {
             useEditorStore.getState().openTab("src/a.ts");
             useEditorStore.getState().openTab("src/b.ts");
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             // 找到第一个标签的关闭按钮
             const closeButtons = screen.getAllByRole("button", { name: /关闭/i });
@@ -104,7 +115,7 @@ describe("EditorTabs", () => {
             useEditorStore.getState().openTab("src/b.ts");
             // 当前激活 b.ts
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             // 关闭 a.ts
             const closeButtons = screen.getAllByRole("button", { name: /关闭/i });
@@ -122,7 +133,7 @@ describe("EditorTabs", () => {
                 useEditorStore.getState().openTab(`src/file${i}.ts`);
             }
 
-            render(<EditorTabs />);
+            renderWithProviders(<EditorTabs />);
 
             // 验证标签容器存在
             const container = screen.getByRole("tablist");

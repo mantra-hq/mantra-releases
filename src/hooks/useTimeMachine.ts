@@ -208,8 +208,8 @@ export function useTimeMachine(repoPath: string | null) {
                 const startTime = performance.now();
 
                 const result = await invoke<SnapshotResult>("get_snapshot_at_time", {
-                    repo_path: repoPath,
-                    file_path: filePath,
+                    repoPath: repoPath,
+                    filePath: filePath,
                     timestamp: timestampSeconds,
                 });
 
@@ -294,8 +294,8 @@ export function useTimeMachine(repoPath: string | null) {
 
             try {
                 const result = await invoke<SnapshotResult>("get_snapshot_at_time", {
-                    repo_path: repoPath,
-                    file_path: filePath,
+                    repoPath: repoPath,
+                    filePath: filePath,
                     timestamp: timestampSeconds,
                 });
                 snapshotCache.set(cacheKey, result);

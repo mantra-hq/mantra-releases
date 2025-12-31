@@ -18,6 +18,8 @@ export interface CodeSnapshotHeaderProps {
   commitHash?: string;
   /** 是否为历史快照 */
   isHistorical?: boolean;
+  /** 自定义类名 */
+  className?: string;
 }
 
 /**
@@ -54,6 +56,7 @@ export function CodeSnapshotHeader({
   timestamp,
   commitHash,
   isHistorical = false,
+  className,
 }: CodeSnapshotHeaderProps) {
   const [copied, setCopied] = useState(false);
 
@@ -80,7 +83,8 @@ export function CodeSnapshotHeader({
       className={cn(
         "flex items-center justify-between",
         "border-b border-border",
-        "bg-muted/30 px-3 py-2"
+        "bg-muted/30 px-3 py-2",
+        className
       )}
     >
       {/* 左侧: 文件路径 */}

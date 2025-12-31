@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from "lucide-react";
+import { ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEditorStore } from "@/stores/useEditorStore";
@@ -109,7 +109,7 @@ export function FileTree({
     };
 
     // 渲染单个节点
-    const renderNode = (flatNode: FlatNode, index: number, style?: React.CSSProperties) => {
+    const renderNode = (flatNode: FlatNode, _index: number, style?: React.CSSProperties) => {
         const { node, depth, isExpanded } = flatNode;
         const isActive = node.path === activeFilePath;
         const Icon =

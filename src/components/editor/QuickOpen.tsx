@@ -9,7 +9,7 @@
  */
 
 import * as React from "react";
-import { Search, File, FileCode, Folder } from "lucide-react";
+import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";

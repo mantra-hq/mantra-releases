@@ -28,3 +28,6 @@ export type { FileTreeProps, TreeNode } from "./FileTree";
 export { QuickOpen } from "./QuickOpen";
 export type { QuickOpenProps } from "./QuickOpen";
 
+export { DiffModeToggle } from "./DiffModeToggle";
+export type { DiffModeToggleProps } from "./DiffModeToggle";
+

@@ -8,11 +8,17 @@
  * - 侧边栏展开状态 (sidebarOpen)
  * - 文件夹展开状态 (expandedFolders)
  * - Monaco ViewState 缓存
+ * - Diff 模式 (inline / side-by-side)
  */
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { editor } from "monaco-editor";
+
+/**
+ * Diff 显示模式
+ */
+export type DiffMode = "inline" | "side-by-side";
 
 /**
  * 文件标签页数据
@@ -32,6 +38,12 @@ export interface EditorTab {
     viewState: editor.ICodeEditorViewState | null;
     /** 所属 commit (历史模式) */
     commitHash?: string;
+    /** 历史时间戳 (用于标签显示) */
+    timestamp?: number;
+    /** 文件内容 (历史版本缓存) */
+    content?: string;
+    /** 前一版本内容 (用于 Diff) */
+    previousContent?: string;
 }
 
 /**
@@ -46,11 +58,19 @@ export interface EditorState {
     sidebarOpen: boolean;
     /** 文件树展开状态 */
     expandedFolders: Set<string>;
+    /** Diff 显示模式 */
+    diffMode: DiffMode;
 
     // ======== Actions ========
 
     /** 打开文件 (双击 = pinned, 单击 = preview) */
-    openTab: (path: string, options?: { preview?: boolean; commitHash?: string }) => void;
+    openTab: (path: string, options?: {
+        preview?: boolean;
+        commitHash?: string;
+        timestamp?: number;
+        content?: string;
+        previousContent?: string;
+    }) => void;
     /** 关闭标签 */
     closeTab: (tabId: string) => void;
     /** 设置激活标签 */
@@ -59,10 +79,16 @@ export interface EditorState {
     pinTab: (tabId: string) => void;
     /** 更新 ViewState */
     updateViewState: (tabId: string, viewState: editor.ICodeEditorViewState) => void;
+    /** 更新标签内容 */
+    updateTabContent: (tabId: string, content: string, previousContent?: string) => void;
     /** 切换侧边栏 */
     toggleSidebar: () => void;
     /** 展开/折叠文件夹 */
     toggleFolder: (path: string) => void;
+    /** 切换 Diff 模式 */
+    toggleDiffMode: () => void;
+    /** 设置 Diff 模式 */
+    setDiffMode: (mode: DiffMode) => void;
     /** 切换到下一个标签 */
     nextTab: () => void;
     /** 切换到上一个标签 */
@@ -81,6 +107,22 @@ function getFileName(path: string): string {
 }
 
 /**
+ * 格式化历史标签显示名称
+ */
+function formatHistoryLabel(path: string, timestamp?: number): string {
+    const fileName = getFileName(path);
+    if (timestamp) {
+        const date = new Date(timestamp);
+        const timeStr = date.toLocaleTimeString("zh-CN", {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+        return `${fileName} @ ${timeStr}`;
+    }
+    return fileName;
+}
+
+/**
  * 编辑器状态 Store
  */
 export const useEditorStore = create<EditorState>()(
@@ -90,17 +132,34 @@ export const useEditorStore = create<EditorState>()(
             activeTabId: null,
             sidebarOpen: false,
             expandedFolders: new Set<string>(),
+            diffMode: "inline" as DiffMode,
 
             openTab: (path, options = {}) => {
-                const { preview = false, commitHash } = options;
+                const { preview = false, commitHash, timestamp, content, previousContent } = options;
                 const tabId = commitHash ? `${commitHash}:${path}` : path;
                 const state = get();
 
                 // 检查是否已打开
                 const existingTab = state.tabs.find((t) => t.id === tabId);
                 if (existingTab) {
-                    // 如果已存在且当前是预览，双击时固定
-                    if (existingTab.isPreview && !preview) {
+                    // 如果已存在，更新内容（如果提供了新内容）
+                    if (content !== undefined || previousContent !== undefined) {
+                        set({
+                            tabs: state.tabs.map((t) =>
+                                t.id === tabId
+                                    ? {
+                                        ...t,
+                                        content: content ?? t.content,
+                                        previousContent: previousContent ?? t.previousContent,
+                                        isPinned: !preview ? true : t.isPinned,
+                                        isPreview: preview ? t.isPreview : false,
+                                    }
+                                    : t
+                            ),
+                            activeTabId: tabId,
+                        });
+                    } else if (existingTab.isPreview && !preview) {
+                        // 如果已存在且当前是预览，双击时固定
                         set({
                             tabs: state.tabs.map((t) =>
                                 t.id === tabId ? { ...t, isPinned: true, isPreview: false } : t
@@ -113,18 +172,23 @@ export const useEditorStore = create<EditorState>()(
                     return;
                 }
 
-                // 如果是预览模式，替换现有预览标签
-                const previewIndex = state.tabs.findIndex((t) => t.isPreview);
+                // 创建新标签
+                const isHistorical = !!commitHash;
                 const newTab: EditorTab = {
                     id: tabId,
                     path,
-                    label: getFileName(path),
+                    label: isHistorical ? formatHistoryLabel(path, timestamp) : getFileName(path),
                     isPinned: !preview,
                     isPreview: preview,
                     viewState: null,
                     commitHash,
+                    timestamp,
+                    content,
+                    previousContent,
                 };
 
+                // 如果是预览模式，替换现有预览标签
+                const previewIndex = state.tabs.findIndex((t) => t.isPreview);
                 if (preview && previewIndex !== -1) {
                     // 替换预览标签
                     const newTabs = [...state.tabs];
@@ -177,6 +241,15 @@ export const useEditorStore = create<EditorState>()(
                     ),
                 })),
 
+            updateTabContent: (tabId, content, previousContent) =>
+                set((state) => ({
+                    tabs: state.tabs.map((t) =>
+                        t.id === tabId
+                            ? { ...t, content, previousContent: previousContent ?? t.previousContent }
+                            : t
+                    ),
+                })),
+
             toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
             toggleFolder: (path) =>
@@ -189,6 +262,13 @@ export const useEditorStore = create<EditorState>()(
                     }
                     return { expandedFolders: newExpanded };
                 }),
+
+            toggleDiffMode: () =>
+                set((state) => ({
+                    diffMode: state.diffMode === "inline" ? "side-by-side" : "inline",
+                })),
+
+            setDiffMode: (mode) => set({ diffMode: mode }),
 
             nextTab: () => {
                 const state = get();
@@ -219,6 +299,8 @@ export const useEditorStore = create<EditorState>()(
             name: "mantra-editor-store",
             partialize: (state) => ({
                 sidebarOpen: state.sidebarOpen,
+                diffMode: state.diffMode,
+                expandedFolders: state.expandedFolders,
                 // 不持久化 tabs 和 viewState (会话级数据)
             }),
             // 自定义序列化/反序列化以处理 Set
@@ -234,6 +316,7 @@ export const useEditorStore = create<EditorState>()(
                             expandedFolders: new Set(parsed.state.expandedFolders || []),
                             tabs: [], // 不从持久化恢复 tabs
                             activeTabId: null,
+                            diffMode: parsed.state.diffMode || "inline",
                         },
                     };
                 },

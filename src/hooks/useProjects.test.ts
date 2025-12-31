@@ -24,6 +24,8 @@ const mockProjects: Project[] = [
     session_count: 1,
     created_at: new Date(Date.now() - 86400000).toISOString(),
     last_activity: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago (most recent)
+    git_repo_path: "/home/user/projects/project-gamma",
+    has_git_repo: true,
   },
   {
     id: "project-1",
@@ -32,6 +34,8 @@ const mockProjects: Project[] = [
     session_count: 1,
     created_at: new Date(Date.now() - 172800000).toISOString(),
     last_activity: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    git_repo_path: null,
+    has_git_repo: false,
   },
   {
     id: "project-2",
@@ -40,6 +44,8 @@ const mockProjects: Project[] = [
     session_count: 0,
     created_at: new Date(Date.now() - 259200000).toISOString(),
     last_activity: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+    git_repo_path: "/home/user/projects/project-beta",
+    has_git_repo: true,
   },
 ];
 
@@ -146,6 +152,8 @@ describe("useProjects", () => {
           session_count: 0,
           created_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
+          git_repo_path: null,
+          has_git_repo: false,
         },
       ];
       mockInvoke.mockResolvedValueOnce(updatedProjects);

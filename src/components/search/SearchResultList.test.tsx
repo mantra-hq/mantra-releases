@@ -11,7 +11,7 @@ import type { SearchResult } from "@/stores/useSearchStore";
 
 // Mock virtualizer
 vi.mock("@tanstack/react-virtual", () => ({
-    useVirtualizer: vi.fn().mockImplementation(({ count, getScrollElement }) => ({
+    useVirtualizer: vi.fn().mockImplementation(({ count, getScrollElement: _getScrollElement }) => ({
         getVirtualItems: () =>
             Array.from({ length: count }, (_, i) => ({
                 index: i,

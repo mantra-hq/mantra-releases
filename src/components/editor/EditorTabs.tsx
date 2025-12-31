@@ -7,15 +7,20 @@
  * - 标签切换和关闭
  * - 预览模式斜体样式
  * - 标签溢出滚动
- * - 历史模式指示器
+ * - 历史模式指示器 (时钟图标)
  */
 
 import * as React from "react";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorTab } from "@/stores/useEditorStore";
 import { Button } from "@/components/ui/button";
 import { getFileIcon } from "@/lib/file-icons";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface EditorTabsProps {
     /** 自定义类名 */
@@ -110,47 +115,63 @@ export function EditorTabs({ className }: EditorTabsProps) {
                 {tabs.map((tab) => {
                     const Icon = getFileIcon(tab.path);
                     const isActive = tab.id === activeTabId;
+                    const isHistorical = !!tab.commitHash;
+
+                    // 格式化历史时间提示
+                    const historyTooltip = isHistorical
+                        ? tab.timestamp
+                            ? `历史版本 @ ${new Date(tab.timestamp).toLocaleString("zh-CN")}`
+                            : `历史版本 (${tab.commitHash?.slice(0, 7)})`
+                        : undefined;
 
                     return (
-                        <div
-                            key={tab.id}
-                            data-tab
-                            data-active={isActive}
-                            role="tab"
-                            aria-selected={isActive}
-                            onClick={(e) => handleTabClick(tab, e)}
-                            onDoubleClick={() => handleTabDoubleClick(tab)}
-                            className={cn(
-                                "group flex items-center gap-1.5 px-3 py-1.5 border-r border-border",
-                                "cursor-pointer select-none min-w-0 max-w-[180px]",
-                                "hover:bg-muted/50 transition-colors",
-                                isActive && "bg-background border-b-2 border-b-primary",
-                                tab.isPreview && "italic"
+                        <Tooltip key={tab.id}>
+                            <TooltipTrigger asChild>
+                                <div
+                                    data-tab
+                                    data-active={isActive}
+                                    data-historical={isHistorical}
+                                    role="tab"
+                                    aria-selected={isActive}
+                                    onClick={(e) => handleTabClick(tab, e)}
+                                    onDoubleClick={() => handleTabDoubleClick(tab)}
+                                    className={cn(
+                                        "group flex items-center gap-1.5 px-3 py-1.5 border-r border-border",
+                                        "cursor-pointer select-none min-w-0 max-w-[200px]",
+                                        "hover:bg-muted/50 transition-colors",
+                                        isActive && "bg-background border-b-2 border-b-primary",
+                                        tab.isPreview && "italic",
+                                        isHistorical && "bg-amber-500/5"
+                                    )}
+                                >
+                                    {/* 历史模式时钟图标 */}
+                                    {isHistorical && (
+                                        <Clock className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                    )}
+                                    <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                                    <span className="truncate text-sm">{tab.label}</span>
+                                    {/* 关闭按钮 */}
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "h-4 w-4 p-0 ml-1 rounded-sm flex-shrink-0",
+                                            "opacity-0 group-hover:opacity-100",
+                                            isActive && "opacity-100"
+                                        )}
+                                        onClick={(e) => handleCloseClick(tab, e)}
+                                        aria-label="关闭标签"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            </TooltipTrigger>
+                            {historyTooltip && (
+                                <TooltipContent side="bottom">
+                                    <p>{historyTooltip}</p>
+                                </TooltipContent>
                             )}
-                        >
-                            <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                            <span className="truncate text-sm">{tab.label}</span>
-                            {/* 历史模式指示器 */}
-                            {tab.commitHash && (
-                                <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">
-                                    {tab.commitHash.slice(0, 7)}
-                                </span>
-                            )}
-                            {/* 关闭按钮 */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                    "h-4 w-4 p-0 ml-1 rounded-sm flex-shrink-0",
-                                    "opacity-0 group-hover:opacity-100",
-                                    isActive && "opacity-100"
-                                )}
-                                onClick={(e) => handleCloseClick(tab, e)}
-                                aria-label="关闭标签"
-                            >
-                                <X className="h-3 w-3" />
-                            </Button>
-                        </div>
+                        </Tooltip>
                     );
                 })}
             </div>
