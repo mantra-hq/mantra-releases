@@ -34,6 +34,18 @@ pub async fn get_project_sessions(
     db.get_project_sessions(&project_id).map_err(Into::into)
 }
 
+/// Get a single session by ID
+///
+/// Returns the full MantraSession including all messages
+#[tauri::command]
+pub async fn get_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Option<MantraSession>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_session(&session_id).map_err(Into::into)
+}
+
 /// Import sessions from file paths
 ///
 /// Parses Claude Code log files and imports them into the database.

@@ -192,6 +192,33 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Get a session by ID
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID to retrieve
+    ///
+    /// # Returns
+    /// The full MantraSession if found, None otherwise
+    pub fn get_session(&self, session_id: &str) -> Result<Option<MantraSession>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT raw_data FROM sessions WHERE id = ?1",
+        )?;
+
+        let result = stmt.query_row(params![session_id], |row| {
+            let raw_data: String = row.get(0)?;
+            Ok(raw_data)
+        });
+
+        match result {
+            Ok(raw_data) => {
+                let session: MantraSession = serde_json::from_str(&raw_data)?;
+                Ok(Some(session))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Update project's last activity time
     ///
     /// # Arguments

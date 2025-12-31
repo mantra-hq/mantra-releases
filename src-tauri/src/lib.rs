@@ -14,7 +14,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 use commands::{
-    find_commit_at_time, get_commit_info, get_file_snapshot, get_project_sessions,
+    find_commit_at_time, get_commit_info, get_file_snapshot, get_project_sessions, get_session,
     import_parsed_sessions, import_sessions, list_projects, parse_claude_log,
     parse_claude_log_string, parse_log_files, scan_custom_directory, scan_log_directory, AppState,
 };
@@ -62,6 +62,7 @@ pub fn run() {
             get_commit_info,
             list_projects,
             get_project_sessions,
+            get_session,
             import_sessions,
             import_parsed_sessions,
             scan_log_directory,
