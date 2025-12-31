@@ -41,17 +41,35 @@ const sourceNames: Record<SessionSource, string> = {
 };
 
 /**
+ * 生成会话显示标题
+ * 使用来源名称 + 创建时间作为标题
+ */
+function getSessionTitle(session: Session): string {
+  const date = new Date(session.created_at);
+  const timeStr = date.toLocaleString("zh-CN", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${sourceNames[session.source]} 会话 · ${timeStr}`;
+}
+
+/**
  * SessionCard 组件
  * 显示会话标题、来源、消息数和时间
  */
 export function SessionCard({ session, onClick }: SessionCardProps) {
   // 格式化相对时间
   const relativeTime = React.useMemo(() => {
-    return formatDistanceToNow(new Date(session.startTime), {
+    return formatDistanceToNow(new Date(session.created_at), {
       addSuffix: true,
       locale: zhCN,
     });
-  }, [session.startTime]);
+  }, [session.created_at]);
+
+  // 生成标题
+  const title = React.useMemo(() => getSessionTitle(session), [session]);
 
   return (
     <button
@@ -74,10 +92,10 @@ export function SessionCard({ session, onClick }: SessionCardProps) {
       {/* 会话信息 */}
       <div className="flex-1 min-w-0">
         <span className="block text-sm font-medium text-foreground truncate">
-          {session.title}
+          {title}
         </span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{session.messageCount} 条消息</span>
+          <span>{session.message_count} 条消息</span>
           <span>·</span>
           <span>{relativeTime}</span>
         </div>
@@ -85,4 +103,3 @@ export function SessionCard({ session, onClick }: SessionCardProps) {
     </button>
   );
 }
-

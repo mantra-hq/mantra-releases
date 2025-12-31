@@ -101,7 +101,7 @@ export default function Dashboard() {
     return projects.filter(
       (p) =>
         p.name.toLowerCase().includes(query) ||
-        p.path.toLowerCase().includes(query)
+        p.cwd.toLowerCase().includes(query)
     );
   }, [projects, debouncedQuery]);
 

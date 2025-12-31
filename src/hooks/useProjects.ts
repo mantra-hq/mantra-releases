@@ -20,7 +20,7 @@ export interface UseProjectsResult {
   /** 错误信息 */
   error: string | null;
   /** 重新获取项目列表 */
-  refetch: () => Promise<void>;
+  refetch: () => void;
 }
 
 /**
@@ -40,11 +40,10 @@ export function useProjects(): UseProjectsResult {
     setError(null);
 
     try {
-      const data = await invoke<Project[]>("get_projects");
-      
-      // 按最后活动时间降序排列
-      const sorted = [...data].sort((a, b) => b.lastActivity - a.lastActivity);
-      setProjects(sorted);
+      const data = await invoke<Project[]>("list_projects");
+
+      // Rust 已按 last_activity DESC 排序，直接使用
+      setProjects(data);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "获取项目列表失败";
@@ -67,4 +66,3 @@ export function useProjects(): UseProjectsResult {
     refetch: fetchProjects,
   };
 }
-

@@ -17,11 +17,10 @@ vi.mock("date-fns", () => ({
 // Mock session data for different sources
 const createMockSession = (source: Session["source"]): Session => ({
   id: `session-${source}`,
-  title: `测试会话 - ${source}`,
   source,
-  messageCount: 25,
-  startTime: Date.now() - 7200000, // 2 hours ago
-  endTime: Date.now() - 3600000, // 1 hour ago
+  message_count: 25,
+  created_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+  updated_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
 });
 
 describe("SessionCard", () => {
@@ -32,16 +31,17 @@ describe("SessionCard", () => {
   });
 
   describe("会话信息展示", () => {
-    it("应该显示会话标题", () => {
+    it("应该显示会话标题（包含来源名称）", () => {
       const session = createMockSession("claude");
       render(<SessionCard session={session} onClick={mockOnClick} />);
-      expect(screen.getByText("测试会话 - claude")).toBeInTheDocument();
+      // 标题格式：{Source} 会话 · {时间}
+      expect(screen.getByText(/Claude 会话/)).toBeInTheDocument();
     });
 
     it("应该显示消息数量", () => {
       const session = createMockSession("claude");
       render(<SessionCard session={session} onClick={mockOnClick} />);
-      expect(screen.getByText(/25.*消息|25 messages/i)).toBeInTheDocument();
+      expect(screen.getByText(/25.*消息|25 条消息/i)).toBeInTheDocument();
     });
 
     it("应该显示相对时间", () => {
@@ -94,18 +94,6 @@ describe("SessionCard", () => {
     });
   });
 
-  describe("长标题处理", () => {
-    it("长标题应该被截断", () => {
-      const session: Session = {
-        ...createMockSession("claude"),
-        title: "这是一个非常非常非常非常非常非常非常非常非常非常长的会话标题用于测试截断功能",
-      };
-      render(<SessionCard session={session} onClick={mockOnClick} />);
-      const titleElement = screen.getByText(session.title);
-      expect(titleElement).toHaveClass("truncate");
-    });
-  });
-
   describe("样式", () => {
     it("应该有正确的卡片容器样式", () => {
       const session = createMockSession("claude");
@@ -116,4 +104,3 @@ describe("SessionCard", () => {
     });
   });
 });
-

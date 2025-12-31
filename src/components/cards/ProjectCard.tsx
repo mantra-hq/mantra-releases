@@ -3,15 +3,17 @@
  * Story 2.8: Task 2
  *
  * 展示项目信息，支持展开/折叠显示会话列表
+ * 展开时按需加载会话数据
  */
 
 import * as React from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { Folder, ChevronDown } from "lucide-react";
+import { Folder, ChevronDown, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/types/project";
+import type { Project, Session } from "@/types/project";
 import { SessionCard } from "./SessionCard";
 
 /**
@@ -38,16 +40,36 @@ export function ProjectCard({
   onToggle,
   onSessionClick,
 }: ProjectCardProps) {
+  // 会话列表状态 (按需加载)
+  const [sessions, setSessions] = React.useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = React.useState(false);
+  const [sessionsLoaded, setSessionsLoaded] = React.useState(false);
+
   // 格式化相对时间
   const relativeTime = React.useMemo(() => {
-    return formatDistanceToNow(new Date(project.lastActivity), {
+    return formatDistanceToNow(new Date(project.last_activity), {
       addSuffix: true,
       locale: zhCN,
     });
-  }, [project.lastActivity]);
+  }, [project.last_activity]);
 
-  // 会话数量
-  const sessionCount = project.sessions.length;
+  // 展开时加载会话
+  React.useEffect(() => {
+    if (isExpanded && !sessionsLoaded && !sessionsLoading) {
+      setSessionsLoading(true);
+      invoke<Session[]>("get_project_sessions", { projectId: project.id })
+        .then((data) => {
+          setSessions(data);
+          setSessionsLoaded(true);
+        })
+        .catch((err) => {
+          console.error("获取会话列表失败:", err);
+        })
+        .finally(() => {
+          setSessionsLoading(false);
+        });
+    }
+  }, [isExpanded, sessionsLoaded, sessionsLoading, project.id]);
 
   return (
     <Collapsible.Root
@@ -91,9 +113,7 @@ export function ProjectCard({
                 {project.name}
               </span>
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span>
-                  {sessionCount} 会话
-                </span>
+                <span>{project.session_count} 会话</span>
                 <span>·</span>
                 <span>{relativeTime}</span>
               </div>
@@ -115,14 +135,26 @@ export function ProjectCard({
       {/* 会话列表 - 展开时显示 */}
       <Collapsible.Content className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
         <div className="border-t border-border p-2 space-y-1">
-          {project.sessions.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              onClick={() => onSessionClick(session.id)}
-            />
-          ))}
-          {sessionCount === 0 && (
+          {/* 加载中 */}
+          {sessionsLoading && (
+            <div className="px-3 py-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>加载会话...</span>
+            </div>
+          )}
+
+          {/* 会话列表 */}
+          {!sessionsLoading &&
+            sessions.map((session) => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                onClick={() => onSessionClick(session.id)}
+              />
+            ))}
+
+          {/* 空状态 */}
+          {!sessionsLoading && sessionsLoaded && sessions.length === 0 && (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
               暂无会话
             </div>
@@ -132,4 +164,3 @@ export function ProjectCard({
     </Collapsible.Root>
   );
 }
-

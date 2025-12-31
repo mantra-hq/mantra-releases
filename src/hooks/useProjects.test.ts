@@ -14,46 +14,32 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
-// Mock project data
+// Mock project data (Rust format - snake_case, ISO dates)
+// Note: Rust returns projects already sorted by last_activity DESC
 const mockProjects: Project[] = [
+  {
+    id: "project-3",
+    name: "project-gamma",
+    cwd: "/home/user/projects/project-gamma",
+    session_count: 1,
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+    last_activity: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago (most recent)
+  },
   {
     id: "project-1",
     name: "project-alpha",
-    path: "/home/user/projects/project-alpha",
-    sessions: [
-      {
-        id: "session-1",
-        title: "初始化项目",
-        source: "claude",
-        messageCount: 30,
-        startTime: Date.now() - 86400000, // 1 day ago
-        endTime: Date.now() - 82800000,
-      },
-    ],
-    lastActivity: Date.now() - 3600000, // 1 hour ago
+    cwd: "/home/user/projects/project-alpha",
+    session_count: 1,
+    created_at: new Date(Date.now() - 172800000).toISOString(),
+    last_activity: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
   },
   {
     id: "project-2",
     name: "project-beta",
-    path: "/home/user/projects/project-beta",
-    sessions: [],
-    lastActivity: Date.now() - 7200000, // 2 hours ago
-  },
-  {
-    id: "project-3",
-    name: "project-gamma",
-    path: "/home/user/projects/project-gamma",
-    sessions: [
-      {
-        id: "session-2",
-        title: "修复 Bug",
-        source: "gemini",
-        messageCount: 15,
-        startTime: Date.now() - 1800000,
-        endTime: Date.now() - 900000,
-      },
-    ],
-    lastActivity: Date.now() - 1800000, // 30 minutes ago (most recent)
+    cwd: "/home/user/projects/project-beta",
+    session_count: 0,
+    created_at: new Date(Date.now() - 259200000).toISOString(),
+    last_activity: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
   },
 ];
 
@@ -78,12 +64,12 @@ describe("useProjects", () => {
   });
 
   describe("成功加载", () => {
-    it("应该正确调用 Tauri IPC", async () => {
+    it("应该正确调用 Tauri IPC (list_projects)", async () => {
       mockInvoke.mockResolvedValueOnce(mockProjects);
       renderHook(() => useProjects());
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith("get_projects");
+        expect(mockInvoke).toHaveBeenCalledWith("list_projects");
       });
     });
 
@@ -99,7 +85,7 @@ describe("useProjects", () => {
       expect(result.current.error).toBeNull();
     });
 
-    it("项目应该按最后活动时间降序排列", async () => {
+    it("应该保持 Rust 返回的排序顺序", async () => {
       mockInvoke.mockResolvedValueOnce(mockProjects);
       const { result } = renderHook(() => useProjects());
 
@@ -107,7 +93,7 @@ describe("useProjects", () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // project-gamma (30 min ago) > project-alpha (1 hour ago) > project-beta (2 hours ago)
+      // Rust 已按 last_activity DESC 排序
       expect(result.current.projects[0].name).toBe("project-gamma");
       expect(result.current.projects[1].name).toBe("project-alpha");
       expect(result.current.projects[2].name).toBe("project-beta");
@@ -151,14 +137,17 @@ describe("useProjects", () => {
       expect(mockInvoke).toHaveBeenCalledTimes(1);
 
       // 更新 mock 返回新数据
-      const updatedProjects = [...mockProjects];
-      updatedProjects.push({
-        id: "project-4",
-        name: "project-delta",
-        path: "/home/user/projects/project-delta",
-        sessions: [],
-        lastActivity: Date.now(),
-      });
+      const updatedProjects: Project[] = [
+        ...mockProjects,
+        {
+          id: "project-4",
+          name: "project-delta",
+          cwd: "/home/user/projects/project-delta",
+          session_count: 0,
+          created_at: new Date().toISOString(),
+          last_activity: new Date().toISOString(),
+        },
+      ];
       mockInvoke.mockResolvedValueOnce(updatedProjects);
 
       // 调用 refetch
@@ -179,7 +168,8 @@ describe("useProjects", () => {
       });
 
       mockInvoke.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockProjects), 100))
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve(mockProjects), 100))
       );
 
       act(() => {
@@ -229,4 +219,3 @@ describe("useProjects", () => {
     });
   });
 });
-

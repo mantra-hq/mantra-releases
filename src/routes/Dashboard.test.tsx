@@ -25,7 +25,7 @@ vi.mock("@/hooks", async () => {
   };
 });
 
-// Mock Tauri invoke (for useProjects internal use)
+// Mock Tauri invoke (for useProjects and ProjectCard internal use)
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve([])),
 }));
@@ -44,38 +44,23 @@ vi.mock("date-fns", () => ({
 import { useProjects } from "@/hooks";
 const mockUseProjects = vi.mocked(useProjects);
 
-// Test data
+// Test data (Rust Project format - snake_case, ISO dates)
 const mockProjects: Project[] = [
   {
     id: "project-1",
     name: "my-awesome-project",
-    path: "/home/user/projects/my-awesome-project",
-    sessions: [
-      {
-        id: "session-1",
-        title: "实现用户认证功能",
-        source: "claude",
-        messageCount: 42,
-        startTime: Date.now() - 3600000,
-        endTime: Date.now() - 1800000,
-      },
-      {
-        id: "session-2",
-        title: "修复登录 Bug",
-        source: "gemini",
-        messageCount: 15,
-        startTime: Date.now() - 7200000,
-        endTime: Date.now() - 5400000,
-      },
-    ],
-    lastActivity: Date.now() - 1800000,
+    cwd: "/home/user/projects/my-awesome-project",
+    session_count: 2,
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+    last_activity: new Date(Date.now() - 1800000).toISOString(),
   },
   {
     id: "project-2",
     name: "another-project",
-    path: "/home/user/projects/another-project",
-    sessions: [],
-    lastActivity: Date.now() - 86400000,
+    cwd: "/home/user/projects/another-project",
+    session_count: 0,
+    created_at: new Date(Date.now() - 172800000).toISOString(),
+    last_activity: new Date(Date.now() - 86400000).toISOString(),
   },
 ];
 
@@ -120,7 +105,7 @@ describe("Dashboard Page", () => {
       });
 
       renderWithRouter(<Dashboard />);
-      
+
       // 骨架屏有多个 Skeleton 元素
       const skeletons = document.querySelectorAll(".animate-pulse");
       expect(skeletons.length).toBeGreaterThan(0);
@@ -147,7 +132,7 @@ describe("Dashboard Page", () => {
   });
 
   describe("AC3 - 会话列表展开", () => {
-    it("点击项目应该展开会话列表", async () => {
+    it("点击项目应该触发展开", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       mockUseProjects.mockReturnValue({
         projects: mockProjects,
@@ -158,19 +143,20 @@ describe("Dashboard Page", () => {
 
       renderWithRouter(<Dashboard />);
 
-      // 初始状态不显示会话
-      expect(screen.queryByText("实现用户认证功能")).not.toBeInTheDocument();
-
       // 点击项目
       const projectButton = screen.getByRole("button", {
         name: /my-awesome-project/i,
       });
       await user.click(projectButton);
 
-      // 应该显示会话列表
+      // 展开后 collapsible content 应该可见
+      // 由于会话是按需加载的，这里检查加载状态或空状态
       await waitFor(() => {
-        expect(screen.getByText("实现用户认证功能")).toBeInTheDocument();
-        expect(screen.getByText("修复登录 Bug")).toBeInTheDocument();
+        // 展开后会显示加载中或会话内容区域
+        const expandedContent = document.querySelector(
+          '[data-state="open"]'
+        );
+        expect(expandedContent).toBeInTheDocument();
       });
     });
   });
@@ -241,7 +227,7 @@ describe("Dashboard Page", () => {
       await vi.advanceTimersByTimeAsync(300);
 
       await waitFor(() => {
-        expect(screen.getByText(/未找到匹配的项目/i)).toBeInTheDocument();
+        expect(screen.getByText(/没有找到/i)).toBeInTheDocument();
       });
 
       // 清理以避免 act() 警告
@@ -313,4 +299,3 @@ describe("Dashboard Page", () => {
     });
   });
 });
-

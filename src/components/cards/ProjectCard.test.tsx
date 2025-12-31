@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectCard } from "./ProjectCard";
 import type { Project, Session } from "@/types/project";
@@ -22,33 +22,38 @@ vi.mock("date-fns", () => ({
   }),
 }));
 
-// Mock session data
+// Mock Tauri invoke
+const mockInvoke = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+}));
+
+// Mock session data (Rust SessionSummary format)
 const mockSessions: Session[] = [
   {
     id: "session-1",
-    title: "实现用户认证功能",
     source: "claude",
-    messageCount: 42,
-    startTime: Date.now() - 3600000, // 1 hour ago
-    endTime: Date.now() - 1800000, // 30 minutes ago
+    message_count: 42,
+    created_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    updated_at: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
   },
   {
     id: "session-2",
-    title: "修复登录 Bug",
     source: "gemini",
-    messageCount: 15,
-    startTime: Date.now() - 7200000, // 2 hours ago
-    endTime: Date.now() - 5400000, // 1.5 hours ago
+    message_count: 15,
+    created_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+    updated_at: new Date(Date.now() - 5400000).toISOString(), // 1.5 hours ago
   },
 ];
 
-// Mock project data
+// Mock project data (Rust Project format)
 const mockProject: Project = {
   id: "project-1",
   name: "my-awesome-project",
-  path: "/home/user/projects/my-awesome-project",
-  sessions: mockSessions,
-  lastActivity: Date.now() - 1800000, // 30 minutes ago
+  cwd: "/home/user/projects/my-awesome-project",
+  session_count: 2,
+  created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+  last_activity: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
 };
 
 describe("ProjectCard", () => {
@@ -61,6 +66,7 @@ describe("ProjectCard", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInvoke.mockResolvedValue(mockSessions);
   });
 
   describe("项目信息展示", () => {
@@ -103,13 +109,23 @@ describe("ProjectCard", () => {
 
     it("折叠状态下不应该显示会话列表", () => {
       render(<ProjectCard {...defaultProps} isExpanded={false} />);
-      expect(screen.queryByText("实现用户认证功能")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("session-card")).not.toBeInTheDocument();
     });
 
-    it("展开状态下应该显示会话列表", () => {
+    it("展开状态下应该加载并显示会话列表", async () => {
       render(<ProjectCard {...defaultProps} isExpanded={true} />);
-      expect(screen.getByText("实现用户认证功能")).toBeInTheDocument();
-      expect(screen.getByText("修复登录 Bug")).toBeInTheDocument();
+
+      // 等待会话加载
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("get_project_sessions", {
+          projectId: "project-1",
+        });
+      });
+
+      // 等待会话渲染
+      await waitFor(() => {
+        expect(screen.getAllByTestId("session-card")).toHaveLength(2);
+      });
     });
   });
 
@@ -131,10 +147,25 @@ describe("ProjectCard", () => {
     it("应该显示 0 会话", () => {
       const emptyProject: Project = {
         ...mockProject,
-        sessions: [],
+        session_count: 0,
       };
       render(<ProjectCard {...defaultProps} project={emptyProject} />);
       expect(screen.getByText(/0.*会话|0 sessions/i)).toBeInTheDocument();
+    });
+
+    it("展开空项目应该显示'暂无会话'", async () => {
+      mockInvoke.mockResolvedValue([]);
+      const emptyProject: Project = {
+        ...mockProject,
+        session_count: 0,
+      };
+      render(
+        <ProjectCard {...defaultProps} project={emptyProject} isExpanded={true} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("暂无会话")).toBeInTheDocument();
+      });
     });
   });
 
@@ -146,4 +177,3 @@ describe("ProjectCard", () => {
     });
   });
 });
-
