@@ -10,6 +10,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Dashboard, Player } from "./routes";
+import { Settings } from "./routes/Settings";
 import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { GlobalSearch } from "./components/search";
@@ -55,6 +56,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
               <Route path="/" element={<Dashboard />} />
               {/* Player: 会话回放页 */}
               <Route path="/session/:sessionId" element={<Player />} />
+              {/* Settings: 设置页面 (Story 3-3) */}
+              <Route path="/settings" element={<Settings />} />
               {/* 默认重定向到 Dashboard */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

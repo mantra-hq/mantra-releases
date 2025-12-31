@@ -57,3 +57,19 @@ export function createEmptyStats(): SanitizationResult['stats'] {
 export function hasChanges(result: SanitizationResult): boolean {
     return result.has_matches;
 }
+
+/** 规则验证结果 */
+export interface ValidationResult {
+    valid: boolean;
+    error?: string;
+}
+
+/**
+ * 验证正则表达式是否有效
+ * @param pattern 正则表达式模式
+ * @returns 验证结果
+ */
+export async function validateRegex(pattern: string): Promise<ValidationResult> {
+    return invoke<ValidationResult>('validate_regex', { pattern });
+}
+

@@ -19,9 +19,10 @@ use commands::{
     get_project, get_project_by_cwd, get_project_sessions, get_representative_file,
     get_session, get_snapshot_at_time, import_parsed_sessions,
     import_sessions, list_projects, parse_claude_log, parse_claude_log_string, parse_log_files,
-    sanitize_session, sanitize_text, scan_custom_directory, scan_log_directory, AppState,
+    sanitize_session, sanitize_text, validate_regex, scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
 };
+
 use storage::Database;
 
 /// Database file name
@@ -81,7 +82,8 @@ pub fn run() {
             list_tree_at_commit,
             list_files_at_commit,
             sanitize_text,
-            sanitize_session
+            sanitize_session,
+            validate_regex
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

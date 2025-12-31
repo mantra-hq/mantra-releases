@@ -74,7 +74,38 @@ pub async fn sanitize_session(
     Ok(result)
 }
 
+/// 正则表达式验证结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ValidationResult {
+    /// 是否有效
+    pub valid: bool,
+    /// 错误信息 (如果无效)
+    pub error: Option<String>,
+}
+
+/// 验证正则表达式是否有效
+///
+/// # Arguments
+/// * `pattern` - 正则表达式模式
+///
+/// # Returns
+/// * `Result<ValidationResult, AppError>` - 验证结果
+#[tauri::command]
+pub async fn validate_regex(pattern: String) -> Result<ValidationResult, AppError> {
+    match regex::Regex::new(&pattern) {
+        Ok(_) => Ok(ValidationResult {
+            valid: true,
+            error: None,
+        }),
+        Err(e) => Ok(ValidationResult {
+            valid: false,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
 #[cfg(test)]
+
 mod tests {
     use super::*;
     use crate::sanitizer::SensitiveType;

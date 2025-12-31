@@ -2,11 +2,13 @@
  * DashboardHeader Component - Dashboard 头部组件
  * Story 2.8: Task 7
  * Story 2.10: Task 2.5 (Global Search Button)
+ * Story 3-3: Task 5.4 (Settings Entry)
  *
  * 包含 Logo、搜索框、主题切换和导入按钮
  */
 
-import { Upload, Search } from "lucide-react";
+import { Upload, Search, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ProjectSearch } from "@/components/search";
@@ -28,6 +30,7 @@ export interface DashboardHeaderProps {
  * Dashboard 页面头部，包含品牌、搜索和操作按钮
  */
 export function DashboardHeader({ onSearch, onImport }: DashboardHeaderProps) {
+  const navigate = useNavigate();
   const openSearch = useSearchStore((state) => state.open);
 
   return (
@@ -72,6 +75,17 @@ export function DashboardHeader({ onSearch, onImport }: DashboardHeaderProps) {
           >
             <Upload className="w-4 h-4" />
             导入
+          </Button>
+          {/* 设置按钮 (Story 3-3) */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/settings")}
+            title="设置"
+            aria-label="设置"
+            data-testid="settings-button"
+          >
+            <Settings className="w-4 h-4" />
           </Button>
           <ThemeToggle />
         </div>
