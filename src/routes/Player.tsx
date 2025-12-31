@@ -3,12 +3,14 @@
  * Story 2.8: Task 1
  * Story 2.10: Task 6 (Message Navigation from Search)
  * Story 2.11: Task 6 (Initial Code Display)
+ * Story 2.12: Task 2 (Smart File Selection Logic)
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
  * 从后端加载真实会话数据并转换为前端格式
  * 集成 Git Time Machine 实现代码快照功能 (FR-GIT)
  * 进入时自动显示项目代表性文件 (AC1, AC2)
+ * 智能文件选择：自动显示最相关的代码文件 (Story 2.12)
  */
 
 import * as React from "react";
@@ -30,50 +32,12 @@ import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useTimeMachine } from "@/hooks/useTimeMachine";
+// Story 2.12: 使用增强的文件路径提取模块
+import {
+  findRecentFilePathEnhanced,
+  toRelativePath,
+} from "@/lib/file-path-extractor";
 
-
-/**
- * 从消息内容块中提取文件路径
- * 优先从 tool_use 的 file_path 参数中提取
- */
-function extractFilePathFromMessage(message: NarrativeMessage): string | null {
-  for (const block of message.content) {
-    // 从 tool_use 提取
-    if (block.type === "tool_use" && block.toolInput) {
-      const input = block.toolInput as Record<string, unknown>;
-      // 常见的文件路径参数名
-      const pathKeys = ["file_path", "filePath", "path", "filename"];
-      for (const key of pathKeys) {
-        if (typeof input[key] === "string" && input[key]) {
-          return input[key] as string;
-        }
-      }
-    }
-    // 从 associatedFilePath 提取
-    if (block.associatedFilePath) {
-      return block.associatedFilePath;
-    }
-  }
-  return null;
-}
-
-/**
- * 从消息列表中提取最近的文件路径
- * 从指定索引向前搜索
- */
-function findRecentFilePath(
-  messages: NarrativeMessage[],
-  fromIndex: number
-): string | null {
-  // 从当前消息向前搜索
-  for (let i = fromIndex; i >= 0; i--) {
-    const filePath = extractFilePathFromMessage(messages[i]);
-    if (filePath) {
-      return filePath;
-    }
-  }
-  return null;
-}
 
 /**
  * Player 页面组件
@@ -121,6 +85,9 @@ export default function Player() {
 
   // Git Time Machine Hook (FR-GIT-002, FR-GIT-003)
   const { fetchSnapshot } = useTimeMachine(repoPath);
+
+  // Story 2.12 AC4: 记录最近有效的文件路径，用于无文件路径时保持视图
+  const lastValidFileRef = React.useRef<string | null>(null);
 
   // 加载会话数据
   React.useEffect(() => {
@@ -301,7 +268,7 @@ export default function Player() {
     };
   }, [sessionCwd, setCode]);
 
-  // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002)
+  // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002, Story 2.12)
   const handleMessageSelect = React.useCallback(
     (messageId: string, message: NarrativeMessage) => {
       setSelectedMessageId(messageId);
@@ -313,22 +280,34 @@ export default function Player() {
       const messageIndex = messages.findIndex((m) => m.id === messageId);
       jumpToMessage(messageIndex, messageId, msgTime);
 
-      // 提取文件路径并获取代码快照 (FR-GIT-002, FR-GIT-003)
+      // Story 2.12: 增强的文件路径提取 (AC #1, #2, #3, #4, #6, #7)
       if (repoPath) {
-        const filePath = findRecentFilePath(messages, messageIndex);
-        if (filePath) {
-          // 将绝对路径转换为相对路径（相对于仓库根目录）
-          const relativePath = filePath.startsWith(repoPath)
-            ? filePath.slice(repoPath.length).replace(/^[/\\]/, "")
-            : filePath;
+        const fileResult = findRecentFilePathEnhanced(messages, messageIndex);
+
+        if (fileResult) {
+          // AC #6: 使用增强的绝对路径转相对路径逻辑
+          const relativePath = toRelativePath(fileResult.path, repoPath);
+
+          // 记录有效文件路径 (AC #4)
+          lastValidFileRef.current = relativePath;
+
+          // 获取代码快照 (FR-GIT-002, FR-GIT-003)
           fetchSnapshot(relativePath, msgTime);
+
+          console.log(
+            `[Player] 文件选择: ${relativePath} (来源: ${fileResult.source}, 置信度: ${fileResult.confidence})`
+          );
+        } else if (lastValidFileRef.current) {
+          // AC #4: 无文件路径时保持当前视图，仅更新时间点
+          console.log("[Player] 无文件路径，保持当前视图:", lastValidFileRef.current);
+          // 不调用 fetchSnapshot，保持当前代码内容
         }
       }
     },
     [messages, jumpToMessage, repoPath, fetchSnapshot]
   );
 
-  // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002)
+  // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002, Story 2.12)
   const handleTimelineSeek = React.useCallback(
     (timestamp: number) => {
       setCurrentTime(timestamp);
@@ -351,14 +330,20 @@ export default function Player() {
           // 更新时间旅行状态 (Story 2.7 AC #7)
           jumpToMessage(nearestEvent.messageIndex, msg.id, timestamp);
 
-          // 提取文件路径并获取代码快照 (FR-GIT-002, FR-GIT-003)
+          // Story 2.12: 增强的文件路径提取
           if (repoPath) {
-            const filePath = findRecentFilePath(messages, nearestEvent.messageIndex);
-            if (filePath) {
-              const relativePath = filePath.startsWith(repoPath)
-                ? filePath.slice(repoPath.length).replace(/^[/\\]/, "")
-                : filePath;
+            const fileResult = findRecentFilePathEnhanced(
+              messages,
+              nearestEvent.messageIndex
+            );
+
+            if (fileResult) {
+              const relativePath = toRelativePath(fileResult.path, repoPath);
+              lastValidFileRef.current = relativePath;
               fetchSnapshot(relativePath, timestamp);
+            } else if (lastValidFileRef.current) {
+              // AC #4: 无文件路径时保持当前视图
+              console.log("[Player] 时间轴 Seek: 无文件路径，保持当前视图");
             }
           }
         }

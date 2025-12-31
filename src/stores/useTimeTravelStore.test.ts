@@ -1,6 +1,7 @@
 /**
  * useTimeTravelStore - 时间旅行状态管理测试
  * Story 2.7: Task 1 验证
+ * Story 2.12: Task 4 - File Not Found State 验证
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -26,6 +27,10 @@ describe("useTimeTravelStore", () => {
             expect(state.commitInfo).toBeNull();
             expect(state.isHistoricalMode).toBe(false);
             expect(state.error).toBeNull();
+            // Story 2.12: 文件不存在状态
+            expect(state.fileNotFound).toBe(false);
+            expect(state.notFoundPath).toBeNull();
+            expect(state.notFoundTimestamp).toBeNull();
         });
     });
 
@@ -185,6 +190,63 @@ describe("useTimeTravelStore", () => {
             expect(state.commitInfo).toBeNull();
             expect(state.isHistoricalMode).toBe(false);
             expect(state.error).toBeNull();
+        });
+    });
+
+    // Story 2.12: 文件不存在状态测试
+    describe("setFileNotFound (Story 2.12)", () => {
+        it("应该设置文件不存在状态", () => {
+            const path = "src/nonexistent.ts";
+            const timestamp = 1735500000;
+
+            useTimeTravelStore.getState().setFileNotFound(path, timestamp);
+
+            const state = useTimeTravelStore.getState();
+            expect(state.fileNotFound).toBe(true);
+            expect(state.notFoundPath).toBe(path);
+            expect(state.notFoundTimestamp).toBe(timestamp);
+            // 应该清除其他错误
+            expect(state.error).toBeNull();
+        });
+
+        it("设置文件不存在状态时应该清除之前的错误", () => {
+            useTimeTravelStore.getState().setError("之前的错误");
+            useTimeTravelStore.getState().setFileNotFound("file.ts", 123);
+
+            const state = useTimeTravelStore.getState();
+            expect(state.fileNotFound).toBe(true);
+            expect(state.error).toBeNull();
+        });
+    });
+
+    describe("clearFileNotFound (Story 2.12)", () => {
+        it("应该清除文件不存在状态", () => {
+            // 先设置状态
+            useTimeTravelStore.getState().setFileNotFound("file.ts", 123);
+
+            // 然后清除
+            useTimeTravelStore.getState().clearFileNotFound();
+
+            const state = useTimeTravelStore.getState();
+            expect(state.fileNotFound).toBe(false);
+            expect(state.notFoundPath).toBeNull();
+            expect(state.notFoundTimestamp).toBeNull();
+        });
+    });
+
+    describe("returnToCurrent 应该清除文件不存在状态 (Story 2.12)", () => {
+        it("returnToCurrent 应该同时清除文件不存在状态", () => {
+            // 设置文件不存在状态
+            useTimeTravelStore.getState().setFileNotFound("file.ts", 123);
+            useTimeTravelStore.getState().jumpToMessage(1, "msg-1", 1735500000000);
+
+            // 返回当前
+            useTimeTravelStore.getState().returnToCurrent();
+
+            const state = useTimeTravelStore.getState();
+            expect(state.fileNotFound).toBe(false);
+            expect(state.notFoundPath).toBeNull();
+            expect(state.notFoundTimestamp).toBeNull();
         });
     });
 });

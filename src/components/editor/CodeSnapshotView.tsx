@@ -2,9 +2,11 @@
  * CodeSnapshotView - 代码快照视图组件
  * Story 2.5: Task 2
  * Story 2.7: Task 3 集成 - AC #5 Diff 高亮
+ * Story 2.12: Task 5 - AC #5 文件不存在处理
  *
  * 使用 Monaco Editor 以只读模式显示历史代码快照
  * 支持语法高亮、主题切换、代码变化动画、Diff 高亮
+ * 文件不存在时显示 FileNotFoundBanner
  */
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -14,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { CodeSnapshotHeader } from "./CodeSnapshotHeader";
 import { EmptyCodeState } from "./EmptyCodeState";
 import { HistoryBanner } from "./HistoryBanner";
+import { FileNotFoundBanner } from "./FileNotFoundBanner";
 import {
   computeDiffDecorations,
   toMonacoDecorations,
@@ -79,6 +82,12 @@ export interface CodeSnapshotViewProps {
   onReturnToCurrent?: () => void;
   /** 前一个代码内容 (用于 Diff 计算, Story 2.7 AC #5) */
   previousCode?: string | null;
+  /** 文件未找到标志 (Story 2.12 AC #5) */
+  fileNotFound?: boolean;
+  /** 未找到的文件路径 (Story 2.12 AC #5) */
+  notFoundPath?: string;
+  /** 清除文件不存在状态回调 (Story 2.12 AC #5) */
+  onDismissNotFound?: () => void;
   /** 自定义 className */
   className?: string;
 }
@@ -136,6 +145,9 @@ export function CodeSnapshotView({
   isHistoricalMode = false,
   onReturnToCurrent,
   previousCode,
+  fileNotFound = false,
+  notFoundPath,
+  onDismissNotFound,
   className,
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
@@ -289,6 +301,21 @@ export function CodeSnapshotView({
           isTransitioning && "animate-fade-in"
         )}
       >
+        {/* 文件未找到遮罩层 (Story 2.12 AC #5) */}
+        {fileNotFound && (
+          <div className="absolute inset-0 z-20 flex flex-col">
+            {/* FileNotFoundBanner */}
+            <FileNotFoundBanner
+              filePath={notFoundPath || filePath}
+              timestamp={timestampMs || undefined}
+              onDismiss={onDismissNotFound}
+              onKeepCurrent={onDismissNotFound}
+            />
+            {/* 半透明遮罩 - 保持上一个有效代码可见 */}
+            <div className="flex-1 bg-background/60 backdrop-blur-[1px]" />
+          </div>
+        )}
+
         <Editor
           height="100%"
           language={language}

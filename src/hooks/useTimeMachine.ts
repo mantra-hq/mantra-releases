@@ -1,12 +1,14 @@
 /**
  * useTimeMachine - Git Time Machine 集成 Hook
  * Story 2.7: Task 2 - AC #3, #4
+ * Story 2.12: Task 4 - AC #5 (File Not Found Handling)
  *
  * 功能:
  * - 封装 Tauri IPC 调用获取历史快照
  * - LRU 缓存优化 (最近 50 个快照)
  * - 加载状态和错误处理
  * - 响应时间目标 <200ms
+ * - 文件不存在时保持上一个有效状态 (Story 2.12)
  */
 
 import { useCallback, useRef } from "react";
@@ -101,6 +103,31 @@ function getErrorMessage(error: unknown): string {
 }
 
 /**
+ * Story 2.12 AC #5: 检测是否是文件不存在错误
+ */
+function isFileNotFoundError(error: unknown): boolean {
+    if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        return (
+            msg.includes("file_not_found") ||
+            msg.includes("filenotfound") ||
+            msg.includes("not found") ||
+            msg.includes("does not exist") ||
+            msg.includes("no such file")
+        );
+    }
+    if (typeof error === "string") {
+        const msg = error.toLowerCase();
+        return (
+            msg.includes("file_not_found") ||
+            msg.includes("not found") ||
+            msg.includes("does not exist")
+        );
+    }
+    return false;
+}
+
+/**
  * 生成缓存键
  */
 function getCacheKey(repoPath: string, filePath: string, timestamp: number): string {
@@ -114,7 +141,14 @@ function getCacheKey(repoPath: string, filePath: string, timestamp: number): str
  * @returns Hook 方法
  */
 export function useTimeMachine(repoPath: string | null) {
-    const { setCode, setCommitInfo, setLoading, setError } = useTimeTravelStore();
+    const {
+        setCode,
+        setCommitInfo,
+        setLoading,
+        setError,
+        setFileNotFound,
+        clearFileNotFound,
+    } = useTimeTravelStore();
 
     // 用于追踪最新请求，避免竞态条件
     const requestIdRef = useRef(0);
@@ -152,6 +186,9 @@ export function useTimeMachine(repoPath: string | null) {
                     return undefined;
                 }
 
+                // Story 2.12: 清除文件不存在状态
+                clearFileNotFound();
+
                 setCode(cached.content, filePath);
                 setCommitInfo({
                     hash: cached.commit_hash,
@@ -164,6 +201,8 @@ export function useTimeMachine(repoPath: string | null) {
             // 开始加载
             setLoading(true);
             setError(null);
+            // Story 2.12: 清除之前的文件不存在状态
+            clearFileNotFound();
 
             try {
                 const startTime = performance.now();
@@ -205,8 +244,22 @@ export function useTimeMachine(repoPath: string | null) {
                 }
 
                 const errorMessage = getErrorMessage(err);
-                setError(errorMessage);
-                console.error("[useTimeMachine] 获取快照失败:", err);
+
+                // Story 2.12 AC #5: 检测文件不存在错误
+                const isFileNotFound = isFileNotFoundError(err);
+
+                if (isFileNotFound) {
+                    // 设置文件不存在状态，但不设置通用错误
+                    setFileNotFound(filePath, timestampSeconds);
+                    console.log(
+                        `[useTimeMachine] 文件不存在: ${filePath} @ ${new Date(timestamp).toISOString()}`
+                    );
+                } else {
+                    // 其他错误设置通用错误
+                    setError(errorMessage);
+                    console.error("[useTimeMachine] 获取快照失败:", err);
+                }
+
                 return undefined;
             } finally {
                 // 检查是否仍是最新请求
@@ -215,7 +268,7 @@ export function useTimeMachine(repoPath: string | null) {
                 }
             }
         },
-        [repoPath, setCode, setCommitInfo, setLoading, setError]
+        [repoPath, setCode, setCommitInfo, setLoading, setError, setFileNotFound, clearFileNotFound]
     );
 
     /**

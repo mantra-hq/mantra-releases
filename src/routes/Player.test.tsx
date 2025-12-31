@@ -2,6 +2,7 @@
  * Player Page Tests - 会话回放页面测试
  * Story 2.8: Task 9 (Code Review Fix)
  * Story 2.11: 更新测试以支持异步加载
+ * Story 2.12: Task 6.4, 6.5 - 智能文件选择集成测试
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -159,6 +160,155 @@ describe("Player Page", () => {
       const { container } = renderWithRouter(<Player />);
       const mainDiv = container.firstChild as HTMLElement;
       expect(mainDiv).toHaveClass("h-screen");
+    });
+  });
+});
+
+/**
+ * Story 2.12: 智能文件选择集成测试
+ * Task 6.4, 6.5
+ */
+describe("Story 2.12 - 智能文件选择", () => {
+  describe("file-path-extractor 集成", () => {
+    // 这些测试验证文件路径提取逻辑与实际消息结构的集成
+    it("应该从 tool_use 消息中提取文件路径", async () => {
+      // 导入实际的提取函数进行集成测试
+      const { extractFilePathWithPriority } = await import("@/lib/file-path-extractor");
+      
+      const message = {
+        id: "msg-1",
+        role: "assistant" as const,
+        timestamp: new Date().toISOString(),
+        content: [
+          {
+            type: "tool_use" as const,
+            content: "",
+            toolName: "Read",
+            toolInput: { file_path: "src/components/Button.tsx" },
+            toolUseId: "tu-1",
+          },
+        ],
+      };
+
+      const result = extractFilePathWithPriority(message);
+      expect(result).not.toBeNull();
+      expect(result?.path).toBe("src/components/Button.tsx");
+      expect(result?.source).toBe("tool_use");
+      expect(result?.confidence).toBe("high");
+    });
+
+    it("应该从历史消息中向前搜索文件路径", async () => {
+      const { findRecentFilePathEnhanced } = await import("@/lib/file-path-extractor");
+      
+      const messages = [
+        {
+          id: "msg-1",
+          role: "assistant" as const,
+          timestamp: new Date().toISOString(),
+          content: [
+            {
+              type: "tool_use" as const,
+              content: "",
+              toolName: "Write",
+              toolInput: { file_path: "src/utils/helper.ts" },
+              toolUseId: "tu-1",
+            },
+          ],
+        },
+        {
+          id: "msg-2",
+          role: "user" as const,
+          timestamp: new Date().toISOString(),
+          content: [
+            {
+              type: "text" as const,
+              content: "好的，谢谢！",
+            },
+          ],
+        },
+        {
+          id: "msg-3",
+          role: "assistant" as const,
+          timestamp: new Date().toISOString(),
+          content: [
+            {
+              type: "text" as const,
+              content: "不客气！还有什么问题吗？",
+            },
+          ],
+        },
+      ];
+
+      // 从第三条消息向前搜索
+      const result = findRecentFilePathEnhanced(messages, 2);
+      expect(result).not.toBeNull();
+      expect(result?.path).toBe("src/utils/helper.ts");
+      expect(result?.source).toBe("history"); // 来自历史消息
+    });
+
+    it("应该正确转换绝对路径为相对路径", async () => {
+      const { toRelativePath } = await import("@/lib/file-path-extractor");
+      
+      // Linux 绝对路径
+      expect(toRelativePath("/home/user/project/src/main.ts", "/home/user/project"))
+        .toBe("src/main.ts");
+      
+      // Windows 绝对路径
+      expect(toRelativePath("C:\\Users\\project\\src\\main.ts", "C:\\Users\\project"))
+        .toBe("src/main.ts");
+      
+      // 已经是相对路径
+      expect(toRelativePath("src/main.ts", "/home/user/project"))
+        .toBe("src/main.ts");
+    });
+  });
+
+  describe("useTimeTravelStore 文件不存在状态集成", () => {
+    it("setFileNotFound 应该正确设置状态", async () => {
+      const { useTimeTravelStore } = await import("@/stores/useTimeTravelStore");
+      
+      // 重置 store
+      useTimeTravelStore.getState().reset();
+      
+      // 设置文件不存在
+      useTimeTravelStore.getState().setFileNotFound("src/deleted.ts", 1735500000);
+      
+      const state = useTimeTravelStore.getState();
+      expect(state.fileNotFound).toBe(true);
+      expect(state.notFoundPath).toBe("src/deleted.ts");
+      expect(state.notFoundTimestamp).toBe(1735500000);
+      expect(state.error).toBeNull(); // 不应该设置通用错误
+    });
+
+    it("clearFileNotFound 应该清除状态", async () => {
+      const { useTimeTravelStore } = await import("@/stores/useTimeTravelStore");
+      
+      // 先设置状态
+      useTimeTravelStore.getState().setFileNotFound("src/test.ts", 123);
+      expect(useTimeTravelStore.getState().fileNotFound).toBe(true);
+      
+      // 清除状态
+      useTimeTravelStore.getState().clearFileNotFound();
+      
+      const state = useTimeTravelStore.getState();
+      expect(state.fileNotFound).toBe(false);
+      expect(state.notFoundPath).toBeNull();
+      expect(state.notFoundTimestamp).toBeNull();
+    });
+
+    it("returnToCurrent 应该同时清除文件不存在状态", async () => {
+      const { useTimeTravelStore } = await import("@/stores/useTimeTravelStore");
+      
+      // 设置历史状态和文件不存在
+      useTimeTravelStore.getState().jumpToMessage(0, "msg-1", 1735500000000);
+      useTimeTravelStore.getState().setFileNotFound("src/old.ts", 1735500000);
+      
+      // 返回当前
+      useTimeTravelStore.getState().returnToCurrent();
+      
+      const state = useTimeTravelStore.getState();
+      expect(state.fileNotFound).toBe(false);
+      expect(state.isHistoricalMode).toBe(false);
     });
   });
 });

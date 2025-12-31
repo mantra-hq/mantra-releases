@@ -1,6 +1,7 @@
 /**
  * useTimeTravelStore - 时间旅行状态管理
  * Story 2.7: Task 1 - AC #1, #2, #7
+ * Story 2.12: Task 4 - AC #5 (File Not Found State)
  *
  * 管理时间旅行核心状态:
  * - 当前时间戳
@@ -8,6 +9,7 @@
  * - 加载状态
  * - 代码内容 (用于 Diff)
  * - Commit 信息
+ * - 文件不存在状态 (Story 2.12)
  */
 
 import { create } from "zustand";
@@ -49,6 +51,14 @@ export interface TimeTravelState {
     /** 错误信息 */
     error: string | null;
 
+    // Story 2.12 AC #5: 文件不存在状态
+    /** 文件是否不存在 */
+    fileNotFound: boolean;
+    /** 不存在的文件路径 */
+    notFoundPath: string | null;
+    /** 文件不存在时的时间戳 (Unix 秒) */
+    notFoundTimestamp: number | null;
+
     // ======== Actions ========
 
     /** 设置当前时间 (用于 TimberLine 拖动) */
@@ -79,6 +89,12 @@ export interface TimeTravelState {
     /** 返回当前状态 */
     returnToCurrent: () => void;
 
+    /** Story 2.12: 设置文件不存在状态 */
+    setFileNotFound: (path: string, timestamp: number) => void;
+
+    /** Story 2.12: 清除文件不存在状态 */
+    clearFileNotFound: () => void;
+
     /** 重置所有状态 */
     reset: () => void;
 }
@@ -97,6 +113,10 @@ const initialState = {
     commitInfo: null,
     isHistoricalMode: false,
     error: null,
+    // Story 2.12 AC #5: 文件不存在状态
+    fileNotFound: false,
+    notFoundPath: null,
+    notFoundTimestamp: null,
 };
 
 /**
@@ -155,6 +175,27 @@ export const useTimeTravelStore = create<TimeTravelState>((set) => ({
             previousCode: null,
             commitInfo: null,
             error: null,
+            // Story 2.12: 清除文件不存在状态
+            fileNotFound: false,
+            notFoundPath: null,
+            notFoundTimestamp: null,
+        }),
+
+    // Story 2.12 AC #5: 设置文件不存在状态
+    setFileNotFound: (path, timestamp) =>
+        set({
+            fileNotFound: true,
+            notFoundPath: path,
+            notFoundTimestamp: timestamp,
+            error: null, // 清除其他错误
+        }),
+
+    // Story 2.12 AC #5: 清除文件不存在状态
+    clearFileNotFound: () =>
+        set({
+            fileNotFound: false,
+            notFoundPath: null,
+            notFoundTimestamp: null,
         }),
 
     reset: () => set(initialState),

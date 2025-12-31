@@ -17,6 +17,9 @@ const mockSetCode = vi.fn();
 const mockSetCommitInfo = vi.fn();
 const mockSetLoading = vi.fn();
 const mockSetError = vi.fn();
+// Story 2.12: 文件不存在状态 mock
+const mockSetFileNotFound = vi.fn();
+const mockClearFileNotFound = vi.fn();
 
 vi.mock("@/stores/useTimeTravelStore", () => ({
     useTimeTravelStore: () => ({
@@ -24,6 +27,9 @@ vi.mock("@/stores/useTimeTravelStore", () => ({
         setCommitInfo: mockSetCommitInfo,
         setLoading: mockSetLoading,
         setError: mockSetError,
+        // Story 2.12: 文件不存在状态
+        setFileNotFound: mockSetFileNotFound,
+        clearFileNotFound: mockClearFileNotFound,
     }),
 }));
 
@@ -116,7 +122,7 @@ describe("useTimeMachine", () => {
             expect(mockSetError).toHaveBeenCalledWith("未找到 Git 仓库");
         });
 
-        it("文件不存在时应该返回正确错误消息", async () => {
+        it("文件不存在时应该调用 setFileNotFound (Story 2.12)", async () => {
             vi.mocked(invoke).mockRejectedValueOnce(new Error("file_not_found"));
 
             const { result } = renderHook(() => useTimeMachine("/repo/path"));
@@ -126,7 +132,10 @@ describe("useTimeMachine", () => {
                 await result.current.fetchSnapshot(uniqueFile, 1735500000000);
             });
 
-            expect(mockSetError).toHaveBeenCalledWith("文件在该时间点不存在");
+            // Story 2.12: 文件不存在时应该调用 setFileNotFound 而非 setError(errorMessage)
+            expect(mockSetFileNotFound).toHaveBeenCalledWith(uniqueFile, 1735500000);
+            // setError(null) 会在加载开始时被调用，但不应该被调用为错误消息
+            expect(mockSetError).not.toHaveBeenCalledWith(expect.stringContaining("文件"));
         });
 
         it("commit 不存在时应该返回正确错误消息", async () => {

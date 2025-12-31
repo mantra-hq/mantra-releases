@@ -153,6 +153,10 @@ export const DualStreamLayout = React.forwardRef<
     const currentTimestamp = useTimeTravelStore((state) => state.currentTimestamp);
     const commitInfo = useTimeTravelStore((state) => state.commitInfo);
     const returnToCurrent = useTimeTravelStore((state) => state.returnToCurrent);
+    // Story 2.12 AC #5: 文件不存在状态
+    const fileNotFound = useTimeTravelStore((state) => state.fileNotFound);
+    const notFoundPath = useTimeTravelStore((state) => state.notFoundPath);
+    const clearFileNotFound = useTimeTravelStore((state) => state.clearFileNotFound);
 
     // 响应式布局检测
     const detectedMode = useResponsiveLayout();
@@ -215,6 +219,9 @@ export const DualStreamLayout = React.forwardRef<
         onReturnToCurrent={returnToCurrent}
         showNoGitWarning={showNoGitWarning}
         projectPath={projectPath}
+        fileNotFound={fileNotFound}
+        notFoundPath={notFoundPath ?? undefined}
+        onDismissNotFound={clearFileNotFound}
       />
     );
 
