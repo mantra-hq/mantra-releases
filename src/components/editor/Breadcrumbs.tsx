@@ -140,7 +140,7 @@ export function Breadcrumbs({
                                 <DropdownMenuTrigger asChild>
                                     <button
                                         className={cn(
-                                            "hover:text-foreground hover:underline transition-colors",
+                                            "cursor-pointer hover:text-foreground hover:underline transition-colors",
                                             isLast && "text-foreground font-medium"
                                         )}
                                     >
@@ -166,7 +166,7 @@ export function Breadcrumbs({
                                 onClick={() => handleSegmentClick(index)}
                                 className={cn(
                                     "hover:text-foreground transition-colors",
-                                    isLast && "text-foreground font-medium cursor-default"
+                                    isLast ? "text-foreground font-medium" : "cursor-pointer"
                                 )}
                             >
                                 {segment}

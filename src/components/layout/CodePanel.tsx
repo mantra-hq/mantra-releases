@@ -145,6 +145,21 @@ export function CodePanel({
         }
     }, [onReturnToCurrent, activeTabId, activeTab, exitSnapshot]);
 
+    // 自动为初始文件创建标签 (修复默认文件无标签问题)
+    React.useEffect(() => {
+        if (filePath && tabs.length === 0) {
+            openTab(filePath, {
+                preview: false,
+                commitHash: commitHash,
+                timestamp: typeof timestamp === "number" ? timestamp : undefined,
+                content: code,
+                previousContent: previousCode ?? undefined,
+                isSnapshot: isHistoricalMode,
+                snapshotTime: typeof timestamp === "number" ? timestamp : undefined,
+            });
+        }
+    }, [filePath, tabs.length, openTab, commitHash, timestamp, code, previousCode, isHistoricalMode]);
+
     // 确定当前显示的文件路径和内容
     // 统一从标签读取，如果没有标签则使用 props（初始状态）
     const displayFilePath = activeTab?.path ?? filePath;
