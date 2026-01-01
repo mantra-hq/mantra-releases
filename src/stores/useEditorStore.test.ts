@@ -305,5 +305,102 @@ describe("useEditorStore", () => {
             expect(state.activeTabId).toBeNull();
         });
     });
+
+    // Story 2.14: 快照管理测试
+    describe("openTab with isSnapshot (Story 2.14)", () => {
+        it("应该使用 snapshot:timestamp:path 格式作为 tabId", () => {
+            const snapshotTime = Date.now();
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime,
+            });
+
+            const state = useEditorStore.getState();
+            expect(state.tabs[0].id).toBe(`snapshot:${snapshotTime}:src/App.tsx`);
+            expect(state.tabs[0].isSnapshot).toBe(true);
+            expect(state.tabs[0].snapshotTime).toBe(snapshotTime);
+        });
+
+        it("快照标签和实时标签应作为不同标签", () => {
+            useEditorStore.getState().openTab("src/App.tsx");
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime: Date.now(),
+            });
+
+            const state = useEditorStore.getState();
+            expect(state.tabs).toHaveLength(2);
+        });
+    });
+
+    describe("findLiveTab (Story 2.14)", () => {
+        it("应该找到实时标签", () => {
+            useEditorStore.getState().openTab("src/App.tsx");
+
+            const liveTab = useEditorStore.getState().findLiveTab("src/App.tsx");
+            expect(liveTab).toBeDefined();
+            expect(liveTab?.path).toBe("src/App.tsx");
+        });
+
+        it("不应该返回快照标签", () => {
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime: Date.now(),
+            });
+
+            const liveTab = useEditorStore.getState().findLiveTab("src/App.tsx");
+            expect(liveTab).toBeUndefined();
+        });
+
+        it("不应该返回 Git 历史标签", () => {
+            useEditorStore.getState().openTab("src/App.tsx", {
+                commitHash: "abc1234",
+            });
+
+            const liveTab = useEditorStore.getState().findLiveTab("src/App.tsx");
+            expect(liveTab).toBeUndefined();
+        });
+    });
+
+    describe("exitSnapshot (Story 2.14)", () => {
+        it("AC #7: 已有实时标签时应关闭快照并切换到实时标签", () => {
+            useEditorStore.getState().openTab("src/App.tsx");
+            const snapshotTime = Date.now();
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime,
+            });
+
+            const snapshotTabId = `snapshot:${snapshotTime}:src/App.tsx`;
+            useEditorStore.getState().exitSnapshot(snapshotTabId);
+
+            const state = useEditorStore.getState();
+            expect(state.tabs).toHaveLength(1);
+            expect(state.tabs[0].id).toBe("src/App.tsx");
+            expect(state.activeTabId).toBe("src/App.tsx");
+        });
+
+        it("AC #8: 无实时标签时应将快照转换为实时标签", () => {
+            const snapshotTime = Date.now();
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime,
+            });
+
+            const snapshotTabId = `snapshot:${snapshotTime}:src/App.tsx`;
+            useEditorStore.getState().exitSnapshot(snapshotTabId);
+
+            const state = useEditorStore.getState();
+            expect(state.tabs).toHaveLength(1);
+            expect(state.tabs[0].id).toBe("src/App.tsx");
+            expect(state.tabs[0].isSnapshot).toBe(false);
+            expect(state.tabs[0].snapshotTime).toBeUndefined();
+            expect(state.activeTabId).toBe("src/App.tsx");
+        });
+
+        it("快照不存在时不应报错", () => {
+            expect(() => useEditorStore.getState().exitSnapshot("non-existent")).not.toThrow();
+        });
+    });
 });
 

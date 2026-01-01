@@ -24,7 +24,7 @@ export type DiffMode = "inline" | "side-by-side";
  * 文件标签页数据
  */
 export interface EditorTab {
-    /** 唯一标识 (文件路径 或 commitHash:path) */
+    /** 唯一标识 (文件路径 或 commitHash:path 或 snapshot:timestamp:path) */
     id: string;
     /** 文件相对路径 */
     path: string;
@@ -44,6 +44,12 @@ export interface EditorTab {
     content?: string;
     /** 前一版本内容 (用于 Diff) */
     previousContent?: string;
+
+    // Story 2.14: 历史状态标识
+    /** 是否为会话快照 (来自时间旅行) */
+    isSnapshot?: boolean;
+    /** 快照时间戳 (Unix ms) */
+    snapshotTime?: number;
 }
 
 /**
@@ -70,6 +76,10 @@ export interface EditorState {
         timestamp?: number;
         content?: string;
         previousContent?: string;
+        /** Story 2.14: 是否为会话快照 */
+        isSnapshot?: boolean;
+        /** Story 2.14: 快照时间戳 */
+        snapshotTime?: number;
     }) => void;
     /** 关闭标签 */
     closeTab: (tabId: string) => void;
@@ -97,6 +107,12 @@ export interface EditorState {
     closeCurrentTab: () => void;
     /** 清除所有标签 */
     closeAllTabs: () => void;
+
+    // Story 2.14: 快照管理
+    /** 退出快照模式 (AC #7, #8) */
+    exitSnapshot: (snapshotTabId: string) => void;
+    /** 查找实时标签 */
+    findLiveTab: (path: string) => EditorTab | undefined;
 }
 
 /**
@@ -135,8 +151,14 @@ export const useEditorStore = create<EditorState>()(
             diffMode: "inline" as DiffMode,
 
             openTab: (path, options = {}) => {
-                const { preview = false, commitHash, timestamp, content, previousContent } = options;
-                const tabId = commitHash ? `${commitHash}:${path}` : path;
+                const { preview = false, commitHash, timestamp, content, previousContent, isSnapshot, snapshotTime } = options;
+                // Story 2.14: 快照模式的 tabId 格式为 snapshot:timestamp:path
+                let tabId = path;
+                if (isSnapshot && snapshotTime) {
+                    tabId = `snapshot:${snapshotTime}:${path}`;
+                } else if (commitHash) {
+                    tabId = `${commitHash}:${path}`;
+                }
                 const state = get();
 
                 // 检查是否已打开
@@ -177,7 +199,11 @@ export const useEditorStore = create<EditorState>()(
                 const newTab: EditorTab = {
                     id: tabId,
                     path,
-                    label: isHistorical ? formatHistoryLabel(path, timestamp) : getFileName(path),
+                    label: isSnapshot
+                        ? formatHistoryLabel(path, snapshotTime)
+                        : isHistorical
+                            ? formatHistoryLabel(path, timestamp)
+                            : getFileName(path),
                     isPinned: !preview,
                     isPreview: preview,
                     viewState: null,
@@ -185,6 +211,9 @@ export const useEditorStore = create<EditorState>()(
                     timestamp,
                     content,
                     previousContent,
+                    // Story 2.14: 快照标识
+                    isSnapshot,
+                    snapshotTime,
                 };
 
                 // 如果是预览模式，替换现有预览标签
@@ -294,6 +323,54 @@ export const useEditorStore = create<EditorState>()(
             },
 
             closeAllTabs: () => set({ tabs: [], activeTabId: null }),
+
+            // Story 2.14: 快照管理
+            findLiveTab: (path) => {
+                const state = get();
+                return state.tabs.find(t =>
+                    t.path === path &&
+                    !t.isSnapshot &&
+                    !t.commitHash
+                );
+            },
+
+            exitSnapshot: (snapshotTabId) => {
+                const state = get();
+                const snapshotTab = state.tabs.find(t => t.id === snapshotTabId);
+                if (!snapshotTab) return;
+
+                const liveTab = state.tabs.find(t =>
+                    t.path === snapshotTab.path &&
+                    !t.isSnapshot &&
+                    !t.commitHash
+                );
+
+                if (liveTab) {
+                    // AC #7: 已有实时标签：关闭快照，切换过去
+                    set({
+                        tabs: state.tabs.filter(t => t.id !== snapshotTabId),
+                        activeTabId: liveTab.id,
+                    });
+                } else {
+                    // AC #8: 无实时标签：转换当前标签为实时
+                    const newLiveId = snapshotTab.path;
+                    set({
+                        tabs: state.tabs.map(t =>
+                            t.id === snapshotTabId
+                                ? {
+                                    ...t,
+                                    id: newLiveId,
+                                    isSnapshot: false,
+                                    snapshotTime: undefined,
+                                    commitHash: undefined,
+                                    label: getFileName(t.path),
+                                }
+                                : t
+                        ),
+                        activeTabId: newLiveId,
+                    });
+                }
+            },
         }),
         {
             name: "mantra-editor-store",

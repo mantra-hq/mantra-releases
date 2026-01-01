@@ -68,6 +68,28 @@ describe("EditorTabs", () => {
             // 历史模式标签应有琥珀色背景样式
             expect(tab).toHaveClass("bg-amber-500/5");
         });
+
+        it("AC #2: 会话快照标签应显示蓝色 Camera 图标", () => {
+            // 使用 openTab 的 isSnapshot 参数打开快照标签
+            useEditorStore.getState().openTab("src/App.tsx", {
+                isSnapshot: true,
+                snapshotTime: Date.now(),
+            });
+
+            renderWithProviders(<EditorTabs />);
+
+            // 应该渲染 SnapshotBadge
+            expect(screen.getByTestId("snapshot-badge-icon-snapshot")).toBeInTheDocument();
+        });
+
+        it("AC #3: Git 历史标签应显示琥珀色 GitCommit 图标", () => {
+            useEditorStore.getState().openTab("src/App.tsx", { commitHash: "abc1234" });
+
+            renderWithProviders(<EditorTabs />);
+
+            // 应该渲染 SnapshotBadge git-history 模式
+            expect(screen.getByTestId("snapshot-badge-icon-git-history")).toBeInTheDocument();
+        });
     });
 
     describe("交互", () => {

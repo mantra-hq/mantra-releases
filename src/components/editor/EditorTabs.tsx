@@ -8,10 +8,12 @@
  * - 预览模式斜体样式
  * - 标签溢出滚动
  * - 历史模式指示器 (时钟图标)
+ *
+ * UX 优化 (方案 B): 纯标签管理，Diff 切换和返回当前已移至 Breadcrumbs
  */
 
 import * as React from "react";
-import { X, ChevronLeft, ChevronRight, Clock, ArrowLeft } from "lucide-react";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorTab } from "@/stores/useEditorStore";
 import { Button } from "@/components/ui/button";
@@ -21,20 +23,17 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SnapshotBadge } from "./SnapshotBadge";
 
 export interface EditorTabsProps {
     /** 自定义类名 */
     className?: string;
-    /** 是否处于历史模式 (UX 优化: 显示返回按钮) */
-    isHistoricalMode?: boolean;
-    /** 返回当前回调 */
-    onReturnToCurrent?: () => void;
 }
 
 /**
- * 编辑器标签页组件
+ * 编辑器标签页组件 (纯标签管理)
  */
-export function EditorTabs({ className, isHistoricalMode, onReturnToCurrent }: EditorTabsProps) {
+export function EditorTabs({ className }: EditorTabsProps) {
     const { tabs, activeTabId, setActiveTab, closeTab, pinTab } = useEditorStore();
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
     const [showLeftArrow, setShowLeftArrow] = React.useState(false);
@@ -148,9 +147,12 @@ export function EditorTabs({ className, isHistoricalMode, onReturnToCurrent }: E
                                         isHistorical && "bg-amber-500/5"
                                     )}
                                 >
-                                    {/* 历史模式时钟图标 */}
-                                    {isHistorical && (
-                                        <Clock className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                    {/* 历史状态徽章 (会话快照或 Git 历史) */}
+                                    {(tab.isSnapshot || isHistorical) && (
+                                        <SnapshotBadge
+                                            type={tab.isSnapshot ? "snapshot" : "git-history"}
+                                            mode="icon"
+                                        />
                                     )}
                                     <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                                     <span className="truncate text-sm">{tab.label}</span>
@@ -190,23 +192,6 @@ export function EditorTabs({ className, isHistoricalMode, onReturnToCurrent }: E
                     aria-label="向右滚动"
                 >
                     <ChevronRight className="h-4 w-4" />
-                </Button>
-            )}
-
-            {/* 历史模式: 返回当前按钮 (UX 优化方案 A) */}
-            {isHistoricalMode && onReturnToCurrent && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onReturnToCurrent}
-                    className={cn(
-                        "h-7 px-2 ml-1 flex-shrink-0",
-                        "text-blue-500 hover:text-blue-600",
-                        "hover:bg-blue-500/10"
-                    )}
-                >
-                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                    <span className="text-xs">返回当前</span>
                 </Button>
             )}
         </div>

@@ -32,6 +32,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Files, PanelLeftClose, PanelLeft } from "lucide-react";
 import type { editor } from "monaco-editor";
+import { StatusBar, type CursorPosition } from "./StatusBar";
+import { BranchSelector } from "@/components/git/BranchSelector";
+import { SyncStatus } from "@/components/git/SyncStatus";
 
 export interface CodePanelProps {
     /** 自定义 className */
@@ -109,6 +112,7 @@ export function CodePanel({
         openTab,
         updateViewState,
         toggleSidebar,
+        exitSnapshot,
     } = useEditorStore();
 
     // QuickOpen 状态
@@ -122,11 +126,24 @@ export function CodePanel({
     // 当前文件的同级文件 (用于 Breadcrumbs)
     const [siblings, setSiblings] = React.useState<SiblingItem[]>([]);
 
+    // Story 2.14: 光标位置状态
+    const [cursorPosition, setCursorPosition] = React.useState<CursorPosition | undefined>();
+
     // 当前活动标签的 ViewState
     const activeTab = React.useMemo(
         () => tabs.find((t) => t.id === activeTabId),
         [tabs, activeTabId]
     );
+
+    // Story 2.14: 组合退出快照回调 (同时清理时间旅行和标签页状态)
+    const handleReturnToCurrent = React.useCallback(() => {
+        // 1. 调用外部回调 (清理 useTimeTravelStore)
+        onReturnToCurrent?.();
+        // 2. 清理标签页状态 (exitSnapshot 或关闭历史标签)
+        if (activeTabId && (activeTab?.isSnapshot || activeTab?.commitHash)) {
+            exitSnapshot(activeTabId);
+        }
+    }, [onReturnToCurrent, activeTabId, activeTab, exitSnapshot]);
 
     // 确定当前显示的文件路径和内容
     // 统一从标签读取，如果没有标签则使用 props（初始状态）
@@ -142,6 +159,9 @@ export function CodePanel({
 
     // Diff 用的前一版本内容
     const displayPreviousCode = activeTab?.previousContent ?? previousCode;
+
+    // 是否有可用的 Diff 数据 (用于 EditorTabs 显示 Diff 模式切换)
+    const hasDiffData = !!(displayPreviousCode && displayPreviousCode !== displayCode);
 
     // 计算时间戳
     const timestampMs = React.useMemo(() => {
@@ -329,6 +349,14 @@ export function CodePanel({
             if (activeTabId) {
                 updateViewState(activeTabId, viewState);
             }
+            // Story 2.14: 更新光标位置
+            if (viewState.cursorState?.[0]) {
+                const cursor = viewState.cursorState[0];
+                setCursorPosition({
+                    line: cursor.position.lineNumber,
+                    column: cursor.position.column,
+                });
+            }
         },
         [activeTabId, updateViewState]
     );
@@ -398,20 +426,15 @@ export function CodePanel({
                         </Button>
                     )}
 
-                    {/* 文件标签页 (AC #1-5) + UX 优化: 传递历史模式和返回按钮 */}
-                    <EditorTabs
-                        className="flex-1 border-b-0"
-                        isHistoricalMode={isHistoricalMode || !!activeTab?.commitHash}
-                        onReturnToCurrent={onReturnToCurrent}
-                    />
+                    {/* 文件标签页 (AC #1-5) - UX 优化方案 B: 纯标签管理 */}
+                    <EditorTabs className="flex-1 border-b-0" />
                 </div>
 
-                {/* 面包屑导航 (UX 优化: 隐藏文件名 + 合并历史信息) */}
+                {/* 面包屑导航 (UX 优化方案 B: 完整路径 + 历史信息 + Diff 切换 + 返回当前) */}
                 {displayFilePath && (
                     <Breadcrumbs
                         filePath={displayFilePath}
                         siblings={siblings}
-                        hideFileName={true}
                         historyInfo={
                             (isHistoricalMode || activeTab?.commitHash) && timestampMs
                                 ? {
@@ -421,6 +444,8 @@ export function CodePanel({
                                 }
                                 : undefined
                         }
+                        hasDiffData={hasDiffData}
+                        onReturnToCurrent={isHistoricalMode || activeTab?.commitHash || activeTab?.isSnapshot ? handleReturnToCurrent : undefined}
                         onNavigate={handleBreadcrumbNavigate}
                     />
                 )}
@@ -435,7 +460,7 @@ export function CodePanel({
                         commitMessage={commitMessage}
                         previousCode={displayPreviousCode}
                         isHistoricalMode={isHistoricalMode || !!activeTab?.commitHash}
-                        onReturnToCurrent={onReturnToCurrent}
+                        onReturnToCurrent={handleReturnToCurrent}
                         fileNotFound={fileNotFound}
                         notFoundPath={notFoundPath}
                         onDismissNotFound={onDismissNotFound}
@@ -443,6 +468,19 @@ export function CodePanel({
                         onViewStateChange={handleViewStateChange}
                     />
                 </div>
+
+                {/* Story 2.14: 底部状态栏 (AC #9, #10, #11, #12) */}
+                <StatusBar
+                    cursorPosition={cursorPosition}
+                    leftContent={
+                        repoPath ? (
+                            <>
+                                <BranchSelector currentBranch="main" />
+                                <SyncStatus status="synced" />
+                            </>
+                        ) : null
+                    }
+                />
             </div>
 
             {/* 快速打开对话框 (AC #15) */}

@@ -15,9 +15,9 @@ import type { editor } from "monaco-editor";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 // UX 优化: 移除 CodeSnapshotHeader 和 HistoryBanner，功能已上移到 EditorTabs/Breadcrumbs
+// UX 优化: DiffModeToggle 也已移至 EditorTabs
 import { EmptyCodeState } from "./EmptyCodeState";
 import { FileNotFoundBanner } from "./FileNotFoundBanner";
-import { DiffModeToggle } from "./DiffModeToggle";
 import {
   computeDiffDecorations,
   toMonacoDecorations,
@@ -370,13 +370,7 @@ export function CodeSnapshotView({
         className
       )}
     >
-      {/* UX 优化: 移除 HistoryBanner 和 CodeSnapshotHeader，功能已上移 */}
-      {/* Diff 模式切换按钮 (仅在有 Diff 数据时显示) */}
-      {hasDiffData && (
-        <div className="flex items-center justify-end px-2 py-1 border-b border-border bg-muted/30">
-          <DiffModeToggle visible={hasDiffData} />
-        </div>
-      )}
+      {/* UX 优化: 移除 HistoryBanner/CodeSnapshotHeader/DiffModeToggle，功能已上移至 EditorTabs */}
 
       {/* 编辑器容器 (AC1) */}
       <div

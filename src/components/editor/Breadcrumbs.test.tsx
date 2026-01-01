@@ -41,25 +41,73 @@ describe("Breadcrumbs", () => {
     });
 
     describe("历史模式指示器 (AC #20)", () => {
-        it("应该显示历史时间戳", () => {
+        it("AC #4: 会话快照应显示蓝色 SnapshotBadge Pill", () => {
             const timestamp = Date.now() - 3600000; // 1小时前
 
             render(
                 <Breadcrumbs
                     filePath="src/App.tsx"
-                    timestamp={timestamp}
+                    historyInfo={{ timestamp, type: "snapshot" }}
                 />
             );
 
-            // UX 优化: 历史指示器现在显示相对时间 (如 "X小时前") 而不是 "历史" 文字
-            expect(screen.getByText(/小时前/)).toBeInTheDocument();
+            // 应该渲染 SnapshotBadge pill
+            expect(screen.getByTestId("snapshot-badge-pill-snapshot")).toBeInTheDocument();
+        });
+
+        it("AC #5: Git 历史应显示琥珀色 SnapshotBadge Pill", () => {
+            const timestamp = Date.now() - 3 * 24 * 3600000; // 3天前
+
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    historyInfo={{ timestamp, commitHash: "abc1234567890", type: "git-history" }}
+                />
+            );
+
+            // 应该渲染 git-history SnapshotBadge pill
+            const pill = screen.getByTestId("snapshot-badge-pill-git-history");
+            expect(pill).toBeInTheDocument();
+            expect(pill).toHaveTextContent("abc1234");
+        });
+
+        it("AC #6: 退出快照按钮应显示正确文案", () => {
+            const onReturnToCurrent = vi.fn();
+
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    onReturnToCurrent={onReturnToCurrent}
+                />
+            );
+
+            // 按钮文案应为「退出快照」
+            expect(screen.getByText("退出快照")).toBeInTheDocument();
+        });
+
+        it("AC #7/#8: 点击退出快照按钮应调用 onReturnToCurrent", () => {
+            const onReturnToCurrent = vi.fn();
+
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    onReturnToCurrent={onReturnToCurrent}
+                />
+            );
+
+            // 点击退出快照按钮
+            fireEvent.click(screen.getByText("退出快照"));
+
+            expect(onReturnToCurrent).toHaveBeenCalledTimes(1);
         });
 
         it("没有时间戳时不显示历史指示器", () => {
             render(<Breadcrumbs filePath="src/App.tsx" />);
 
-            // 不应显示相对时间指示器
-            expect(screen.queryByText(/小时前|分钟前|天前/)).not.toBeInTheDocument();
+            // 不应显示 SnapshotBadge
+            expect(screen.queryByTestId(/snapshot-badge-pill/)).not.toBeInTheDocument();
         });
     });
 

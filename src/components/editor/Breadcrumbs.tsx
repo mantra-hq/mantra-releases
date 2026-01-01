@@ -6,11 +6,13 @@
  * - 显示文件路径分段 (src > components > editor > CodeSnapshotView.tsx)
  * - 点击路径段弹出下拉菜单导航
  * - 历史模式时间戳指示器
+ * - UX 优化 (方案 B): 整合 Diff 切换和返回当前按钮
  */
 
 import * as React from "react";
-import { ChevronRight, Clock } from "lucide-react";
+import { ChevronRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -19,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { DiffModeToggle } from "./DiffModeToggle";
+import { SnapshotBadge, type SnapshotType } from "./SnapshotBadge";
 
 /** 同级文件/目录信息 */
 export interface SiblingItem {
@@ -38,6 +42,8 @@ export interface HistoryInfo {
     commitHash?: string;
     /** Commit 消息 */
     commitMessage?: string;
+    /** Story 2.14: 历史类型 (snapshot | git-history) */
+    type?: SnapshotType;
 }
 
 export interface BreadcrumbsProps {
@@ -53,6 +59,10 @@ export interface BreadcrumbsProps {
     hideFileName?: boolean;
     /** 点击路径段回调 */
     onNavigate?: (path: string) => void;
+    /** 是否有 Diff 数据 (UX 优化方案 B: 显示 Diff 模式切换) */
+    hasDiffData?: boolean;
+    /** 返回当前回调 (UX 优化方案 B: 历史模式时显示) */
+    onReturnToCurrent?: () => void;
     /** 自定义类名 */
     className?: string;
 }
@@ -67,6 +77,8 @@ export function Breadcrumbs({
     historyInfo,
     hideFileName = false,
     onNavigate,
+    hasDiffData,
+    onReturnToCurrent,
     className,
 }: BreadcrumbsProps) {
     // 历史信息优先使用 historyInfo，否则回退到 timestamp
@@ -164,22 +176,42 @@ export function Breadcrumbs({
                 );
             })}
 
-            {/* 历史模式时间戳指示器 (UX 优化: 合并显示 commit 信息) */}
-            {effectiveHistoryInfo && (
-                <div className="ml-auto flex items-center gap-1.5 text-xs text-amber-500">
-                    <Clock className="h-3 w-3" />
-                    <span className="flex items-center gap-1">
-                        {effectiveHistoryInfo.commitHash && (
-                            <span className="font-mono opacity-80">
-                                {effectiveHistoryInfo.commitHash.slice(0, 7)}
-                            </span>
-                        )}
-                        {effectiveHistoryInfo.commitHash && <span>·</span>}
-                        {formatDistanceToNow(new Date(effectiveHistoryInfo.timestamp), {
-                            addSuffix: true,
-                            locale: zhCN,
-                        })}
-                    </span>
+            {/* 右侧工具区 (UX 优化方案 B: 历史信息 + Diff 切换 + 返回当前) */}
+            {(effectiveHistoryInfo || hasDiffData) && (
+                <div className="ml-auto flex items-center gap-2">
+                    {/* Story 2.14: 历史状态徽章 Pill 模式 */}
+                    {effectiveHistoryInfo && (
+                        <SnapshotBadge
+                            type={effectiveHistoryInfo.type || (effectiveHistoryInfo.commitHash ? "git-history" : "snapshot")}
+                            mode="pill"
+                            timestamp={effectiveHistoryInfo.timestamp}
+                            commitHash={effectiveHistoryInfo.commitHash}
+                            relativeTime={formatDistanceToNow(new Date(effectiveHistoryInfo.timestamp), {
+                                addSuffix: false,
+                                locale: zhCN,
+                            })}
+                        />
+                    )}
+
+                    {/* Diff 模式切换 */}
+                    {hasDiffData && <DiffModeToggle visible={hasDiffData} />}
+
+                    {/* 返回当前按钮 */}
+                    {onReturnToCurrent && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onReturnToCurrent}
+                            className={cn(
+                                "h-6 px-2 flex-shrink-0",
+                                "text-blue-500 hover:text-blue-600",
+                                "hover:bg-blue-500/10"
+                            )}
+                        >
+                            <ArrowLeft className="h-3 w-3 mr-1" />
+                            <span className="text-xs">退出快照</span>
+                        </Button>
+                    )}
                 </div>
             )}
         </div>
