@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useEditorStore } from "@/stores/useEditorStore";
+import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useTimeMachine } from "@/hooks/useTimeMachine";
 // Story 2.12: 使用增强的文件路径提取模块
 import {
@@ -87,6 +88,9 @@ export default function Player() {
 
   // 编辑器标签管理
   const openTab = useEditorStore((state) => state.openTab);
+
+  // 右侧面板 Tab 管理 (修复 Bash 详情后其他消息点击无响应问题)
+  const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
 
   // Git Time Machine Hook (FR-GIT-002, FR-GIT-003)
   const { fetchSnapshot } = useTimeMachine(repoPath);
@@ -312,6 +316,9 @@ export default function Player() {
               previousContent: previousContentRef.current ?? undefined,
             });
 
+            // 切换右侧面板到代码 Tab (修复 Bash 详情后其他消息点击无响应问题)
+            setActiveRightTab("code");
+
             // 更新 previousContent 用于下次 Diff
             previousContentRef.current = snapshot.content;
           }
@@ -326,7 +333,7 @@ export default function Player() {
         }
       }
     },
-    [messages, jumpToMessage, repoPath, fetchSnapshot, openTab]
+    [messages, jumpToMessage, repoPath, fetchSnapshot, openTab, setActiveRightTab]
   );
 
   // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002, Story 2.12)
@@ -374,6 +381,8 @@ export default function Player() {
                   content: snapshot.content,
                   previousContent: previousContentRef.current ?? undefined,
                 });
+                // 切换右侧面板到代码 Tab
+                setActiveRightTab("code");
                 previousContentRef.current = snapshot.content;
               }
             } else if (lastValidFileRef.current) {
@@ -384,7 +393,7 @@ export default function Player() {
         }
       }
     },
-    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot, openTab]
+    [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot, openTab, setActiveRightTab]
   );
 
   // 返回 Dashboard

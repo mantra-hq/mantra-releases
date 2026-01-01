@@ -59,7 +59,9 @@ export function FileTree({
     onFileDoubleClick,
     className,
 }: FileTreeProps) {
-    const { expandedFolders, toggleFolder } = useEditorStore();
+    // 使用独立的选择器确保引用稳定
+    const expandedFolders = useEditorStore((state) => state.expandedFolders);
+    const toggleFolder = useEditorStore((state) => state.toggleFolder);
     const parentRef = React.useRef<HTMLDivElement>(null);
 
     // 扁平化树结构

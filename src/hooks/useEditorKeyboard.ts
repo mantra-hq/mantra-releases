@@ -25,7 +25,11 @@ export interface UseEditorKeyboardOptions {
  */
 export function useEditorKeyboard(options: UseEditorKeyboardOptions = {}) {
     const { onQuickOpen, enabled = true } = options;
-    const { nextTab, prevTab, closeCurrentTab, toggleSidebar } = useEditorStore();
+    // 使用独立的选择器确保引用稳定
+    const nextTab = useEditorStore((state) => state.nextTab);
+    const prevTab = useEditorStore((state) => state.prevTab);
+    const closeCurrentTab = useEditorStore((state) => state.closeCurrentTab);
+    const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -78,4 +82,5 @@ export function useEditorKeyboard(options: UseEditorKeyboardOptions = {}) {
 }
 
 export default useEditorKeyboard;
+
 

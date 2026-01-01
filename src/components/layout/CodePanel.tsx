@@ -104,16 +104,14 @@ export function CodePanel({
     onDismissNotFound,
     onLoadFileContent,
 }: CodePanelProps) {
-    // 编辑器状态管理
-    const {
-        tabs,
-        activeTabId,
-        sidebarOpen,
-        openTab,
-        updateViewState,
-        toggleSidebar,
-        exitSnapshot,
-    } = useEditorStore();
+    // 编辑器状态管理 - 使用独立的选择器确保引用稳定
+    const tabs = useEditorStore((state) => state.tabs);
+    const activeTabId = useEditorStore((state) => state.activeTabId);
+    const sidebarOpen = useEditorStore((state) => state.sidebarOpen);
+    const openTab = useEditorStore((state) => state.openTab);
+    const updateViewState = useEditorStore((state) => state.updateViewState);
+    const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
+    const exitSnapshot = useEditorStore((state) => state.exitSnapshot);
 
     // QuickOpen 状态
     const [quickOpenVisible, setQuickOpenVisible] = React.useState(false);
@@ -145,9 +143,14 @@ export function CodePanel({
         }
     }, [onReturnToCurrent, activeTabId, activeTab, exitSnapshot]);
 
+    // 用于追踪是否已为初始文件创建过标签
+    const initialTabCreatedRef = React.useRef(false);
+
     // 自动为初始文件创建标签 (修复默认文件无标签问题)
     React.useEffect(() => {
-        if (filePath && tabs.length === 0) {
+        // 只在 tabs 为空且未创建过时执行一次
+        if (filePath && tabs.length === 0 && !initialTabCreatedRef.current) {
+            initialTabCreatedRef.current = true;
             openTab(filePath, {
                 preview: false,
                 commitHash: commitHash,

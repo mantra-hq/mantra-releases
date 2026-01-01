@@ -127,11 +127,13 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
           )}
         >
           {/* 消息内容块 - 使用 ContentBlockRenderer 渲染所有类型 */}
+          {/* Story 2.15: 启用 ToolCallCard 支持详情面板交互 */}
           <div className="space-y-1">
             {message.content.map((block, blockIndex) => (
               <ContentBlockRenderer
                 key={`${message.id}-block-${blockIndex}`}
                 block={block}
+                useNewToolCard={true}
               />
             ))}
           </div>

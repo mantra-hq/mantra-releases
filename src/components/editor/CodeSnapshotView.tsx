@@ -226,6 +226,8 @@ export function CodeSnapshotView({
   onViewStateChangeRef.current = onViewStateChange;
   // 跟踪是否需要恢复 ViewState
   const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null);
+  // 跟踪是否正在恢复 ViewState（避免循环）
+  const isRestoringViewStateRef = useRef(false);
 
   // 编辑器挂载回调 (不依赖 viewState，避免重新挂载)
   const handleEditorMount: OnMount = useCallback((editor, _monaco) => {
@@ -243,6 +245,8 @@ export function CodeSnapshotView({
 
     // Story 2.13 AC #5: 监听光标/滚动变化，保存 ViewState
     const saveViewState = () => {
+      // 正在恢复 ViewState 时跳过保存，避免循环
+      if (isRestoringViewStateRef.current) return;
       const state = editor.saveViewState();
       if (state && onViewStateChangeRef.current) {
         onViewStateChangeRef.current(state);
@@ -287,8 +291,13 @@ export function CodeSnapshotView({
   // Story 2.13 AC #5: ViewState 变化时恢复 (独立 effect，避免 onMount 重绑定)
   useEffect(() => {
     if (viewState && editorRef.current) {
-      // 编辑器已挂载，直接恢复
+      // 标记正在恢复，避免触发 saveViewState 循环
+      isRestoringViewStateRef.current = true;
       editorRef.current.restoreViewState(viewState);
+      // 延迟重置标记，确保事件处理完成
+      requestAnimationFrame(() => {
+        isRestoringViewStateRef.current = false;
+      });
     } else if (viewState) {
       // 编辑器未挂载，存储待恢复状态
       pendingViewStateRef.current = viewState;
@@ -303,8 +312,18 @@ export function CodeSnapshotView({
     };
   }, []);
 
+  // 是否已初始化（避免首次挂载时触发动画）
+  const isInitializedRef = useRef(false);
+
   // 代码变化处理 (动画 + Diff 高亮)
   useEffect(() => {
+    // 首次挂载时跳过动画，只初始化 ref
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      previousCodeRef.current = code;
+      return;
+    }
+
     const prevCode = previousCodeRef.current;
 
     if (prevCode !== code) {

@@ -21,16 +21,24 @@ const mockSetError = vi.fn();
 const mockSetFileNotFound = vi.fn();
 const mockClearFileNotFound = vi.fn();
 
+// Store mock state (used by selectors)
+const mockStoreState = {
+    setCode: mockSetCode,
+    setCommitInfo: mockSetCommitInfo,
+    setLoading: mockSetLoading,
+    setError: mockSetError,
+    setFileNotFound: mockSetFileNotFound,
+    clearFileNotFound: mockClearFileNotFound,
+};
+
+// Mock useTimeTravelStore with selector support
 vi.mock("@/stores/useTimeTravelStore", () => ({
-    useTimeTravelStore: () => ({
-        setCode: mockSetCode,
-        setCommitInfo: mockSetCommitInfo,
-        setLoading: mockSetLoading,
-        setError: mockSetError,
-        // Story 2.12: 文件不存在状态
-        setFileNotFound: mockSetFileNotFound,
-        clearFileNotFound: mockClearFileNotFound,
-    }),
+    useTimeTravelStore: (selector?: (state: typeof mockStoreState) => unknown) => {
+        if (selector) {
+            return selector(mockStoreState);
+        }
+        return mockStoreState;
+    },
 }));
 
 import { invoke } from "@tauri-apps/api/core";
@@ -162,6 +170,65 @@ describe("useTimeMachine", () => {
             });
 
             expect(mockSetError).toHaveBeenCalledWith("unknown_error");
+        });
+
+        it("Tauri 对象格式错误（FILE_NOT_FOUND 错误码）应该正确识别文件不存在", async () => {
+            // 模拟 Tauri 返回的结构化错误 (新格式: 精确错误码)
+            const tauriError = {
+                code: "FILE_NOT_FOUND",
+                message: "在 Commit de46d01 中找不到文件: src/test.tsx",
+            };
+            vi.mocked(invoke).mockRejectedValueOnce(tauriError);
+
+            const { result } = renderHook(() => useTimeMachine("/repo/path"));
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            // 应该识别为文件不存在错误，调用 setFileNotFound
+            expect(mockSetFileNotFound).toHaveBeenCalledWith(uniqueFile, 1735500000);
+            // 不应该设置通用错误消息
+            expect(mockSetError).not.toHaveBeenCalledWith(expect.stringContaining("Git"));
+        });
+
+        it("Tauri 对象格式错误（GIT_ERROR 通用错误码）应该正常处理", async () => {
+            const tauriError = {
+                code: "GIT_ERROR",
+                message: "Git 操作失败: invalid commit",
+            };
+            vi.mocked(invoke).mockRejectedValueOnce(tauriError);
+
+            const { result } = renderHook(() => useTimeMachine("/repo/path"));
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            // 应该设置 Git 错误消息 (使用错误码映射)
+            expect(mockSetError).toHaveBeenCalledWith("Git 操作失败");
+            expect(mockSetFileNotFound).not.toHaveBeenCalled();
+        });
+
+        it("Tauri 对象格式错误（COMMIT_NOT_FOUND 错误码）应该正常处理", async () => {
+            const tauriError = {
+                code: "COMMIT_NOT_FOUND",
+                message: "找不到 Commit: 在 2020-01-01 之前没有找到任何 Commit",
+            };
+            vi.mocked(invoke).mockRejectedValueOnce(tauriError);
+
+            const { result } = renderHook(() => useTimeMachine("/repo/path"));
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            // 应该设置 commit 不存在错误消息 (使用错误码映射)
+            expect(mockSetError).toHaveBeenCalledWith("该时间点没有可用的提交");
+            expect(mockSetFileNotFound).not.toHaveBeenCalled();
         });
 
         it("应该正确转换时间戳从毫秒到秒", async () => {

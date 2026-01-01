@@ -47,13 +47,24 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
+/// 将 GitError 转换为精确的错误码
+fn git_error_code(err: &GitError) -> &'static str {
+    match err {
+        GitError::FileNotFound { .. } => "FILE_NOT_FOUND",
+        GitError::CommitNotFound(_) => "COMMIT_NOT_FOUND",
+        GitError::NotARepository(_) => "NOT_A_REPOSITORY",
+        GitError::InvalidUtf8 => "INVALID_UTF8",
+        GitError::RepositoryError(_) => "GIT_ERROR",
+    }
+}
+
 impl From<AppError> for ErrorResponse {
     fn from(err: AppError) -> Self {
         let (code, message) = match &err {
             AppError::Parse(e) => ("PARSE_ERROR".to_string(), e.to_string()),
             AppError::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             AppError::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
-            AppError::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
+            AppError::Git(e) => (git_error_code(e).to_string(), e.to_string()),
             AppError::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
             AppError::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
         };
@@ -72,7 +83,7 @@ impl Serialize for AppError {
             Self::Parse(e) => ("PARSE_ERROR".to_string(), e.to_string()),
             Self::Io(e) => ("IO_ERROR".to_string(), e.to_string()),
             Self::Internal(msg) => ("INTERNAL_ERROR".to_string(), msg.clone()),
-            Self::Git(e) => ("GIT_ERROR".to_string(), e.to_string()),
+            Self::Git(e) => (git_error_code(e).to_string(), e.to_string()),
             Self::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
             Self::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
         };
@@ -103,5 +114,25 @@ mod tests {
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains("INTERNAL_ERROR"));
         assert!(json.contains("test error"));
+    }
+
+    #[test]
+    fn test_git_file_not_found_serialization() {
+        let git_err = GitError::FileNotFound {
+            commit: "abc123".to_string(),
+            path: "src/main.rs".to_string(),
+        };
+        let err = AppError::Git(git_err);
+        let json = serde_json::to_string(&err).unwrap();
+        assert!(json.contains("FILE_NOT_FOUND"));
+        assert!(json.contains("src/main.rs"));
+    }
+
+    #[test]
+    fn test_git_commit_not_found_serialization() {
+        let git_err = GitError::CommitNotFound("before 2020".to_string());
+        let err = AppError::Git(git_err);
+        let json = serde_json::to_string(&err).unwrap();
+        assert!(json.contains("COMMIT_NOT_FOUND"));
     }
 }

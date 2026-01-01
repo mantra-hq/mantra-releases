@@ -34,7 +34,12 @@ export interface EditorTabsProps {
  * 编辑器标签页组件 (纯标签管理)
  */
 export function EditorTabs({ className }: EditorTabsProps) {
-    const { tabs, activeTabId, setActiveTab, closeTab, pinTab } = useEditorStore();
+    // 使用独立的选择器确保引用稳定
+    const tabs = useEditorStore((state) => state.tabs);
+    const activeTabId = useEditorStore((state) => state.activeTabId);
+    const setActiveTab = useEditorStore((state) => state.setActiveTab);
+    const closeTab = useEditorStore((state) => state.closeTab);
+    const pinTab = useEditorStore((state) => state.pinTab);
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
     const [showLeftArrow, setShowLeftArrow] = React.useState(false);
     const [showRightArrow, setShowRightArrow] = React.useState(false);
@@ -199,4 +204,5 @@ export function EditorTabs({ className }: EditorTabsProps) {
 }
 
 export default EditorTabs;
+
 

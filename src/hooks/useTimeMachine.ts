@@ -87,43 +87,111 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * 从错误对象中提取消息
+ */
+function extractErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    if (typeof error === "string") {
+        return error;
+    }
+    // 处理 Tauri 返回的对象格式错误 {code: "...", message: "..."}
+    if (error && typeof error === "object") {
+        const errObj = error as Record<string, unknown>;
+        if (typeof errObj.message === "string") {
+            return errObj.message;
+        }
+    }
+    return "";
+}
+
+/**
+ * 从错误对象中提取错误码
+ */
+function extractErrorCode(error: unknown): string | null {
+    if (error && typeof error === "object") {
+        const errObj = error as Record<string, unknown>;
+        if (typeof errObj.code === "string") {
+            return errObj.code;
+        }
+    }
+    return null;
+}
+
+/**
  * 解析错误消息
  */
 function getErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-        // 检查是否匹配已知错误类型
-        for (const [key, message] of Object.entries(ERROR_MESSAGES)) {
-            if (error.message.toLowerCase().includes(key)) {
-                return message;
+    const code = extractErrorCode(error);
+    const message = extractErrorMessage(error);
+
+    // 优先使用错误码映射
+    if (code) {
+        const codeMapping: Record<string, string> = {
+            FILE_NOT_FOUND: ERROR_MESSAGES.file_not_found,
+            COMMIT_NOT_FOUND: ERROR_MESSAGES.commit_not_found,
+            NOT_A_REPOSITORY: ERROR_MESSAGES.repo_not_found,
+            GIT_ERROR: ERROR_MESSAGES.git_error,
+        };
+        if (code in codeMapping) {
+            return codeMapping[code];
+        }
+    }
+
+    // 回退到消息关键词匹配
+    if (message) {
+        const lowerMessage = message.toLowerCase();
+        for (const [key, displayMsg] of Object.entries(ERROR_MESSAGES)) {
+            if (lowerMessage.includes(key)) {
+                return displayMsg;
             }
         }
-        return error.message;
+        return message;
     }
+
     return ERROR_MESSAGES.default;
 }
 
 /**
  * Story 2.12 AC #5: 检测是否是文件不存在错误
+ * 优先使用错误码，回退到消息匹配
  */
 function isFileNotFoundError(error: unknown): boolean {
-    if (error instanceof Error) {
-        const msg = error.message.toLowerCase();
-        return (
-            msg.includes("file_not_found") ||
-            msg.includes("filenotfound") ||
-            msg.includes("not found") ||
-            msg.includes("does not exist") ||
-            msg.includes("no such file")
-        );
+    // 优先检查错误码 (Tauri 结构化错误)
+    const code = extractErrorCode(error);
+    if (code === "FILE_NOT_FOUND") {
+        return true;
     }
-    if (typeof error === "string") {
-        const msg = error.toLowerCase();
-        return (
-            msg.includes("file_not_found") ||
-            msg.includes("not found") ||
-            msg.includes("does not exist")
-        );
+
+    // 回退到消息匹配 (兼容旧格式)
+    const message = extractErrorMessage(error);
+    if (!message) {
+        return false;
     }
+
+    const lowerMsg = message.toLowerCase();
+
+    // 英文关键词
+    if (
+        lowerMsg.includes("file_not_found") ||
+        lowerMsg.includes("filenotfound") ||
+        lowerMsg.includes("not found") ||
+        lowerMsg.includes("does not exist") ||
+        lowerMsg.includes("no such file")
+    ) {
+        return true;
+    }
+
+    // 中文关键词
+    if (
+        message.includes("找不到文件") ||
+        message.includes("文件不存在") ||
+        message.includes("未找到文件")
+    ) {
+        return true;
+    }
+
     return false;
 }
 
@@ -141,14 +209,14 @@ function getCacheKey(repoPath: string, filePath: string, timestamp: number): str
  * @returns Hook 方法
  */
 export function useTimeMachine(repoPath: string | null) {
-    const {
-        setCode,
-        setCommitInfo,
-        setLoading,
-        setError,
-        setFileNotFound,
-        clearFileNotFound,
-    } = useTimeTravelStore();
+    // 使用独立的选择器获取 action 函数，确保引用稳定
+    // 避免整个 store 状态变化时导致函数引用变化
+    const setCode = useTimeTravelStore((state) => state.setCode);
+    const setCommitInfo = useTimeTravelStore((state) => state.setCommitInfo);
+    const setLoading = useTimeTravelStore((state) => state.setLoading);
+    const setError = useTimeTravelStore((state) => state.setError);
+    const setFileNotFound = useTimeTravelStore((state) => state.setFileNotFound);
+    const clearFileNotFound = useTimeTravelStore((state) => state.clearFileNotFound);
 
     // 用于追踪最新请求，避免竞态条件
     const requestIdRef = useRef(0);

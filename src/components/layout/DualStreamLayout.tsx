@@ -2,9 +2,10 @@
  * DualStreamLayout - 双流分栏布局组件
  * Story 2.2: AC #1, #2, #3, #6
  * Story 2.6: 集成 TimberLine 时间轴控制器
+ * Story 2.15: 右侧面板固定双 Tab (代码编辑 + 终端)
  *
  * 左侧: NarrativePanel (对话流) - 默认 40%
- * 右侧: CodePanel (代码快照) - 默认 60%
+ * 右侧: CodePanel / Terminal (代码快照 + 终端) - 默认 60%
  * 底部: TimberLine (时间轴控制器)
  *
  * Note: Uses react-resizable-panels v4.x API
@@ -25,9 +26,11 @@ import type { NarrativeMessage } from "@/types/message";
 import type { TimelineEvent } from "@/types/timeline";
 import { TimberLine } from "@/components/timeline";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
+import { RightPanelTerminal } from "@/components/terminal";
 
 // 响应式 Tab 组件 (Tablet/Mobile 模式)
-import { MessageSquare, Code2 } from "lucide-react";
+import { MessageSquare, Code2, Terminal } from "lucide-react";
 
 // Panel IDs for v4 API
 const NARRATIVE_PANEL_ID = "narrative";
@@ -164,6 +167,12 @@ export const DualStreamLayout = React.forwardRef<
     const notFoundPath = useTimeTravelStore((state) => state.notFoundPath);
     const clearFileNotFound = useTimeTravelStore((state) => state.clearFileNotFound);
 
+    // Story 2.15: 详情面板状态 - 使用 store 中的 activeRightTab
+    const activeRightTab = useDetailPanelStore((state) => state.activeRightTab);
+    const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
+    const terminalContent = useDetailPanelStore((state) => state.terminalContent);
+    const closePanel = useDetailPanelStore((state) => state.closePanel);
+
     // 响应式布局检测
     const detectedMode = useResponsiveLayout();
     const layoutMode = forceMode ?? detectedMode;
@@ -213,7 +222,9 @@ export const DualStreamLayout = React.forwardRef<
         onMessageSelect={onMessageSelect}
       />
     );
-    const renderCodeContent = codeContent ?? (
+
+    // Story 2.15: 右侧面板根据状态显示 CodePanel 或 Terminal (固定双 tab)
+    const renderCodePanel = (
       <CodePanel
         code={currentCode ?? ""}
         filePath={currentFilePath ?? ""}
@@ -230,6 +241,59 @@ export const DualStreamLayout = React.forwardRef<
         notFoundPath={notFoundPath ?? undefined}
         onDismissNotFound={clearFileNotFound}
       />
+    );
+
+    const renderTerminalPanel = terminalContent ? (
+      <RightPanelTerminal
+        command={terminalContent.command}
+        output={terminalContent.output}
+        isError={terminalContent.isError}
+        exitCode={terminalContent.exitCode}
+        onClose={closePanel}
+      />
+    ) : (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+        点击会话中的终端类工具查看详情
+      </div>
+    );
+
+    // 右侧面板固定双 Tab 架构
+    const renderCodeContent = codeContent ?? (
+      <div className="h-full flex flex-col">
+        {/* 固定 Tab 切换栏 - 始终显示 */}
+        <div className="flex border-b border-border bg-muted/30 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveRightTab("code")}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+              activeRightTab === "code"
+                ? "text-primary border-b-2 border-primary -mb-px"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Code2 className="h-4 w-4" />
+            代码编辑
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveRightTab("terminal")}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+              activeRightTab === "terminal"
+                ? "text-primary border-b-2 border-primary -mb-px"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Terminal className="h-4 w-4" />
+            终端
+          </button>
+        </div>
+        {/* 内容区域 */}
+        <div className="flex-1 min-h-0">
+          {activeRightTab === "code" ? renderCodePanel : renderTerminalPanel}
+        </div>
+      </div>
     );
 
     // 渲染 TimberLine 时间轴

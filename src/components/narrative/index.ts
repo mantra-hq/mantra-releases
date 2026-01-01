@@ -16,6 +16,12 @@ export type { ChainOfThoughtProps } from "./ChainOfThought";
 export { ToolCall } from "./ToolCall";
 export type { ToolCallProps } from "./ToolCall";
 
+export { ToolCallCard } from "./ToolCallCard";
+export type { ToolCallCardProps, ToolCallStatus } from "./ToolCallCard";
+
+export { TodoWriteCard } from "./TodoWriteCard";
+export type { TodoWriteCardProps } from "./TodoWriteCard";
+
 export { ToolOutput } from "./ToolOutput";
 export type { ToolOutputProps } from "./ToolOutput";
 

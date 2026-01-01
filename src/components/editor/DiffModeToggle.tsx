@@ -31,7 +31,9 @@ export interface DiffModeToggleProps {
  * - side-by-side: 并排对比模式 (双列视图)
  */
 export function DiffModeToggle({ className, visible = true }: DiffModeToggleProps) {
-    const { diffMode, setDiffMode } = useEditorStore();
+    // 使用独立的选择器确保引用稳定
+    const diffMode = useEditorStore((state) => state.diffMode);
+    const setDiffMode = useEditorStore((state) => state.setDiffMode);
 
     if (!visible) return null;
 
