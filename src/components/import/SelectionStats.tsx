@@ -20,6 +20,8 @@ export interface SelectionStatsProps {
     onSelectAll: () => void;
     /** 清空选择回调 */
     onClearAll: () => void;
+    /** 反选回调 */
+    onInvertSelection: () => void;
 }
 
 /**
@@ -31,8 +33,10 @@ export function SelectionStats({
     selectedCount,
     onSelectAll,
     onClearAll,
+    onInvertSelection,
 }: SelectionStatsProps) {
     const allSelected = selectedCount === totalSessions && totalSessions > 0;
+    const noneSelected = selectedCount === 0;
 
     return (
         <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border border-border rounded-lg">
@@ -53,14 +57,33 @@ export function SelectionStats({
             </div>
 
             {/* 批量操作按钮 */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={allSelected ? onClearAll : onSelectAll}
-                    className="text-xs h-7"
+                    onClick={onSelectAll}
+                    disabled={allSelected}
+                    className="text-xs h-7 px-2"
                 >
-                    {allSelected ? "清空选择" : "全选"}
+                    全选
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClearAll}
+                    disabled={noneSelected}
+                    className="text-xs h-7 px-2"
+                >
+                    清空
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onInvertSelection}
+                    disabled={totalSessions === 0}
+                    className="text-xs h-7 px-2"
+                >
+                    反选
                 </Button>
             </div>
         </div>

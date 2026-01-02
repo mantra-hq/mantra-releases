@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
-use crate::parsers::{ClaudeParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, LogParser};
 use crate::scanner::ProjectScanner;
 use crate::storage::Database;
 
@@ -83,7 +83,9 @@ pub async fn get_session(
 
 /// Import sessions from file paths
 ///
-/// Parses Claude Code log files and imports them into the database.
+/// Parses Claude Code log files or Cursor workspaces and imports them into the database.
+/// - If path is a file (.jsonl): uses ClaudeParser
+/// - If path is a directory: uses CursorParser for workspace
 #[tauri::command]
 pub async fn import_sessions(
     state: State<'_, AppState>,
@@ -91,16 +93,34 @@ pub async fn import_sessions(
 ) -> Result<ImportResult, AppError> {
     let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
     let mut scanner = ProjectScanner::new(&mut db);
-    let parser = ClaudeParser::new();
+    let claude_parser = ClaudeParser::new();
+    let cursor_parser = CursorParser::new();
 
     let mut all_sessions = Vec::new();
     let mut parse_errors = Vec::new();
 
-    // Parse all files
+    // Parse all files/directories
     for path in &paths {
-        match parser.parse_file(path) {
-            Ok(session) => all_sessions.push(session),
-            Err(e) => parse_errors.push(format!("{}: {}", path, e)),
+        let path_buf = PathBuf::from(path);
+
+        if path_buf.is_dir() {
+            // Cursor workspace (directory)
+            match cursor_parser.parse_workspace(&path_buf) {
+                Ok(sessions) => {
+                    if sessions.is_empty() {
+                        parse_errors.push(format!("{}: 工作区中未找到对话", path));
+                    } else {
+                        all_sessions.extend(sessions);
+                    }
+                }
+                Err(e) => parse_errors.push(format!("{}: {}", path, e)),
+            }
+        } else {
+            // Claude Code log file
+            match claude_parser.parse_file(path) {
+                Ok(session) => all_sessions.push(session),
+                Err(e) => parse_errors.push(format!("{}: {}", path, e)),
+            }
         }
     }
 

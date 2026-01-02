@@ -45,10 +45,9 @@ const SOURCES: SourceConfig[] = [
   {
     id: "cursor",
     name: "Cursor",
-    defaultPath: "~/.cursor/projects",
+    defaultPath: "~/.config/Cursor (按工作区)",
     icon: Terminal,
-    disabled: true,
-    badge: "即将推出",
+    disabled: false,
   },
 ];
 

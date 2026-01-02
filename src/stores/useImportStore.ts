@@ -57,8 +57,12 @@ export interface ImportState {
   setDiscoveredFiles: (files: DiscoveredFile[]) => void;
   /** 切换单个文件选择 */
   toggleFile: (path: string) => void;
-  /** 切换全选 */
-  toggleAll: () => void;
+  /** 全选所有文件 */
+  selectAll: () => void;
+  /** 清空所有选择 */
+  clearAll: () => void;
+  /** 反选 */
+  invertSelection: () => void;
   /** 切换项目下所有文件的选择 */
   toggleProject: (projectPath: string) => void;
   /** 切换项目展开状态 */
@@ -140,12 +144,26 @@ export const useImportStore = create<ImportState>((set) => ({
       return { selectedFiles: newSelected };
     }),
 
-  toggleAll: () =>
+  selectAll: () =>
+    set((state) => ({
+      selectedFiles: new Set(state.discoveredFiles.map((f) => f.path)),
+    })),
+
+  clearAll: () =>
+    set({
+      selectedFiles: new Set(),
+    }),
+
+  invertSelection: () =>
     set((state) => {
-      if (state.selectedFiles.size === state.discoveredFiles.length) {
-        return { selectedFiles: new Set() };
+      const allPaths = state.discoveredFiles.map((f) => f.path);
+      const newSelected = new Set<string>();
+      for (const path of allPaths) {
+        if (!state.selectedFiles.has(path)) {
+          newSelected.add(path);
+        }
       }
-      return { selectedFiles: new Set(state.discoveredFiles.map((f) => f.path)) };
+      return { selectedFiles: newSelected };
     }),
 
   toggleProject: (projectPath) =>

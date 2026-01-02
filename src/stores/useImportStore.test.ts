@@ -161,38 +161,60 @@ describe("useImportStore", () => {
     });
   });
 
-  // Task 7.3: Actions - toggleAll
-  describe("toggleAll", () => {
+  // Task 7.3: Actions - selectAll, clearAll, invertSelection
+  describe("selectAll", () => {
     beforeEach(() => {
       act(() => {
         useImportStore.getState().setDiscoveredFiles(mockFiles);
       });
     });
 
-    it("deselects all when all are selected", () => {
+    it("selects all files", () => {
       act(() => {
-        useImportStore.getState().toggleAll();
+        useImportStore.getState().clearAll(); // clear first
+        useImportStore.getState().selectAll();
+      });
+
+      expect(useImportStore.getState().selectedFiles.size).toBe(mockFiles.length);
+    });
+  });
+
+  describe("clearAll", () => {
+    beforeEach(() => {
+      act(() => {
+        useImportStore.getState().setDiscoveredFiles(mockFiles);
+      });
+    });
+
+    it("clears all selections", () => {
+      act(() => {
+        useImportStore.getState().clearAll();
       });
 
       expect(useImportStore.getState().selectedFiles.size).toBe(0);
     });
+  });
 
-    it("selects all when some are deselected", () => {
+  describe("invertSelection", () => {
+    beforeEach(() => {
       act(() => {
-        useImportStore.getState().toggleFile(mockFiles[0].path); // deselect one
-        useImportStore.getState().toggleAll(); // select all
+        useImportStore.getState().setDiscoveredFiles(mockFiles);
       });
-
-      expect(useImportStore.getState().selectedFiles.size).toBe(mockFiles.length);
     });
 
-    it("selects all when none are selected", () => {
+    it("inverts selection - selected becomes unselected and vice versa", () => {
       act(() => {
-        useImportStore.getState().toggleAll(); // deselect all
-        useImportStore.getState().toggleAll(); // select all
+        // Start with all selected, deselect first one
+        useImportStore.getState().toggleFile(mockFiles[0].path);
+        // Now only file 1 and 2 are selected
+        useImportStore.getState().invertSelection();
       });
 
-      expect(useImportStore.getState().selectedFiles.size).toBe(mockFiles.length);
+      // After invert: only file 0 should be selected
+      const selected = useImportStore.getState().selectedFiles;
+      expect(selected.size).toBe(1);
+      expect(selected.has(mockFiles[0].path)).toBe(true);
+      expect(selected.has(mockFiles[1].path)).toBe(false);
     });
   });
 

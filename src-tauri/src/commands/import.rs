@@ -3,13 +3,14 @@
 //! Provides IPC commands for scanning log directories and importing log files.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::parsers::{ClaudeParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, LogParser};
+use crate::parsers::cursor::CursorPaths;
 
 /// Import source type
 #[derive(Debug, Clone, Deserialize)]
@@ -68,7 +69,28 @@ fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
             .join(".gemini")
             .join("project_temp")
             .join("chats"),
-        ImportSource::Cursor => home.join(".cursor").join("projects"),
+        // Cursor 使用不同的存储结构，这里返回 workspaceStorage 目录
+        // 实际扫描逻辑在 scan_cursor_workspaces 中处理
+        ImportSource::Cursor => {
+            #[cfg(target_os = "linux")]
+            {
+                home.join(".config").join("Cursor").join("User").join("workspaceStorage")
+            }
+            #[cfg(target_os = "macos")]
+            {
+                home.join("Library").join("Application Support").join("Cursor").join("User").join("workspaceStorage")
+            }
+            #[cfg(target_os = "windows")]
+            {
+                dirs::data_dir()
+                    .unwrap_or(home.clone())
+                    .join("Cursor").join("User").join("workspaceStorage")
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+            {
+                return Err(AppError::internal("不支持的操作系统"));
+            }
+        }
     };
 
     Ok(path)
@@ -137,6 +159,11 @@ fn path_to_discovered_file(path: &PathBuf) -> Option<DiscoveredFile> {
 /// * `Err(AppError)` - IO or internal error
 #[tauri::command]
 pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFile>, AppError> {
+    // Cursor 使用特殊的扫描逻辑（工作区模式）
+    if matches!(source, ImportSource::Cursor) {
+        return scan_cursor_workspaces().await;
+    }
+
     let dir = get_default_log_dir(&source)?;
 
     // Use spawn_blocking for filesystem operations
@@ -156,17 +183,81 @@ pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFi
     Ok(result)
 }
 
+/// Scan Cursor workspaces and return them as discoverable items
+///
+/// Each workspace is represented as a DiscoveredFile with:
+/// - path: The project path (used for import)
+/// - name: The project folder name
+/// - project_path: Same as path
+async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
+    let result = tokio::task::spawn_blocking(|| {
+        // Try to detect Cursor paths
+        let paths = match CursorPaths::detect() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        // Scan workspaces
+        let workspaces = match paths.scan_workspaces() {
+            Ok(ws) => ws,
+            Err(_) => return Vec::new(),
+        };
+
+        // Convert workspaces to DiscoveredFile format
+        workspaces
+            .into_iter()
+            .filter_map(|ws| {
+                let folder_path = ws.folder_path.to_string_lossy().to_string();
+                let name = ws.folder_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+
+                // Get modified time from state.vscdb if it exists
+                let modified_at = fs::metadata(&ws.state_db_path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                // Get size of state.vscdb as a rough indicator
+                let size = fs::metadata(&ws.state_db_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+
+                Some(DiscoveredFile {
+                    path: folder_path.clone(),
+                    name: format!("{} (Cursor 工作区)", name),
+                    size,
+                    modified_at,
+                    project_path: folder_path,
+                })
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
+
+    Ok(result)
+}
+
 /// Scan a custom directory for session files
 ///
+/// This function supports multiple strategies:
+/// 1. For Claude/Gemini: Scan for .jsonl files
+/// 2. For Cursor: Scan workspaceStorage directory for workspaces
+///
 /// # Arguments
-/// * `path` - Directory path to scan
+/// * `path` - Directory path to scan (e.g., ~/.config/Cursor/User/workspaceStorage)
 ///
 /// # Returns
 /// * `Ok(Vec<DiscoveredFile>)` - List of discovered files
 /// * `Err(AppError)` - IO or internal error
 #[tauri::command]
 pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, AppError> {
-    let dir = PathBuf::from(path);
+    let dir = PathBuf::from(path.clone());
 
     // Use spawn_blocking for filesystem operations
     let result = tokio::task::spawn_blocking(move || {
@@ -174,15 +265,99 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
             return Vec::new();
         }
 
-        find_session_files(&dir)
+        // Strategy 1: Try to find .jsonl files (Claude/Gemini)
+        let jsonl_files: Vec<_> = find_session_files(&dir)
             .iter()
             .filter_map(path_to_discovered_file)
-            .collect::<Vec<_>>()
+            .collect();
+
+        if !jsonl_files.is_empty() {
+            return jsonl_files;
+        }
+
+        // Strategy 2: Try to scan as Cursor workspaceStorage directory
+        // User may select:
+        // - workspaceStorage directory directly
+        // - User directory (containing workspaceStorage)
+        // - Cursor directory (containing User/workspaceStorage)
+        let workspace_storage_path = find_workspace_storage_path(&dir);
+
+        if let Some(ws_path) = workspace_storage_path {
+            // Create a temporary CursorPaths with custom workspace_storage
+            if let Ok(cursor_paths) = CursorPaths::detect() {
+                // Use the custom workspace_storage path for scanning
+                let custom_paths = CursorPaths {
+                    global_storage: cursor_paths.global_storage,
+                    workspace_storage: ws_path,
+                };
+
+                if let Ok(workspaces) = custom_paths.scan_workspaces() {
+                    return workspaces
+                        .into_iter()
+                        .filter_map(|ws| {
+                            let folder_path = ws.folder_path.to_string_lossy().to_string();
+                            let name = ws.folder_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("Unknown")
+                                .to_string();
+
+                            let modified_at = fs::metadata(&ws.state_db_path)
+                                .ok()
+                                .and_then(|m| m.modified().ok())
+                                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+
+                            let size = fs::metadata(&ws.state_db_path)
+                                .map(|m| m.len())
+                                .unwrap_or(0);
+
+                            Some(DiscoveredFile {
+                                path: folder_path.clone(),
+                                name: format!("{} (Cursor 工作区)", name),
+                                size,
+                                modified_at,
+                                project_path: folder_path,
+                            })
+                        })
+                        .collect();
+                }
+            }
+        }
+
+        Vec::new()
     })
     .await
     .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
 
     Ok(result)
+}
+
+/// Find workspaceStorage path from user-selected directory
+/// Handles cases where user selects:
+/// - workspaceStorage directly
+/// - User directory (parent of workspaceStorage)
+/// - Cursor directory (grandparent)
+fn find_workspace_storage_path(dir: &Path) -> Option<PathBuf> {
+    // Case 1: dir is workspaceStorage itself
+    if dir.file_name().map_or(false, |n| n == "workspaceStorage") {
+        return Some(dir.to_path_buf());
+    }
+
+    // Case 2: dir contains workspaceStorage (e.g., User directory)
+    let ws_child = dir.join("workspaceStorage");
+    if ws_child.exists() && ws_child.is_dir() {
+        return Some(ws_child);
+    }
+
+    // Case 3: dir contains User/workspaceStorage (e.g., Cursor directory)
+    let ws_grandchild = dir.join("User").join("workspaceStorage");
+    if ws_grandchild.exists() && ws_grandchild.is_dir() {
+        return Some(ws_grandchild);
+    }
+
+    None
 }
 
 /// Parse multiple log files
@@ -196,27 +371,72 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
 #[tauri::command]
 pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>, AppError> {
     let results = tokio::task::spawn_blocking(move || {
-        let parser = ClaudeParser::new();
+        let claude_parser = ClaudeParser::new();
+        let cursor_parser = CursorParser::new();
         let mut results = Vec::with_capacity(paths.len());
 
         for path in paths {
-            let result = match parser.parse_file(&path) {
-                Ok(session) => FileImportResult {
-                    success: true,
-                    file_path: path,
-                    project_id: Some(generate_project_id(&session.cwd)),
-                    session_id: Some(session.id.clone()),
-                    error: None,
-                },
-                Err(e) => FileImportResult {
-                    success: false,
-                    file_path: path,
-                    project_id: None,
-                    session_id: None,
-                    error: Some(e.to_string()),
-                },
-            };
-            results.push(result);
+            let path_buf = PathBuf::from(&path);
+
+            // 检测是 Cursor 工作区（目录）还是 Claude 日志文件
+            if path_buf.is_dir() {
+                // Cursor 工作区：使用 CursorParser 解析整个工作区
+                match cursor_parser.parse_workspace(&path_buf) {
+                    Ok(sessions) => {
+                        // 每个工作区可能有多个会话，返回第一个作为主结果
+                        if sessions.is_empty() {
+                            results.push(FileImportResult {
+                                success: false,
+                                file_path: path,
+                                project_id: None,
+                                session_id: None,
+                                error: Some("工作区中未找到对话".to_string()),
+                            });
+                        } else {
+                            // 返回会话数量作为成功指示
+                            let first_session = &sessions[0];
+                            results.push(FileImportResult {
+                                success: true,
+                                file_path: path.clone(),
+                                project_id: Some(generate_project_id(&first_session.cwd)),
+                                session_id: Some(format!("{} 个会话", sessions.len())),
+                                error: None,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        results.push(FileImportResult {
+                            success: false,
+                            file_path: path,
+                            project_id: None,
+                            session_id: None,
+                            error: Some(e.to_string()),
+                        });
+                    }
+                }
+            } else {
+                // Claude/其他文件：使用 ClaudeParser
+                match claude_parser.parse_file(&path) {
+                    Ok(session) => {
+                        results.push(FileImportResult {
+                            success: true,
+                            file_path: path,
+                            project_id: Some(generate_project_id(&session.cwd)),
+                            session_id: Some(session.id.clone()),
+                            error: None,
+                        });
+                    }
+                    Err(e) => {
+                        results.push(FileImportResult {
+                            success: false,
+                            file_path: path,
+                            project_id: None,
+                            session_id: None,
+                            error: Some(e.to_string()),
+                        });
+                    }
+                }
+            }
         }
 
         results
@@ -265,5 +485,21 @@ mod tests {
     fn test_path_to_discovered_file() {
         // This test requires a real file, skip in unit tests
         // Integration tests should cover this
+    }
+
+    #[test]
+    fn test_find_workspace_storage_path_direct() {
+        // Case 1: workspaceStorage directory directly
+        let dir = PathBuf::from("/some/path/workspaceStorage");
+        let result = find_workspace_storage_path(&dir);
+        assert_eq!(result, Some(PathBuf::from("/some/path/workspaceStorage")));
+    }
+
+    #[test]
+    fn test_find_workspace_storage_path_not_found() {
+        // Case where no workspaceStorage exists
+        let dir = PathBuf::from("/tmp/nonexistent");
+        let result = find_workspace_storage_path(&dir);
+        assert_eq!(result, None);
     }
 }

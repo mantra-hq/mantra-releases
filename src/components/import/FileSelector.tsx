@@ -47,8 +47,12 @@ export interface FileSelectorProps {
   onSelectFiles: () => void;
   /** 切换单个文件选择 */
   onToggleFile: (path: string) => void;
-  /** 切换全选 */
-  onToggleAll: () => void;
+  /** 全选 */
+  onSelectAll: () => void;
+  /** 清空选择 */
+  onClearAll: () => void;
+  /** 反选 */
+  onInvertSelection: () => void;
   /** 切换项目选择 */
   onToggleProject: (projectPath: string) => void;
   /** 切换项目展开 */
@@ -71,7 +75,9 @@ export function FileSelector({
   onScan,
   onSelectFiles,
   onToggleFile,
-  onToggleAll,
+  onSelectAll,
+  onClearAll,
+  onInvertSelection,
   onToggleProject,
   onToggleProjectExpand,
   onSearchChange,
@@ -157,8 +163,9 @@ export function FileSelector({
             totalProjects={totalProjects}
             totalSessions={totalSessions}
             selectedCount={selectedFiles.size}
-            onSelectAll={() => onToggleAll()}
-            onClearAll={() => onToggleAll()}
+            onSelectAll={onSelectAll}
+            onClearAll={onClearAll}
+            onInvertSelection={onInvertSelection}
           />
 
           {/* 项目分组列表 */}

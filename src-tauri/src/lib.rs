@@ -18,7 +18,8 @@ use commands::{
     detect_git_repo, find_commit_at_time, get_commit_info, get_file_at_head, get_file_snapshot,
     get_project, get_project_by_cwd, get_project_sessions, get_representative_file,
     get_session, get_snapshot_at_time, import_parsed_sessions,
-    import_sessions, list_projects, parse_claude_log, parse_claude_log_string, parse_log_files,
+    import_sessions, list_projects, parse_claude_log, parse_claude_log_string,
+    parse_cursor_log, parse_cursor_all, parse_log_files,
     sanitize_session, sanitize_text, validate_regex, scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
 };
@@ -62,6 +63,8 @@ pub fn run() {
             greet,
             parse_claude_log,
             parse_claude_log_string,
+            parse_cursor_log,
+            parse_cursor_all,
             get_file_snapshot,
             get_file_at_head,
             get_snapshot_at_time,

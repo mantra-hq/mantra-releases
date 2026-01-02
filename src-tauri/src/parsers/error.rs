@@ -31,6 +31,14 @@ pub enum ParseError {
     /// Empty or no conversations found
     #[error("未找到任何对话记录")]
     EmptyConversation,
+
+    /// SQLite database error
+    #[error("数据库错误: {0}")]
+    DatabaseError(String),
+
+    /// Workspace not found
+    #[error("工作区未找到: {0}")]
+    WorkspaceNotFound(String),
 }
 
 impl ParseError {
@@ -42,6 +50,16 @@ impl ParseError {
     /// Create an InvalidFormat error
     pub fn invalid_format(msg: impl Into<String>) -> Self {
         Self::InvalidFormat(msg.into())
+    }
+
+    /// Create a DatabaseError
+    pub fn database_error(msg: impl Into<String>) -> Self {
+        Self::DatabaseError(msg.into())
+    }
+
+    /// Create a WorkspaceNotFound error
+    pub fn workspace_not_found(path: impl Into<String>) -> Self {
+        Self::WorkspaceNotFound(path.into())
     }
 }
 
@@ -59,6 +77,12 @@ mod tests {
 
         let err = ParseError::EmptyConversation;
         assert_eq!(err.to_string(), "未找到任何对话记录");
+
+        let err = ParseError::database_error("connection failed");
+        assert_eq!(err.to_string(), "数据库错误: connection failed");
+
+        let err = ParseError::workspace_not_found("/path/to/project");
+        assert_eq!(err.to_string(), "工作区未找到: /path/to/project");
     }
 
     #[test]

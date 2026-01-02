@@ -4,9 +4,11 @@
 //! AI coding assistants (Claude, Gemini, Cursor) into MantraSession format.
 
 mod claude;
+pub mod cursor;
 mod error;
 
 pub use claude::ClaudeParser;
+pub use cursor::CursorParser;
 pub use error::ParseError;
 
 use crate::models::MantraSession;

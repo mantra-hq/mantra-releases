@@ -146,7 +146,9 @@ export function ImportWizard({
     setSource,
     setDiscoveredFiles,
     toggleFile,
-    toggleAll,
+    selectAll,
+    clearAll,
+    invertSelection,
     toggleProject,
     toggleProjectExpand,
     setSearchQuery,
@@ -327,7 +329,9 @@ export function ImportWizard({
             onScan={handleScan}
             onSelectFiles={handleSelectFiles}
             onToggleFile={toggleFile}
-            onToggleAll={toggleAll}
+            onSelectAll={selectAll}
+            onClearAll={clearAll}
+            onInvertSelection={invertSelection}
             onToggleProject={toggleProject}
             onToggleProjectExpand={toggleProjectExpand}
             onSearchChange={setSearchQuery}
