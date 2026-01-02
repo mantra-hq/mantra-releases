@@ -1,9 +1,9 @@
 /**
  * ToolCallCard - 工具调用卡片组件
- * Story 2.15: Task 3
+ * Story 2.15: Task 3, Task 7
  *
  * 单行紧凑布局显示工具调用，支持原位展开和查看详情
- * AC: #1, #2, #3, #4
+ * AC: #1, #2, #3, #4, #11, #12, #13
  */
 
 import * as React from "react";
@@ -23,6 +23,8 @@ import {
     ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCollapsible } from "@/hooks/useCollapsible";
+import { FloatingCollapseBar } from "@/components/common/FloatingCollapseBar";
 
 /** 工具调用状态 */
 export type ToolCallStatus = "pending" | "success" | "error";
@@ -270,8 +272,18 @@ export function ToolCallCard({
     onJumpToOutput,
     className,
 }: ToolCallCardProps) {
-    const [isExpanded, setIsExpanded] = React.useState(false);
     const { icon: Icon, summary } = getToolSummary(toolName, toolInput);
+
+    // AC #11, #12, #13: 使用 useCollapsible 管理折叠状态和浮动栏
+    const {
+        isExpanded,
+        toggle,
+        collapse,
+        showFloatingBar,
+        collapseButtonRef,
+        contentRef,
+        scrollToTop,
+    } = useCollapsible();
 
     const handleMouseEnter = React.useCallback(() => {
         onHover?.(toolUseId);
@@ -367,22 +379,25 @@ export function ToolCallCard({
 
                 {/* 展开/折叠按钮 */}
                 {hasInput && (
-                    <Collapsible.Root open={isExpanded} onOpenChange={setIsExpanded}>
-                        <Collapsible.Trigger
-                            className={cn(
-                                "p-1 rounded cursor-pointer hover:bg-muted",
-                                "text-muted-foreground hover:text-foreground",
-                                "transition-colors"
-                            )}
-                            title={isExpanded ? "收起" : "展开原始内容"}
-                        >
-                            {isExpanded ? (
-                                <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                                <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                        </Collapsible.Trigger>
-                    </Collapsible.Root>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggle();
+                        }}
+                        className={cn(
+                            "p-1 rounded cursor-pointer hover:bg-muted",
+                            "text-muted-foreground hover:text-foreground",
+                            "transition-colors"
+                        )}
+                        title={isExpanded ? "收起" : "展开原始内容"}
+                    >
+                        {isExpanded ? (
+                            <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                    </button>
                 )}
 
                 {/* 跳转到输出 */}
@@ -419,7 +434,7 @@ export function ToolCallCard({
 
             {/* 展开的原始内容 */}
             {hasInput && (
-                <Collapsible.Root open={isExpanded} onOpenChange={setIsExpanded}>
+                <Collapsible.Root open={isExpanded} onOpenChange={toggle}>
                     <Collapsible.Content
                         className={cn(
                             "overflow-hidden",
@@ -427,14 +442,43 @@ export function ToolCallCard({
                             "data-[state=closed]:animate-collapsible-up"
                         )}
                     >
-                        <div className="border-t border-border bg-background px-3 py-2">
+                        <div
+                            ref={contentRef}
+                            className="border-t border-border bg-background px-3 py-2"
+                        >
                             <pre className="font-mono text-xs whitespace-pre-wrap break-all text-muted-foreground max-h-60 overflow-auto">
                                 {JSON.stringify(toolInput, null, 2)}
                             </pre>
+
+                            {/* AC #11: 底部收起按钮 */}
+                            <button
+                                ref={collapseButtonRef}
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    collapse();
+                                }}
+                                className={cn(
+                                    "mt-2 w-full flex items-center justify-center gap-1",
+                                    "py-1.5 rounded text-xs",
+                                    "text-muted-foreground hover:text-foreground",
+                                    "hover:bg-muted/50 transition-colors"
+                                )}
+                            >
+                                <ChevronUp className="h-3 w-3" />
+                                收起
+                            </button>
                         </div>
                     </Collapsible.Content>
                 </Collapsible.Root>
             )}
+
+            {/* AC #12: 浮动操作栏 */}
+            <FloatingCollapseBar
+                visible={showFloatingBar && isExpanded}
+                onCollapse={collapse}
+                onScrollToTop={scrollToTop}
+            />
         </div>
     );
 }

@@ -5,6 +5,18 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+
+// Mock IntersectionObserver (used by useCollapsible)
+vi.stubGlobal("IntersectionObserver", class MockIntersectionObserver {
+    callback: IntersectionObserverCallback;
+    constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+    }
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+});
+
 import { ToolCallCard } from "./ToolCallCard";
 
 describe("ToolCallCard", () => {

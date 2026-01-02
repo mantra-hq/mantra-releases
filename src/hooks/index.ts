@@ -19,3 +19,18 @@ export {
 export { useProjects, type UseProjectsResult } from "./useProjects";
 export { useDebouncedValue } from "./useDebouncedValue";
 export { useGlobalShortcut } from "./useGlobalShortcut";
+
+// Story 2.15: 工具配对和可折叠 hooks
+export {
+    useToolPairing,
+    type ToolCallMessage,
+    type ToolOutputMessage,
+    type ToolPair,
+    type ToolPairMap,
+    type UseToolPairingResult,
+} from "./useToolPairing";
+export {
+    useCollapsible,
+    type UseCollapsibleOptions,
+    type UseCollapsibleResult,
+} from "./useCollapsible";
