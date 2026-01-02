@@ -43,6 +43,8 @@ export interface ToolCallCardProps {
     isHighlighted?: boolean;
     /** 悬停时回调 */
     onHover?: (toolUseId: string | null) => void;
+    /** 点击卡片回调 (非按钮区域) */
+    onClick?: (toolUseId: string) => void;
     /** 点击查看详情回调 */
     onViewDetail?: (toolUseId: string) => void;
     /** 跳转到配对输出回调 */
@@ -263,6 +265,7 @@ export function ToolCallCard({
     duration,
     isHighlighted = false,
     onHover,
+    onClick,
     onViewDetail,
     onJumpToOutput,
     className,
@@ -277,6 +280,10 @@ export function ToolCallCard({
     const handleMouseLeave = React.useCallback(() => {
         onHover?.(null);
     }, [onHover]);
+
+    const handleClick = React.useCallback(() => {
+        onClick?.(toolUseId);
+    }, [onClick, toolUseId]);
 
     const handleViewDetail = React.useCallback(
         (e: React.MouseEvent) => {
@@ -294,6 +301,7 @@ export function ToolCallCard({
         [onJumpToOutput, toolUseId]
     );
 
+    const hasClickHandler = Boolean(onClick);
     const hasDetailHandler = Boolean(onViewDetail);
     const hasJumpHandler = Boolean(onJumpToOutput);
     const hasInput = toolInput && Object.keys(toolInput).length > 0;
@@ -310,10 +318,13 @@ export function ToolCallCard({
                     : "border-border bg-muted/30",
                 // 高亮状态
                 isHighlighted && "ring-2 ring-primary/50",
+                // 可点击样式
+                hasClickHandler && "cursor-pointer hover:bg-muted/50",
                 className
             )}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onClick={hasClickHandler ? handleClick : undefined}
         >
             {/* 单行紧凑布局 */}
             <div className="flex items-center gap-2 px-3 py-2">

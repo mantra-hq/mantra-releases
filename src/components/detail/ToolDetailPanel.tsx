@@ -115,16 +115,16 @@ export function ToolDetailPanel({
             </div>
 
             {/* 内容区 */}
-            <div className="flex-1 overflow-auto">
-                {/* Call 参数 */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Call 参数 - 固定高度 */}
                 {hasInput && (
-                    <div className="border-b border-border">
+                    <div className="border-b border-border shrink-0">
                         <div className="px-4 py-2 bg-muted/30">
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 输入参数
                             </span>
                         </div>
-                        <div className="px-4 py-3">
+                        <div className="px-4 py-3 max-h-40 overflow-auto">
                             <pre className="font-mono text-xs whitespace-pre-wrap break-all text-foreground">
                                 {JSON.stringify(toolInput, null, 2)}
                             </pre>
@@ -132,15 +132,15 @@ export function ToolDetailPanel({
                     </div>
                 )}
 
-                {/* Output 结果 */}
+                {/* Output 结果 - 填满剩余空间，内部滚动 */}
                 {hasOutput && (
-                    <div>
-                        <div className="px-4 py-2 bg-muted/30">
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="px-4 py-2 bg-muted/30 shrink-0">
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                 输出结果
                             </span>
                         </div>
-                        <div className="p-2">
+                        <div className="flex-1 min-h-0 overflow-auto p-2">
                             {renderOutput ? (
                                 renderOutput(toolOutput!, toolName)
                             ) : (

@@ -112,7 +112,7 @@ export function SearchResultRenderer({
                 共 {results.length} 个{results[0]?.line === 0 ? "文件" : "结果"}
             </div>
 
-            <div className="max-h-80 overflow-auto space-y-1">
+            <div className="space-y-1">
                 {results.map((result, idx) => (
                     <button
                         key={`${result.file}-${result.line}-${idx}`}

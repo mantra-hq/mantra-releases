@@ -37,45 +37,9 @@ const TERMINAL_TOOLS = [
   "send_command_input",
 ];
 
-/** 文件类工具列表 */
-const FILE_TOOLS = [
-  "read_file",
-  "Read",
-  "view_file",
-  "write_to_file",
-  "Write",
-  "Edit",
-  "replace_file_content",
-  "multi_replace_file_content",
-];
-
-/** 搜索类工具列表 */
-const SEARCH_TOOLS = [
-  "grep_search",
-  "Grep",
-  "find_by_name",
-  "codebase_search",
-  "Glob",
-  "glob",
-];
-
 /** 检查是否为终端类工具 */
 function isTerminalTool(toolName: string): boolean {
   return TERMINAL_TOOLS.some(t =>
-    toolName.toLowerCase().includes(t.toLowerCase())
-  );
-}
-
-/** 检查是否为文件类工具 */
-function isFileTool(toolName: string): boolean {
-  return FILE_TOOLS.some(t =>
-    toolName.toLowerCase().includes(t.toLowerCase())
-  );
-}
-
-/** 检查是否为搜索类工具 */
-function isSearchTool(toolName: string): boolean {
-  return SEARCH_TOOLS.some(t =>
     toolName.toLowerCase().includes(t.toLowerCase())
   );
 }
@@ -174,44 +138,23 @@ export function ContentBlockRenderer({
             onJumpToOutput={pairingContext ? () => {
               pairingContext.scrollTo(block.toolUseId!, "output");
             } : undefined}
-            onViewDetail={(toolUseId) => {
-              // 根据工具类型决定打开哪个面板
-              if (isTerminalTool(toolName)) {
-                // 终端类工具 - 打开终端 tab
-                // Story 2.15: 从配对信息获取实际输出
-                openTerminalDetail({
-                  command: block.toolInput?.command as string | undefined,
-                  output: pairInfo?.outputContent ?? "",
-                  isError: isError,
-                });
-              } else if (isFileTool(toolName)) {
-                // 文件类工具 - 切换到代码 tab
-                openToolDetail({
-                  toolUseId,
-                  toolName,
-                  toolInput: block.toolInput,
-                  toolOutput: pairInfo?.outputContent,
-                  isError: isError,
-                });
-              } else if (isSearchTool(toolName)) {
-                // 搜索类工具 - 打开工具详情 (使用 SearchResultRenderer)
-                openToolDetail({
-                  toolUseId,
-                  toolName,
-                  toolInput: block.toolInput,
-                  toolOutput: pairInfo?.outputContent,
-                  isError: isError,
-                });
-              } else {
-                // 其他工具 - 通用详情
-                openToolDetail({
-                  toolUseId,
-                  toolName,
-                  toolInput: block.toolInput,
-                  toolOutput: pairInfo?.outputContent,
-                  isError: isError,
-                });
-              }
+            onClick={isTerminalTool(toolName) ? () => {
+              // 终端类工具 - 点击卡片打开终端 Tab
+              openTerminalDetail({
+                command: block.toolInput?.command as string | undefined,
+                output: pairInfo?.outputContent ?? "",
+                isError: isError,
+              });
+            } : undefined}
+            onViewDetail={() => {
+              // 所有工具 - 点击详情按钮打开工具详情 Tab
+              openToolDetail({
+                toolUseId: block.toolUseId!,
+                toolName,
+                toolInput: block.toolInput,
+                toolOutput: pairInfo?.outputContent,
+                isError: isError,
+              });
             }}
             className={className}
           />
