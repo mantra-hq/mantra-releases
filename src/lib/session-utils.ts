@@ -116,6 +116,8 @@ function convertContentBlock(
                 type: "tool_result",
                 content: block.content,
                 isError: block.is_error ?? false,
+                // Story 2.15 修复: 保留 toolUseId 用于配对功能
+                toolUseId: block.tool_use_id,
                 associatedFilePath: toolUseInfo?.filePath,
                 associatedToolName: toolUseInfo?.toolName,
             };

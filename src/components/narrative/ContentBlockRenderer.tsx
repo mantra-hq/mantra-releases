@@ -13,10 +13,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChainOfThought } from "./ChainOfThought";
 import { ToolCall } from "./ToolCall";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallCard, type ToolCallStatus } from "./ToolCallCard";
 import { TodoWriteCard } from "./TodoWriteCard";
 import { ToolOutput } from "./ToolOutput";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
+import { useToolPairingContext } from "@/contexts/ToolPairingContext";
 
 export interface ContentBlockRendererProps {
   /** 内容块数据 */
@@ -84,6 +85,9 @@ export function ContentBlockRenderer({
   const setHighlightedToolId = useDetailPanelStore((state) => state.setHighlightedToolId);
   const highlightedToolId = useDetailPanelStore((state) => state.highlightedToolId);
 
+  // Story 2.15: 获取配对信息
+  const pairingContext = useToolPairingContext();
+
   switch (block.type) {
     case "text":
       return (
@@ -134,30 +138,43 @@ export function ContentBlockRenderer({
       if (useNewToolCard && block.toolUseId) {
         const toolName = block.toolName || "Unknown Tool";
 
+        // Story 2.15: 从配对信息获取状态
+        const pairInfo = pairingContext?.pairs.get(block.toolUseId);
+        const hasOutput = Boolean(pairInfo?.outputContent);
+        const isError = pairInfo?.isError ?? false;
+        const status: ToolCallStatus = hasOutput
+          ? (isError ? "error" : "success")
+          : "pending";
+
         return (
           <ToolCallCard
             toolUseId={block.toolUseId}
             toolName={toolName}
             toolInput={block.toolInput}
+            status={status}
             isHighlighted={highlightedToolId === block.toolUseId}
             onHover={setHighlightedToolId}
+            onJumpToOutput={pairingContext ? () => {
+              pairingContext.scrollTo(block.toolUseId!, "output");
+            } : undefined}
             onViewDetail={(toolUseId) => {
               // 根据工具类型决定打开哪个面板
               if (isTerminalTool(toolName)) {
                 // 终端类工具 - 打开终端 tab
-                // 注意: 这里暂时传入空输出，实际输出需要从 tool_result 获取
+                // Story 2.15: 从配对信息获取实际输出
                 openTerminalDetail({
                   command: block.toolInput?.command as string | undefined,
-                  output: "", // 将由配对的 tool_result 填充
-                  isError: false,
+                  output: pairInfo?.outputContent ?? "",
+                  isError: isError,
                 });
               } else if (isFileTool(toolName)) {
                 // 文件类工具 - 切换到代码 tab
-                // TODO: 触发 TimeTravelStore 显示对应文件
                 openToolDetail({
                   toolUseId,
                   toolName,
                   toolInput: block.toolInput,
+                  toolOutput: pairInfo?.outputContent,
+                  isError: isError,
                 });
               } else {
                 // 其他工具 - 通用详情
@@ -165,6 +182,8 @@ export function ContentBlockRenderer({
                   toolUseId,
                   toolName,
                   toolInput: block.toolInput,
+                  toolOutput: pairInfo?.outputContent,
+                  isError: isError,
                 });
               }
             }}
@@ -188,6 +207,9 @@ export function ContentBlockRenderer({
           isError={block.isError}
           filePath={block.associatedFilePath}
           toolName={block.associatedToolName}
+          toolUseId={block.toolUseId}
+          isHighlighted={highlightedToolId === block.toolUseId}
+          onHover={setHighlightedToolId}
           className={className}
         />
       );

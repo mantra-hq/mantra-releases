@@ -34,7 +34,7 @@ export interface ContentBlock {
   toolName?: string;
   /** 工具输入参数 (tool_use 专用) */
   toolInput?: Record<string, unknown>;
-  /** 工具调用 ID (tool_use 专用) */
+  /** 工具调用 ID (tool_use / tool_result 共用，用于配对) */
   toolUseId?: string;
   /** 是否为错误结果 (tool_result 专用) */
   isError?: boolean;

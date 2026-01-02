@@ -45,6 +45,12 @@ export interface ToolOutputProps {
   filePath?: string;
   /** 关联的工具名称 (用于推断语言类型) */
   toolName?: string;
+  /** 工具调用 ID (用于配对高亮和跳转) */
+  toolUseId?: string;
+  /** 是否高亮 (配对悬停时) */
+  isHighlighted?: boolean;
+  /** 悬停回调 */
+  onHover?: (toolUseId: string | null) => void;
   /** 自定义 className */
   className?: string;
 }
@@ -76,12 +82,24 @@ export function ToolOutput({
   defaultOpen = false,
   filePath,
   toolName,
+  toolUseId,
+  isHighlighted = false,
+  onHover,
   className,
 }: ToolOutputProps) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   // 从 store 获取 setCode 方法
   const setCode = useTimeTravelStore((state) => state.setCode);
+
+  // 悬停处理
+  const handleMouseEnter = React.useCallback(() => {
+    if (toolUseId) onHover?.(toolUseId);
+  }, [onHover, toolUseId]);
+
+  const handleMouseLeave = React.useCallback(() => {
+    onHover?.(null);
+  }, [onHover]);
 
   // 截断长内容的预览
   const previewLength = 100;
@@ -135,6 +153,7 @@ export function ToolOutput({
     <Collapsible.Root
       open={isOpen}
       onOpenChange={setIsOpen}
+      data-tool-output-id={toolUseId}
       className={cn(
         // 容器样式
         "rounded-lg my-2 overflow-hidden",
@@ -142,9 +161,13 @@ export function ToolOutput({
         isError
           ? "border-l-[3px] border-l-destructive bg-destructive/5"
           : "border-l-[3px] border-l-success bg-success/5",
+        // 高亮状态 (配对悬停)
+        isHighlighted && "ring-2 ring-primary/50",
         className
       )}
       aria-label={isError ? "工具执行失败" : "工具执行成功"}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* 头部区域：使用 flex 容器包裹 Trigger 和独立按钮 */}
       <div className="flex items-center">

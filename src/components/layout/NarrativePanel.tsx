@@ -2,6 +2,7 @@
  * NarrativePanel - 对话流面板
  * Story 2.2: Task 4.1 (基础)
  * Story 2.3: Task 5 (集成 NarrativeStream)
+ * Story 2.15: 集成 ToolPairingProvider (配对功能)
  * Story 2.16: Task 9 (集成消息过滤)
  *
  * 左侧面板，显示 AI 对话的意图和消息流
@@ -22,6 +23,7 @@ import {
   MessageFilterBar,
   EmptyFilterResult,
 } from "@/components/filter";
+import { ToolPairingProvider, useToolPairingContext } from "@/contexts/ToolPairingContext";
 
 export interface NarrativePanelProps {
   /** 自定义 className */
@@ -100,32 +102,78 @@ export const NarrativePanel = React.forwardRef<
     const showEmptyFilterResult = hasActiveFilters && filterResult.filteredCount === 0;
 
     // 渲染 NarrativeStream (空状态由 NarrativeStream 内部处理)
+    // Story 2.15: 使用原始 messages 构建配对，确保跨过滤的配对关系正确
     return (
-      <div className={cn("h-full flex flex-col", className)}>
-        {/* 过滤栏 (Story 2.16) */}
-        <MessageFilterBar
-          filteredCount={filterResult.filteredCount}
-          totalCount={filterResult.totalCount}
+      <ToolPairingProvider messages={messages ?? []}>
+        <NarrativePanelContent
+          className={className}
+          streamRef={streamRef}
+          filterResult={filterResult}
+          hasActiveFilters={hasActiveFilters}
+          showEmptyFilterResult={showEmptyFilterResult}
+          selectedMessageId={selectedMessageId}
+          onMessageSelect={onMessageSelect}
         />
-
-        {/* 消息流或空状态 */}
-        <div className="flex-1 min-h-0">
-          {showEmptyFilterResult ? (
-            <EmptyFilterResult className="h-full" />
-          ) : (
-            <NarrativeStream
-              ref={streamRef}
-              messages={filterResult.messages}
-              selectedMessageId={selectedMessageId}
-              onMessageSelect={onMessageSelect}
-              className="h-full"
-            />
-          )}
-        </div>
-      </div>
+      </ToolPairingProvider>
     );
   }
 );
+
+/** 内部内容组件 - 用于在 ToolPairingProvider 内部注册滚动回调 */
+interface NarrativePanelContentProps {
+  className?: string;
+  streamRef: React.RefObject<NarrativeStreamRef | null>;
+  filterResult: ReturnType<typeof filterWithPairedResults>;
+  hasActiveFilters: boolean;
+  showEmptyFilterResult: boolean;
+  selectedMessageId?: string;
+  onMessageSelect?: (messageId: string, message: NarrativeMessage) => void;
+}
+
+function NarrativePanelContent({
+  className,
+  streamRef,
+  filterResult,
+  showEmptyFilterResult,
+  selectedMessageId,
+  onMessageSelect,
+}: NarrativePanelContentProps) {
+  // Story 2.15: 注册滚动回调到配对上下文
+  const pairingContext = useToolPairingContext();
+
+  React.useEffect(() => {
+    if (pairingContext) {
+      pairingContext.registerScrollCallback((messageId: string) => {
+        streamRef.current?.scrollToMessage(messageId);
+      });
+    }
+  }, [pairingContext, streamRef]);
+
+  return (
+    <div className={cn("h-full flex flex-col", className)}>
+      {/* 过滤栏 (Story 2.16) */}
+      <MessageFilterBar
+        filteredCount={filterResult.filteredCount}
+        totalCount={filterResult.totalCount}
+      />
+
+      {/* 消息流或空状态 */}
+      <div className="flex-1 min-h-0">
+        {showEmptyFilterResult ? (
+          <EmptyFilterResult className="h-full" />
+        ) : (
+          <NarrativeStream
+            ref={streamRef}
+            messages={filterResult.messages}
+            selectedMessageId={selectedMessageId}
+            onMessageSelect={onMessageSelect}
+            className="h-full"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 NarrativePanel.displayName = "NarrativePanel";
 
