@@ -190,9 +190,9 @@ pub struct SuggestedCodeBlock {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BubbleContext {
-    /// Mentioned files
+    /// Mentioned files (complex nested object, use Value for flexibility)
     #[serde(default)]
-    pub mentions: Vec<CursorMention>,
+    pub mentions: serde_json::Value,
 }
 
 /// Role mapping for bubble types
