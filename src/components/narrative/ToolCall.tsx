@@ -125,34 +125,48 @@ export function ToolCall({
         className
       )}
     >
-      <Collapsible.Trigger
-        className={cn(
-          // 头部样式
-          "flex items-center gap-2 w-full",
-          "px-3 py-2",
-          "cursor-pointer select-none",
-          "text-[13px] font-medium",
-          // Hover 效果
-          "hover:bg-muted/70",
-          // Focus 状态
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "focus-visible:ring-inset"
-        )}
-        aria-expanded={isOpen}
-      >
-        {/* 工具图标 */}
-        <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {/* 头部区域：使用 flex 容器包裹 Trigger 和独立按钮，避免 button 嵌套 */}
+      <div className="flex items-center">
+        <Collapsible.Trigger
+          className={cn(
+            // 头部样式
+            "flex items-center gap-2 flex-1",
+            "px-3 py-2",
+            "cursor-pointer select-none",
+            "text-[13px] font-medium",
+            // Hover 效果
+            "hover:bg-muted/70",
+            // Focus 状态
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "focus-visible:ring-inset"
+          )}
+          aria-expanded={isOpen}
+        >
+          {/* 工具图标 */}
+          <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
 
-        {/* 工具名称 */}
-        <span className="truncate">{toolName}</span>
+          {/* 工具名称 */}
+          <span className="truncate">{toolName}</span>
 
-        {/* 查看代码按钮 (仅 Write/Edit 工具且有代码内容时显示) */}
+          {/* 展开箭头 */}
+          {hasInput && (
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground ml-auto",
+                "transition-transform duration-150 ease-out",
+                isOpen && "rotate-90"
+              )}
+            />
+          )}
+        </Collapsible.Trigger>
+
+        {/* 查看代码按钮 - 独立于 Trigger 避免嵌套 button */}
         {showViewCodeButton && (
           <button
             type="button"
             onClick={handleViewCode}
             className={cn(
-              "ml-auto mr-2 p-1 rounded",
+              "p-1 mr-2 rounded cursor-pointer",
               "text-primary hover:bg-primary/10",
               "transition-colors duration-150",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -162,19 +176,7 @@ export function ToolCall({
             <Code2 className="h-4 w-4" />
           </button>
         )}
-
-        {/* 展开箭头 */}
-        {hasInput && (
-          <ChevronRight
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 text-muted-foreground",
-              !showViewCodeButton && "ml-auto",
-              "transition-transform duration-150 ease-out",
-              isOpen && "rotate-90"
-            )}
-          />
-        )}
-      </Collapsible.Trigger>
+      </div>
 
       {hasInput && (
         <Collapsible.Content
@@ -212,6 +214,7 @@ export function ToolCall({
 }
 
 export default ToolCall;
+
 
 
 

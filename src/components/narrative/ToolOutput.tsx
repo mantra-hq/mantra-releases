@@ -219,7 +219,7 @@ export function ToolOutput({
             type="button"
             onClick={handleViewCode}
             className={cn(
-              "p-1 mr-2 rounded",
+              "p-1 mr-2 rounded cursor-pointer",
               "text-primary hover:bg-primary/10",
               "transition-colors duration-150",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -265,6 +265,7 @@ export function ToolOutput({
 }
 
 export default ToolOutput;
+
 
 
 

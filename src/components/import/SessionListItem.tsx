@@ -5,6 +5,7 @@
  * 单个会话的列表项，显示文件名、大小、时间
  */
 
+import * as React from "react";
 import { FileJson } from "lucide-react";
 import { Checkbox } from "@/components/ui";
 import type { DiscoveredFile } from "@/components/import";
@@ -54,18 +55,27 @@ export function SessionListItem({
     selected,
     onToggle,
 }: SessionListItemProps) {
+    // 处理复选框点击，阻止事件冒泡
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+    };
+
     return (
         <div
             data-testid={`session-item-${session.path}`}
-            className="flex items-center gap-3 px-3 py-2 pl-10 border-b border-border/30 last:border-b-0 hover:bg-muted/30 transition-colors"
+            onClick={onToggle}
+            className="flex items-center gap-3 px-3 py-2 pl-10 border-b border-border/30 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors"
         >
             {/* 复选框 */}
-            <Checkbox
-                data-testid={`session-checkbox-${session.path}`}
-                checked={selected}
-                onCheckedChange={onToggle}
-                aria-label={`选择会话 ${session.name}`}
-            />
+            <div onClick={handleCheckboxClick}>
+                <Checkbox
+                    data-testid={`session-checkbox-${session.path}`}
+                    checked={selected}
+                    onCheckedChange={onToggle}
+                    aria-label={`选择会话 ${session.name}`}
+                    className="cursor-pointer"
+                />
+            </div>
 
             {/* 文件图标 */}
             <FileJson className="w-4 h-4 text-muted-foreground shrink-0" />

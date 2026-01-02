@@ -370,7 +370,7 @@ export function ToolCallCard({
                     <Collapsible.Root open={isExpanded} onOpenChange={setIsExpanded}>
                         <Collapsible.Trigger
                             className={cn(
-                                "p-1 rounded hover:bg-muted",
+                                "p-1 rounded cursor-pointer hover:bg-muted",
                                 "text-muted-foreground hover:text-foreground",
                                 "transition-colors"
                             )}
@@ -391,7 +391,7 @@ export function ToolCallCard({
                         type="button"
                         onClick={handleJumpToOutput}
                         className={cn(
-                            "p-1 rounded hover:bg-muted",
+                            "p-1 rounded cursor-pointer hover:bg-muted",
                             "text-muted-foreground hover:text-foreground",
                             "transition-colors"
                         )}
@@ -407,7 +407,7 @@ export function ToolCallCard({
                         type="button"
                         onClick={handleViewDetail}
                         className={cn(
-                            "px-2 py-0.5 rounded text-xs",
+                            "px-2 py-0.5 rounded text-xs cursor-pointer",
                             "bg-primary/10 text-primary",
                             "hover:bg-primary/20 transition-colors"
                         )}

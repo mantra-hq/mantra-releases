@@ -61,6 +61,14 @@ export function ProjectGroupItem({
 
     const remainingCount = group.sessions.length - DEFAULT_VISIBLE_COUNT;
 
+    // 处理复选框点击，阻止事件冒泡以避免触发折叠
+    const handleCheckboxClick = React.useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation();
+        },
+        []
+    );
+
     return (
         <Collapsible.Root
             open={isExpanded}
@@ -68,42 +76,44 @@ export function ProjectGroupItem({
             data-testid={`project-group-${group.projectPath}`}
             className="border-b border-border/50 last:border-b-0"
         >
-            {/* 项目头部 */}
-            <div className="flex items-center gap-3 px-3 py-3 hover:bg-muted/30 transition-colors">
-                {/* 展开/折叠按钮 */}
-                <Collapsible.Trigger asChild>
-                    <button
-                        type="button"
-                        className="p-1 rounded hover:bg-muted transition-colors"
-                        aria-label={isExpanded ? "折叠" : "展开"}
-                    >
-                        <ChevronRight
-                            className={cn(
-                                "w-4 h-4 text-muted-foreground transition-transform duration-200",
-                                isExpanded && "rotate-90"
-                            )}
-                        />
-                    </button>
-                </Collapsible.Trigger>
-
-                {/* 项目复选框 */}
-                <Checkbox
-                    data-testid={`project-checkbox-${group.projectPath}`}
-                    checked={isSelected}
-                    data-state={
-                        isSelected
-                            ? "checked"
-                            : isPartiallySelected
-                                ? "indeterminate"
-                                : "unchecked"
-                    }
-                    onCheckedChange={onToggleProject}
-                    aria-label={`选择项目 ${group.projectName}`}
+            {/* 项目头部 - 整行可点击展开/折叠 */}
+            <Collapsible.Trigger
+                className={cn(
+                    "flex items-center gap-3 px-3 py-3 w-full",
+                    "cursor-pointer hover:bg-muted/30 transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                )}
+                aria-label={isExpanded ? "折叠" : "展开"}
+            >
+                {/* 展开/折叠箭头 */}
+                <ChevronRight
+                    className={cn(
+                        "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0",
+                        isExpanded && "rotate-90"
+                    )}
                 />
+
+                {/* 项目复选框 - 独立点击区域 */}
+                <div onClick={handleCheckboxClick}>
+                    <Checkbox
+                        data-testid={`project-checkbox-${group.projectPath}`}
+                        checked={isSelected}
+                        data-state={
+                            isSelected
+                                ? "checked"
+                                : isPartiallySelected
+                                    ? "indeterminate"
+                                    : "unchecked"
+                        }
+                        onCheckedChange={onToggleProject}
+                        aria-label={`选择项目 ${group.projectName}`}
+                        className="cursor-pointer"
+                    />
+                </div>
 
                 {/* 项目图标和名称 */}
                 <Folder className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-sm font-medium text-foreground flex-1 truncate">
+                <span className="text-sm font-medium text-foreground flex-1 truncate text-left">
                     {group.projectName}
                 </span>
 
@@ -114,7 +124,7 @@ export function ProjectGroupItem({
                         : ""}
                     {group.sessions.length} 个会话
                 </span>
-            </div>
+            </Collapsible.Trigger>
 
             {/* 会话列表 */}
             <Collapsible.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">

@@ -152,7 +152,7 @@ export function TodoWriteCard({
                     {/* 展开/折叠 */}
                     <Collapsible.Trigger
                         className={cn(
-                            "p-1 rounded hover:bg-muted",
+                            "p-1 rounded cursor-pointer hover:bg-muted",
                             "text-muted-foreground hover:text-foreground",
                             "transition-colors"
                         )}

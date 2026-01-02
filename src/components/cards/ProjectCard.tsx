@@ -78,8 +78,7 @@ export function ProjectCard({
       data-testid="project-card"
       className={cn(
         "bg-card border border-border rounded-lg overflow-hidden",
-        "transition-colors duration-150",
-        "hover:border-primary/50"
+        "transition-colors duration-150"
       )}
     >
       {/* 卡片头部 - 可点击触发展开/折叠 */}
@@ -89,7 +88,9 @@ export function ProjectCard({
           className={cn(
             "w-full flex items-center justify-between p-4",
             "cursor-pointer",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+            "transition-colors duration-150",
+            "hover:bg-muted/50",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
             "text-left"
           )}
           aria-label={project.name}
