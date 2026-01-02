@@ -2,8 +2,10 @@
  * NarrativePanel - 对话流面板
  * Story 2.2: Task 4.1 (基础)
  * Story 2.3: Task 5 (集成 NarrativeStream)
+ * Story 2.16: Task 9 (集成消息过滤)
  *
  * 左侧面板，显示 AI 对话的意图和消息流
+ * 支持按类型过滤和关键词搜索消息
  */
 
 import * as React from "react";
@@ -14,6 +16,12 @@ import {
   type NarrativeStreamRef,
 } from "@/components/narrative";
 import type { NarrativeMessage } from "@/types/message";
+import { useMessageFilterStore } from "@/stores/useMessageFilterStore";
+import { filterWithPairedResults } from "@/lib/message-filter";
+import {
+  MessageFilterBar,
+  EmptyFilterResult,
+} from "@/components/filter";
 
 export interface NarrativePanelProps {
   /** 自定义 className */
@@ -51,6 +59,18 @@ export const NarrativePanel = React.forwardRef<
     // NarrativeStream ref
     const streamRef = React.useRef<NarrativeStreamRef>(null);
 
+    // 过滤状态 (Story 2.16)
+    const { selectedTypes, searchQuery } = useMessageFilterStore();
+
+    // 计算过滤后的消息 (Story 2.16)
+    const filterResult = React.useMemo(() => {
+      return filterWithPairedResults(
+        messages ?? [],
+        selectedTypes,
+        searchQuery
+      );
+    }, [messages, selectedTypes, searchQuery]);
+
     // 暴露给父组件的方法
     React.useImperativeHandle(
       ref,
@@ -75,15 +95,34 @@ export const NarrativePanel = React.forwardRef<
       );
     }
 
+    // 判断是否有活动过滤
+    const hasActiveFilters = selectedTypes.size > 0 || searchQuery.length > 0;
+    const showEmptyFilterResult = hasActiveFilters && filterResult.filteredCount === 0;
+
     // 渲染 NarrativeStream (空状态由 NarrativeStream 内部处理)
     return (
-      <NarrativeStream
-        ref={streamRef}
-        messages={messages ?? []}
-        selectedMessageId={selectedMessageId}
-        onMessageSelect={onMessageSelect}
-        className={cn("h-full", className)}
-      />
+      <div className={cn("h-full flex flex-col", className)}>
+        {/* 过滤栏 (Story 2.16) */}
+        <MessageFilterBar
+          filteredCount={filterResult.filteredCount}
+          totalCount={filterResult.totalCount}
+        />
+
+        {/* 消息流或空状态 */}
+        <div className="flex-1 min-h-0">
+          {showEmptyFilterResult ? (
+            <EmptyFilterResult className="h-full" />
+          ) : (
+            <NarrativeStream
+              ref={streamRef}
+              messages={filterResult.messages}
+              selectedMessageId={selectedMessageId}
+              onMessageSelect={onMessageSelect}
+              className="h-full"
+            />
+          )}
+        </div>
+      </div>
     );
   }
 );
@@ -91,4 +130,3 @@ export const NarrativePanel = React.forwardRef<
 NarrativePanel.displayName = "NarrativePanel";
 
 export default NarrativePanel;
-
