@@ -34,3 +34,9 @@ export {
     type UseCollapsibleOptions,
     type UseCollapsibleResult,
 } from "./useCollapsible";
+
+// Story 2.17: 当前会话 hook
+export {
+    useCurrentSession,
+    type UseCurrentSessionResult,
+} from "./useCurrentSession";

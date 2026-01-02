@@ -4,6 +4,7 @@
  * Story 2.10: Task 6 (Message Navigation from Search)
  * Story 2.11: Task 6 (Initial Code Display)
  * Story 2.12: Task 2 (Smart File Selection Logic)
+ * Story 2.17: TopBar 面包屑导航
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
@@ -17,7 +18,6 @@
 import * as React from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
 import { getProjectByCwd, getRepresentativeFile, detectGitRepo } from "@/lib/project-ipc";
@@ -40,6 +40,10 @@ import {
   findRecentFilePathEnhanced,
   toRelativePath,
 } from "@/lib/file-path-extractor";
+// Story 2.17: TopBar 面包屑导航
+import { TopBar } from "@/components/navigation";
+import { ImportWizard } from "@/components/import";
+import { useCurrentSession } from "@/hooks";
 
 
 /**
@@ -99,6 +103,16 @@ export default function Player() {
   const lastValidFileRef = React.useRef<string | null>(null);
   // 记录上一个文件的内容（用于 Diff）
   const previousContentRef = React.useRef<string | null>(null);
+
+  // Story 2.17: 获取当前会话和项目信息
+  const {
+    project: currentProject,
+    sessions: projectSessions,
+    refetch: refetchCurrentSession,
+  } = useCurrentSession(sessionId);
+
+  // Story 2.17: ImportWizard 状态
+  const [importOpen, setImportOpen] = React.useState(false);
 
   // 加载会话数据
   React.useEffect(() => {
@@ -401,6 +415,37 @@ export default function Player() {
     navigate("/");
   }, [navigate]);
 
+  // Story 2.17: TopBar 回调函数
+  // 打开 ProjectDrawer (AC2, AC3) - 暂时导航到 Dashboard
+  const handleDrawerOpen = React.useCallback(() => {
+    // Story 2.18 将实现真正的 ProjectDrawer
+    // 目前导航回 Dashboard
+    navigate("/");
+  }, [navigate]);
+
+  // 会话切换 (AC9)
+  const handleSessionSelect = React.useCallback(
+    (newSessionId: string) => {
+      if (newSessionId !== sessionId) {
+        navigate(`/player/${newSessionId}`);
+      }
+    },
+    [sessionId, navigate]
+  );
+
+  // 同步项目 (AC10) - 预留接口，Story 2.19 实现
+  const handleSync = React.useCallback(() => {
+    // TODO: Story 2.19 实现 sync_project IPC
+    console.log("[Player] Sync project:", currentProject?.id);
+    refetchCurrentSession();
+  }, [currentProject, refetchCurrentSession]);
+
+  // 导入完成回调
+  const handleImportComplete = React.useCallback(() => {
+    setImportOpen(false);
+    refetchCurrentSession();
+  }, [refetchCurrentSession]);
+
   // DEV: 滚动到指定消息的调试函数 (可在 DevTools console 中调用 scrollToMessage('id'))
   React.useEffect(() => {
     if (import.meta.env.DEV) {
@@ -519,32 +564,19 @@ export default function Player() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header with Theme Toggle */}
-      <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleBack}
-              className="mr-2"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-xl font-bold text-foreground">
-              Mantra <span className="text-primary">心法</span>
-            </span>
-            {sessionCwd && (
-              <span className="text-sm text-muted-foreground ml-4 font-mono truncate max-w-md">
-                {sessionCwd}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      {/* Story 2.17: TopBar 面包屑导航 */}
+      <TopBar
+        sessionId={sessionId}
+        sessionName={`Session ${sessionId.slice(0, 8)}`}
+        messageCount={messages.length}
+        projectId={currentProject?.id ?? ""}
+        projectName={currentProject?.name ?? sessionCwd?.split("/").pop() ?? "项目"}
+        sessions={projectSessions}
+        onDrawerOpen={handleDrawerOpen}
+        onSessionSelect={handleSessionSelect}
+        onSync={handleSync}
+        onImport={() => setImportOpen(true)}
+      />
 
       {/* Main Content - DualStreamLayout */}
       <main className="flex-1 min-h-0 flex flex-col">
@@ -579,6 +611,13 @@ export default function Player() {
           />
         )}
       </main>
+
+      {/* Story 2.17: Import Wizard Modal */}
+      <ImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onComplete={handleImportComplete}
+      />
     </div>
   );
 }
