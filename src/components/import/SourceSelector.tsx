@@ -4,8 +4,8 @@
  *
  * 显示可用的导入来源选项：
  * - Claude Code (已支持)
- * - Gemini CLI (Post-MVP)
- * - Cursor (Post-MVP)
+ * - Gemini CLI (即将推出)
+ * - Cursor (已支持 - Story 1.7)
  */
 
 import * as React from "react";

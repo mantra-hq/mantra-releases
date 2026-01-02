@@ -77,13 +77,41 @@ impl CursorPaths {
     }
 
     /// Find workspace ID for a given project path
+    /// Supports both direct path matching and WSL path conversion
     pub fn find_workspace_id(&self, project_path: &Path) -> Result<Option<WorkspaceInfo>, ParseError> {
         let workspaces = self.scan_workspaces()?;
         let normalized_target = normalize_path(project_path);
 
-        Ok(workspaces.into_iter().find(|ws| {
+        // First try direct path match
+        if let Some(ws) = workspaces.iter().find(|ws| {
             normalize_path(&ws.folder_path) == normalized_target
-        }))
+        }) {
+            return Ok(Some(ws.clone()));
+        }
+
+        // Try WSL path conversion if on Linux and path looks like WSL mount
+        #[cfg(target_os = "linux")]
+        {
+            // If target is a WSL path (/mnt/c/...), try matching against Windows paths
+            if let Some(windows_path) = wsl_to_windows_path(project_path) {
+                if let Some(ws) = workspaces.iter().find(|ws| {
+                    ws.folder_path == windows_path
+                }) {
+                    return Ok(Some(ws.clone()));
+                }
+            }
+
+            // If target is a regular Linux path, try matching against WSL-converted workspace paths
+            for ws in &workspaces {
+                if let Some(wsl_path) = windows_to_wsl_path(&ws.folder_path) {
+                    if normalize_path(&wsl_path) == normalized_target {
+                        return Ok(Some(ws.clone()));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -199,7 +227,6 @@ fn normalize_path(path: &Path) -> PathBuf {
 }
 
 /// Convert a WSL path to Windows path (for remote workspace matching)
-#[allow(dead_code)]
 pub fn wsl_to_windows_path(wsl_path: &Path) -> Option<PathBuf> {
     let path_str = wsl_path.to_string_lossy();
 
@@ -221,7 +248,6 @@ pub fn wsl_to_windows_path(wsl_path: &Path) -> Option<PathBuf> {
 }
 
 /// Convert a Windows path to WSL path (for remote workspace matching)
-#[allow(dead_code)]
 pub fn windows_to_wsl_path(windows_path: &Path) -> Option<PathBuf> {
     let path_str = windows_path.to_string_lossy();
 

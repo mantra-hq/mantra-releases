@@ -92,10 +92,13 @@ impl CursorParser {
                 Ok(session) => sessions.push(session),
                 Err(e) => {
                     // Log warning but continue with other conversations
+                    // Note: Using eprintln as tracing is not available in this context
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "Warning: Failed to parse composer {}: {}",
                         summary.composer_id, e
                     );
+                    let _ = e; // Suppress unused warning in release
                 }
             }
         }
@@ -249,6 +252,9 @@ impl CursorParser {
             return Ok(None);
         }
 
+        // Extract mentioned files from bubble context
+        let mentioned_files = extract_mentioned_files_from_bubble(&bubble.context);
+
         // Build message
         let timestamp = bubble.timestamp.map(epoch_ms_to_datetime);
 
@@ -256,6 +262,7 @@ impl CursorParser {
             role,
             content_blocks,
             timestamp,
+            mentioned_files,
         }))
     }
 }
@@ -267,7 +274,42 @@ fn epoch_ms_to_datetime(ms: i64) -> DateTime<Utc> {
         .unwrap_or_else(Utc::now)
 }
 
-/// Extract mentioned files from context
+/// Extract mentioned files from bubble context
+fn extract_mentioned_files_from_bubble(context: &Option<BubbleContext>) -> Vec<String> {
+    let mut files = Vec::new();
+
+    if let Some(ctx) = context {
+        // Extract from mentions object (e.g., mentions.fileSelections, mentions.files)
+        if let Some(mentions) = ctx.mentions.as_object() {
+            // Handle fileSelections format
+            if let Some(file_selections) = mentions.get("fileSelections") {
+                if let Some(obj) = file_selections.as_object() {
+                    for (uri, _) in obj {
+                        files.push(uri.clone());
+                    }
+                }
+            }
+            // Handle files array format
+            if let Some(files_arr) = mentions.get("files") {
+                if let Some(arr) = files_arr.as_array() {
+                    for item in arr {
+                        if let Some(uri) = item.as_str() {
+                            files.push(uri.to_string());
+                        } else if let Some(obj) = item.as_object() {
+                            if let Some(uri) = obj.get("uri").and_then(|v| v.as_str()) {
+                                files.push(uri.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    files
+}
+
+/// Extract mentioned files from composer context (for session-level context)
 #[allow(dead_code)]
 fn extract_mentioned_files(context: &Option<CursorContext>) -> Vec<String> {
     let mut files = Vec::new();

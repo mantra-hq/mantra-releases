@@ -64,6 +64,10 @@ pub struct Message {
     /// Timestamp of the message (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<DateTime<Utc>>,
+
+    /// Mentioned files in this message (extracted from context)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mentioned_files: Vec<String>,
 }
 
 /// Optional metadata for a session
@@ -143,6 +147,17 @@ impl Message {
             role,
             content_blocks,
             timestamp: Some(Utc::now()),
+            mentioned_files: Vec::new(),
+        }
+    }
+
+    /// Create a new message with mentioned files
+    pub fn with_mentioned_files(role: Role, content_blocks: Vec<ContentBlock>, mentioned_files: Vec<String>) -> Self {
+        Self {
+            role,
+            content_blocks,
+            timestamp: Some(Utc::now()),
+            mentioned_files,
         }
     }
 

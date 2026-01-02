@@ -106,7 +106,7 @@ fn find_session_files(dir: &PathBuf) -> Vec<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 files.extend(find_session_files(&path));
-            } else if path.extension().map_or(false, |ext| ext == "jsonl") {
+            } else if path.extension().is_some_and(|ext| ext == "jsonl") {
                 // Filter out agent- prefixed files (smaller agent logs)
                 // and .timelines directory files
                 if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
@@ -206,7 +206,7 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
         // Convert workspaces to DiscoveredFile format
         workspaces
             .into_iter()
-            .filter_map(|ws| {
+            .map(|ws| {
                 let folder_path = ws.folder_path.to_string_lossy().to_string();
                 let name = ws.folder_path
                     .file_name()
@@ -227,13 +227,13 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
                     .map(|m| m.len())
                     .unwrap_or(0);
 
-                Some(DiscoveredFile {
+                DiscoveredFile {
                     path: folder_path.clone(),
                     name: format!("{} (Cursor 工作区)", name),
                     size,
                     modified_at,
                     project_path: folder_path,
-                })
+                }
             })
             .collect()
     })
@@ -294,7 +294,7 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
                 if let Ok(workspaces) = custom_paths.scan_workspaces() {
                     return workspaces
                         .into_iter()
-                        .filter_map(|ws| {
+                        .map(|ws| {
                             let folder_path = ws.folder_path.to_string_lossy().to_string();
                             let name = ws.folder_path
                                 .file_name()
@@ -313,13 +313,13 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
                                 .map(|m| m.len())
                                 .unwrap_or(0);
 
-                            Some(DiscoveredFile {
+                            DiscoveredFile {
                                 path: folder_path.clone(),
                                 name: format!("{} (Cursor 工作区)", name),
                                 size,
                                 modified_at,
                                 project_path: folder_path,
-                            })
+                            }
                         })
                         .collect();
                 }
@@ -341,7 +341,7 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
 /// - Cursor directory (grandparent)
 fn find_workspace_storage_path(dir: &Path) -> Option<PathBuf> {
     // Case 1: dir is workspaceStorage itself
-    if dir.file_name().map_or(false, |n| n == "workspaceStorage") {
+    if dir.file_name().is_some_and(|n| n == "workspaceStorage") {
         return Some(dir.to_path_buf());
     }
 

@@ -96,6 +96,7 @@ impl ClaudeParser {
                     role,
                     content_blocks,
                     timestamp,
+                    mentioned_files: Vec::new(),
                 });
             }
         }
@@ -341,6 +342,7 @@ impl LogParser for ClaudeParser {
                 role,
                 content_blocks,
                 timestamp: claude_msg.timestamp,
+                mentioned_files: Vec::new(),
             };
 
             session.messages.push(message);
