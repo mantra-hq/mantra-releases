@@ -280,7 +280,7 @@ export const DualStreamLayout = React.forwardRef<
             type="button"
             onClick={() => setActiveRightTab("code")}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors cursor-pointer",
               activeRightTab === "code"
                 ? "text-primary border-b-2 border-primary -mb-px"
                 : "text-muted-foreground hover:text-foreground"
@@ -293,7 +293,7 @@ export const DualStreamLayout = React.forwardRef<
             type="button"
             onClick={() => setActiveRightTab("terminal")}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+              "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors cursor-pointer",
               activeRightTab === "terminal"
                 ? "text-primary border-b-2 border-primary -mb-px"
                 : "text-muted-foreground hover:text-foreground"
@@ -308,7 +308,7 @@ export const DualStreamLayout = React.forwardRef<
               type="button"
               onClick={() => setActiveRightTab("tool")}
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+                "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors cursor-pointer",
                 activeRightTab === "tool"
                   ? "text-primary border-b-2 border-primary -mb-px"
                   : "text-muted-foreground hover:text-foreground"
