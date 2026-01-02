@@ -49,6 +49,16 @@ const FILE_TOOLS = [
   "multi_replace_file_content",
 ];
 
+/** 搜索类工具列表 */
+const SEARCH_TOOLS = [
+  "grep_search",
+  "Grep",
+  "find_by_name",
+  "codebase_search",
+  "Glob",
+  "glob",
+];
+
 /** 检查是否为终端类工具 */
 function isTerminalTool(toolName: string): boolean {
   return TERMINAL_TOOLS.some(t =>
@@ -59,6 +69,13 @@ function isTerminalTool(toolName: string): boolean {
 /** 检查是否为文件类工具 */
 function isFileTool(toolName: string): boolean {
   return FILE_TOOLS.some(t =>
+    toolName.toLowerCase().includes(t.toLowerCase())
+  );
+}
+
+/** 检查是否为搜索类工具 */
+function isSearchTool(toolName: string): boolean {
+  return SEARCH_TOOLS.some(t =>
     toolName.toLowerCase().includes(t.toLowerCase())
   );
 }
@@ -169,6 +186,15 @@ export function ContentBlockRenderer({
                 });
               } else if (isFileTool(toolName)) {
                 // 文件类工具 - 切换到代码 tab
+                openToolDetail({
+                  toolUseId,
+                  toolName,
+                  toolInput: block.toolInput,
+                  toolOutput: pairInfo?.outputContent,
+                  isError: isError,
+                });
+              } else if (isSearchTool(toolName)) {
+                // 搜索类工具 - 打开工具详情 (使用 SearchResultRenderer)
                 openToolDetail({
                   toolUseId,
                   toolName,

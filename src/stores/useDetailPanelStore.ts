@@ -8,7 +8,7 @@
 import { create } from "zustand";
 
 /** 右侧面板 Tab 类型 */
-export type RightPanelTab = "code" | "terminal";
+export type RightPanelTab = "code" | "terminal" | "tool";
 
 /** 详情面板类型 (兼容旧逻辑) */
 export type DetailPanelType = "tool" | "file" | "search" | null;
@@ -86,6 +86,7 @@ export const useDetailPanelStore = create<DetailPanelState>((set) => ({
 
     openToolDetail: (detail) =>
         set({
+            activeRightTab: "tool", // 切换到工具详情 Tab
             panelType: "tool",
             toolDetail: detail,
         }),

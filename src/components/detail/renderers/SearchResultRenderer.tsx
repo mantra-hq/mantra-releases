@@ -47,13 +47,25 @@ function parseSearchResults(content: string): SearchMatch[] {
         const matches: SearchMatch[] = [];
 
         for (const line of lines) {
-            // 常见格式: file:line:content
-            const match = line.match(/^(.+?):(\d+):(.*)$/);
-            if (match) {
+            // 格式 1: file:line:content (grep 格式)
+            const grepMatch = line.match(/^(.+?):(\d+):(.*)$/);
+            if (grepMatch) {
                 matches.push({
-                    file: match[1],
-                    line: parseInt(match[2], 10),
-                    content: match[3],
+                    file: grepMatch[1],
+                    line: parseInt(grepMatch[2], 10),
+                    content: grepMatch[3],
+                });
+                continue;
+            }
+
+            // 格式 2: 纯文件路径 (Glob 格式)
+            // 检查是否看起来像文件路径 (以 / 开头或包含 /)
+            const trimmedLine = line.trim();
+            if (trimmedLine && (trimmedLine.startsWith("/") || trimmedLine.includes("/"))) {
+                matches.push({
+                    file: trimmedLine,
+                    line: 0, // Glob 没有行号
+                    content: "", // Glob 没有内容预览
                 });
             }
         }
@@ -97,7 +109,7 @@ export function SearchResultRenderer({
             className={cn("space-y-1", className)}
         >
             <div className="text-xs text-muted-foreground mb-2">
-                共 {results.length} 个结果
+                共 {results.length} 个{results[0]?.line === 0 ? "文件" : "结果"}
             </div>
 
             <div className="max-h-80 overflow-auto space-y-1">
@@ -114,13 +126,18 @@ export function SearchResultRenderer({
                     >
                         <div className="flex items-center gap-2 text-xs">
                             <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
-                            <span className="truncate text-foreground">
-                                {result.file.split("/").pop()}
+                            <span className="truncate text-foreground" title={result.file}>
+                                {result.line === 0
+                                    ? result.file // Glob: 显示完整路径
+                                    : result.file.split("/").pop() // Grep: 只显示文件名
+                                }
                             </span>
-                            <span className="flex items-center gap-0.5 text-muted-foreground">
-                                <Hash className="h-3 w-3" />
-                                {result.line}
-                            </span>
+                            {result.line > 0 && (
+                                <span className="flex items-center gap-0.5 text-muted-foreground shrink-0">
+                                    <Hash className="h-3 w-3" />
+                                    {result.line}
+                                </span>
+                            )}
                         </div>
                         {result.content && (
                             <div className="mt-1 font-mono text-xs text-muted-foreground truncate pl-5">

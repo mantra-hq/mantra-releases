@@ -28,9 +28,10 @@ import { TimberLine } from "@/components/timeline";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { RightPanelTerminal } from "@/components/terminal";
+import { ToolDetailPanel } from "@/components/detail";
 
 // 响应式 Tab 组件 (Tablet/Mobile 模式)
-import { MessageSquare, Code2, Terminal } from "lucide-react";
+import { MessageSquare, Code2, Terminal, Wrench } from "lucide-react";
 
 // Panel IDs for v4 API
 const NARRATIVE_PANEL_ID = "narrative";
@@ -171,6 +172,7 @@ export const DualStreamLayout = React.forwardRef<
     const activeRightTab = useDetailPanelStore((state) => state.activeRightTab);
     const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
     const terminalContent = useDetailPanelStore((state) => state.terminalContent);
+    const toolDetail = useDetailPanelStore((state) => state.toolDetail);
     const closePanel = useDetailPanelStore((state) => state.closePanel);
 
     // 响应式布局检测
@@ -223,7 +225,7 @@ export const DualStreamLayout = React.forwardRef<
       />
     );
 
-    // Story 2.15: 右侧面板根据状态显示 CodePanel 或 Terminal (固定双 tab)
+    // Story 2.15: 右侧面板固定双 Tab + 动态工具详情 Tab
     const renderCodePanel = (
       <CodePanel
         code={currentCode ?? ""}
@@ -257,10 +259,22 @@ export const DualStreamLayout = React.forwardRef<
       </div>
     );
 
-    // 右侧面板固定双 Tab 架构
+    // Story 2.15: 工具详情面板
+    const renderToolDetailPanel = toolDetail ? (
+      <ToolDetailPanel
+        toolName={toolDetail.toolName}
+        toolInput={toolDetail.toolInput}
+        toolOutput={toolDetail.toolOutput}
+        isError={toolDetail.isError}
+        duration={toolDetail.duration}
+        onClose={closePanel}
+      />
+    ) : null;
+
+    // 右侧面板固定双 Tab + 动态工具详情 Tab
     const renderCodeContent = codeContent ?? (
       <div className="h-full flex flex-col">
-        {/* 固定 Tab 切换栏 - 始终显示 */}
+        {/* Tab 切换栏 */}
         <div className="flex border-b border-border bg-muted/30 shrink-0">
           <button
             type="button"
@@ -288,10 +302,28 @@ export const DualStreamLayout = React.forwardRef<
             <Terminal className="h-4 w-4" />
             终端
           </button>
+          {/* 动态工具详情 Tab - 仅当有 toolDetail 时显示 */}
+          {toolDetail && (
+            <button
+              type="button"
+              onClick={() => setActiveRightTab("tool")}
+              className={cn(
+                "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors",
+                activeRightTab === "tool"
+                  ? "text-primary border-b-2 border-primary -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Wrench className="h-4 w-4" />
+              工具详情
+            </button>
+          )}
         </div>
         {/* 内容区域 */}
         <div className="flex-1 min-h-0">
-          {activeRightTab === "code" ? renderCodePanel : renderTerminalPanel}
+          {activeRightTab === "code" && renderCodePanel}
+          {activeRightTab === "terminal" && renderTerminalPanel}
+          {activeRightTab === "tool" && renderToolDetailPanel}
         </div>
       </div>
     );

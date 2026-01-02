@@ -43,6 +43,8 @@ const SEARCH_TOOLS = [
     "grep_search",
     "find_by_name",
     "codebase_search",
+    "Glob",
+    "glob",
 ];
 
 /** 检查工具是否属于某类 */
