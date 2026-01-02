@@ -13,6 +13,8 @@ export interface GenericRendererProps {
     content: string;
     /** 是否错误 */
     isError?: boolean;
+    /** 是否自适应高度填满父容器 */
+    autoHeight?: boolean;
     /** 自定义 className */
     className?: string;
 }
@@ -35,6 +37,7 @@ function formatContent(content: string): string {
 export function GenericRenderer({
     content,
     isError = false,
+    autoHeight = true,
     className,
 }: GenericRendererProps) {
     const formatted = React.useMemo(() => formatContent(content), [content]);
@@ -45,7 +48,7 @@ export function GenericRenderer({
             className={cn(
                 "font-mono text-xs whitespace-pre-wrap break-all p-3",
                 "bg-muted/30 rounded-md",
-                "max-h-96 overflow-auto",
+                autoHeight ? "h-full min-h-0 overflow-auto" : "max-h-96 overflow-auto",
                 isError ? "text-destructive" : "text-foreground",
                 className
             )}

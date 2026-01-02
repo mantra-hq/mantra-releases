@@ -23,6 +23,8 @@ export interface SearchResultRendererProps {
     content: string;
     /** 点击结果回调 */
     onResultClick?: (file: string, line: number) => void;
+    /** 是否自适应高度填满父容器 */
+    autoHeight?: boolean;
     /** 自定义 className */
     className?: string;
 }
@@ -84,6 +86,7 @@ function parseSearchResults(content: string): SearchMatch[] {
 export function SearchResultRenderer({
     content,
     onResultClick,
+    autoHeight = true,
     className,
 }: SearchResultRendererProps) {
     const results = React.useMemo(() => parseSearchResults(content), [content]);
@@ -95,6 +98,7 @@ export function SearchResultRenderer({
                 data-testid="search-result-renderer"
                 className={cn(
                     "font-mono text-xs whitespace-pre-wrap text-muted-foreground p-3",
+                    autoHeight && "h-full min-h-0 overflow-auto",
                     className
                 )}
             >
@@ -106,7 +110,11 @@ export function SearchResultRenderer({
     return (
         <div
             data-testid="search-result-renderer"
-            className={cn("space-y-1", className)}
+            className={cn(
+                "space-y-1",
+                autoHeight && "h-full min-h-0 overflow-auto",
+                className
+            )}
         >
             <div className="text-xs text-muted-foreground mb-2">
                 共 {results.length} 个{results[0]?.line === 0 ? "文件" : "结果"}

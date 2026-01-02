@@ -22,9 +22,11 @@ export interface TerminalPanelProps {
     isDark?: boolean;
     /** 自定义 className */
     className?: string;
-    /** 最小高度 (px) */
+    /** 是否自适应高度填满父容器 */
+    autoHeight?: boolean;
+    /** 最小高度 (px) - autoHeight 时忽略 */
     minHeight?: number;
-    /** 最大高度 (px) */
+    /** 最大高度 (px) - autoHeight 时忽略 */
     maxHeight?: number;
 }
 
@@ -91,6 +93,7 @@ export function TerminalPanel({
     content,
     isDark = true,
     className,
+    autoHeight = false,
     minHeight = 100,
     maxHeight = 400,
 }: TerminalPanelProps) {
@@ -180,9 +183,10 @@ export function TerminalPanel({
                 "rounded-md overflow-hidden",
                 "border border-border",
                 isDark ? "bg-zinc-950" : "bg-white",
+                autoHeight && "h-full min-h-0",
                 className
             )}
-            style={{
+            style={autoHeight ? undefined : {
                 minHeight: `${minHeight}px`,
                 maxHeight: `${maxHeight}px`,
             }}

@@ -14,6 +14,8 @@ export interface TerminalRendererProps {
     content: string;
     /** 是否错误输出 */
     isError?: boolean;
+    /** 是否自适应高度填满父容器 */
+    autoHeight?: boolean;
     /** 自定义 className */
     className?: string;
 }
@@ -29,12 +31,14 @@ export interface TerminalRendererProps {
 export function TerminalRenderer({
     content,
     isError = false,
+    autoHeight = true,
     className,
 }: TerminalRendererProps) {
     return (
         <div
             data-testid="terminal-renderer"
             className={cn(
+                autoHeight && "h-full min-h-0",
                 isError && "border border-destructive rounded-md",
                 className
             )}
@@ -42,8 +46,9 @@ export function TerminalRenderer({
             <TerminalPanel
                 content={content}
                 isDark={true}
-                minHeight={80}
-                maxHeight={300}
+                autoHeight={autoHeight}
+                minHeight={autoHeight ? undefined : 80}
+                maxHeight={autoHeight ? undefined : 300}
             />
         </div>
     );

@@ -13,6 +13,8 @@ export interface FileRendererProps {
     content: string;
     /** 文件路径 (用于推断语言) */
     filePath?: string;
+    /** 是否自适应高度填满父容器 */
+    autoHeight?: boolean;
     /** 自定义 className */
     className?: string;
 }
@@ -56,25 +58,29 @@ function inferLanguage(filePath?: string): string {
 export function FileRenderer({
     content,
     filePath,
+    autoHeight = true,
     className,
 }: FileRendererProps) {
     const language = inferLanguage(filePath);
     const lineCount = content.split("\n").length;
-    const height = Math.min(Math.max(lineCount * 20, 100), 400);
+    // 只有非 autoHeight 模式才计算固定高度
+    const height = autoHeight ? "100%" : Math.min(Math.max(lineCount * 20, 100), 400);
 
     return (
         <div
             data-testid="file-renderer"
             className={cn(
                 "rounded-md overflow-hidden border border-border",
+                autoHeight && "h-full min-h-0",
                 className
             )}
-            style={{ height: `${height}px` }}
+            style={autoHeight ? undefined : { height: `${height}px` }}
         >
             <Editor
                 language={language}
                 value={content}
                 theme="vs-dark"
+                height={autoHeight ? "100%" : undefined}
                 options={{
                     readOnly: true,
                     minimap: { enabled: false },
