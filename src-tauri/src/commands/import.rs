@@ -9,8 +9,9 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::parsers::{ClaudeParser, CursorParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
 use crate::parsers::cursor::CursorPaths;
+use crate::parsers::gemini::GeminiPaths;
 
 /// Import source type
 #[derive(Debug, Clone, Deserialize)]
@@ -65,10 +66,7 @@ fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
     // 会话日志是 JSONL 格式，文件名是 UUID.jsonl
     let path = match source {
         ImportSource::Claude => home.join(".claude").join("projects"),
-        ImportSource::Gemini => home
-            .join(".gemini")
-            .join("project_temp")
-            .join("chats"),
+        ImportSource::Gemini => home.join(".gemini").join("tmp"),
         // Cursor 使用不同的存储结构，这里返回 workspaceStorage 目录
         // 实际扫描逻辑在 scan_cursor_workspaces 中处理
         ImportSource::Cursor => {
@@ -164,6 +162,11 @@ pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFi
         return scan_cursor_workspaces().await;
     }
 
+    // Gemini 使用特殊的扫描逻辑（项目哈希目录）
+    if matches!(source, ImportSource::Gemini) {
+        return scan_gemini_projects().await;
+    }
+
     let dir = get_default_log_dir(&source)?;
 
     // Use spawn_blocking for filesystem operations
@@ -234,6 +237,54 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
                     modified_at,
                     project_path: folder_path,
                 }
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
+
+    Ok(result)
+}
+
+/// Scan Gemini CLI projects and return session files as discoverable items
+///
+/// Each session file is represented as a DiscoveredFile with:
+/// - path: The session JSON file path (used for import)
+/// - name: The session filename
+/// - project_path: The project hash directory path
+async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
+    let result = tokio::task::spawn_blocking(|| {
+        // Try to detect Gemini paths
+        let paths = match GeminiPaths::detect() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        // Scan all sessions
+        let sessions = match paths.scan_all_sessions() {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        // Convert sessions to DiscoveredFile format
+        sessions
+            .into_iter()
+            .filter_map(|session_file| {
+                let metadata = fs::metadata(&session_file.path).ok()?;
+                let modified_at = metadata
+                    .modified()
+                    .ok()?
+                    .duration_since(UNIX_EPOCH)
+                    .ok()?
+                    .as_millis() as u64;
+
+                Some(DiscoveredFile {
+                    path: session_file.path.to_string_lossy().to_string(),
+                    name: format!("{} (Gemini CLI)", session_file.filename),
+                    size: metadata.len(),
+                    modified_at,
+                    project_path: format!("gemini-project:{}", session_file.project_hash),
+                })
             })
             .collect()
     })
@@ -373,6 +424,7 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
     let results = tokio::task::spawn_blocking(move || {
         let claude_parser = ClaudeParser::new();
         let cursor_parser = CursorParser::new();
+        let gemini_parser = GeminiParser::new();
         let mut results = Vec::with_capacity(paths.len());
 
         for path in paths {
@@ -415,8 +467,27 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
                     }
                 }
             } else {
-                // Claude/其他文件：使用 ClaudeParser
-                match claude_parser.parse_file(&path) {
+                // 根据文件扩展名和路径选择解析器
+                let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
+                let is_json = path.ends_with(".json");
+                let is_jsonl = path.ends_with(".jsonl");
+
+                let parse_result = if is_gemini && is_json {
+                    // Gemini CLI 会话文件
+                    gemini_parser.parse_file(&path)
+                } else if is_jsonl {
+                    // Claude Code JSONL 文件
+                    claude_parser.parse_file(&path)
+                } else if is_json {
+                    // 尝试先作为 Gemini 解析，失败则尝试 Claude
+                    gemini_parser.parse_file(&path)
+                        .or_else(|_| claude_parser.parse_file(&path))
+                } else {
+                    // 默认使用 Claude 解析器
+                    claude_parser.parse_file(&path)
+                };
+
+                match parse_result {
                     Ok(session) => {
                         results.push(FileImportResult {
                             success: true,
@@ -471,6 +542,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_default_log_dir_gemini() {
+        let result = get_default_log_dir(&ImportSource::Gemini);
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.to_str().unwrap().contains(".gemini"));
+        assert!(path.to_str().unwrap().contains("tmp"));
+    }
+
+    #[test]
     fn test_generate_project_id() {
         let id1 = generate_project_id("/home/user/project1");
         let id2 = generate_project_id("/home/user/project2");
@@ -502,4 +582,19 @@ mod tests {
         let result = find_workspace_storage_path(&dir);
         assert_eq!(result, None);
     }
+
+    #[test]
+    fn test_gemini_file_detection_in_parse_log_files() {
+        // Test the file type detection logic for Gemini files
+        // Paths containing ".gemini" and ending with ".json" should be detected as Gemini
+        let gemini_path = "/home/user/.gemini/tmp/abc123/chats/session-2025-01-01.json";
+        assert!(gemini_path.contains("/.gemini/"));
+        assert!(gemini_path.ends_with(".json"));
+
+        // Windows path style
+        let gemini_path_win = "C:\\Users\\test\\.gemini\\tmp\\abc123\\chats\\session.json";
+        assert!(gemini_path_win.contains("\\.gemini\\"));
+        assert!(gemini_path_win.ends_with(".json"));
+    }
 }
+

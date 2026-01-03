@@ -6,10 +6,12 @@
 mod claude;
 pub mod cursor;
 mod error;
+pub mod gemini;
 
 pub use claude::ClaudeParser;
 pub use cursor::CursorParser;
 pub use error::ParseError;
+pub use gemini::GeminiParser;
 
 use crate::models::MantraSession;
 
