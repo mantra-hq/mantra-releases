@@ -98,9 +98,8 @@ impl GeminiParser {
                 }
             }
 
-            if let Some(message) = self.convert_message(gemini_msg)? {
-                messages.push(message);
-            }
+            let converted = self.convert_message(gemini_msg)?;
+            messages.extend(converted);
         }
 
         let mut session = MantraSession {
@@ -129,20 +128,29 @@ impl GeminiParser {
     }
 
 
-    /// Convert a Gemini message to a MantraSession Message
-    fn convert_message(&self, gemini_msg: &GeminiMessage) -> Result<Option<Message>, ParseError> {
+    /// Convert a Gemini message to Mantra Messages
+    ///
+    /// Mantra 消息结构规范：
+    /// 1. 文本消息 (thinking + text) → 一条消息
+    /// 2. 工具调用消息 (tool_use + tool_result) → 每个工具调用一条独立消息
+    ///
+    /// 这样设计确保每个消息是语义完整的单元，便于前端渲染和理解。
+    fn convert_message(&self, gemini_msg: &GeminiMessage) -> Result<Vec<Message>, ParseError> {
         let role = match gemini_msg.msg_type.to_mantra_role() {
             Some(r) => r,
-            None => return Ok(None), // Skip messages with unknown role
+            None => return Ok(Vec::new()), // Skip messages with unknown role
         };
 
-        let mut content_blocks = Vec::new();
-        let mut mentioned_files = Vec::new();
+        let mut messages = Vec::new();
+        let timestamp = parse_timestamp(&gemini_msg.timestamp).ok();
+
+        // === 消息 1: 思考 + 文本内容 ===
+        let mut text_blocks = Vec::new();
 
         // Add thoughts first (for Gemini messages)
         if let Some(thoughts) = &gemini_msg.thoughts {
             for thought in thoughts {
-                content_blocks.push(ContentBlock::Thinking {
+                text_blocks.push(ContentBlock::Thinking {
                     thinking: thought.as_formatted_string(),
                 });
             }
@@ -152,18 +160,31 @@ impl GeminiParser {
         if !gemini_msg.content.is_empty() {
             let text = gemini_msg.content.as_text();
             if !text.is_empty() {
-                content_blocks.push(ContentBlock::Text { text });
+                text_blocks.push(ContentBlock::Text { text });
             }
         }
 
-        // Add tool calls and their results (for Gemini messages)
+        // Create text message if we have content
+        if !text_blocks.is_empty() {
+            messages.push(Message {
+                role: role.clone(),
+                content_blocks: text_blocks,
+                timestamp,
+                mentioned_files: Vec::new(),
+            });
+        }
+
+        // === 消息 2+: 每个工具调用作为独立消息 ===
         if let Some(tool_calls) = &gemini_msg.tool_calls {
             for tool_call in tool_calls {
+                let mut tool_blocks = Vec::new();
+                let mut mentioned_files = Vec::new();
+
                 // Extract file paths from tool call arguments
                 Self::extract_file_paths(&tool_call.args, &mut mentioned_files);
 
                 // Add ToolUse
-                content_blocks.push(ContentBlock::ToolUse {
+                tool_blocks.push(ContentBlock::ToolUse {
                     id: tool_call.id.clone(),
                     name: tool_call.name.clone(),
                     input: tool_call.args.clone(),
@@ -176,34 +197,30 @@ impl GeminiParser {
                         let is_error = tool_call.status == "error";
                         let content = response.response.as_content();
 
-                        content_blocks.push(ContentBlock::ToolResult {
+                        tool_blocks.push(ContentBlock::ToolResult {
                             tool_use_id: tool_call.id.clone(),
                             content,
                             is_error,
                         });
                     }
                 }
+
+                // Parse tool call timestamp if available, fallback to message timestamp
+                let tool_timestamp = tool_call.timestamp.as_deref()
+                    .and_then(|ts| parse_timestamp(ts).ok())
+                    .or(timestamp);
+
+                // Create tool action message
+                messages.push(Message {
+                    role: role.clone(),
+                    content_blocks: tool_blocks,
+                    timestamp: tool_timestamp,
+                    mentioned_files,
+                });
             }
         }
 
-        // Deduplicate mentioned files
-        mentioned_files.sort();
-        mentioned_files.dedup();
-
-        // Parse message timestamp
-        let timestamp = parse_timestamp(&gemini_msg.timestamp).ok();
-
-        // Only create message if we have content
-        if content_blocks.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(Message {
-            role,
-            content_blocks,
-            timestamp,
-            mentioned_files,
-        }))
+        Ok(messages)
     }
 
     /// Extract file paths from tool call arguments
@@ -513,28 +530,38 @@ mod tests {
         let parser = GeminiParser::new();
         let session = parser.parse_string(CONVERSATION_WITH_TOOL_CALLS).unwrap();
 
-        assert_eq!(session.messages.len(), 2);
+        // 新结构：user + assistant text + assistant tool_action
+        assert_eq!(session.messages.len(), 3);
 
-        // Check gemini message with tool calls
-        let gemini_msg = &session.messages[1];
-        assert!(gemini_msg.content_blocks.len() >= 3); // text + tool_use + tool_result
+        // 消息 0: user
+        assert_eq!(session.messages[0].role, Role::User);
 
-        // Find ToolUse block
-        let tool_use = gemini_msg.content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolUse { .. }));
-        assert!(tool_use.is_some());
-        match tool_use.unwrap() {
+        // 消息 1: assistant 文本消息
+        let text_msg = &session.messages[1];
+        assert_eq!(text_msg.role, Role::Assistant);
+        assert_eq!(text_msg.content_blocks.len(), 1);
+        match &text_msg.content_blocks[0] {
+            ContentBlock::Text { text } => assert_eq!(text, "I'll list the files for you."),
+            _ => panic!("Expected Text block"),
+        }
+
+        // 消息 2: assistant 工具调用消息 (tool_use + tool_result)
+        let tool_msg = &session.messages[2];
+        assert_eq!(tool_msg.role, Role::Assistant);
+        assert_eq!(tool_msg.content_blocks.len(), 2); // tool_use + tool_result
+
+        // Check ToolUse block
+        match &tool_msg.content_blocks[0] {
             ContentBlock::ToolUse { id, name, input } => {
                 assert_eq!(id, "run_shell_command-123");
                 assert_eq!(name, "run_shell_command");
                 assert_eq!(input["command"], "ls -la");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected ToolUse block"),
         }
 
-        // Find ToolResult block
-        let tool_result = gemini_msg.content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
-        assert!(tool_result.is_some());
-        match tool_result.unwrap() {
+        // Check ToolResult block
+        match &tool_msg.content_blocks[1] {
             ContentBlock::ToolResult {
                 tool_use_id,
                 content,
@@ -544,7 +571,7 @@ mod tests {
                 assert!(content.contains("drwxr-xr-x"));
                 assert!(!is_error);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected ToolResult block"),
         }
     }
 
@@ -688,8 +715,11 @@ mod tests {
         let parser = GeminiParser::new();
         let session = parser.parse_string(json).unwrap();
 
-        let msg = &session.messages[0];
-        let tool_result = msg.content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        // 新结构：消息 0 是文本，消息 1 是工具调用
+        assert_eq!(session.messages.len(), 2);
+
+        let tool_msg = &session.messages[1];
+        let tool_result = tool_msg.content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
         assert!(tool_result.is_some());
 
         match tool_result.unwrap() {
@@ -785,9 +815,15 @@ mod tests {
         let parser = GeminiParser::new();
         let session = parser.parse_string(json).unwrap();
 
-        let msg = &session.messages[0];
-        assert!(msg.mentioned_files.contains(&"/src/main.rs".to_string()));
-        assert!(msg.mentioned_files.contains(&"/src/lib.rs".to_string()));
+        // 新结构：消息 0 是文本，消息 1 和 2 是工具调用
+        assert_eq!(session.messages.len(), 3);
+
+        // 工具调用消息各自包含自己的 mentioned_files
+        let tool_msg_1 = &session.messages[1];
+        assert!(tool_msg_1.mentioned_files.contains(&"/src/main.rs".to_string()));
+
+        let tool_msg_2 = &session.messages[2];
+        assert!(tool_msg_2.mentioned_files.contains(&"/src/lib.rs".to_string()));
     }
 
     #[test]
@@ -898,16 +934,18 @@ mod tests {
         let session = parser.parse_string(json).unwrap();
 
         assert_eq!(session.id, "8c9a7d96-6b65-4e36-9540-0484bc3e3eb2");
-        assert_eq!(session.messages.len(), 2);
+        // 新结构：user + assistant text/thinking + assistant tool_action
+        assert_eq!(session.messages.len(), 3);
 
-        // Check thinking block
-        let gemini_msg = &session.messages[1];
-        let has_thinking = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::Thinking { .. }));
+        // 消息 1: 文本消息，包含 thinking
+        let text_msg = &session.messages[1];
+        let has_thinking = text_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::Thinking { .. }));
         assert!(has_thinking, "Should have thinking block");
 
-        // Check tool use and result
-        let has_tool_use = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. }));
-        let has_tool_result = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        // 消息 2: 工具调用消息
+        let tool_msg = &session.messages[2];
+        let has_tool_use = tool_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. }));
+        let has_tool_result = tool_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { .. }));
         assert!(has_tool_use, "Should have tool use block");
         assert!(has_tool_result, "Should have tool result block");
 
