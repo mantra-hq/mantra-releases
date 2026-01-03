@@ -18,8 +18,32 @@ export type MessageRole = "user" | "assistant";
  * - thinking: AI 思考过程 (Chain of Thought)
  * - tool_use: 工具调用请求
  * - tool_result: 工具执行结果
+ * - code_diff: 代码差异
+ * - image: 图片内容
+ * - reference: 代码引用
  */
-export type ContentBlockType = "text" | "thinking" | "tool_use" | "tool_result";
+export type ContentBlockType =
+  | "text"
+  | "thinking"
+  | "tool_use"
+  | "tool_result"
+  | "code_diff"
+  | "image"
+  | "reference";
+
+/**
+ * 会话来源常量
+ */
+export const SessionSources = {
+  CLAUDE: "claude",
+  GEMINI: "gemini",
+  CURSOR: "cursor",
+  COPILOT: "copilot",
+  AIDER: "aider",
+  UNKNOWN: "unknown",
+} as const;
+
+export type SessionSource = (typeof SessionSources)[keyof typeof SessionSources] | string;
 
 /**
  * 内容块接口
@@ -36,12 +60,30 @@ export interface ContentBlock {
   toolInput?: Record<string, unknown>;
   /** 工具调用 ID (tool_use / tool_result 共用，用于配对) */
   toolUseId?: string;
+  /** 统一配对 ID (用于关联 tool_use 和 tool_result) */
+  correlationId?: string;
   /** 是否为错误结果 (tool_result 专用) */
   isError?: boolean;
   /** 关联的文件路径 (tool_result 专用，从对应的 tool_use 继承) */
   associatedFilePath?: string;
   /** 关联的工具名称 (tool_result 专用，从对应的 tool_use 继承) */
   associatedToolName?: string;
+  /** 文件路径 (code_diff / reference 专用) */
+  filePath?: string;
+  /** 代码差异内容 (code_diff 专用) */
+  diff?: string;
+  /** 编程语言 (code_diff 专用) */
+  language?: string;
+  /** 图片源 (image 专用) */
+  source?: string;
+  /** 媒体类型 (image 专用) */
+  mediaType?: string;
+  /** 起始行 (reference 专用) */
+  startLine?: number;
+  /** 结束行 (reference 专用) */
+  endLine?: number;
+  /** 符号名称 (reference 专用) */
+  symbol?: string;
 }
 
 /**

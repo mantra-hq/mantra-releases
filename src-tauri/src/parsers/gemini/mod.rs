@@ -21,7 +21,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 
 use super::{LogParser, ParseError};
-use crate::models::{ContentBlock, MantraSession, Message, SessionMetadata, SessionSource};
+use crate::models::{sources, ContentBlock, MantraSession, Message, SessionMetadata};
 
 pub use path::{get_gemini_dir, get_gemini_tmp_dir, GeminiPaths, GeminiSessionFile};
 pub use types::*;
@@ -104,7 +104,7 @@ impl GeminiParser {
 
         let mut session = MantraSession {
             id: conversation.session_id,
-            source: SessionSource::Gemini,
+            source: sources::GEMINI.to_string(),
             cwd,
             created_at,
             updated_at,
@@ -183,11 +183,15 @@ impl GeminiParser {
                 // Extract file paths from tool call arguments
                 Self::extract_file_paths(&tool_call.args, &mut mentioned_files);
 
+                // Generate correlation_id using tool_call.id (deterministic)
+                let correlation_id = Some(tool_call.id.clone());
+
                 // Add ToolUse
                 tool_blocks.push(ContentBlock::ToolUse {
                     id: tool_call.id.clone(),
                     name: tool_call.name.clone(),
                     input: tool_call.args.clone(),
+                    correlation_id: correlation_id.clone(),
                 });
 
                 // Add ToolResult if available
@@ -201,6 +205,7 @@ impl GeminiParser {
                             tool_use_id: tool_call.id.clone(),
                             content,
                             is_error,
+                            correlation_id: correlation_id.clone(),
                         });
                     }
                 }
@@ -480,7 +485,7 @@ mod tests {
         let session = parser.parse_string(SIMPLE_CONVERSATION).unwrap();
 
         assert_eq!(session.id, "test-session-123");
-        assert_eq!(session.source, SessionSource::Gemini);
+        assert_eq!(session.source, sources::GEMINI);
         assert!(session.cwd.contains("abc456def789"));
         assert_eq!(session.messages.len(), 2);
 
@@ -552,7 +557,7 @@ mod tests {
 
         // Check ToolUse block
         match &tool_msg.content_blocks[0] {
-            ContentBlock::ToolUse { id, name, input } => {
+            ContentBlock::ToolUse { id, name, input, .. } => {
                 assert_eq!(id, "run_shell_command-123");
                 assert_eq!(name, "run_shell_command");
                 assert_eq!(input["command"], "ls -la");
@@ -566,6 +571,7 @@ mod tests {
                 tool_use_id,
                 content,
                 is_error,
+                ..
             } => {
                 assert_eq!(tool_use_id, "run_shell_command-123");
                 assert!(content.contains("drwxr-xr-x"));

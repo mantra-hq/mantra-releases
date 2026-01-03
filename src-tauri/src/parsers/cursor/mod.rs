@@ -24,7 +24,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::models::{ContentBlock, MantraSession, Message, SessionMetadata, SessionSource};
+use crate::models::{sources, ContentBlock, MantraSession, Message, SessionMetadata};
 use crate::parsers::ParseError;
 
 /// Parser for Cursor conversation logs
@@ -142,7 +142,7 @@ impl CursorParser {
         // Create session
         let mut session = MantraSession::new(
             summary.composer_id.clone(),
-            SessionSource::Cursor,
+            sources::CURSOR.to_string(),
             project_path.to_string_lossy().to_string(),
         );
 
@@ -217,22 +217,60 @@ impl CursorParser {
             }
         }
 
-        // Add tool results
-        for tool_result in &bubble.tool_results {
-            if let (Some(id), Some(name)) = (&tool_result.id, &tool_result.name) {
-                // For tool use, we create both ToolUse and ToolResult
+        // Parse toolFormerData (PRIMARY: this is where Cursor stores tool call data)
+        if let Some(tfd) = &bubble.tool_former_data {
+            if let Some(name) = &tfd.name {
+                // Generate correlation_id from tool_call_id (preferred) or fallback to name+index
+                let correlation_id = tfd.tool_call_id.clone()
+                    .or_else(|| Some(format!("cursor:{}:{}", name, tfd.tool_index.unwrap_or(0))));
+
+                // Parse tool input from raw_args (JSON string)
+                let input = tfd.raw_args
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_else(|| serde_json::json!({}));
+
+                // Add ToolUse block
                 content_blocks.push(ContentBlock::ToolUse {
-                    id: id.clone(),
+                    id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
                     name: name.clone(),
-                    input: serde_json::json!({}),
+                    input,
+                    correlation_id: correlation_id.clone(),
                 });
 
-                if let Some(result) = &tool_result.result {
+                // Add ToolResult if result exists
+                if let Some(result_str) = &tfd.result {
                     content_blocks.push(ContentBlock::ToolResult {
-                        tool_use_id: id.clone(),
-                        content: result.to_string(),
-                        is_error: tool_result.is_error,
+                        tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
+                        content: result_str.clone(),
+                        is_error: tfd.status.as_deref() == Some("failed"),
+                        correlation_id,
                     });
+                }
+            }
+        }
+
+        // Fallback: parse legacy toolResults (usually empty, but kept for backwards compatibility)
+        if bubble.tool_former_data.is_none() {
+            for tool_result in &bubble.tool_results {
+                if let (Some(id), Some(name)) = (&tool_result.id, &tool_result.name) {
+                    let correlation_id = Some(id.clone());
+
+                    content_blocks.push(ContentBlock::ToolUse {
+                        id: id.clone(),
+                        name: name.clone(),
+                        input: serde_json::json!({}),
+                        correlation_id: correlation_id.clone(),
+                    });
+
+                    if let Some(result) = &tool_result.result {
+                        content_blocks.push(ContentBlock::ToolResult {
+                            tool_use_id: id.clone(),
+                            content: result.to_string(),
+                            is_error: tool_result.is_error,
+                            correlation_id,
+                        });
+                    }
                 }
             }
         }

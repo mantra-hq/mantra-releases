@@ -78,10 +78,10 @@ impl<'a> ProjectScanner<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::SessionSource;
+    use crate::models::sources;
 
     fn create_test_session(id: &str, cwd: &str) -> MantraSession {
-        MantraSession::new(id.to_string(), SessionSource::Claude, cwd.to_string())
+        MantraSession::new(id.to_string(), sources::CLAUDE.to_string(), cwd.to_string())
     }
 
     #[test]

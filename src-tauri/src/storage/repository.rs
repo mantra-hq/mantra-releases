@@ -575,34 +575,17 @@ impl Database {
 
 /// Parse session source from string
 fn parse_session_source(s: &str) -> SessionSource {
-    match s.to_lowercase().as_str() {
-        "claude" => SessionSource::Claude,
-        "gemini" => SessionSource::Gemini,
-        "cursor" => SessionSource::Cursor,
-        "unknown" => SessionSource::Unknown,
-        _ => SessionSource::Unknown, // Explicit unknown for unrecognized sources
-    }
-}
-
-/// Implement Display for SessionSource for database storage
-impl std::fmt::Display for SessionSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SessionSource::Claude => write!(f, "claude"),
-            SessionSource::Gemini => write!(f, "gemini"),
-            SessionSource::Cursor => write!(f, "cursor"),
-            SessionSource::Unknown => write!(f, "unknown"),
-        }
-    }
+    // SessionSource is now a String type alias, just return the string
+    s.to_lowercase()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::MantraSession;
+    use crate::models::{sources, MantraSession};
 
     fn create_test_session(id: &str, cwd: &str) -> MantraSession {
-        MantraSession::new(id.to_string(), SessionSource::Claude, cwd.to_string())
+        MantraSession::new(id.to_string(), sources::CLAUDE.to_string(), cwd.to_string())
     }
 
     #[test]

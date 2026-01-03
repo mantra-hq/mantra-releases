@@ -138,9 +138,14 @@ pub struct CursorBubble {
     #[serde(default)]
     pub is_agentic: bool,
 
-    /// Tool results from this message
+    /// Tool results from this message (legacy, usually empty)
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+
+    /// Tool call data - PRIMARY field for tool interactions
+    /// Contains actual tool call data (name, rawArgs, result, status)
+    #[serde(default)]
+    pub tool_former_data: Option<ToolFormerData>,
 
     /// Suggested code blocks
     #[serde(default)]
@@ -154,7 +159,48 @@ pub struct CursorBubble {
     pub timestamp: Option<i64>,
 }
 
-/// Tool result in a bubble
+/// Tool call data from Cursor's toolFormerData field
+/// 
+/// This is the PRIMARY source for tool call information in Cursor.
+/// The `toolResults` field is typically empty; use this instead.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolFormerData {
+    /// Tool type enum (e.g., 38 for edit_file)
+    pub tool: Option<i32>,
+
+    /// Tool index in conversation
+    pub tool_index: Option<i32>,
+
+    /// Tool call ID (use as correlation_id)
+    pub tool_call_id: Option<String>,
+
+    /// Model call ID
+    pub model_call_id: Option<String>,
+
+    /// Execution status: pending/running/completed/failed
+    pub status: Option<String>,
+
+    /// Tool name (e.g., "read_file", "edit_file", "run_terminal_cmd")
+    pub name: Option<String>,
+
+    /// Raw arguments JSON string
+    pub raw_args: Option<String>,
+
+    /// Parsed parameters JSON string
+    pub params: Option<String>,
+
+    /// Execution result JSON string
+    pub result: Option<String>,
+
+    /// Additional data
+    pub additional_data: Option<serde_json::Value>,
+
+    /// User decision (for approval flows)
+    pub user_decision: Option<String>,
+}
+
+/// Tool result in a bubble (legacy, usually empty)
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResult {

@@ -103,6 +103,7 @@ pub fn extract_project_name(cwd: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::sources;
 
     #[test]
     fn test_extract_project_name() {
@@ -187,7 +188,7 @@ mod tests {
     fn test_session_summary_serialization() {
         let summary = SessionSummary {
             id: "sess_123".to_string(),
-            source: SessionSource::Claude,
+            source: sources::CLAUDE.to_string(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
             message_count: 10,

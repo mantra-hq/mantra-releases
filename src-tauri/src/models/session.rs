@@ -1,20 +1,29 @@
 //! Session data models for Mantra
 //!
 //! Defines the MantraSession structure and related types for representing
-//! AI conversation sessions.
+//! AI conversation sessions from various AI coding tools.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Source of the AI conversation session
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SessionSource {
-    Claude,
-    Gemini,
-    Cursor,
-    /// Unknown source (fallback for unrecognized sources)
-    Unknown,
+/// Session source is now a String for unlimited extensibility.
+/// Use constants from the `sources` module for known sources.
+pub type SessionSource = String;
+
+/// Known session source constants
+pub mod sources {
+    /// Claude Code sessions
+    pub const CLAUDE: &str = "claude";
+    /// Gemini CLI sessions
+    pub const GEMINI: &str = "gemini";
+    /// Cursor IDE sessions
+    pub const CURSOR: &str = "cursor";
+    /// GitHub Copilot sessions
+    pub const COPILOT: &str = "copilot";
+    /// Aider sessions
+    pub const AIDER: &str = "aider";
+    /// Unknown/unrecognized source
+    pub const UNKNOWN: &str = "unknown";
 }
 
 /// Role in the conversation
@@ -40,6 +49,9 @@ pub enum ContentBlock {
         id: String,
         name: String,
         input: serde_json::Value,
+        /// Unified correlation ID for pairing with ToolResult
+        #[serde(skip_serializing_if = "Option::is_none")]
+        correlation_id: Option<String>,
     },
 
     /// Result from tool execution
@@ -48,6 +60,50 @@ pub enum ContentBlock {
         content: String,
         #[serde(default)]
         is_error: bool,
+        /// Unified correlation ID for pairing with ToolUse
+        #[serde(skip_serializing_if = "Option::is_none")]
+        correlation_id: Option<String>,
+    },
+
+    /// Code diff content (new code changes)
+    CodeDiff {
+        /// File path the diff applies to
+        file_path: String,
+        /// Diff content (unified diff format or similar)
+        diff: String,
+        /// Programming language
+        #[serde(skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+    },
+
+    /// Image content
+    Image {
+        /// Image data URL or path
+        source: String,
+        /// MIME type (e.g., "image/png", "image/jpeg")
+        #[serde(skip_serializing_if = "Option::is_none")]
+        media_type: Option<String>,
+        /// Alt text or description
+        #[serde(skip_serializing_if = "Option::is_none")]
+        alt: Option<String>,
+    },
+
+    /// Code reference (file snippet or symbol reference)
+    Reference {
+        /// File path
+        file_path: String,
+        /// Start line (1-indexed)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        start_line: Option<u32>,
+        /// End line (1-indexed, inclusive)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        end_line: Option<u32>,
+        /// Referenced content snippet
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<String>,
+        /// Symbol name (function, class, etc.)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        symbol: Option<String>,
     },
 }
 
@@ -173,12 +229,12 @@ mod tests {
 
     #[test]
     fn test_session_source_serialization() {
-        let source = SessionSource::Claude;
+        let source: SessionSource = sources::CLAUDE.to_string();
         let json = serde_json::to_string(&source).unwrap();
         assert_eq!(json, r#""claude""#);
 
         let deserialized: SessionSource = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized, SessionSource::Claude);
+        assert_eq!(deserialized, sources::CLAUDE);
     }
 
     #[test]
@@ -223,11 +279,13 @@ mod tests {
             id: "tool_123".to_string(),
             name: "read_file".to_string(),
             input: serde_json::json!({"path": "/tmp/test.txt"}),
+            correlation_id: Some("corr_123".to_string()),
         };
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains(r#""type":"tool_use""#));
         assert!(json.contains(r#""id":"tool_123""#));
         assert!(json.contains(r#""name":"read_file""#));
+        assert!(json.contains(r#""correlation_id":"corr_123""#));
 
         let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, block);
@@ -239,10 +297,12 @@ mod tests {
             tool_use_id: "tool_123".to_string(),
             content: "File content here".to_string(),
             is_error: false,
+            correlation_id: Some("corr_123".to_string()),
         };
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains(r#""type":"tool_result""#));
         assert!(json.contains(r#""tool_use_id":"tool_123""#));
+        assert!(json.contains(r#""correlation_id":"corr_123""#));
 
         let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, block);
@@ -264,7 +324,7 @@ mod tests {
     fn test_mantra_session_serialization() {
         let session = MantraSession::new(
             "session_123".to_string(),
-            SessionSource::Claude,
+            sources::CLAUDE.to_string(),
             "/home/user/project".to_string(),
         );
         let json = serde_json::to_string(&session).unwrap();
@@ -274,14 +334,14 @@ mod tests {
 
         let deserialized: MantraSession = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, "session_123");
-        assert_eq!(deserialized.source, SessionSource::Claude);
+        assert_eq!(deserialized.source, sources::CLAUDE);
     }
 
     #[test]
     fn test_session_add_message() {
         let mut session = MantraSession::new(
             "test".to_string(),
-            SessionSource::Claude,
+            sources::CLAUDE.to_string(),
             "/tmp".to_string(),
         );
         assert_eq!(session.messages.len(), 0);
@@ -294,7 +354,7 @@ mod tests {
     fn test_full_session_roundtrip() {
         let mut session = MantraSession::new(
             "test_session".to_string(),
-            SessionSource::Claude,
+            sources::CLAUDE.to_string(),
             "/home/user/project".to_string(),
         );
 
@@ -320,6 +380,7 @@ mod tests {
                     id: "tool_1".to_string(),
                     name: "write_file".to_string(),
                     input: serde_json::json!({"path": "main.rs", "content": "fn main() {}"}),
+                    correlation_id: Some("tool_1".to_string()),
                 },
             ],
         ));
