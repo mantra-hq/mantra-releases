@@ -83,12 +83,18 @@ impl GeminiParser {
             }
 
             // Aggregate tokens from gemini messages
+            // Prefer the authoritative 'total' field if available
             if let Some(tokens) = &gemini_msg.tokens {
-                if let Some(input) = tokens.input {
-                    total_tokens += input.max(0) as u64;
-                }
-                if let Some(output) = tokens.output {
-                    total_tokens += output.max(0) as u64;
+                if let Some(total) = tokens.total {
+                    total_tokens += total.max(0) as u64;
+                } else {
+                    // Fallback: sum input + output if total not available
+                    if let Some(input) = tokens.input {
+                        total_tokens += input.max(0) as u64;
+                    }
+                    if let Some(output) = tokens.output {
+                        total_tokens += output.max(0) as u64;
+                    }
                 }
             }
 
@@ -820,6 +826,93 @@ mod tests {
 
         // Should aggregate: 100 + 50 + 200 + 150 = 500
         assert_eq!(session.metadata.total_tokens, Some(500));
+    }
+
+    #[test]
+    fn test_parse_real_world_tool_call_format() {
+        // Based on actual Gemini CLI output format
+        let json = r#"{
+            "sessionId": "8c9a7d96-6b65-4e36-9540-0484bc3e3eb2",
+            "projectHash": "3f39cb10e8c4f4196f80e8daa74c4d17f88708c17dcf1ae0d56da82a11a9f941",
+            "startTime": "2025-12-30T20:11:51.773Z",
+            "lastUpdated": "2025-12-30T20:23:26.927Z",
+            "messages": [
+                {
+                    "id": "61a5e2cb-2840-4249-93cb-3406903fa0e1",
+                    "timestamp": "2025-12-30T20:11:51.774Z",
+                    "type": "user",
+                    "content": "请帮我分析这个问题"
+                },
+                {
+                    "id": "b20dd04d-74a5-47dd-913c-8232f30231b9",
+                    "timestamp": "2025-12-30T20:12:02.838Z",
+                    "type": "gemini",
+                    "content": "我来分析一下",
+                    "thoughts": [
+                        {
+                            "subject": "Examining System",
+                            "description": "Analyzing the problem",
+                            "timestamp": "2025-12-30T20:11:55.073Z"
+                        }
+                    ],
+                    "tokens": {
+                        "input": 6926,
+                        "output": 246,
+                        "cached": 0,
+                        "thoughts": 651,
+                        "tool": 0,
+                        "total": 7823
+                    },
+                    "model": "gemini-3-pro-preview",
+                    "toolCalls": [
+                        {
+                            "id": "run_shell_command-1767125522547",
+                            "name": "run_shell_command",
+                            "args": {
+                                "command": "hostnamectl"
+                            },
+                            "result": [
+                                {
+                                    "functionResponse": {
+                                        "id": "run_shell_command-1767125522547",
+                                        "name": "run_shell_command",
+                                        "response": {
+                                            "output": "Static hostname: test-machine"
+                                        }
+                                    }
+                                }
+                            ],
+                            "status": "success",
+                            "timestamp": "2025-12-30T20:12:41.239Z",
+                            "displayName": "Shell",
+                            "description": "Execute shell commands",
+                            "resultDisplay": "Static hostname: test-machine",
+                            "renderOutputAsMarkdown": false
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        assert_eq!(session.id, "8c9a7d96-6b65-4e36-9540-0484bc3e3eb2");
+        assert_eq!(session.messages.len(), 2);
+
+        // Check thinking block
+        let gemini_msg = &session.messages[1];
+        let has_thinking = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::Thinking { .. }));
+        assert!(has_thinking, "Should have thinking block");
+
+        // Check tool use and result
+        let has_tool_use = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. }));
+        let has_tool_result = gemini_msg.content_blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(has_tool_use, "Should have tool use block");
+        assert!(has_tool_result, "Should have tool result block");
+
+        // Check tokens
+        assert_eq!(session.metadata.total_tokens, Some(7823));
     }
 }
 

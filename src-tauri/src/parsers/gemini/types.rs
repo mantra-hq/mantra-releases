@@ -228,6 +228,22 @@ pub struct GeminiToolCall {
 
     /// Execution timestamp
     pub timestamp: Option<String>,
+
+    /// Human-readable tool name for display (e.g., "Shell", "Edit File")
+    #[serde(default)]
+    pub display_name: Option<String>,
+
+    /// Tool description for UI display
+    #[serde(default)]
+    pub description: Option<String>,
+
+    /// Pre-formatted result for display (cleaner than raw output)
+    #[serde(default)]
+    pub result_display: Option<String>,
+
+    /// Whether to render output as markdown
+    #[serde(default)]
+    pub render_output_as_markdown: Option<bool>,
 }
 
 /// Wrapper for tool result containing functionResponse
@@ -312,10 +328,22 @@ pub struct GeminiTokens {
     /// Output/completion tokens
     pub output: Option<i64>,
 
-    /// Cache read tokens
+    /// Cached tokens (from Gemini CLI: cachedContentTokenCount)
+    pub cached: Option<i64>,
+
+    /// Thoughts tokens (optional)
+    pub thoughts: Option<i64>,
+
+    /// Tool use tokens (optional)
+    pub tool: Option<i64>,
+
+    /// Total tokens (the authoritative sum)
+    pub total: Option<i64>,
+
+    /// Cache read tokens (legacy field)
     pub cache_read: Option<i64>,
 
-    /// Cache write tokens
+    /// Cache write tokens (legacy field)
     pub cache_write: Option<i64>,
 }
 
@@ -499,6 +527,38 @@ mod tests {
             result[0].function_response.name,
             "run_shell_command"
         );
+    }
+
+    #[test]
+    fn test_deserialize_tool_call_with_display_fields() {
+        let json = r#"{
+            "id": "run_shell_command-123",
+            "name": "run_shell_command",
+            "args": {"command": "ls -la"},
+            "result": [
+                {
+                    "functionResponse": {
+                        "id": "run_shell_command-123",
+                        "name": "run_shell_command",
+                        "response": {
+                            "output": "file1.txt\nfile2.txt"
+                        }
+                    }
+                }
+            ],
+            "status": "success",
+            "timestamp": "2025-12-30T20:13:20.000Z",
+            "displayName": "Shell",
+            "description": "Execute shell commands",
+            "resultDisplay": "file1.txt\nfile2.txt",
+            "renderOutputAsMarkdown": false
+        }"#;
+
+        let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+        assert_eq!(tool_call.display_name, Some("Shell".to_string()));
+        assert_eq!(tool_call.description, Some("Execute shell commands".to_string()));
+        assert_eq!(tool_call.result_display, Some("file1.txt\nfile2.txt".to_string()));
+        assert_eq!(tool_call.render_output_as_markdown, Some(false));
     }
 
     #[test]

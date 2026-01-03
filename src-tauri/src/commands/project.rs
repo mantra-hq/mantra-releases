@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
-use crate::parsers::{ClaudeParser, CursorParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
 use crate::storage::Database;
 
@@ -83,9 +83,11 @@ pub async fn get_session(
 
 /// Import sessions from file paths
 ///
-/// Parses Claude Code log files or Cursor workspaces and imports them into the database.
-/// - If path is a file (.jsonl): uses ClaudeParser
+/// Parses Claude Code log files, Gemini CLI sessions, or Cursor workspaces
+/// and imports them into the database.
 /// - If path is a directory: uses CursorParser for workspace
+/// - If path contains .gemini and ends with .json: uses GeminiParser
+/// - Otherwise (.jsonl files): uses ClaudeParser
 #[tauri::command]
 pub async fn import_sessions(
     state: State<'_, AppState>,
@@ -95,6 +97,7 @@ pub async fn import_sessions(
     let mut scanner = ProjectScanner::new(&mut db);
     let claude_parser = ClaudeParser::new();
     let cursor_parser = CursorParser::new();
+    let gemini_parser = GeminiParser::new();
 
     let mut all_sessions = Vec::new();
     let mut parse_errors = Vec::new();
@@ -116,8 +119,27 @@ pub async fn import_sessions(
                 Err(e) => parse_errors.push(format!("{}: {}", path, e)),
             }
         } else {
-            // Claude Code log file
-            match claude_parser.parse_file(path) {
+            // Detect file type by path pattern
+            let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
+            let is_json = path.ends_with(".json");
+            let is_jsonl = path.ends_with(".jsonl");
+
+            let parse_result = if is_gemini && is_json {
+                // Gemini CLI session file
+                gemini_parser.parse_file(path)
+            } else if is_jsonl {
+                // Claude Code JSONL file
+                claude_parser.parse_file(path)
+            } else if is_json {
+                // Try Gemini first, then Claude
+                gemini_parser.parse_file(path)
+                    .or_else(|_| claude_parser.parse_file(path))
+            } else {
+                // Default to Claude parser
+                claude_parser.parse_file(path)
+            };
+
+            match parse_result {
                 Ok(session) => all_sessions.push(session),
                 Err(e) => parse_errors.push(format!("{}: {}", path, e)),
             }

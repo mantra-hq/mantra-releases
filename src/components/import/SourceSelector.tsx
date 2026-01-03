@@ -4,7 +4,7 @@
  *
  * 显示可用的导入来源选项：
  * - Claude Code (已支持)
- * - Gemini CLI (即将推出)
+ * - Gemini CLI (已支持 - Story 1.6)
  * - Cursor (已支持 - Story 1.7)
  */
 
@@ -37,10 +37,9 @@ const SOURCES: SourceConfig[] = [
   {
     id: "gemini",
     name: "Gemini CLI",
-    defaultPath: "~/.gemini/project_temp/chats",
+    defaultPath: "~/.gemini/tmp",
     icon: MessageSquare,
-    disabled: true,
-    badge: "即将推出",
+    disabled: false,
   },
   {
     id: "cursor",

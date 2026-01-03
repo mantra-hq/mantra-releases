@@ -25,8 +25,8 @@ describe("SourceSelector", () => {
       render(<SourceSelector value={null} onChange={vi.fn()} />);
 
       expect(screen.getByText("~/.claude/projects")).toBeInTheDocument();
-      expect(screen.getByText("~/.gemini/project_temp/chats")).toBeInTheDocument();
-      expect(screen.getByText("~/.cursor/projects")).toBeInTheDocument();
+      expect(screen.getByText("~/.gemini/tmp")).toBeInTheDocument();
+      expect(screen.getByText("~/.config/Cursor (按工作区)")).toBeInTheDocument();
     });
 
     it("renders source icons", () => {
@@ -73,39 +73,38 @@ describe("SourceSelector", () => {
     });
   });
 
-  // Task 2.5: 禁用暂不支持的来源
-  describe("Disabled Sources", () => {
-    it("marks Gemini as post-mvp/disabled", () => {
+  // Task 2.5: 启用状态测试
+  describe("Enabled Sources", () => {
+    it("all sources are enabled", () => {
       render(<SourceSelector value={null} onChange={vi.fn()} />);
 
+      const claudeCard = screen.getByTestId("source-card-claude");
       const geminiCard = screen.getByTestId("source-card-gemini");
-      expect(geminiCard).toHaveAttribute("data-disabled", "true");
-      // 检查徽章在 Gemini 卡片内
-      expect(geminiCard).toHaveTextContent("即将推出");
-    });
-
-    it("marks Cursor as post-mvp/disabled", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
-
       const cursorCard = screen.getByTestId("source-card-cursor");
-      expect(cursorCard).toHaveAttribute("data-disabled", "true");
+
+      expect(claudeCard).toHaveAttribute("data-disabled", "false");
+      expect(geminiCard).toHaveAttribute("data-disabled", "false");
+      expect(cursorCard).toHaveAttribute("data-disabled", "false");
     });
 
-    it("does not call onChange when clicking disabled source", () => {
+    it("calls onChange when clicking Gemini source", () => {
       const onChange = vi.fn();
       render(<SourceSelector value={null} onChange={onChange} />);
 
       const geminiCard = screen.getByTestId("source-card-gemini");
       fireEvent.click(geminiCard);
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith("gemini");
     });
 
-    it("keeps Claude enabled", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
+    it("calls onChange when clicking Cursor source", () => {
+      const onChange = vi.fn();
+      render(<SourceSelector value={null} onChange={onChange} />);
 
-      const claudeCard = screen.getByTestId("source-card-claude");
-      expect(claudeCard).toHaveAttribute("data-disabled", "false");
+      const cursorCard = screen.getByTestId("source-card-cursor");
+      fireEvent.click(cursorCard);
+
+      expect(onChange).toHaveBeenCalledWith("cursor");
     });
   });
 
