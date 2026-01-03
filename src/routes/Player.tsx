@@ -5,6 +5,7 @@
  * Story 2.11: Task 6 (Initial Code Display)
  * Story 2.12: Task 2 (Smart File Selection Logic)
  * Story 2.17: TopBar 面包屑导航
+ * Story 2.18: ProjectDrawer 项目抽屉
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
@@ -44,6 +45,9 @@ import {
 import { TopBar } from "@/components/navigation";
 import { ImportWizard } from "@/components/import";
 import { useCurrentSession } from "@/hooks";
+// Story 2.18: ProjectDrawer 项目抽屉
+import { ProjectDrawer } from "@/components/sidebar";
+import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 
 
 /**
@@ -113,6 +117,16 @@ export default function Player() {
 
   // Story 2.17: ImportWizard 状态
   const [importOpen, setImportOpen] = React.useState(false);
+
+  // Story 2.18: ProjectDrawer 状态
+  const {
+    isOpen: drawerOpen,
+    setIsOpen: setDrawerOpen,
+    projects: allProjects,
+    isLoading: projectsLoading,
+    getProjectSessions: fetchProjectSessions,
+    refetchProjects,
+  } = useProjectDrawer();
 
   // 加载会话数据
   React.useEffect(() => {
@@ -415,13 +429,11 @@ export default function Player() {
     navigate("/");
   }, [navigate]);
 
-  // Story 2.17: TopBar 回调函数
-  // 打开 ProjectDrawer (AC2, AC3) - 暂时导航到 Dashboard
+  // Story 2.17 & 2.18: TopBar 回调函数
+  // 打开 ProjectDrawer (AC2, AC3)
   const handleDrawerOpen = React.useCallback(() => {
-    // Story 2.18 将实现真正的 ProjectDrawer
-    // 目前导航回 Dashboard
-    navigate("/");
-  }, [navigate]);
+    setDrawerOpen(true);
+  }, [setDrawerOpen]);
 
   // 会话切换 (AC9)
   const handleSessionSelect = React.useCallback(
@@ -444,7 +456,39 @@ export default function Player() {
   const handleImportComplete = React.useCallback(() => {
     setImportOpen(false);
     refetchCurrentSession();
-  }, [refetchCurrentSession]);
+    refetchProjects();
+  }, [refetchCurrentSession, refetchProjects]);
+
+  // Story 2.18: 抽屉中的会话选择回调 (AC10, AC11)
+  const handleDrawerSessionSelect = React.useCallback(
+    (newSessionId: string, _projectId: string) => {
+      if (newSessionId !== sessionId) {
+        navigate(`/player/${newSessionId}`);
+      }
+    },
+    [sessionId, navigate]
+  );
+
+  // Story 2.18: 抽屉中的导入按钮回调
+  const handleDrawerImport = React.useCallback(() => {
+    setImportOpen(true);
+  }, []);
+
+  // Story 2.18 Task 9: 全局快捷键 Cmd/Ctrl+Shift+P 打开抽屉 (AC1)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+Shift+P (macOS) 或 Ctrl+Shift+P (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setDrawerOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [setDrawerOpen]);
 
   // DEV: 滚动到指定消息的调试函数 (可在 DevTools console 中调用 scrollToMessage('id'))
   React.useEffect(() => {
@@ -617,6 +661,18 @@ export default function Player() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onComplete={handleImportComplete}
+      />
+
+      {/* Story 2.18: ProjectDrawer 项目抽屉 */}
+      <ProjectDrawer
+        isOpen={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        projects={allProjects}
+        isLoading={projectsLoading}
+        currentSessionId={sessionId}
+        onSessionSelect={handleDrawerSessionSelect}
+        onImportClick={handleDrawerImport}
+        getProjectSessions={fetchProjectSessions}
       />
     </div>
   );

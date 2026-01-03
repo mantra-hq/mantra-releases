@@ -90,3 +90,31 @@ export async function getSnapshotAtTime(
 export async function listProjects(): Promise<Project[]> {
   return invoke<Project[]>("list_projects");
 }
+
+/**
+ * 会话摘要信息（匹配 Rust SessionSummary）
+ * Story 2.18: Task 7
+ */
+export interface SessionSummary {
+  /** 会话 ID */
+  id: string;
+  /** 会话来源 */
+  source: "claude" | "gemini" | "cursor" | "unknown";
+  /** 创建时间 (ISO 8601 字符串) */
+  created_at: string;
+  /** 更新时间 (ISO 8601 字符串) */
+  updated_at: string;
+  /** 消息数量 */
+  message_count: number;
+}
+
+/**
+ * 获取项目的所有会话
+ * Story 2.18: Task 7
+ *
+ * @param projectId - 项目 ID
+ * @returns 会话摘要列表，按更新时间降序排列
+ */
+export async function getProjectSessions(projectId: string): Promise<SessionSummary[]> {
+  return invoke<SessionSummary[]>("get_project_sessions", { projectId });
+}
