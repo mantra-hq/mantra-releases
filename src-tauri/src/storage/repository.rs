@@ -119,11 +119,13 @@ impl Database {
     }
 
     /// List all projects ordered by last activity (descending)
+    /// Excludes soft-deleted projects
     pub fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
             "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
+             WHERE p.deleted_at IS NULL
              ORDER BY p.last_activity DESC",
         )?;
 
@@ -475,6 +477,99 @@ impl Database {
         tx.commit()?;
 
         Ok(result)
+    }
+
+    /// Rename a project
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to rename
+    /// * `new_name` - The new project name
+    pub fn rename_project(&self, project_id: &str, new_name: &str) -> Result<(), StorageError> {
+        let rows_affected = self.connection().execute(
+            "UPDATE projects SET name = ?1 WHERE id = ?2",
+            params![new_name, project_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "Project with id {} not found",
+                project_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Soft delete a project (set deleted_at timestamp)
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to delete
+    pub fn soft_delete_project(&self, project_id: &str) -> Result<(), StorageError> {
+        let now = Utc::now().to_rfc3339();
+        let rows_affected = self.connection().execute(
+            "UPDATE projects SET deleted_at = ?1 WHERE id = ?2",
+            params![now, project_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "Project with id {} not found",
+                project_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Restore a soft-deleted project
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to restore
+    pub fn restore_project(&self, project_id: &str) -> Result<(), StorageError> {
+        let rows_affected = self.connection().execute(
+            "UPDATE projects SET deleted_at = NULL WHERE id = ?1",
+            params![project_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "Project with id {} not found",
+                project_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Get session message count for a specific session
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID
+    pub fn get_session_message_count(&self, session_id: &str) -> Result<u32, StorageError> {
+        let count: i32 = self.connection().query_row(
+            "SELECT message_count FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        )?;
+        Ok(count as u32)
+    }
+
+    /// Update session message count and raw data
+    ///
+    /// # Arguments
+    /// * `session` - The updated session
+    pub fn update_session(&self, session: &MantraSession) -> Result<(), StorageError> {
+        let raw_data = serde_json::to_string(session)?;
+        self.connection().execute(
+            "UPDATE sessions SET message_count = ?1, updated_at = ?2, raw_data = ?3 WHERE id = ?4",
+            params![
+                session.messages.len() as i32,
+                session.updated_at.to_rfc3339(),
+                raw_data,
+                session.id
+            ],
+        )?;
+        Ok(())
     }
 }
 

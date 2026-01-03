@@ -118,3 +118,73 @@ export interface SessionSummary {
 export async function getProjectSessions(projectId: string): Promise<SessionSummary[]> {
   return invoke<SessionSummary[]>("get_project_sessions", { projectId });
 }
+
+// =============================================================================
+// Story 2.19: Project Management IPC
+// =============================================================================
+
+/**
+ * 更新的会话信息（消息数变化）
+ */
+export interface UpdatedSession {
+  /** 会话 ID */
+  session_id: string;
+  /** 旧消息数 */
+  old_message_count: number;
+  /** 新消息数 */
+  new_message_count: number;
+}
+
+/**
+ * 同步结果
+ */
+export interface SyncResult {
+  /** 新发现的会话 */
+  new_sessions: SessionSummary[];
+  /** 有新消息的会话 */
+  updated_sessions: UpdatedSession[];
+  /** 无变化的会话数 */
+  unchanged_count: number;
+}
+
+/**
+ * 同步项目：检测新会话和消息更新
+ * Story 2.19: Task 9.1
+ *
+ * @param projectId - 项目 ID
+ * @returns 同步结果
+ */
+export async function syncProject(projectId: string): Promise<SyncResult> {
+  return invoke<SyncResult>("sync_project", { projectId });
+}
+
+/**
+ * 移除项目（软删除）
+ * Story 2.19: Task 9.2
+ *
+ * @param projectId - 项目 ID
+ */
+export async function removeProject(projectId: string): Promise<void> {
+  return invoke<void>("remove_project", { projectId });
+}
+
+/**
+ * 恢复已移除的项目
+ * Story 2.19: Task 9.2
+ *
+ * @param projectId - 项目 ID
+ */
+export async function restoreProject(projectId: string): Promise<void> {
+  return invoke<void>("restore_project", { projectId });
+}
+
+/**
+ * 重命名项目
+ * Story 2.19: Task 9.3
+ *
+ * @param projectId - 项目 ID
+ * @param newName - 新的项目名称
+ */
+export async function renameProject(projectId: string, newName: string): Promise<void> {
+  return invoke<void>("rename_project", { projectId, newName });
+}

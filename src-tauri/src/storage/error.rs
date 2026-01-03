@@ -23,6 +23,10 @@ pub enum StorageError {
     #[error("会话不存在: {0}")]
     SessionNotFound(String),
 
+    /// Generic not found error
+    #[error("资源不存在: {0}")]
+    NotFound(String),
+
     /// Lock error when accessing database
     #[error("数据库锁错误")]
     LockError,

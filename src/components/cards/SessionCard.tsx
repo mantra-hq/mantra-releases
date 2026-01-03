@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { MessageSquare, Sparkles, Terminal } from "lucide-react";
+import { MessageSquare, Sparkles, Terminal, HelpCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ const sourceIcons: Record<SessionSource, React.ReactNode> = {
   claude: <Sparkles className="w-5 h-5 text-orange-500" />,
   gemini: <MessageSquare className="w-5 h-5 text-blue-500" />,
   cursor: <Terminal className="w-5 h-5 text-purple-500" />,
+  unknown: <HelpCircle className="w-5 h-5 text-gray-500" />,
 };
 
 /**
@@ -38,6 +39,7 @@ const sourceNames: Record<SessionSource, string> = {
   claude: "Claude",
   gemini: "Gemini",
   cursor: "Cursor",
+  unknown: "Unknown",
 };
 
 /**

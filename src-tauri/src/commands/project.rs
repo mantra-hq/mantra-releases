@@ -32,6 +32,28 @@ pub struct RepresentativeFile {
     pub language: String,
 }
 
+/// Sync result for a project (Story 2.19)
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncResult {
+    /// Newly discovered sessions
+    pub new_sessions: Vec<SessionSummary>,
+    /// Sessions with new messages
+    pub updated_sessions: Vec<UpdatedSession>,
+    /// Count of unchanged sessions
+    pub unchanged_count: u32,
+}
+
+/// Updated session information
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdatedSession {
+    /// Session ID
+    pub session_id: String,
+    /// Previous message count
+    pub old_message_count: u32,
+    /// New message count
+    pub new_message_count: u32,
+}
+
 /// List all projects ordered by last activity
 #[tauri::command]
 pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<Project>, AppError> {
@@ -279,6 +301,193 @@ fn detect_language(filename: &str) -> &str {
         Some("sql") => "sql",
         _ => "text",
     }
+}
+
+// ============================================================================
+// Story 2.19: Project Management Commands
+// ============================================================================
+
+/// Sync a project: detect new sessions and message updates
+///
+/// Scans the project's cwd directory for new session files and checks
+/// existing sessions for message count changes.
+#[tauri::command]
+pub async fn sync_project(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<SyncResult, AppError> {
+    // Get project info
+    let project = {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_project(&project_id)?
+            .ok_or_else(|| AppError::NotFound(format!("Project {} not found", project_id)))?
+    };
+
+    let cwd = project.cwd.clone();
+
+    // Get existing sessions
+    let existing_sessions = {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_project_sessions(&project_id)?
+    };
+
+    // Build a map of existing session IDs to message counts
+    let existing_session_map: std::collections::HashMap<String, u32> = existing_sessions
+        .iter()
+        .map(|s| (s.id.clone(), s.message_count))
+        .collect();
+
+    // Scan for sessions in the project directory
+    let claude_parser = ClaudeParser::new();
+    let gemini_parser = GeminiParser::new();
+    let cursor_parser = CursorParser::new();
+
+    let cwd_path = PathBuf::from(&cwd);
+    let mut all_sessions: Vec<MantraSession> = Vec::new();
+
+    // Try different session file locations based on tool type
+    // Claude: ~/.claude/projects/{hash}/sessions/
+    // Gemini: {cwd}/.gemini/history/
+    // Cursor: {cwd}/.cursor/ directory
+
+    // Detect Claude sessions
+    if let Some(home) = dirs::home_dir() {
+        let claude_projects_dir = home.join(".claude").join("projects");
+        if claude_projects_dir.exists() {
+            // Search for session files that match this project's cwd
+            if let Ok(entries) = std::fs::read_dir(&claude_projects_dir) {
+                for entry in entries.flatten() {
+                    let sessions_dir = entry.path().join("sessions");
+                    if sessions_dir.exists() {
+                        if let Ok(session_files) = std::fs::read_dir(&sessions_dir) {
+                            for session_file in session_files.flatten() {
+                                let path = session_file.path();
+                                if path.extension().is_some_and(|e| e == "jsonl") {
+                                    if let Ok(session) = claude_parser.parse_file(path.to_string_lossy().as_ref()) {
+                                        if session.cwd == cwd {
+                                            all_sessions.push(session);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Detect Gemini sessions
+    let gemini_history_dir = cwd_path.join(".gemini").join("history");
+    if gemini_history_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&gemini_history_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_some_and(|e| e == "json") {
+                    if let Ok(session) = gemini_parser.parse_file(path.to_string_lossy().as_ref()) {
+                        all_sessions.push(session);
+                    }
+                }
+            }
+        }
+    }
+
+    // Detect Cursor workspace
+    let cursor_dir = cwd_path.join(".cursor");
+    if cursor_dir.exists() && cursor_dir.is_dir() {
+        if let Ok(sessions) = cursor_parser.parse_workspace(&cwd_path) {
+            all_sessions.extend(sessions);
+        }
+    }
+
+    // Process sessions
+    let mut new_sessions: Vec<SessionSummary> = Vec::new();
+    let mut updated_sessions: Vec<UpdatedSession> = Vec::new();
+    let mut unchanged_count: u32 = 0;
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    for session in all_sessions {
+        if let Some(&old_count) = existing_session_map.get(&session.id) {
+            let new_count = session.messages.len() as u32;
+            if new_count > old_count {
+                // Session has new messages
+                db.update_session(&session)?;
+                updated_sessions.push(UpdatedSession {
+                    session_id: session.id.clone(),
+                    old_message_count: old_count,
+                    new_message_count: new_count,
+                });
+            } else {
+                unchanged_count += 1;
+            }
+        } else {
+            // New session - import it
+            let (imported, _) = db.import_session(&session)?;
+            if imported {
+                new_sessions.push(SessionSummary {
+                    id: session.id.clone(),
+                    source: session.source.clone(),
+                    created_at: session.created_at,
+                    updated_at: session.updated_at,
+                    message_count: session.messages.len() as u32,
+                });
+            }
+        }
+    }
+
+    Ok(SyncResult {
+        new_sessions,
+        updated_sessions,
+        unchanged_count,
+    })
+}
+
+/// Remove a project (soft delete)
+///
+/// Marks the project as deleted without actually removing data,
+/// allowing for undo within a time window.
+#[tauri::command]
+pub async fn remove_project(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.soft_delete_project(&project_id)?;
+    Ok(())
+}
+
+/// Restore a removed project
+///
+/// Clears the deleted_at marker, making the project visible again.
+#[tauri::command]
+pub async fn restore_project(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.restore_project(&project_id)?;
+    Ok(())
+}
+
+/// Rename a project
+///
+/// Updates the project's display name.
+#[tauri::command]
+pub async fn rename_project(
+    state: State<'_, AppState>,
+    project_id: String,
+    new_name: String,
+) -> Result<(), AppError> {
+    // Validate name is not empty
+    let trimmed_name = new_name.trim();
+    if trimmed_name.is_empty() {
+        return Err(AppError::Validation("项目名称不能为空".to_string()));
+    }
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.rename_project(&project_id, trimmed_name)?;
+    Ok(())
 }
 
 #[cfg(test)]

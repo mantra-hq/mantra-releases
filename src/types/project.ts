@@ -8,7 +8,7 @@
 /**
  * 会话来源类型
  */
-export type SessionSource = "claude" | "gemini" | "cursor";
+export type SessionSource = "claude" | "gemini" | "cursor" | "unknown";
 
 /**
  * 会话摘要信息 (Rust: SessionSummary)

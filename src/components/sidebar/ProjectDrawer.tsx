@@ -1,10 +1,12 @@
 /**
  * ProjectDrawer Component - 项目抽屉
  * Story 2.18: Task 2
+ * Story 2.19: Task 10 - 集成项目管理功能
  *
  * 侧边抽屉，用于浏览和管理所有项目
  * - 从左侧滑入，宽度 320px
  * - 包含标题栏、搜索框、项目树列表和导入按钮
+ * - 支持项目同步、重命名、移除操作
  */
 
 import * as React from "react";
@@ -20,6 +22,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { DrawerSearch } from "./DrawerSearch";
 import { ProjectTreeItem } from "./ProjectTreeItem";
+import { ProjectContextMenu } from "./ProjectContextMenu";
+import { RemoveProjectDialog } from "./RemoveProjectDialog";
+import { showSyncResult } from "./SyncResultToast";
+import { useUndoableAction } from "@/hooks/useUndoableAction";
+import {
+  syncProject,
+  removeProject,
+  restoreProject,
+  renameProject,
+} from "@/lib/project-ipc";
+import { toast } from "sonner";
 import type { Project } from "@/types/project";
 import type { SessionSummary } from "./types";
 
@@ -43,6 +56,8 @@ export interface ProjectDrawerProps {
   onImportClick: () => void;
   /** 获取项目会话列表 */
   getProjectSessions: (projectId: string) => Promise<SessionSummary[]>;
+  /** Story 2.19: 项目列表变更回调（用于刷新列表） */
+  onProjectsChange?: () => void;
 }
 
 /**
@@ -58,6 +73,7 @@ export function ProjectDrawer({
   onSessionSelect,
   onImportClick,
   getProjectSessions,
+  onProjectsChange,
 }: ProjectDrawerProps) {
   // 搜索关键词状态
   const [searchKeyword, setSearchKeyword] = React.useState("");
@@ -73,6 +89,17 @@ export function ProjectDrawer({
   const [loadingProjects, setLoadingProjects] = React.useState<Set<string>>(
     new Set()
   );
+
+  // Story 2.19: 项目管理状态
+  // 当前操作的项目（用于对话框）
+  const [activeProject, setActiveProject] = React.useState<Project | null>(null);
+  // 移除对话框打开状态
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = React.useState(false);
+  // 重命名中的项目 ID
+  const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null);
+
+  // 可撤销操作 Hook
+  const undoableAction = useUndoableAction();
 
   // 过滤后的项目列表
   const filteredProjects = React.useMemo(() => {
@@ -147,6 +174,58 @@ export function ProjectDrawer({
     onImportClick();
     onOpenChange(false);
   }, [onImportClick, onOpenChange]);
+
+  // Story 2.19: 处理重命名保存
+  const handleRenameSave = React.useCallback(
+    async (newName: string) => {
+      if (!renamingProjectId) return;
+
+      try {
+        await renameProject(renamingProjectId, newName);
+        onProjectsChange?.();
+        setRenamingProjectId(null);
+      } catch (error) {
+        toast.error("重命名失败", {
+          description: (error as Error).message,
+        });
+      }
+    },
+    [renamingProjectId, onProjectsChange]
+  );
+
+  // Story 2.19: 处理重命名取消
+  const handleRenameCancel = React.useCallback(() => {
+    setRenamingProjectId(null);
+  }, []);
+
+  // Story 2.19: 处理移除确认
+  const handleRemoveConfirm = React.useCallback(async () => {
+    if (!activeProject) return;
+
+    const projectToRemove = activeProject;
+    setIsRemoveDialogOpen(false);
+
+    // 使用可撤销操作
+    undoableAction.trigger({
+      execute: async () => {
+        await removeProject(projectToRemove.id);
+        onProjectsChange?.();
+        toast.success(`已移除「${projectToRemove.name}」`, {
+          action: {
+            label: "撤销",
+            onClick: () => undoableAction.cancel(),
+          },
+          duration: 5000,
+        });
+      },
+      undo: async () => {
+        await restoreProject(projectToRemove.id);
+        onProjectsChange?.();
+        toast.success("已恢复项目");
+      },
+      timeoutMs: 5000,
+    });
+  }, [activeProject, undoableAction, onProjectsChange]);
 
   // 空状态
   const isEmpty = !isLoading && projects.length === 0;
@@ -223,6 +302,35 @@ export function ProjectDrawer({
                   onSessionSelect={(sessionId) =>
                     handleSessionSelect(sessionId, project.id)
                   }
+                  // Story 2.19: 重命名相关
+                  isRenaming={renamingProjectId === project.id}
+                  onRename={handleRenameSave}
+                  onRenameCancel={handleRenameCancel}
+                  // Story 2.19: 设置菜单
+                  settingsMenu={
+                    <ProjectContextMenu
+                      onSync={async () => {
+                        try {
+                          const result = await syncProject(project.id);
+                          showSyncResult(project.name, result);
+                          if (result.new_sessions.length > 0 || result.updated_sessions.length > 0) {
+                            const sessions = await getProjectSessions(project.id);
+                            setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
+                            onProjectsChange?.();
+                          }
+                        } catch (error) {
+                          showSyncResult(project.name, null, error as Error);
+                        }
+                      }}
+                      onRename={() => {
+                        setRenamingProjectId(project.id);
+                      }}
+                      onRemove={() => {
+                        setActiveProject(project);
+                        setIsRemoveDialogOpen(true);
+                      }}
+                    />
+                  }
                 />
               ))}
             </div>
@@ -244,6 +352,14 @@ export function ProjectDrawer({
           </div>
         )}
       </SheetContent>
+
+      {/* Story 2.19: 移除确认对话框 */}
+      <RemoveProjectDialog
+        isOpen={isRemoveDialogOpen}
+        onOpenChange={setIsRemoveDialogOpen}
+        projectName={activeProject?.name ?? ""}
+        onConfirm={handleRemoveConfirm}
+      />
     </Sheet>
   );
 }

@@ -55,6 +55,21 @@ impl Database {
             )?;
         }
 
+        // Migration: Add deleted_at column for soft delete (Story 2.19)
+        let has_deleted_at: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'deleted_at'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_deleted_at {
+            conn.execute_batch(
+                "ALTER TABLE projects ADD COLUMN deleted_at TEXT;",
+            )?;
+        }
+
         Ok(())
     }
 

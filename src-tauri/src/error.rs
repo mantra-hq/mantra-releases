@@ -36,6 +36,14 @@ pub enum AppError {
     /// Lock error
     #[error("锁获取失败")]
     LockError,
+
+    /// Resource not found error (Story 2.19)
+    #[error("资源不存在: {0}")]
+    NotFound(String),
+
+    /// Validation error (Story 2.19)
+    #[error("验证错误: {0}")]
+    Validation(String),
 }
 
 /// Serializable error response for Tauri IPC
@@ -67,6 +75,8 @@ impl From<AppError> for ErrorResponse {
             AppError::Git(e) => (git_error_code(e).to_string(), e.to_string()),
             AppError::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
             AppError::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
+            AppError::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
+            AppError::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
         };
         Self { code, message }
     }
@@ -86,6 +96,8 @@ impl Serialize for AppError {
             Self::Git(e) => (git_error_code(e).to_string(), e.to_string()),
             Self::Storage(e) => ("STORAGE_ERROR".to_string(), e.to_string()),
             Self::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
+            Self::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
+            Self::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
         };
         ErrorResponse { code, message }.serialize(serializer)
     }

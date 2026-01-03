@@ -23,6 +23,8 @@ use commands::{
     parse_gemini_all, parse_gemini_project, parse_log_files,
     sanitize_session, sanitize_text, validate_regex, scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
+    // Story 2.19: Project management commands
+    sync_project, remove_project, restore_project, rename_project,
 };
 
 use storage::Database;
@@ -91,7 +93,12 @@ pub fn run() {
             list_files_at_commit,
             sanitize_text,
             sanitize_session,
-            validate_regex
+            validate_regex,
+            // Story 2.19: Project management
+            sync_project,
+            remove_project,
+            restore_project,
+            rename_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
