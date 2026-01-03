@@ -55,6 +55,7 @@ describe("ProjectContextMenu", () => {
   const defaultProps = {
     project: mockProject,
     onSync: vi.fn().mockResolvedValue(undefined),
+    onForceSync: vi.fn().mockResolvedValue(undefined),
     onRename: vi.fn(),
     onRemove: vi.fn(),
   };
@@ -166,7 +167,7 @@ describe("ProjectContextMenu", () => {
   });
 
   it("shows sync loading state during sync", async () => {
-    let resolveSync: () => void = () => {};
+    let resolveSync: () => void = () => { };
     const onSync = vi.fn().mockImplementation(
       () => new Promise<void>((resolve) => {
         resolveSync = resolve;

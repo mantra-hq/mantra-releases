@@ -463,6 +463,15 @@ export default function Player() {
     refetchProjects();
   }, [refetchCurrentSession, refetchProjects]);
 
+  // 导入对话框关闭回调（无论如何关闭都刷新项目列表）
+  const handleImportOpenChange = React.useCallback((open: boolean) => {
+    setImportOpen(open);
+    // 关闭对话框时刷新项目列表
+    if (!open) {
+      refetchProjects();
+    }
+  }, [refetchProjects]);
+
   // Story 2.18: 抽屉中的会话选择回调 (AC10, AC11)
   // Story 2.21 AC #3: 选择会话后抽屉自动关闭
   const handleDrawerSessionSelect = React.useCallback(
@@ -578,7 +587,7 @@ export default function Player() {
         {/* Import Wizard Modal */}
         <ImportWizard
           open={importOpen}
-          onOpenChange={setImportOpen}
+          onOpenChange={handleImportOpenChange}
           onComplete={handleImportComplete}
         />
         {/* ProjectDrawer 项目抽屉 */}
@@ -591,6 +600,7 @@ export default function Player() {
           onSessionSelect={handleDrawerSessionSelect}
           onImportClick={handleDrawerImport}
           getProjectSessions={fetchProjectSessions}
+          onProjectsChange={refetchProjects}
         />
       </div>
     );
@@ -725,7 +735,7 @@ export default function Player() {
       {/* Story 2.17: Import Wizard Modal */}
       <ImportWizard
         open={importOpen}
-        onOpenChange={setImportOpen}
+        onOpenChange={handleImportOpenChange}
         onComplete={handleImportComplete}
       />
 
@@ -739,6 +749,7 @@ export default function Player() {
         onSessionSelect={handleDrawerSessionSelect}
         onImportClick={handleDrawerImport}
         getProjectSessions={fetchProjectSessions}
+        onProjectsChange={refetchProjects}
       />
     </div>
   );

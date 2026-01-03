@@ -311,11 +311,18 @@ fn detect_language(filename: &str) -> &str {
 ///
 /// Scans the project's cwd directory for new session files and checks
 /// existing sessions for message count changes.
+///
+/// # Arguments
+/// * `project_id` - The project ID to sync
+/// * `force` - If true, re-parse all sessions regardless of message count changes.
+///             Useful when parser bugs are fixed and data needs to be corrected.
 #[tauri::command]
 pub async fn sync_project(
     state: State<'_, AppState>,
     project_id: String,
+    force: Option<bool>,
 ) -> Result<SyncResult, AppError> {
+    let force = force.unwrap_or(false);
     // Get project info
     let project = {
         let db = state.db.lock().map_err(|_| AppError::LockError)?;
@@ -410,8 +417,9 @@ pub async fn sync_project(
     for session in all_sessions {
         if let Some(&old_count) = existing_session_map.get(&session.id) {
             let new_count = session.messages.len() as u32;
-            if new_count > old_count {
-                // Session has new messages
+            // Update if: new messages added OR force re-parse requested
+            if new_count > old_count || force {
+                // Session has updates or force re-parse
                 db.update_session(&session)?;
                 updated_sessions.push(UpdatedSession {
                     session_id: session.id.clone(),

@@ -16,15 +16,17 @@ export type { SyncResult } from "@/lib/project-ipc";
  * @param projectName 项目名称
  * @param result 同步结果（成功时）
  * @param error 错误（失败时）
+ * @param isForceSync 是否为强制重新解析
  */
 export function showSyncResult(
   projectName: string,
   result: SyncResult | null,
-  error?: Error
+  error?: Error,
+  isForceSync?: boolean
 ): void {
   // 错误状态
   if (error) {
-    toast.error("同步失败", {
+    toast.error(isForceSync ? "重新解析失败" : "同步失败", {
       description: error.message || "请稍后重试",
     });
     return;
@@ -32,7 +34,7 @@ export function showSyncResult(
 
   // 空结果
   if (!result) {
-    toast.error("同步失败", {
+    toast.error(isForceSync ? "重新解析失败" : "同步失败", {
       description: "未返回同步结果",
     });
     return;
@@ -41,6 +43,36 @@ export function showSyncResult(
   const { new_sessions, updated_sessions } = result;
   const hasNewSessions = new_sessions.length > 0;
   const hasUpdates = updated_sessions.length > 0;
+
+  // 强制重新解析模式
+  if (isForceSync) {
+    if (!hasNewSessions && !hasUpdates) {
+      toast.success("重新解析完成", {
+        description: `「${projectName}」所有会话已是最新数据`,
+      });
+      return;
+    }
+
+    const parts: string[] = [];
+    if (hasNewSessions) {
+      parts.push(`发现 ${new_sessions.length} 个新会话`);
+    }
+    if (hasUpdates) {
+      parts.push(`重新解析 ${updated_sessions.length} 个会话`);
+    }
+
+    toast.success("重新解析完成", {
+      description: (
+        <div className="flex flex-col gap-1">
+          <div className="font-medium">🔃 {projectName}</div>
+          {parts.map((part, index) => (
+            <div key={index}>• {part}</div>
+          ))}
+        </div>
+      ),
+    });
+    return;
+  }
 
   // AC8: 无更新时显示「已是最新」
   if (!hasNewSessions && !hasUpdates) {

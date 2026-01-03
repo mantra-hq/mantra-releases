@@ -18,6 +18,7 @@ import { TodoWriteCard } from "./TodoWriteCard";
 import { ToolOutput } from "./ToolOutput";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useToolPairingContext } from "@/contexts/ToolPairingContext";
+import { useEditorStore } from "@/stores/useEditorStore";
 
 export interface ContentBlockRendererProps {
   /** 内容块数据 */
@@ -44,6 +45,47 @@ function isTerminalTool(toolName: string): boolean {
   );
 }
 
+/** 文件类工具列表 */
+const FILE_TOOLS = [
+  "Read",
+  "read_file",
+  "view_file",
+  "Write",
+  "write_to_file",
+  "Edit",
+  "replace_file_content",
+  "multi_replace_file_content",
+];
+
+/** 检查是否为文件类工具 */
+function isFileTool(toolName: string): boolean {
+  return FILE_TOOLS.some(t =>
+    toolName.toLowerCase().includes(t.toLowerCase())
+  );
+}
+
+/** 从 toolInput 提取文件路径 */
+function extractFilePath(toolInput?: Record<string, unknown>): string | null {
+  if (!toolInput) return null;
+
+  const pathKeys = [
+    "file_path",
+    "filePath",
+    "path",
+    "AbsolutePath",
+    "TargetFile",
+    "filename",
+  ];
+
+  for (const key of pathKeys) {
+    const value = toolInput[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 /**
  * ContentBlockRenderer 组件
  *
@@ -65,6 +107,10 @@ export function ContentBlockRenderer({
   const openTerminalDetail = useDetailPanelStore((state) => state.openTerminalDetail);
   const setHighlightedToolId = useDetailPanelStore((state) => state.setHighlightedToolId);
   const highlightedToolId = useDetailPanelStore((state) => state.highlightedToolId);
+  const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
+
+  // 文件类工具 - 打开文件到右侧代码面板
+  const openTab = useEditorStore((state) => state.openTab);
 
   // Story 2.15: 获取配对信息
   const pairingContext = useToolPairingContext();
@@ -138,14 +184,28 @@ export function ContentBlockRenderer({
             onJumpToOutput={pairingContext ? () => {
               pairingContext.scrollTo(block.toolUseId!, "output");
             } : undefined}
-            onClick={isTerminalTool(toolName) ? () => {
-              // 终端类工具 - 点击卡片打开终端 Tab
-              openTerminalDetail({
-                command: block.toolInput?.command as string | undefined,
-                output: pairInfo?.outputContent ?? "",
-                isError: isError,
-              });
-            } : undefined}
+            onClick={
+              isTerminalTool(toolName) ? () => {
+                // 终端类工具 - 点击卡片打开终端 Tab
+                openTerminalDetail({
+                  command: block.toolInput?.command as string | undefined,
+                  output: pairInfo?.outputContent ?? "",
+                  isError: isError,
+                });
+              } : isFileTool(toolName) ? () => {
+                // 文件类工具 - 点击卡片打开文件到右侧代码面板
+                const filePath = extractFilePath(block.toolInput);
+                if (filePath) {
+                  // 使用 tool_result 的内容作为文件内容（如果有配对输出）
+                  const fileContent = pairInfo?.outputContent;
+                  openTab(filePath, {
+                    preview: true,
+                    content: fileContent || undefined,
+                  });
+                  setActiveRightTab("code");
+                }
+              } : undefined
+            }
             onViewDetail={() => {
               // 所有工具 - 点击详情按钮打开工具详情 Tab
               openToolDetail({

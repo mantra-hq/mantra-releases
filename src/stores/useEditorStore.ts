@@ -146,7 +146,7 @@ export const useEditorStore = create<EditorState>()(
         (set, get) => ({
             tabs: [],
             activeTabId: null,
-            sidebarOpen: false,
+            sidebarOpen: true,
             expandedFolders: new Set<string>(),
             diffMode: "inline" as DiffMode,
 
@@ -414,6 +414,10 @@ export const useEditorStore = create<EditorState>()(
 );
 
 export default useEditorStore;
+
+
+
+
 
 
 

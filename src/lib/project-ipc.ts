@@ -152,10 +152,11 @@ export interface SyncResult {
  * Story 2.19: Task 9.1
  *
  * @param projectId - 项目 ID
+ * @param force - 可选，强制重新解析所有会话（用于修复解析 bug 后恢复数据）
  * @returns 同步结果
  */
-export async function syncProject(projectId: string): Promise<SyncResult> {
-  return invoke<SyncResult>("sync_project", { projectId });
+export async function syncProject(projectId: string, force?: boolean): Promise<SyncResult> {
+  return invoke<SyncResult>("sync_project", { projectId, force });
 }
 
 /**

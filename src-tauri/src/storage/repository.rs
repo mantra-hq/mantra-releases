@@ -81,6 +81,12 @@ impl Database {
 
         match project_result {
             Ok(mut project) => {
+                // Restore project if it was soft-deleted (Story 2.19 fix)
+                self.connection().execute(
+                    "UPDATE projects SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+                    params![project.id],
+                )?;
+                
                 // Get session count
                 let count: i32 = self.connection().query_row(
                     "SELECT COUNT(*) FROM sessions WHERE project_id = ?1",
@@ -409,7 +415,15 @@ impl Database {
                 )?;
 
                 match stmt.query_row(params![session.cwd], |row: &rusqlite::Row| row.get::<_, String>(0)) {
-                    Ok(project_id) => Ok((project_id, false)),
+                    Ok(project_id) => {
+                        // Restore project if it was soft-deleted (Story 2.19 fix)
+                        // This ensures re-importing a deleted project makes it visible again
+                        tx.execute(
+                            "UPDATE projects SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+                            params![project_id],
+                        )?;
+                        Ok((project_id, false))
+                    },
                     Err(rusqlite::Error::QueryReturnedNoRows) => {
                         let id = Uuid::new_v4().to_string();
                         let name = extract_project_name(&session.cwd);

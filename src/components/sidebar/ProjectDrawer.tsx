@@ -342,6 +342,18 @@ export function ProjectDrawer({
                           showSyncResult(project.name, null, error as Error);
                         }
                       }}
+                      onForceSync={async () => {
+                        try {
+                          const result = await syncProject(project.id, true);
+                          showSyncResult(project.name, result, undefined, true);
+                          // 强制重新解析后总是刷新会话列表
+                          const sessions = await getProjectSessions(project.id);
+                          setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
+                          onProjectsChange?.();
+                        } catch (error) {
+                          showSyncResult(project.name, null, error as Error);
+                        }
+                      }}
                       onRename={() => {
                         setRenamingProjectId(project.id);
                       }}

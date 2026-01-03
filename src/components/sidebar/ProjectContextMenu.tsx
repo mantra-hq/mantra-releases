@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { RefreshCw, Pencil, Trash2, Loader2, Settings } from "lucide-react";
+import { RefreshCw, RotateCcw, Pencil, Trash2, Loader2, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,8 +19,10 @@ import {
  * ProjectContextMenu Props
  */
 export interface ProjectContextMenuProps {
-  /** 同步回调 */
+  /** 同步回调（增量同步） */
   onSync: () => Promise<void>;
+  /** 强制重新解析回调（完全重新解析所有会话） */
+  onForceSync: () => Promise<void>;
   /** 重命名回调 */
   onRename: () => void;
   /** 移除回调 */
@@ -35,12 +37,14 @@ export interface ProjectContextMenuProps {
  */
 export function ProjectContextMenu({
   onSync,
+  onForceSync,
   onRename,
   onRemove,
   onOpenChange,
 }: ProjectContextMenuProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSyncing, setIsSyncing] = React.useState(false);
+  const [isForceSyncing, setIsForceSyncing] = React.useState(false);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -54,6 +58,17 @@ export function ProjectContextMenu({
       await onSync();
     } finally {
       setIsSyncing(false);
+      setIsOpen(false);
+    }
+  };
+
+  const handleForceSync = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsForceSyncing(true);
+    try {
+      await onForceSync();
+    } finally {
+      setIsForceSyncing(false);
       setIsOpen(false);
     }
   };
@@ -85,7 +100,7 @@ export function ProjectContextMenu({
 
       <DropdownMenuContent align="start" className="w-48">
         {/* 同步更新 (AC2) */}
-        <DropdownMenuItem onClick={handleSync} disabled={isSyncing}>
+        <DropdownMenuItem onClick={handleSync} disabled={isSyncing || isForceSyncing}>
           {isSyncing ? (
             <Loader2
               className="h-4 w-4 mr-2 animate-spin"
@@ -95,6 +110,24 @@ export function ProjectContextMenu({
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
           同步更新
+        </DropdownMenuItem>
+
+        {/* 强制重新解析 - 用于修复解析 bug 后恢复数据 */}
+        <DropdownMenuItem onClick={handleForceSync} disabled={isSyncing || isForceSyncing}>
+          {isForceSyncing ? (
+            <Loader2
+              className="h-4 w-4 mr-2 animate-spin"
+              data-testid="force-sync-loading"
+            />
+          ) : (
+            <RotateCcw className="h-4 w-4 mr-2" />
+          )}
+          <div className="flex flex-col items-start">
+            <span>强制重新解析</span>
+            <span className="text-xs text-muted-foreground">
+              重新解析所有会话
+            </span>
+          </div>
         </DropdownMenuItem>
 
         {/* 重命名 (AC2) */}
