@@ -97,6 +97,8 @@ export function ProjectDrawer({
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = React.useState(false);
   // 重命名中的项目 ID
   const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null);
+  // Story 2.18 fix: 菜单打开的项目 ID（用于保持按钮可见）
+  const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
 
   // 可撤销操作 Hook
   const undoableAction = useUndoableAction();
@@ -306,9 +308,14 @@ export function ProjectDrawer({
                   isRenaming={renamingProjectId === project.id}
                   onRename={handleRenameSave}
                   onRenameCancel={handleRenameCancel}
+                  // Story 2.18 fix: 菜单打开状态
+                  isSettingsMenuOpen={menuOpenProjectId === project.id}
                   // Story 2.19: 设置菜单
                   settingsMenu={
                     <ProjectContextMenu
+                      onOpenChange={(open) => {
+                        setMenuOpenProjectId(open ? project.id : null);
+                      }}
                       onSync={async () => {
                         try {
                           const result = await syncProject(project.id);

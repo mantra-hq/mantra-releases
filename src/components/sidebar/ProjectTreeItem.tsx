@@ -45,6 +45,8 @@ export interface ProjectTreeItemProps {
   onRenameCancel?: () => void;
   /** Story 2.19: 设置菜单组件（替换默认齿轮按钮） */
   settingsMenu?: React.ReactNode;
+  /** Story 2.18 fix: 菜单是否打开（用于保持按钮可见） */
+  isSettingsMenuOpen?: boolean;
 }
 
 /**
@@ -65,10 +67,8 @@ export function ProjectTreeItem({
   onRename,
   onRenameCancel,
   settingsMenu,
+  isSettingsMenuOpen = false,
 }: ProjectTreeItemProps) {
-  // 悬停状态（用于显示齿轮按钮）
-  const [isHovered, setIsHovered] = React.useState(false);
-
   return (
     <div data-testid={`project-tree-item-${project.id}`}>
       {/* 项目节点 - 使用 div 包裹避免嵌套 button */}
@@ -78,8 +78,6 @@ export function ProjectTreeItem({
           "hover:bg-muted/50 transition-colors",
           "group relative"
         )}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
         {/* 可点击区域 - 展开/折叠 */}
         <button
@@ -123,9 +121,18 @@ export function ProjectTreeItem({
 
         {/* 齿轮按钮 (AC9: 预留给 2.19) - 作为兄弟元素避免嵌套 */}
         {/* Story 2.19: 如果提供了 settingsMenu，渲染它；否则渲染默认按钮 */}
-        {isHovered && !isRenaming && (
+        {/* 始终渲染但通过 CSS 控制可见性，避免悬浮时布局跳动 */}
+        {!isRenaming && (
           settingsMenu ? (
-            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div
+              className={cn(
+                "shrink-0 transition-opacity",
+                // 悬停时或菜单打开时显示，否则隐藏
+                "opacity-0 group-hover:opacity-100",
+                isSettingsMenuOpen && "opacity-100"
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
               {settingsMenu}
             </div>
           ) : onSettingsClick ? (
@@ -135,7 +142,10 @@ export function ProjectTreeItem({
                 e.stopPropagation();
                 onSettingsClick();
               }}
-              className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0"
+              className={cn(
+                "h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0 transition-opacity",
+                "opacity-0 group-hover:opacity-100"
+              )}
               aria-label="项目设置"
               data-testid={`project-settings-${project.id}`}
             >
