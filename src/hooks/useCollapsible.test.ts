@@ -125,7 +125,7 @@ describe("useCollapsible", () => {
 
     it("折叠状态下 Escape 键不应该有效果", () => {
         const onCollapse = vi.fn();
-        const { result } = renderHook(() =>
+        renderHook(() =>
             useCollapsible({ defaultExpanded: false, onCollapse })
         );
 

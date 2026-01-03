@@ -29,8 +29,9 @@ import {
   type TimelineEvent,
 } from "@/types/timeline";
 import { TimberLine } from "@/components/timeline";
-import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, AlertCircle, Loader2, Menu, Plus, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useEditorStore } from "@/stores/useEditorStore";
@@ -48,6 +49,8 @@ import { useCurrentSession } from "@/hooks";
 // Story 2.18: ProjectDrawer 项目抽屉
 import { ProjectDrawer } from "@/components/sidebar";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
+// Story 2.21: Player 空状态组件
+import { PlayerEmptyState } from "@/components/player";
 
 
 /**
@@ -119,6 +122,7 @@ export default function Player() {
   const [importOpen, setImportOpen] = React.useState(false);
 
   // Story 2.18: ProjectDrawer 状态
+  // Story 2.21 AC #2: 无 sessionId 时默认展开抽屉
   const {
     isOpen: drawerOpen,
     setIsOpen: setDrawerOpen,
@@ -126,7 +130,7 @@ export default function Player() {
     isLoading: projectsLoading,
     getProjectSessions: fetchProjectSessions,
     refetchProjects,
-  } = useProjectDrawer();
+  } = useProjectDrawer({ defaultOpen: !sessionId });
 
   // 加载会话数据
   React.useEffect(() => {
@@ -424,7 +428,7 @@ export default function Player() {
     [timelineEvents, messages, setStoreCurrentTime, jumpToMessage, repoPath, fetchSnapshot, openTab, setActiveRightTab]
   );
 
-  // 返回 Dashboard
+  // 返回首页
   const handleBack = React.useCallback(() => {
     navigate("/");
   }, [navigate]);
@@ -460,13 +464,15 @@ export default function Player() {
   }, [refetchCurrentSession, refetchProjects]);
 
   // Story 2.18: 抽屉中的会话选择回调 (AC10, AC11)
+  // Story 2.21 AC #3: 选择会话后抽屉自动关闭
   const handleDrawerSessionSelect = React.useCallback(
     (newSessionId: string, _projectId: string) => {
       if (newSessionId !== sessionId) {
+        setDrawerOpen(false); // AC #3: 关闭抽屉
         navigate(`/player/${newSessionId}`);
       }
     },
-    [sessionId, navigate]
+    [sessionId, navigate, setDrawerOpen]
   );
 
   // Story 2.18: 抽屉中的导入按钮回调
@@ -504,28 +510,88 @@ export default function Player() {
     };
   }, []);
 
-  // 无效 sessionId 错误处理
+  // 无效 sessionId 错误处理 → Story 2.21: 改为显示空状态 (AC #1, #4)
   if (!sessionId) {
     return (
       <div className="h-screen flex flex-col bg-background">
-        <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur">
-          <div className="flex h-14 items-center px-4">
-            <Button variant="ghost" size="icon" onClick={handleBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-xl font-bold text-foreground ml-2">
-              Mantra <span className="text-primary">心法</span>
-            </span>
+        {/* Story 2.21 AC #4: 简化版 TopBar（无会话信息） */}
+        <header
+          className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+        >
+          <div className="flex h-14 items-center justify-between px-4 gap-2">
+            {/* 左侧: 汉堡菜单 + Logo */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="打开项目抽屉"
+                className="h-8 w-8"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+              <span className="text-lg font-bold text-foreground">
+                Mantra <span className="text-primary">心法</span>
+              </span>
+            </div>
+            {/* 右侧: 简化操作按钮（无同步）- Story 2.21 AC #15, #16 */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => useSearchStore.getState().open()}
+                aria-label="全局搜索 (⌘K)"
+                className="h-8 w-8"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setImportOpen(true)}
+                aria-label="导入会话"
+                className="h-8 w-8"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/settings")}
+                aria-label="设置"
+                className="h-8 w-8"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
         </header>
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-foreground mb-2">会话未找到</h2>
-            <p className="text-sm text-muted-foreground mb-4">请从项目列表中选择一个会话</p>
-            <Button onClick={handleBack}>返回 Dashboard</Button>
-          </div>
+        {/* Story 2.21 AC #4-9: Player 空状态 */}
+        <main className="flex-1 min-h-0">
+          <PlayerEmptyState
+            hasProjects={allProjects.length > 0}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onImport={() => setImportOpen(true)}
+          />
         </main>
+        {/* Import Wizard Modal */}
+        <ImportWizard
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onComplete={handleImportComplete}
+        />
+        {/* ProjectDrawer 项目抽屉 */}
+        <ProjectDrawer
+          isOpen={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          projects={allProjects}
+          isLoading={projectsLoading}
+          currentSessionId={undefined}
+          onSessionSelect={handleDrawerSessionSelect}
+          onImportClick={handleDrawerImport}
+          getProjectSessions={fetchProjectSessions}
+        />
       </div>
     );
   }
@@ -573,7 +639,7 @@ export default function Player() {
             <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
             <h2 className="text-lg font-semibold text-foreground mb-2">加载失败</h2>
             <p className="text-sm text-muted-foreground mb-4">{error}</p>
-            <Button onClick={handleBack}>返回 Dashboard</Button>
+            <Button onClick={handleBack}>返回首页</Button>
           </div>
         </main>
       </div>
@@ -599,7 +665,7 @@ export default function Player() {
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-lg font-semibold text-foreground mb-2">会话为空</h2>
             <p className="text-sm text-muted-foreground mb-4">这个会话没有任何消息</p>
-            <Button onClick={handleBack}>返回 Dashboard</Button>
+            <Button onClick={handleBack}>返回首页</Button>
           </div>
         </main>
       </div>

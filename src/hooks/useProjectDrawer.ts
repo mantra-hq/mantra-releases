@@ -1,6 +1,7 @@
 /**
  * useProjectDrawer Hook
  * Story 2.18: Task 6
+ * Story 2.21: Task 3 (支持 defaultOpen)
  *
  * 封装项目抽屉的状态管理：
  * - 抽屉开关状态
@@ -11,6 +12,15 @@
 import * as React from "react";
 import { useProjects } from "./useProjects";
 import { getProjectSessions, type SessionSummary } from "@/lib/project-ipc";
+
+/**
+ * useProjectDrawer 选项
+ * Story 2.21: Task 3.1
+ */
+export interface UseProjectDrawerOptions {
+  /** 是否默认打开 */
+  defaultOpen?: boolean;
+}
 
 /**
  * useProjectDrawer 返回值类型
@@ -43,10 +53,11 @@ export interface UseProjectDrawerResult {
 /**
  * useProjectDrawer Hook
  * 管理项目抽屉的完整状态
+ * Story 2.21: Task 3.1 - 支持 defaultOpen 参数
  */
-export function useProjectDrawer(): UseProjectDrawerResult {
-  // 抽屉开关状态
-  const [isOpen, setIsOpen] = React.useState(false);
+export function useProjectDrawer(options?: UseProjectDrawerOptions): UseProjectDrawerResult {
+  // 抽屉开关状态 - 支持默认打开 (Story 2.21 AC #2)
+  const [isOpen, setIsOpen] = React.useState(options?.defaultOpen ?? false);
 
   // 项目列表
   const { projects, isLoading, error, refetch } = useProjects();

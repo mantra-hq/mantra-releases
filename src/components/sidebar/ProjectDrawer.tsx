@@ -10,7 +10,7 @@
  */
 
 import * as React from "react";
-import { FolderOpen, Plus, FolderSearch } from "lucide-react";
+import { FolderOpen, Plus, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -271,19 +271,32 @@ export function ProjectDrawer({
               加载中...
             </div>
           ) : isEmpty ? (
-            // AC14: 空项目列表
+            // AC14: 空项目列表 (Story 2.21 AC #17: 与 Player 空状态样式一致)
             <div
               className="flex flex-col items-center justify-center h-full p-6 text-center"
               data-testid="project-drawer-empty"
             >
-              <FolderSearch className="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground mb-4">
+              {/* 图标容器 - 与 PlayerEmptyState 一致 */}
+              <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-xl bg-muted/50">
+                <FolderOpen className="h-8 w-8 text-muted-foreground/70" />
+              </div>
+              {/* 主标题 */}
+              <p className="text-sm font-medium text-foreground mb-1">
                 还没有导入任何项目
               </p>
-              <Button onClick={handleImportClick} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                导入项目
+              {/* 副标题 */}
+              <p className="text-xs text-muted-foreground mb-4">
+                导入 AI 编程会话，开始回放心法
+              </p>
+              {/* CTA 按钮 */}
+              <Button onClick={handleImportClick} size="sm" className="gap-1.5">
+                <Rocket className="h-3.5 w-3.5" />
+                导入第一个项目
               </Button>
+              {/* 支持说明 */}
+              <p className="text-[10px] text-muted-foreground/70 mt-3">
+                Claude Code · Cursor · Gemini CLI · Codex
+              </p>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">

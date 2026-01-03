@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import Player from "./Player";
 
@@ -48,6 +47,8 @@ vi.mock("@/lib/project-ipc", () => ({
     content: "# Test Project",
     language: "markdown",
   }),
+  detectGitRepo: vi.fn().mockResolvedValue("/test/project"),
+  getProjectSessions: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock DualStreamLayout
@@ -65,6 +66,68 @@ vi.mock("@/components/theme-toggle", () => ({
 // Mock TimberLine
 vi.mock("@/components/timeline", () => ({
   TimberLine: () => <div data-testid="timberline">TimberLine</div>,
+}));
+
+// Mock TopBar
+vi.mock("@/components/navigation", () => ({
+  TopBar: ({ onDrawerOpen }: { onDrawerOpen: () => void }) => (
+    <div data-testid="top-bar">
+      <button data-testid="topbar-menu-button" onClick={onDrawerOpen}>Menu</button>
+      <span>Mantra</span>
+      <span className="text-primary">心法</span>
+    </div>
+  ),
+}));
+
+// Mock ImportWizard
+vi.mock("@/components/import", () => ({
+  ImportWizard: ({ open }: { open: boolean }) => (
+    open ? <div data-testid="import-wizard">Import Wizard</div> : null
+  ),
+}));
+
+// Mock ProjectDrawer
+vi.mock("@/components/sidebar", () => ({
+  ProjectDrawer: ({ isOpen }: { isOpen: boolean }) => (
+    isOpen ? <div data-testid="project-drawer">Project Drawer</div> : null
+  ),
+}));
+
+// Mock PlayerEmptyState
+vi.mock("@/components/player", () => ({
+  PlayerEmptyState: ({ onOpenDrawer, onImport }: { onOpenDrawer: () => void; onImport: () => void }) => (
+    <div data-testid="player-empty-state">
+      <h2>选择一个会话开始回放</h2>
+      <button onClick={onOpenDrawer}>打开项目列表</button>
+      <button onClick={onImport}>导入项目</button>
+    </div>
+  ),
+}));
+
+// Mock useProjectDrawer hook
+vi.mock("@/hooks/useProjectDrawer", () => ({
+  useProjectDrawer: () => ({
+    isOpen: false,
+    setIsOpen: vi.fn(),
+    openDrawer: vi.fn(),
+    closeDrawer: vi.fn(),
+    toggleDrawer: vi.fn(),
+    projects: [],
+    isLoading: false,
+    error: null,
+    refetchProjects: vi.fn(),
+    getProjectSessions: vi.fn().mockResolvedValue([]),
+  }),
+}));
+
+// Mock useProjects hook
+vi.mock("@/hooks/useProjects", () => ({
+  useProjects: () => ({
+    projects: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
 }));
 
 // Mock useTimeMachine hook
@@ -89,8 +152,9 @@ function renderWithRouter(
   return render(
     <MemoryRouter initialEntries={[route]}>
       <Routes>
+        {/* Story 2.21: Player 也处理首页路由 */}
+        <Route path="/" element={ui} />
         <Route path="/session/:sessionId" element={ui} />
-        <Route path="/" element={<div data-testid="dashboard">Dashboard</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -111,47 +175,49 @@ describe("Player Page", () => {
       expect(screen.getByText("心法")).toBeInTheDocument();
     });
 
-    it("应该渲染 DualStreamLayout", async () => {
+    it("应该渲染 DualStreamLayout（有 sessionId 时）", async () => {
       renderWithRouter(<Player />);
-      // 等待异步加载完成后显示 DualStreamLayout
-      // 由于会话返回空消息，会显示"会话为空"状态
+      // 等待异步加载完成
       await waitFor(() => {
-        // 检查初始标题渲染
         expect(screen.getByText("Mantra")).toBeInTheDocument();
       });
     });
 
-    it("应该渲染返回按钮", async () => {
-      renderWithRouter(<Player />);
-      await waitFor(() => {
-        const buttons = screen.getAllByRole("button");
-        expect(buttons.length).toBeGreaterThanOrEqual(1);
-      });
-    });
-
-    it("应该在加载时显示加载状态", () => {
+    it("应该在加载时显示加载状态（有 sessionId 时）", () => {
       renderWithRouter(<Player />);
       // 初始渲染时应该显示加载中状态
       expect(screen.getByText("加载会话中...")).toBeInTheDocument();
     });
   });
 
-  describe("导航", () => {
-    it("点击返回按钮应该导航回 Dashboard", async () => {
-      const user = userEvent.setup();
-      renderWithRouter(<Player />);
-
-      // 等待加载完成
+  describe("Story 2.21 - 空状态", () => {
+    it("无 sessionId 时应该显示 PlayerEmptyState", async () => {
+      renderWithRouter(<Player />, { route: "/" });
+      // 应该显示空状态组件
       await waitFor(() => {
-        expect(screen.getByText("Mantra")).toBeInTheDocument();
+        expect(screen.getByTestId("player-empty-state")).toBeInTheDocument();
       });
+    });
 
-      // 找到返回按钮 (第一个 button，包含 ArrowLeft 图标)
-      const backButton = screen.getAllByRole("button")[0];
-      await user.click(backButton);
+    it("空状态应该显示引导文案", async () => {
+      renderWithRouter(<Player />, { route: "/" });
+      await waitFor(() => {
+        expect(screen.getByText("选择一个会话开始回放")).toBeInTheDocument();
+      });
+    });
 
-      // 应该导航到 Dashboard
-      expect(screen.getByTestId("dashboard")).toBeInTheDocument();
+    it("空状态应该有打开项目列表按钮", async () => {
+      renderWithRouter(<Player />, { route: "/" });
+      await waitFor(() => {
+        expect(screen.getByText("打开项目列表")).toBeInTheDocument();
+      });
+    });
+
+    it("空状态应该有导入项目按钮", async () => {
+      renderWithRouter(<Player />, { route: "/" });
+      await waitFor(() => {
+        expect(screen.getByText("导入项目")).toBeInTheDocument();
+      });
     });
   });
 

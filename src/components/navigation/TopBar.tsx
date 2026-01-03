@@ -1,8 +1,9 @@
 /**
  * TopBar Component - Player 页面顶部导航栏
  * Story 2.17: Task 1
+ * Story 2.21: Task 4 (添加 Logo, 全局搜索按钮, 设置按钮)
  *
- * 面包屑导航：☰ 📁 项目名 › 💬 会话名 (消息数)
+ * 面包屑导航：☰ [Logo] 📁 项目名 › 💬 会话名 (消息数)
  * 支持响应式截断
  */
 
@@ -59,6 +60,7 @@ export function TopBar({
   sessionId,
   sessionName,
   messageCount,
+  projectId: _projectId, // 预留接口，未来可用于项目级操作
   projectName,
   sessions,
   onDrawerOpen,
@@ -76,7 +78,7 @@ export function TopBar({
       )}
     >
       <div className="flex h-14 items-center justify-between px-4 gap-2">
-        {/* 左侧: 汉堡菜单 + 面包屑 */}
+        {/* 左侧: 汉堡菜单 + Logo + 面包屑 */}
         <div className="flex items-center gap-1 min-w-0 flex-1">
           {/* 汉堡菜单 (AC2) */}
           <BreadcrumbItem
@@ -85,6 +87,11 @@ export function TopBar({
             aria-label="打开项目抽屉"
             testId="topbar-menu-button"
           />
+
+          {/* Logo (Story 2.21 AC #14) */}
+          <span className="text-sm font-bold text-foreground whitespace-nowrap mr-2">
+            Mantra <span className="text-primary">心法</span>
+          </span>
 
           {/* 项目名 (AC3) */}
           <BreadcrumbItem
