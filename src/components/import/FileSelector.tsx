@@ -1,11 +1,13 @@
 /**
  * FileSelector Component - 文件选择组件 (重构版)
  * Story 2.9: Task 3 + UX Redesign
+ * Story 2.20: Import Status Enhancement
  *
  * 显示发现的日志文件列表，使用项目分组展示：
  * - 按项目分组
  * - 实时搜索过滤
  * - 批量选择
+ * - 识别已导入项目
  */
 
 import * as React from "react";
@@ -61,6 +63,10 @@ export interface FileSelectorProps {
   onSearchChange: (query: string) => void;
   /** 是否正在加载 */
   loading: boolean;
+  /** 已导入项目路径集合 (Story 2.20) */
+  importedPaths?: Set<string>;
+  /** 全选新项目回调 (Story 2.20) */
+  onSelectAllNew?: () => void;
 }
 
 /**
@@ -82,6 +88,8 @@ export function FileSelector({
   onToggleProjectExpand,
   onSearchChange,
   loading,
+  importedPaths,
+  onSelectAllNew,
 }: FileSelectorProps) {
   // 防抖搜索
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
@@ -97,6 +105,23 @@ export function FileSelector({
     () => filterGroups(projectGroups, debouncedQuery),
     [projectGroups, debouncedQuery]
   );
+
+  // Story 2.20: 计算新项目和已导入项目数量
+  const { newProjectCount, importedCount } = React.useMemo(() => {
+    if (!importedPaths) {
+      return { newProjectCount: undefined, importedCount: undefined };
+    }
+    let newCount = 0;
+    let importedCountVal = 0;
+    for (const group of projectGroups) {
+      if (importedPaths.has(group.projectPath)) {
+        importedCountVal++;
+      } else {
+        newCount++;
+      }
+    }
+    return { newProjectCount: newCount, importedCount: importedCountVal };
+  }, [projectGroups, importedPaths]);
 
   // 统计数据
   const totalProjects = projectGroups.length;
@@ -166,6 +191,9 @@ export function FileSelector({
             onSelectAll={onSelectAll}
             onClearAll={onClearAll}
             onInvertSelection={onInvertSelection}
+            importedCount={importedCount}
+            newProjectCount={newProjectCount}
+            onSelectAllNew={onSelectAllNew}
           />
 
           {/* 项目分组列表 */}
@@ -176,6 +204,7 @@ export function FileSelector({
             onToggleProject={onToggleProject}
             onToggleExpand={onToggleProjectExpand}
             onToggleSession={onToggleFile}
+            importedPaths={importedPaths}
           />
         </>
       )}

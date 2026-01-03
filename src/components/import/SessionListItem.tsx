@@ -8,6 +8,7 @@
 import * as React from "react";
 import { FileJson } from "lucide-react";
 import { Checkbox } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import type { DiscoveredFile } from "@/components/import";
 
 /** SessionListItem Props */
@@ -18,6 +19,8 @@ export interface SessionListItemProps {
     selected: boolean;
     /** 切换选中状态 */
     onToggle: () => void;
+    /** 是否禁用 (Story 2.20: 已导入项目的会话) */
+    disabled?: boolean;
 }
 
 /**
@@ -54,26 +57,40 @@ export function SessionListItem({
     session,
     selected,
     onToggle,
+    disabled = false,
 }: SessionListItemProps) {
     // 处理复选框点击，阻止事件冒泡
     const handleCheckboxClick = (e: React.MouseEvent) => {
         e.stopPropagation();
     };
 
+    // 处理行点击
+    const handleRowClick = () => {
+        if (!disabled) {
+            onToggle();
+        }
+    };
+
     return (
         <div
             data-testid={`session-item-${session.path}`}
-            onClick={onToggle}
-            className="flex items-center gap-3 px-3 py-2 pl-10 border-b border-border/30 last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors"
+            onClick={handleRowClick}
+            className={cn(
+                "flex items-center gap-3 px-3 py-2 pl-10 border-b border-border/30 last:border-b-0 transition-colors",
+                disabled
+                    ? "cursor-not-allowed opacity-50"
+                    : "cursor-pointer hover:bg-muted/30"
+            )}
         >
             {/* 复选框 */}
             <div onClick={handleCheckboxClick}>
                 <Checkbox
                     data-testid={`session-checkbox-${session.path}`}
                     checked={selected}
-                    onCheckedChange={onToggle}
+                    disabled={disabled}
+                    onCheckedChange={disabled ? undefined : onToggle}
                     aria-label={`选择会话 ${session.name}`}
-                    className="cursor-pointer"
+                    className={disabled ? "cursor-not-allowed" : "cursor-pointer"}
                 />
             </div>
 

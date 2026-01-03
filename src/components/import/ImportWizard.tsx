@@ -1,6 +1,7 @@
 /**
  * ImportWizard Component - 导入向导 Modal
  * Story 2.9: Task 1, Task 8
+ * Story 2.20: Import Status Enhancement
  *
  * 多步骤导入向导，包含：
  * - 步骤 1: 选择导入源
@@ -22,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, parseLogFiles } from "@/lib/import-ipc";
+import { getImportedProjectPaths } from "@/lib/project-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
 import { FileSelector } from "./FileSelector";
 import { ImportProgress, type ImportProgressData } from "./ImportProgress";
@@ -142,6 +144,7 @@ export function ImportWizard({
     results,
     isLoading,
     errors,
+    importedPaths,
     setStep,
     setSource,
     setDiscoveredFiles,
@@ -157,6 +160,8 @@ export function ImportWizard({
     setLoading,
     addError,
     reset,
+    setImportedPaths,
+    selectAllNew,
   } = useImportStore();
 
   // 当 initialStep 变化时同步 (用于测试)
@@ -170,6 +175,19 @@ export function ImportWizard({
       reset();
     }
   }, [open, reset]);
+
+  // Story 2.20: 加载已导入项目路径
+  React.useEffect(() => {
+    if (open) {
+      getImportedProjectPaths()
+        .then((paths) => {
+          setImportedPaths(paths);
+        })
+        .catch((err) => {
+          console.error("Failed to load imported project paths:", err);
+        });
+    }
+  }, [open, setImportedPaths]);
 
   /**
    * 处理来源选择
@@ -336,6 +354,8 @@ export function ImportWizard({
             onToggleProjectExpand={toggleProjectExpand}
             onSearchChange={setSearchQuery}
             loading={isLoading}
+            importedPaths={importedPaths}
+            onSelectAllNew={selectAllNew}
           />
         );
       case "progress":

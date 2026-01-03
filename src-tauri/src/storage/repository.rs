@@ -541,6 +541,22 @@ impl Database {
         Ok(())
     }
 
+    /// Get all imported project cwd paths (excluding soft-deleted)
+    ///
+    /// Returns a list of cwd paths for all non-deleted projects.
+    /// Used by Story 2.20 to identify already-imported projects in ImportWizard.
+    pub fn get_imported_project_paths(&self) -> Result<Vec<String>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT cwd FROM projects WHERE deleted_at IS NULL",
+        )?;
+
+        let paths = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(paths)
+    }
+
     /// Get session message count for a specific session
     ///
     /// # Arguments
@@ -777,5 +793,40 @@ mod tests {
         assert_eq!(projects.len(), 1);
         assert!(projects[0].has_git_repo);
         assert_eq!(projects[0].git_repo_path, Some("/home/user/test".to_string()));
+    }
+
+    #[test]
+    fn test_get_imported_project_paths() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Initially empty
+        let paths = db.get_imported_project_paths().unwrap();
+        assert!(paths.is_empty());
+
+        // Add projects
+        db.get_or_create_project("/home/user/project1").unwrap();
+        db.get_or_create_project("/home/user/project2").unwrap();
+
+        let paths = db.get_imported_project_paths().unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains(&"/home/user/project1".to_string()));
+        assert!(paths.contains(&"/home/user/project2".to_string()));
+    }
+
+    #[test]
+    fn test_get_imported_project_paths_excludes_deleted() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Add projects
+        let (project1, _) = db.get_or_create_project("/home/user/project1").unwrap();
+        db.get_or_create_project("/home/user/project2").unwrap();
+
+        // Soft delete one
+        db.soft_delete_project(&project1.id).unwrap();
+
+        let paths = db.get_imported_project_paths().unwrap();
+        assert_eq!(paths.len(), 1);
+        assert!(paths.contains(&"/home/user/project2".to_string()));
+        assert!(!paths.contains(&"/home/user/project1".to_string()));
     }
 }

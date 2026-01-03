@@ -490,6 +490,22 @@ pub async fn rename_project(
     Ok(())
 }
 
+// ============================================================================
+// Story 2.20: Import Wizard Enhancement Commands
+// ============================================================================
+
+/// Get all imported project cwd paths
+///
+/// Returns a list of cwd paths for all non-deleted projects.
+/// Used by ImportWizard to identify already-imported projects.
+#[tauri::command]
+pub async fn get_imported_project_paths(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_imported_project_paths().map_err(Into::into)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

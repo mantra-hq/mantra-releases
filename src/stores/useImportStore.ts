@@ -1,6 +1,7 @@
 /**
  * useImportStore - 导入状态管理
  * Story 2.9: Task 7 + UX Redesign
+ * Story 2.20: Import Status Enhancement
  *
  * 管理导入向导的所有状态:
  * - Modal 开关状态
@@ -11,6 +12,7 @@
  * - 搜索过滤
  * - 导入进度
  * - 导入结果
+ * - 已导入项目路径 (Story 2.20)
  */
 
 import { create } from "zustand";
@@ -43,6 +45,8 @@ export interface ImportState {
   isLoading: boolean;
   /** 错误列表 */
   errors: ImportError[];
+  /** 已导入项目路径集合 (Story 2.20) */
+  importedPaths: Set<string>;
 
   // ======== Actions ========
   /** 打开 Modal */
@@ -53,7 +57,7 @@ export interface ImportState {
   setStep: (step: ImportStep) => void;
   /** 设置来源 */
   setSource: (source: ImportSource) => void;
-  /** 设置发现的文件 (默认全选) */
+  /** 设置发现的文件 (默认全选新项目) */
   setDiscoveredFiles: (files: DiscoveredFile[]) => void;
   /** 切换单个文件选择 */
   toggleFile: (path: string) => void;
@@ -79,6 +83,10 @@ export interface ImportState {
   addError: (error: ImportError) => void;
   /** 重置状态 */
   reset: () => void;
+  /** 设置已导入路径 (Story 2.20) */
+  setImportedPaths: (paths: string[]) => void;
+  /** 全选新项目 (Story 2.20) */
+  selectAllNew: () => void;
 }
 
 /**
@@ -96,6 +104,7 @@ const initialState = {
   results: [] as ImportResult[],
   isLoading: false,
   errors: [] as ImportError[],
+  importedPaths: new Set<string>(),
 };
 
 /**
@@ -126,15 +135,28 @@ export const useImportStore = create<ImportState>((set) => ({
     }),
 
   setDiscoveredFiles: (files) =>
-    set({
-      discoveredFiles: files,
-      selectedFiles: new Set(files.map((f) => f.path)),
-      expandedProjects: new Set<string>(),
-      searchQuery: "",
+    set((state) => {
+      // Story 2.20: 默认仅选中新项目的文件
+      const newProjectFiles = files.filter(
+        (f) => !state.importedPaths.has(f.projectPath)
+      );
+      return {
+        discoveredFiles: files,
+        selectedFiles: new Set(newProjectFiles.map((f) => f.path)),
+        expandedProjects: new Set<string>(),
+        searchQuery: "",
+      };
     }),
 
   toggleFile: (path) =>
     set((state) => {
+      // Story 2.20: 检查文件是否属于已导入项目
+      const file = state.discoveredFiles.find((f) => f.path === path);
+      if (file && state.importedPaths.has(file.projectPath)) {
+        // 不允许选中已导入项目的文件
+        return state;
+      }
+
       const newSelected = new Set(state.selectedFiles);
       if (newSelected.has(path)) {
         newSelected.delete(path);
@@ -145,9 +167,15 @@ export const useImportStore = create<ImportState>((set) => ({
     }),
 
   selectAll: () =>
-    set((state) => ({
-      selectedFiles: new Set(state.discoveredFiles.map((f) => f.path)),
-    })),
+    set((state) => {
+      // Story 2.20: 全选也应该排除已导入项目
+      const selectableFiles = state.discoveredFiles.filter(
+        (f) => !state.importedPaths.has(f.projectPath)
+      );
+      return {
+        selectedFiles: new Set(selectableFiles.map((f) => f.path)),
+      };
+    }),
 
   clearAll: () =>
     set({
@@ -156,11 +184,14 @@ export const useImportStore = create<ImportState>((set) => ({
 
   invertSelection: () =>
     set((state) => {
-      const allPaths = state.discoveredFiles.map((f) => f.path);
+      // Story 2.20: 反选时排除已导入项目
+      const selectableFiles = state.discoveredFiles.filter(
+        (f) => !state.importedPaths.has(f.projectPath)
+      );
       const newSelected = new Set<string>();
-      for (const path of allPaths) {
-        if (!state.selectedFiles.has(path)) {
-          newSelected.add(path);
+      for (const file of selectableFiles) {
+        if (!state.selectedFiles.has(file.path)) {
+          newSelected.add(file.path);
         }
       }
       return { selectedFiles: newSelected };
@@ -168,6 +199,11 @@ export const useImportStore = create<ImportState>((set) => ({
 
   toggleProject: (projectPath) =>
     set((state) => {
+      // Story 2.20: 不允许切换已导入项目
+      if (state.importedPaths.has(projectPath)) {
+        return state;
+      }
+
       const projectFiles = state.discoveredFiles.filter(
         (f) => f.projectPath === projectPath
       );
@@ -243,6 +279,24 @@ export const useImportStore = create<ImportState>((set) => ({
       results: [],
       isLoading: false,
       errors: [],
+      // Note: importedPaths 不重置，保持已加载的数据
+    }),
+
+  // Story 2.20: 设置已导入路径
+  setImportedPaths: (paths) =>
+    set({
+      importedPaths: new Set(paths),
+    }),
+
+  // Story 2.20: 全选新项目
+  selectAllNew: () =>
+    set((state) => {
+      const newProjectFiles = state.discoveredFiles.filter(
+        (f) => !state.importedPaths.has(f.projectPath)
+      );
+      return {
+        selectedFiles: new Set(newProjectFiles.map((f) => f.path)),
+      };
     }),
 }));
 

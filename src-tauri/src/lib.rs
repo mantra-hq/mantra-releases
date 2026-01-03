@@ -25,6 +25,8 @@ use commands::{
     list_tree_at_commit, list_files_at_commit,
     // Story 2.19: Project management commands
     sync_project, remove_project, restore_project, rename_project,
+    // Story 2.20: Import wizard enhancement
+    get_imported_project_paths,
 };
 
 use storage::Database;
@@ -98,7 +100,9 @@ pub fn run() {
             sync_project,
             remove_project,
             restore_project,
-            rename_project
+            rename_project,
+            // Story 2.20: Import wizard enhancement
+            get_imported_project_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

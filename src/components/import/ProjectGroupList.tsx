@@ -1,11 +1,12 @@
 /**
  * ProjectGroupList Component - 项目分组列表
  * Story 2.9 UX Redesign
+ * Story 2.20: Import Status Enhancement
  *
  * 项目分组列表，支持大量项目时的流畅滚动
  */
 
-import type { ProjectGroup } from "@/types/import";
+import type { ProjectGroup, ProjectImportStatus } from "@/types/import";
 import { getProjectSelectionState } from "@/lib/import-utils";
 import { ProjectGroupItem } from "./ProjectGroupItem";
 
@@ -23,6 +24,20 @@ export interface ProjectGroupListProps {
     onToggleExpand: (projectPath: string) => void;
     /** 切换单个会话选择 */
     onToggleSession: (filePath: string) => void;
+    /** 已导入项目路径集合 (Story 2.20) */
+    importedPaths?: Set<string>;
+}
+
+/**
+ * 计算项目的导入状态
+ * Story 2.20
+ */
+function getImportStatus(
+    projectPath: string,
+    importedPaths?: Set<string>
+): ProjectImportStatus | undefined {
+    if (!importedPaths) return undefined;
+    return importedPaths.has(projectPath) ? "imported" : "new";
 }
 
 /**
@@ -35,6 +50,7 @@ export function ProjectGroupList({
     onToggleProject,
     onToggleExpand,
     onToggleSession,
+    importedPaths,
 }: ProjectGroupListProps) {
     if (groups.length === 0) {
         return (
@@ -51,6 +67,7 @@ export function ProjectGroupList({
         >
             {groups.map((group) => {
                 const selectionState = getProjectSelectionState(group, selectedFiles);
+                const importStatus = getImportStatus(group.projectPath, importedPaths);
 
                 return (
                     <ProjectGroupItem
@@ -62,6 +79,7 @@ export function ProjectGroupList({
                         onToggleProject={() => onToggleProject(group.projectPath)}
                         onToggleExpand={() => onToggleExpand(group.projectPath)}
                         onToggleSession={onToggleSession}
+                        importStatus={importStatus}
                     />
                 );
             })}

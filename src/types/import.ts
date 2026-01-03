@@ -6,6 +6,12 @@
 import type { DiscoveredFile } from "@/components/import";
 
 /**
+ * 项目导入状态
+ * Story 2.20: AC #2-4
+ */
+export type ProjectImportStatus = "new" | "imported";
+
+/**
  * 项目分组
  */
 export interface ProjectGroup {
@@ -15,6 +21,8 @@ export interface ProjectGroup {
     projectName: string;
     /** 该项目下的会话列表 (按时间倒序) */
     sessions: DiscoveredFile[];
+    /** 导入状态 (Story 2.20) */
+    importStatus?: ProjectImportStatus;
 }
 
 /**

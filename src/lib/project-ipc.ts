@@ -188,3 +188,19 @@ export async function restoreProject(projectId: string): Promise<void> {
 export async function renameProject(projectId: string, newName: string): Promise<void> {
   return invoke<void>("rename_project", { projectId, newName });
 }
+
+// =============================================================================
+// Story 2.20: Import Wizard Enhancement IPC
+// =============================================================================
+
+/**
+ * 获取所有已导入项目的 cwd 路径列表
+ * Story 2.20: Task 2
+ *
+ * 用于导入向导识别已导入的项目，排除软删除的项目
+ *
+ * @returns 已导入项目的 cwd 路径列表
+ */
+export async function getImportedProjectPaths(): Promise<string[]> {
+  return invoke<string[]>("get_imported_project_paths");
+}

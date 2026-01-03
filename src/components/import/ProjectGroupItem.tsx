@@ -1,11 +1,13 @@
 /**
  * ProjectGroupItem Component - 项目分组卡片
  * Story 2.9 UX Redesign
+ * Story 2.20: Import Status Enhancement
  *
  * 可折叠的项目卡片，使用 Radix Collapsible
  * - 点击复选框选中/取消该项目下所有会话
  * - 点击展开按钮查看会话列表
  * - 默认显示最近 3 个会话
+ * - 支持已导入/新项目状态显示
  */
 
 import * as React from "react";
@@ -13,7 +15,7 @@ import { ChevronRight, Folder } from "lucide-react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { Checkbox } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import type { ProjectGroup, ProjectSelectionState } from "@/types/import";
+import type { ProjectGroup, ProjectImportStatus, ProjectSelectionState } from "@/types/import";
 import { SessionListItem } from "./SessionListItem";
 
 /** 默认显示的会话数量 */
@@ -35,6 +37,8 @@ export interface ProjectGroupItemProps {
     onToggleExpand: () => void;
     /** 切换单个会话选择 */
     onToggleSession: (path: string) => void;
+    /** 导入状态 (Story 2.20) */
+    importStatus?: ProjectImportStatus;
 }
 
 /**
@@ -48,10 +52,15 @@ export function ProjectGroupItem({
     onToggleProject,
     onToggleExpand,
     onToggleSession,
+    importStatus,
 }: ProjectGroupItemProps) {
     const [showAll, setShowAll] = React.useState(false);
 
     const { isSelected, isPartiallySelected, selectedCount } = selectionState;
+
+    // Story 2.20: 导入状态判断
+    const isImported = importStatus === "imported";
+    const isNew = importStatus === "new";
 
     // 显示的会话列表
     const visibleSessions =
@@ -77,14 +86,23 @@ export function ProjectGroupItem({
             className="border-b border-border/50 last:border-b-0"
         >
             {/* 项目头部 - 整行可点击展开/折叠 */}
-            <Collapsible.Trigger
-                className={cn(
-                    "flex items-center gap-3 px-3 py-3 w-full",
-                    "cursor-pointer hover:bg-muted/30 transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                )}
-                aria-label={isExpanded ? "折叠" : "展开"}
-            >
+            <Collapsible.Trigger asChild>
+                <div
+                    className={cn(
+                        "flex items-center gap-3 px-3 py-3 w-full",
+                        "cursor-pointer hover:bg-muted/30 transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    )}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? "折叠" : "展开"}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                        }
+                    }}
+                >
                 {/* 展开/折叠箭头 */}
                 <ChevronRight
                     className={cn(
@@ -98,6 +116,7 @@ export function ProjectGroupItem({
                     <Checkbox
                         data-testid={`project-checkbox-${group.projectPath}`}
                         checked={isSelected}
+                        disabled={isImported}
                         data-state={
                             isSelected
                                 ? "checked"
@@ -107,15 +126,42 @@ export function ProjectGroupItem({
                         }
                         onCheckedChange={onToggleProject}
                         aria-label={`选择项目 ${group.projectName}`}
-                        className="cursor-pointer"
+                        className={cn(
+                            "cursor-pointer",
+                            isImported && "cursor-not-allowed opacity-50"
+                        )}
                     />
                 </div>
 
                 {/* 项目图标和名称 */}
-                <Folder className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-sm font-medium text-foreground flex-1 truncate text-left">
+                <Folder className={cn(
+                    "w-4 h-4 shrink-0",
+                    isImported ? "text-muted-foreground" : "text-primary"
+                )} />
+                <span className={cn(
+                    "text-sm font-medium flex-1 truncate text-left",
+                    isImported ? "text-muted-foreground" : "text-foreground"
+                )}>
                     {group.projectName}
                 </span>
+
+                {/* Story 2.20: 导入状态标签 */}
+                {isImported && (
+                    <span
+                        data-testid={`import-badge-imported-${group.projectPath}`}
+                        className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0"
+                    >
+                        已导入
+                    </span>
+                )}
+                {isNew && (
+                    <span
+                        data-testid={`import-badge-new-${group.projectPath}`}
+                        className="text-xs text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium shrink-0"
+                    >
+                        NEW
+                    </span>
+                )}
 
                 {/* 会话统计 */}
                 <span className="text-xs text-muted-foreground shrink-0">
@@ -124,6 +170,7 @@ export function ProjectGroupItem({
                         : ""}
                     {group.sessions.length} 个会话
                 </span>
+                </div>
             </Collapsible.Trigger>
 
             {/* 会话列表 */}
@@ -135,6 +182,7 @@ export function ProjectGroupItem({
                             session={session}
                             selected={selectedFiles.has(session.path)}
                             onToggle={() => onToggleSession(session.path)}
+                            disabled={isImported}
                         />
                     ))}
 
