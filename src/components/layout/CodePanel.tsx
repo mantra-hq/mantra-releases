@@ -5,6 +5,7 @@
  * Story 2.11: AC6, AC7 (无 Git 仓库警告)
  * Story 2.12: AC5 (文件不存在处理)
  * Story 2.13: Task 9 (集成 EditorTabs, Breadcrumbs, FileTree, QuickOpen)
+ * Story 2.26: 国际化支持
  *
  * 右侧面板，完整的代码浏览器:
  * - 文件标签页 (EditorTabs)
@@ -15,6 +16,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
     CodeSnapshotView,
@@ -104,6 +106,8 @@ export function CodePanel({
     onDismissNotFound,
     onLoadFileContent,
 }: CodePanelProps) {
+    const { t } = useTranslation();
+
     // 编辑器状态管理 - 使用独立的选择器确保引用稳定
     const tabs = useEditorStore((state) => state.tabs);
     const activeTabId = useEditorStore((state) => state.activeTabId);
@@ -397,14 +401,14 @@ export function CodePanel({
                     <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                             <Files className="h-4 w-4" />
-                            <span>资源管理器</span>
+                            <span>{t("editor.explorer")}</span>
                         </div>
                         <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
                             onClick={toggleSidebar}
-                            aria-label="关闭侧边栏"
+                            aria-label={t("editor.closeSidebar")}
                         >
                             <PanelLeftClose className="h-4 w-4" />
                         </Button>
@@ -413,7 +417,7 @@ export function CodePanel({
                     {/* 文件树 */}
                     {treeLoading ? (
                         <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                            加载中...
+                            {t("common.loading")}
                         </div>
                     ) : (
                         <FileTree
@@ -438,7 +442,7 @@ export function CodePanel({
                             size="icon"
                             className="h-8 w-8 shrink-0"
                             onClick={toggleSidebar}
-                            aria-label="展开侧边栏"
+                            aria-label={t("editor.openSidebar")}
                         >
                             <PanelLeft className="h-4 w-4" />
                         </Button>

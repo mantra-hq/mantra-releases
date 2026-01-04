@@ -1,5 +1,6 @@
 /**
  * feedback.ts - 统一交互反馈工具
+ * Story 2-26: 国际化支持
  *
  * 提供一致的用户操作反馈机制，基于 Sonner Toast
  *
@@ -10,6 +11,13 @@
  */
 
 import { toast } from "sonner";
+import i18n from "@/i18n";
+
+/**
+ * 获取翻译文本的辅助函数
+ */
+const t = (key: string, options?: Record<string, unknown>) =>
+  i18n.t(key, options);
 
 /**
  * 统一反馈工具
@@ -24,14 +32,14 @@ export const feedback = {
    * @param name - 可选，保存对象名称
    */
   saved: (name?: string) =>
-    toast.success(name ? `「${name}」已保存` : "保存成功"),
+    toast.success(name ? `「${name}」${t("feedback.saved")}` : t("feedback.saved")),
 
   /**
    * 删除成功
    * @param name - 可选，删除对象名称
    */
   deleted: (name?: string) =>
-    toast.success(name ? `「${name}」已删除` : "删除成功"),
+    toast.success(name ? `「${name}」${t("feedback.deleted")}` : t("feedback.deleted")),
 
   // ============================================================
   // 批量操作
@@ -43,8 +51,8 @@ export const feedback = {
    * @param type - 对象类型（如 "规则"、"文件"）
    */
   imported: (count: number, type: string) =>
-    toast.success("导入完成", {
-      description: `已导入 ${count} 条${type}`,
+    toast.success(t("feedback.importComplete"), {
+      description: t("feedback.importedCount", { count, type }),
     }),
 
   /**
@@ -53,8 +61,8 @@ export const feedback = {
    * @param type - 对象类型
    */
   exported: (count: number, type: string) =>
-    toast.success("导出完成", {
-      description: `已导出 ${count} 条${type}`,
+    toast.success(t("feedback.exportComplete"), {
+      description: t("feedback.exportedCount", { count, type }),
     }),
 
   /**
@@ -64,16 +72,16 @@ export const feedback = {
    */
   retryResult: (success: number, failed: number) => {
     if (failed === 0 && success > 0) {
-      toast.success("重试成功", {
-        description: `${success} 个文件已导入`,
+      toast.success(t("feedback.retrySuccess"), {
+        description: t("feedback.filesImported", { success }),
       });
     } else if (success > 0 && failed > 0) {
-      toast.warning("部分重试成功", {
-        description: `成功 ${success} 个，仍失败 ${failed} 个`,
+      toast.warning(t("feedback.partialRetrySuccess"), {
+        description: t("feedback.partialRetryResult", { success, failed }),
       });
     } else if (success === 0 && failed > 0) {
-      toast.error("重试失败", {
-        description: `${failed} 个文件仍然失败`,
+      toast.error(t("feedback.retryFailed"), {
+        description: t("feedback.stillFailed", { failed }),
       });
     }
     // success === 0 && failed === 0 时不显示（无操作）
@@ -89,8 +97,8 @@ export const feedback = {
    * @param reason - 可选，失败原因
    */
   error: (action: string, reason?: string) =>
-    toast.error(`${action}失败`, {
-      description: reason || "请稍后重试",
+    toast.error(t("feedback.actionFailed", { action }), {
+      description: reason || t("feedback.retryLater"),
     }),
 };
 

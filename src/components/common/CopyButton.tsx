@@ -1,11 +1,13 @@
 /**
  * CopyButton - 通用复制按钮组件
  * Story 2.22: Task 1
+ * Story 2.26: 国际化支持
  *
  * 提供一键复制功能，支持成功反馈动画和无障碍支持
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,11 +73,16 @@ export function CopyButton({
   onSuccess,
   onError,
   className,
-  ariaLabel = "复制",
-  tooltip = "复制",
+  ariaLabel,
+  tooltip,
 }: CopyButtonProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 默认值使用 t() 翻译
+  const defaultAriaLabel = ariaLabel ?? t("common.copy");
+  const defaultTooltip = tooltip ?? t("common.copy");
 
   // 清理 timeout 防止内存泄漏 (H1 fix)
   useEffect(() => {
@@ -102,9 +109,9 @@ export function CopyButton({
       // 2 秒后恢复原状 (AC4)
       timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      onError?.(error instanceof Error ? error : new Error("复制失败"));
+      onError?.(error instanceof Error ? error : new Error(t("feedback.copyFailed")));
     }
-  }, [content, onSuccess, onError]);
+  }, [content, onSuccess, onError, t]);
 
   // 键盘事件处理 - 确保 Enter/Space 在所有环境下工作 (AC5)
   // 注: 原生 button 已支持，此处为兼容性/测试环境考虑
@@ -133,9 +140,9 @@ export function CopyButton({
       onClick={handleCopy}
       onKeyDown={handleKeyDown}
       disabled={isDisabled}
-      aria-label={copied ? "已复制" : ariaLabel}
+      aria-label={copied ? t("common.copied") : defaultAriaLabel}
       aria-pressed={copied}
-      title={copied ? "已复制" : tooltip}
+      title={copied ? t("common.copied") : defaultTooltip}
       className={cn(
         // Base styles
         "shrink-0 rounded p-1",
@@ -162,7 +169,7 @@ export function CopyButton({
       {/* 屏幕阅读器通知 (AC5) */}
       {copied && (
         <span className="sr-only" role="status" aria-live="polite">
-          已复制到剪贴板
+          {t("feedback.copiedToClipboard")}
         </span>
       )}
     </button>

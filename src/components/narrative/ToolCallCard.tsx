@@ -1,12 +1,14 @@
 /**
  * ToolCallCard - 工具调用卡片组件
  * Story 2.15: Task 3, Task 7
+ * Story 2.26: 国际化支持
  *
  * 单行紧凑布局显示工具调用，支持原位展开和查看详情
  * AC: #1, #2, #3, #4, #11, #12, #13
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
     ChevronDown,
@@ -25,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCollapsible } from "@/hooks/useCollapsible";
 import { FloatingCollapseBar } from "@/components/common/FloatingCollapseBar";
+import i18n from "@/i18n";
 
 /** 工具调用状态 */
 export type ToolCallStatus = "pending" | "success" | "error";
@@ -68,7 +71,7 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
         format: (input) => {
             const path = extractPath(input);
             const lines = typeof input.lines === "number" ? input.lines : null;
-            return lines ? `${path} (${lines} 行)` : path;
+            return lines ? `${path} (${i18n.t("message.lines", { count: lines })})` : path;
         },
     },
     Read: {
@@ -112,7 +115,7 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
         icon: FileText,
         format: (input) => {
             const path = extractPath(input, "TargetFile");
-            return `${path} (编辑)`;
+            return `${path} (${i18n.t("message.edit")})`;
         },
     },
     run_command: {
@@ -156,7 +159,7 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
                         : "";
             const count = typeof input.matches === "number" ? input.matches : null;
             return count !== null
-                ? `"${query}" → ${count} 个结果`
+                ? `"${query}" → ${i18n.t("message.results", { count })}`
                 : query ? `"${query}"` : "";
         },
     },
@@ -191,7 +194,7 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
             const path = extractPath(input, "DirectoryPath");
             const count = typeof input.count === "number" ? input.count : null;
             return count !== null
-                ? `${path} (${count} 项)`
+                ? `${path} (${i18n.t("message.items", { count })})`
                 : path;
         },
     },
@@ -200,7 +203,7 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
         format: (input) => {
             const todos = Array.isArray(input.todos) ? input.todos : [];
             const count = todos.length;
-            return count > 0 ? `${count} 个任务` : "";
+            return count > 0 ? i18n.t("message.tasks", { count }) : "";
         },
     },
 };
@@ -272,6 +275,7 @@ export function ToolCallCard({
     onJumpToOutput,
     className,
 }: ToolCallCardProps) {
+    const { t } = useTranslation();
     const { icon: Icon, summary } = getToolSummary(toolName, toolInput);
 
     // AC #11, #12, #13: 使用 useCollapsible 管理折叠状态和浮动栏
@@ -390,7 +394,7 @@ export function ToolCallCard({
                             "text-muted-foreground hover:text-foreground",
                             "transition-colors"
                         )}
-                        title={isExpanded ? "收起" : "展开原始内容"}
+                        title={isExpanded ? t("common.collapse") : t("message.expandRawContent")}
                     >
                         {isExpanded ? (
                             <ChevronUp className="h-3.5 w-3.5" />
@@ -410,7 +414,7 @@ export function ToolCallCard({
                             "text-muted-foreground hover:text-foreground",
                             "transition-colors"
                         )}
-                        title="跳转到输出"
+                        title={t("message.jumpToOutput")}
                     >
                         <ExternalLink className="h-3.5 w-3.5" />
                     </button>
@@ -427,7 +431,7 @@ export function ToolCallCard({
                             "hover:bg-primary/20 transition-colors"
                         )}
                     >
-                        详情
+                        {t("message.details")}
                     </button>
                 )}
             </div>
@@ -466,7 +470,7 @@ export function ToolCallCard({
                                 )}
                             >
                                 <ChevronUp className="h-3 w-3" />
-                                收起
+                                {t("common.collapse")}
                             </button>
                         </div>
                     </Collapsible.Content>

@@ -1,12 +1,14 @@
 /**
  * GlobalSearch - 全局搜索 Modal 组件
  * Story 2.10: Task 1
+ * Story 2.26: 国际化支持
  *
  * Command Palette 风格的全局搜索框
  * 支持键盘快捷键、实时搜索、键盘导航
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Search, X, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -29,6 +31,7 @@ function isMacOS(): boolean {
  * GlobalSearch 组件
  */
 export function GlobalSearch() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -204,7 +207,7 @@ export function GlobalSearch() {
 
                 {/* Content */}
                 <Dialog.Content
-                    aria-label="全局搜索"
+                    aria-label={t("search.globalSearch")}
                     onKeyDown={handleKeyDown}
                     className={cn(
                         "fixed left-1/2 top-[15%] z-50 -translate-x-1/2",
@@ -220,9 +223,9 @@ export function GlobalSearch() {
                     )}
                 >
                     {/* Hidden Title for Accessibility */}
-                    <Dialog.Title className="sr-only">全局搜索</Dialog.Title>
+                    <Dialog.Title className="sr-only">{t("search.globalSearch")}</Dialog.Title>
                     <Dialog.Description className="sr-only">
-                        输入关键词搜索会话内容，使用方向键导航，回车确认选择
+                        {t("search.description")}
                     </Dialog.Description>
 
                     {/* Search Input */}
@@ -233,8 +236,8 @@ export function GlobalSearch() {
                             type="text"
                             value={query}
                             onChange={handleInputChange}
-                            placeholder="搜索会话内容..."
-                            aria-label="搜索"
+                            placeholder={t("search.placeholder")}
+                            aria-label={t("common.search")}
                             className={cn(
                                 "flex-1 bg-transparent border-none outline-none",
                                 "text-base text-foreground placeholder:text-muted-foreground"
@@ -253,7 +256,7 @@ export function GlobalSearch() {
                         <Dialog.Close asChild>
                             <button
                                 type="button"
-                                aria-label="关闭搜索"
+                                aria-label={t("search.closeSearch")}
                                 className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                             >
                                 <X className="w-4 h-4" />
@@ -305,19 +308,19 @@ export function GlobalSearch() {
                             <span className="flex items-center gap-1">
                                 <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">↑</kbd>
                                 <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">↓</kbd>
-                                <span className="ml-1">导航</span>
+                                <span className="ml-1">{t("search.navigate")}</span>
                             </span>
                             <span className="flex items-center gap-1">
                                 <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">↵</kbd>
-                                <span className="ml-1">选择</span>
+                                <span className="ml-1">{t("search.select")}</span>
                             </span>
                             <span className="flex items-center gap-1">
                                 <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Esc</kbd>
-                                <span className="ml-1">关闭</span>
+                                <span className="ml-1">{t("common.close")}</span>
                             </span>
                         </div>
                         {hasQuery && results.length > 0 && (
-                            <span>{results.length} 个结果</span>
+                            <span>{t("search.resultsCount", { count: results.length })}</span>
                         )}
                     </div>
                 </Dialog.Content>

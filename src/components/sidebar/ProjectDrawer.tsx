@@ -2,6 +2,7 @@
  * ProjectDrawer Component - 项目抽屉
  * Story 2.18: Task 2
  * Story 2.19: Task 10 - 集成项目管理功能
+ * Story 2-26: i18n 国际化
  *
  * 侧边抽屉，用于浏览和管理所有项目
  * - 从左侧滑入，宽度 320px
@@ -11,6 +12,7 @@
 
 import * as React from "react";
 import { FolderOpen, Plus, Rocket } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -79,6 +81,7 @@ export function ProjectDrawer({
   onProjectsChange,
   onCurrentProjectRemoved,
 }: ProjectDrawerProps) {
+  const { t } = useTranslation();
   // 搜索关键词状态
   const [searchKeyword, setSearchKeyword] = React.useState("");
   // 展开的项目 ID 集合
@@ -188,12 +191,12 @@ export function ProjectDrawer({
         onProjectsChange?.();
         setRenamingProjectId(null);
       } catch (error) {
-        toast.error("重命名失败", {
+        toast.error(t("project.renameFailed", "重命名失败"), {
           description: (error as Error).message,
         });
       }
     },
-    [renamingProjectId, onProjectsChange]
+    [renamingProjectId, onProjectsChange, t]
   );
 
   // Story 2.19: 处理重命名取消
@@ -216,13 +219,13 @@ export function ProjectDrawer({
       if (isRemovingCurrentProject) {
         onCurrentProjectRemoved?.();
       }
-      toast.success(`已移除「${projectToRemove.name}」`);
+      toast.success(t("project.removed", { name: projectToRemove.name }));
     } catch (error) {
-      toast.error("移除失败", {
+      toast.error(t("project.removeFailed"), {
         description: (error as Error).message,
       });
     }
-  }, [activeProject, currentProjectId, onProjectsChange, onCurrentProjectRemoved]);
+  }, [activeProject, currentProjectId, onProjectsChange, onCurrentProjectRemoved, t]);
 
   // 空状态
   const isEmpty = !isLoading && projects.length === 0;
@@ -243,10 +246,10 @@ export function ProjectDrawer({
         <SheetHeader className="px-4 py-3 border-b shrink-0">
           <SheetTitle className="flex items-center gap-2 text-base">
             <FolderOpen className="h-5 w-5" />
-            我的项目
+            {t("project.myProjects")}
           </SheetTitle>
           <SheetDescription className="sr-only">
-            浏览和管理所有项目及会话
+            {t("project.browseAndManage")}
           </SheetDescription>
         </SheetHeader>
 
@@ -255,7 +258,7 @@ export function ProjectDrawer({
           <DrawerSearch
             value={searchKeyword}
             onChange={setSearchKeyword}
-            placeholder="搜索项目或会话..."
+            placeholder={t("import.searchProjectOrSession") + "..."}
           />
         </div>
 
@@ -263,7 +266,7 @@ export function ProjectDrawer({
         <div className="flex-1 overflow-y-auto pb-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
-              加载中...
+              {t("common.loading")}...
             </div>
           ) : isEmpty ? (
             // AC14: 空项目列表 (Story 2.21 AC #17: 与 Player 空状态样式一致)
@@ -277,25 +280,25 @@ export function ProjectDrawer({
               </div>
               {/* 主标题 */}
               <p className="text-sm font-medium text-foreground mb-1">
-                还没有导入任何项目
+                {t("project.noProjects")}
               </p>
               {/* 副标题 */}
               <p className="text-xs text-muted-foreground mb-4">
-                导入 AI 编程会话，开始回放心法
+                {t("project.importPrompt")}
               </p>
               {/* CTA 按钮 */}
               <Button onClick={handleImportClick} size="sm" className="gap-1.5">
                 <Rocket className="h-3.5 w-3.5" />
-                导入第一个项目
+                {t("import.importFirstProject")}
               </Button>
               {/* 支持说明 */}
               <p className="text-[10px] text-muted-foreground/70 mt-3">
-                Claude Code · Cursor · Gemini CLI · Codex
+                {t("import.supportedTools")}
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
-              未找到匹配的项目
+              {t("project.noMatch")}
             </div>
           ) : (
             <div className="py-2">
@@ -374,7 +377,7 @@ export function ProjectDrawer({
               data-testid="project-drawer-import-button"
             >
               <Plus className="h-4 w-4 mr-2" />
-              导入新项目
+              {t("project.importNew")}
             </Button>
           </div>
         )}

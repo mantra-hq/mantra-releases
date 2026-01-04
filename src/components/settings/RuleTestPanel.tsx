@@ -1,9 +1,11 @@
 /**
  * RuleTestPanel - 规则测试面板
  * Story 3-3: Task 4 - AC #4
+ * Story 2.26: 国际化支持
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -14,6 +16,7 @@ import { SanitizationSummary } from '@/components/sanitizer/SanitizationSummary'
 import type { SanitizationResult } from '@/components/sanitizer/types';
 
 export function RuleTestPanel() {
+    const { t } = useTranslation();
     const [testText, setTestText] = useState('');
     const [result, setResult] = useState<SanitizationResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +41,7 @@ export function RuleTestPanel() {
             const sanitizationResult = await sanitizeText(testText, customPatterns);
             setResult(sanitizationResult);
         } catch (err) {
-            setError((err as Error).message || '测试失败');
+            setError((err as Error).message || t("settings.testFailed"));
         } finally {
             setIsLoading(false);
         }
@@ -48,20 +51,20 @@ export function RuleTestPanel() {
 
     return (
         <div className="space-y-4 border rounded-lg p-4" data-testid="rule-test-panel">
-            <h4 className="font-medium">规则测试</h4>
+            <h4 className="font-medium">{t("settings.ruleTest")}</h4>
 
             <div className="space-y-2">
-                <Label htmlFor="testText">测试文本</Label>
+                <Label htmlFor="testText">{t("settings.testText")}</Label>
                 <Textarea
                     id="testText"
-                    placeholder="输入包含敏感信息的文本进行测试..."
+                    placeholder={t("settings.testInputPlaceholder")}
                     className="h-32 font-mono text-sm"
                     value={testText}
                     onChange={(e) => setTestText(e.target.value)}
                     data-testid="test-text-input"
                 />
                 <p className="text-xs text-muted-foreground">
-                    当前已启用 {enabledRulesCount} 条自定义规则
+                    {t("settings.enabledRulesCount", { count: enabledRulesCount })}
                 </p>
             </div>
 
@@ -73,12 +76,12 @@ export function RuleTestPanel() {
                 {isLoading ? (
                     <>
                         <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        测试中...
+                        {t("settings.testing")}
                     </>
                 ) : (
                     <>
                         <Play className="h-4 w-4 mr-1" />
-                        运行测试
+                        {t("settings.runTest")}
                     </>
                 )}
             </Button>
@@ -93,14 +96,14 @@ export function RuleTestPanel() {
                 <div className="space-y-4" data-testid="test-results">
                     <SanitizationSummary stats={result.stats} />
                     <div className="space-y-2">
-                        <Label>清洗结果</Label>
+                        <Label>{t("settings.sanitizedResult")}</Label>
                         <div className="p-3 rounded-lg bg-muted font-mono text-sm whitespace-pre-wrap max-h-48 overflow-auto" data-testid="sanitized-result">
                             {result.sanitized_text}
                         </div>
                     </div>
                     {!result.has_matches && (
                         <p className="text-sm text-muted-foreground">
-                            未匹配到任何敏感信息
+                            {t("settings.noMatchFound")}
                         </p>
                     )}
                 </div>

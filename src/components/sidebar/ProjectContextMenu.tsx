@@ -1,11 +1,13 @@
 /**
  * ProjectContextMenu Component - 项目上下文菜单
  * Story 2.19: Task 1
+ * Story 2.26: 国际化支持
  *
  * 项目管理菜单，包含同步、重命名、移除操作
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { RefreshCw, RotateCcw, Pencil, Trash2, Loader2, Settings } from "lucide-react";
 import {
   DropdownMenu,
@@ -42,6 +44,7 @@ export function ProjectContextMenu({
   onRemove,
   onOpenChange,
 }: ProjectContextMenuProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [isForceSyncing, setIsForceSyncing] = React.useState(false);
@@ -91,7 +94,7 @@ export function ProjectContextMenu({
         <button
           type="button"
           className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0 cursor-pointer"
-          aria-label="项目设置"
+          aria-label={t("project.settings")}
           data-testid="project-context-menu-trigger"
         >
           <Settings className="h-3.5 w-3.5 text-muted-foreground" />
@@ -109,7 +112,7 @@ export function ProjectContextMenu({
           ) : (
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
-          同步更新
+          {t("project.syncUpdate")}
         </DropdownMenuItem>
 
         {/* 强制重新解析 - 用于修复解析 bug 后恢复数据 */}
@@ -123,9 +126,9 @@ export function ProjectContextMenu({
             <RotateCcw className="h-4 w-4 mr-2" />
           )}
           <div className="flex flex-col items-start">
-            <span>强制重新解析</span>
+            <span>{t("sync.forceReparse")}</span>
             <span className="text-xs text-muted-foreground">
-              重新解析所有会话
+              {t("sync.reparseAllSessions")}
             </span>
           </div>
         </DropdownMenuItem>
@@ -133,7 +136,7 @@ export function ProjectContextMenu({
         {/* 重命名 (AC2) */}
         <DropdownMenuItem onClick={handleRename}>
           <Pencil className="h-4 w-4 mr-2" />
-          重命名
+          {t("project.rename")}
         </DropdownMenuItem>
 
         {/* 分隔线 */}
@@ -144,10 +147,10 @@ export function ProjectContextMenu({
           <div className="flex flex-col items-start">
             <div className="flex items-center">
               <Trash2 className="h-4 w-4 mr-2" />
-              从 Mantra 移除
+              {t("project.removeFromMantra")}
             </div>
             <span className="text-xs text-muted-foreground ml-6">
-              (不会删除源项目)
+              {t("project.removeNote")}
             </span>
           </div>
         </DropdownMenuItem>

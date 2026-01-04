@@ -1,6 +1,7 @@
 /**
  * FilterSearchInput Tests - 过滤搜索输入组件测试
  * Story 2.16: Task 3.4
+ * Story 2.26: 国际化支持
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
@@ -33,10 +34,11 @@ describe("FilterSearchInput", () => {
         expect(screen.getByLabelText("搜索消息")).toBeInTheDocument();
     });
 
-    it("should show placeholder text", () => {
-        render(<FilterSearchInput placeholder="自定义占位符" />);
+    it("should show default placeholder text from i18n", () => {
+        render(<FilterSearchInput />);
 
-        expect(screen.getByPlaceholderText("自定义占位符")).toBeInTheDocument();
+        // 测试默认 placeholder (来自 i18n 的 search.searchMessages)
+        expect(screen.getByPlaceholderText("搜索消息")).toBeInTheDocument();
     });
 
     it("should update local value immediately", async () => {

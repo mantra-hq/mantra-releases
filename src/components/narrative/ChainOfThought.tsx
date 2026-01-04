@@ -1,12 +1,14 @@
 /**
  * ChainOfThought - 思维链组件
  * Story 2.4: Task 1
+ * Story 2.26: 国际化支持
  *
  * 显示 AI 的思考过程 (CoT)，默认折叠，支持展开查看
  * AC: #2, #5, #6, #7
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,7 @@ export interface ChainOfThoughtProps {
 
 /**
  * ChainOfThought 组件
- * 
+ *
  * 视觉规范:
  * - 容器: 左侧 2px 虚线边框，padding-left 12px
  * - 头部: 💭 图标 + "思考过程" + 展开箭头
@@ -34,6 +36,7 @@ export function ChainOfThought({
   defaultOpen = false,
   className,
 }: ChainOfThoughtProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   return (
@@ -63,13 +66,13 @@ export function ChainOfThought({
         aria-expanded={isOpen}
       >
         {/* 图标 */}
-        <span className="text-sm" role="img" aria-label="思考">
+        <span className="text-sm" role="img" aria-label={t("message.thinking")}>
           💭
         </span>
-        
+
         {/* 标题 */}
-        <span>思考过程</span>
-        
+        <span>{t("message.thinkingProcess")}</span>
+
         {/* 展开箭头 */}
         <ChevronRight
           className={cn(

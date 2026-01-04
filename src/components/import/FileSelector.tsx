@@ -2,6 +2,7 @@
  * FileSelector Component - 文件选择组件 (重构版)
  * Story 2.9: Task 3 + UX Redesign
  * Story 2.20: Import Status Enhancement
+ * Story 2.26: 国际化支持
  *
  * 显示发现的日志文件列表，使用项目分组展示：
  * - 按项目分组
@@ -11,6 +12,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Search, FolderOpen, Loader2, FileJson } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -91,6 +93,8 @@ export function FileSelector({
   importedPaths,
   onSelectAllNew,
 }: FileSelectorProps) {
+  const { t } = useTranslation();
+
   // 防抖搜索
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
 
@@ -141,7 +145,7 @@ export function FileSelector({
   }, [projectGroups, selectedFiles]);
 
   // Story 2.23: 根据是否已有文件决定按钮文案
-  const scanButtonText = files.length > 0 ? "重新扫描" : "扫描默认路径";
+  const scanButtonText = files.length > 0 ? t("import.rescan") : t("import.scanDefault");
 
   return (
     <div data-testid="file-selector" className="space-y-4">
@@ -163,7 +167,7 @@ export function FileSelector({
           className="gap-2"
         >
           <FolderOpen className="w-4 h-4" />
-          手动选择目录
+          {t("import.selectManually")}
         </Button>
       </div>
 
@@ -174,7 +178,7 @@ export function FileSelector({
           className="flex items-center justify-center gap-2 py-12 text-muted-foreground"
         >
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">正在扫描...</span>
+          <span className="text-sm">{t("import.scanning")}</span>
         </div>
       )}
 
@@ -182,8 +186,8 @@ export function FileSelector({
       {!loading && files.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-lg">
           <FileJson className="w-10 h-10 mb-2 opacity-50" />
-          <span className="text-sm">暂无文件</span>
-          <span className="text-xs mt-1">点击上方按钮扫描或选择目录</span>
+          <span className="text-sm">{t("import.noFiles")}</span>
+          <span className="text-xs mt-1">{t("import.scanHint")}</span>
         </div>
       )}
 

@@ -65,7 +65,8 @@ describe("RemoveProjectDialog", () => {
     render(<RemoveProjectDialog {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/从 Mantra 移除项目/)).toBeInTheDocument();
+      // i18n key: project.removeFromMantra = "从 Mantra 移除"
+      expect(screen.getByText(/从 Mantra 移除/)).toBeInTheDocument();
     });
   });
 

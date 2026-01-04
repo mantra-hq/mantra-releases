@@ -1,12 +1,14 @@
 /**
  * TypeChips - 消息类型过滤 Chips 组件
  * Story 2.16: Task 2
+ * Story 2.26: 国际化支持
  *
  * 支持多选的过滤类型 Chips，使用 OR 逻辑过滤消息
  * AC: #1, #2, #3
  */
 
 
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { MESSAGE_TYPES, useMessageFilterStore } from "@/stores/useMessageFilterStore";
 
@@ -20,13 +22,14 @@ export interface TypeChipsProps {
  * 显示可多选的消息类型过滤芯片
  */
 export function TypeChips({ className }: TypeChipsProps) {
+    const { t } = useTranslation();
     const { selectedTypes, toggleType } = useMessageFilterStore();
 
     return (
         <div
             className={cn("flex flex-wrap gap-1.5", className)}
             role="group"
-            aria-label="消息类型过滤"
+            aria-label={t("filter.messageTypeFilter")}
         >
             {MESSAGE_TYPES.map((type) => {
                 const isSelected = selectedTypes.has(type.id);
@@ -59,7 +62,7 @@ export function TypeChips({ className }: TypeChipsProps) {
                         <span className="text-sm" aria-hidden="true">
                             {type.icon}
                         </span>
-                        <span>{type.label}</span>
+                        <span>{t(type.label)}</span>
                     </button>
                 );
             })}

@@ -1,12 +1,14 @@
 /**
  * ToolOutput - 工具输出组件
  * Story 2.4: Task 3
+ * Story 2.26: 国际化支持
  *
  * 显示工具执行结果，支持成功/错误两种状态
  * AC: #4, #5, #6, #7
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight, Check, X, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -87,6 +89,7 @@ export function ToolOutput({
   onHover,
   className,
 }: ToolOutputProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   // 从 store 获取 setCode 方法
@@ -165,7 +168,7 @@ export function ToolOutput({
         isHighlighted && "ring-2 ring-primary/50",
         className
       )}
-      aria-label={isError ? "工具执行失败" : "工具执行成功"}
+      aria-label={isError ? t("message.toolExecuteFailed") : t("message.toolExecuteSuccess")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -200,7 +203,7 @@ export function ToolOutput({
               "text-muted-foreground"
             )}
           >
-            {isOpen ? (isError ? "错误详情" : "执行结果") : previewContent}
+            {isOpen ? (isError ? t("message.errorDetails") : t("message.executeResult")) : previewContent}
           </span>
 
           {/* 展开箭头 */}
@@ -224,7 +227,7 @@ export function ToolOutput({
               "transition-colors duration-150",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             )}
-            title="在代码面板中查看"
+            title={t("message.viewInCodePanel")}
           >
             <Code2 className="h-4 w-4" />
           </button>

@@ -1,9 +1,11 @@
 /**
  * RuleList - 规则列表组件
  * Story 3-3: Task 3 - AC #1, #5
+ * Story 2.26: 国际化支持
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -35,6 +37,7 @@ export interface RuleListProps {
 }
 
 export function RuleList({ onImport, onExport }: RuleListProps) {
+    const { t } = useTranslation();
     const { rules, addRule, updateRule, deleteRule, toggleRule } =
         useSanitizationRulesStore();
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -72,13 +75,13 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium flex items-center gap-2">
                     <Shield className="h-5 w-5" />
-                    自定义清洗规则
+                    {t("settings.customSanitizationRules")}
                 </h3>
                 <div className="flex gap-2">
                     {onImport && (
                         <Button variant="outline" size="sm" onClick={onImport} data-testid="import-button">
                             <FileUp className="h-4 w-4 mr-1" />
-                            导入
+                            {t("settings.import")}
                         </Button>
                     )}
                     {onExport && (
@@ -90,12 +93,12 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                             data-testid="export-button"
                         >
                             <FileDown className="h-4 w-4 mr-1" />
-                            导出
+                            {t("settings.export")}
                         </Button>
                     )}
                     <Button size="sm" onClick={handleAdd} data-testid="add-rule-button">
                         <Plus className="h-4 w-4 mr-1" />
-                        添加规则
+                        {t("settings.addRule")}
                     </Button>
                 </div>
             </div>
@@ -103,13 +106,13 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
             {rules.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg" data-testid="empty-state">
                     <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="font-medium">暂无自定义规则</p>
+                    <p className="font-medium">{t("settings.noRulesYet")}</p>
                     <p className="text-sm mt-1">
-                        添加规则以匹配特定的敏感信息，如公司邮箱、内部域名等
+                        {t("settings.addRuleHint")}
                     </p>
                     <Button className="mt-4" onClick={handleAdd}>
                         <Plus className="h-4 w-4 mr-1" />
-                        添加第一条规则
+                        {t("settings.addFirstRule")}
                     </Button>
                 </div>
             ) : (
@@ -132,14 +135,14 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                                 <Switch
                                     checked={rule.enabled}
                                     onCheckedChange={() => toggleRule(rule.id)}
-                                    aria-label={rule.enabled ? '禁用规则' : '启用规则'}
+                                    aria-label={rule.enabled ? t("settings.disableRule") : t("settings.enableRule")}
                                     data-testid={`toggle-rule-${rule.id}`}
                                 />
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleEdit(rule)}
-                                    aria-label="编辑规则"
+                                    aria-label={t("settings.editRule")}
                                     data-testid={`edit-rule-${rule.id}`}
                                 >
                                     <Pencil className="h-4 w-4" />
@@ -149,7 +152,7 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            aria-label="删除规则"
+                                            aria-label={t("settings.deleteRule")}
                                             data-testid={`delete-rule-${rule.id}`}
                                         >
                                             <Trash2 className="h-4 w-4 text-destructive" />
@@ -157,18 +160,18 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
-                                            <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                            <AlertDialogTitle>{t("settings.confirmDelete")}</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                确定要删除规则 "{rule.name}" 吗？此操作无法撤销。
+                                                {t("settings.confirmDeleteDesc", { name: rule.name })}
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                            <AlertDialogCancel>取消</AlertDialogCancel>
+                                            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                                             <AlertDialogAction
                                                 onClick={() => handleDelete(rule)}
                                                 data-testid={`confirm-delete-${rule.id}`}
                                             >
-                                                删除
+                                                {t("common.delete")}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
@@ -183,7 +186,7 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {editingRule ? '编辑规则' : '添加规则'}
+                            {editingRule ? t("settings.editRule") : t("settings.addRule")}
                         </DialogTitle>
                     </DialogHeader>
                     <RuleEditor

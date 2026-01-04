@@ -2,12 +2,14 @@
  * TopBarActions Component - TopBar 右侧操作按钮
  * Story 2.17: Task 4
  * Story 2.21: Task 4.2-4.4 (添加全局搜索按钮、设置按钮)
+ * Story 2-26: i18n 国际化
  *
  * 按钮顺序：搜索 → 同步 → 导入 → 设置 → 主题切换
  */
 
 import { RefreshCw, Plus, Search, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSearchStore } from "@/stores/useSearchStore";
@@ -42,6 +44,7 @@ export function TopBarActions({
   isSyncing = false,
   showSync = true,
 }: TopBarActionsProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const openSearch = useSearchStore((state) => state.open);
 
@@ -58,7 +61,7 @@ export function TopBarActions({
               variant="ghost"
               size="icon"
               onClick={openSearch}
-              aria-label="全局搜索 (⌘K)"
+              aria-label={t("topbar.globalSearchShortcut")}
               data-testid="topbar-search-button"
               className="h-8 w-8"
             >
@@ -66,7 +69,7 @@ export function TopBarActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p>全局搜索 (⌘K)</p>
+            <p>{t("topbar.globalSearchShortcut")}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -79,7 +82,7 @@ export function TopBarActions({
                 size="icon"
                 onClick={onSync}
                 disabled={isSyncing}
-                aria-label="同步项目"
+                aria-label={t("sync.syncProject")}
                 data-testid="topbar-sync-button"
                 className="h-8 w-8"
               >
@@ -89,7 +92,7 @@ export function TopBarActions({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>同步项目</p>
+              <p>{t("sync.syncProject")}</p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -101,7 +104,7 @@ export function TopBarActions({
               variant="ghost"
               size="icon"
               onClick={onImport}
-              aria-label="导入会话"
+              aria-label={t("import.importSession")}
               data-testid="topbar-import-button"
               className="h-8 w-8"
             >
@@ -109,7 +112,7 @@ export function TopBarActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p>导入会话</p>
+            <p>{t("import.importSession")}</p>
           </TooltipContent>
         </Tooltip>
 
@@ -120,7 +123,7 @@ export function TopBarActions({
               variant="ghost"
               size="icon"
               onClick={() => navigate("/settings")}
-              aria-label="设置"
+              aria-label={t("settings.title")}
               data-testid="topbar-settings-button"
               className="h-8 w-8"
             >
@@ -128,7 +131,7 @@ export function TopBarActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p>设置</p>
+            <p>{t("settings.title")}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

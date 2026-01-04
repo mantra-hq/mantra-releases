@@ -1,6 +1,7 @@
 /**
  * SyncStatus - 同步状态组件
  * Story 2.14: Task 7 - AC #11
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示四种同步状态: 已同步/同步中/有远程更新/离线
@@ -8,6 +9,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Loader2, AlertCircle, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,31 +26,31 @@ export interface SyncStatusProps {
 }
 
 /**
- * 状态配置
+ * 状态配置 (图标和样式)
  */
 const STATUS_CONFIG: Record<SyncStatusType, {
     icon: React.ElementType;
-    label: string;
+    labelKey: string;
     className: string;
 }> = {
     synced: {
         icon: Check,
-        label: "已同步",
+        labelKey: "git.synced",
         className: "text-green-500",
     },
     syncing: {
         icon: Loader2,
-        label: "同步中",
+        labelKey: "git.syncing",
         className: "text-blue-500",
     },
     behind: {
         icon: AlertCircle,
-        label: "有远程更新",
+        labelKey: "git.hasRemoteUpdates",
         className: "text-amber-500",
     },
     offline: {
         icon: WifiOff,
-        label: "离线",
+        labelKey: "git.offline",
         className: "text-muted-foreground",
     },
 };
@@ -60,6 +62,7 @@ export function SyncStatus({
     status = "synced",
     className,
 }: SyncStatusProps) {
+    const { t } = useTranslation();
     const config = STATUS_CONFIG[status];
     const Icon = config.icon;
 
@@ -79,7 +82,7 @@ export function SyncStatus({
                     status === "syncing" && "animate-spin"
                 )}
             />
-            <span>{config.label}</span>
+            <span>{t(config.labelKey)}</span>
         </div>
     );
 }

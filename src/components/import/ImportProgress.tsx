@@ -2,6 +2,7 @@
  * ImportProgress Component - 导入进度展示
  * Story 2.9: Task 4
  * Story 2.23: Real-time Progress Events + Cancel Support
+ * Story 2.26: 国际化支持
  *
  * 显示导入进度信息：
  * - 总体进度条
@@ -13,6 +14,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { CheckCircle2, XCircle, ChevronDown, ChevronRight, FileWarning, Loader2, StopCircle } from "lucide-react";
 import {
   Progress,
@@ -95,6 +97,7 @@ export function ImportProgress({
   onCancel,
   isCancelling = false,
 }: ImportProgressProps) {
+  const { t } = useTranslation();
   const [errorsExpanded, setErrorsExpanded] = React.useState(true);
   const [showCancelConfirm, setShowCancelConfirm] = React.useState(false);
 
@@ -121,7 +124,7 @@ export function ImportProgress({
           {progress.current} / {progress.total}
         </div>
         <div className="text-sm text-muted-foreground">
-          正在处理: <span className="font-mono">{progress.currentFile || "等待中..."}</span>
+          {t("import.processing")}: <span className="font-mono">{progress.currentFile || t("common.waiting")}</span>
         </div>
       </div>
 
@@ -134,7 +137,7 @@ export function ImportProgress({
           aria-valuenow={percentage}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`导入进度 ${percentage}%`}
+          aria-label={t("import.progressLabel", { percent: percentage })}
         />
         <div className="text-xs text-center text-muted-foreground">
           {percentage}%
@@ -153,7 +156,7 @@ export function ImportProgress({
             >
               {progress.successCount}
             </div>
-            <div className="text-xs text-muted-foreground">成功</div>
+            <div className="text-xs text-muted-foreground">{t("common.success")}</div>
           </div>
         </div>
 
@@ -167,7 +170,7 @@ export function ImportProgress({
             >
               {progress.failureCount}
             </div>
-            <div className="text-xs text-muted-foreground">失败</div>
+            <div className="text-xs text-muted-foreground">{t("common.failed")}</div>
           </div>
         </div>
       </div>
@@ -179,7 +182,7 @@ export function ImportProgress({
           className="border border-border rounded-lg overflow-hidden"
         >
           <div className="px-3 py-2 bg-muted/50 text-sm text-muted-foreground">
-            最近处理
+            {t("import.recentProcessed")}
           </div>
           <div className="divide-y divide-border">
             {recentFiles.map((file, index) => (
@@ -235,7 +238,7 @@ export function ImportProgress({
               <ChevronRight className="w-4 h-4" />
             )}
             <FileWarning className="w-4 h-4" />
-            <span>解析失败的文件 ({errors.length})</span>
+            <span>{t("import.parseFailedFiles")} ({errors.length})</span>
           </button>
 
           {/* 错误列表内容 */}
@@ -275,7 +278,7 @@ export function ImportProgress({
             ) : (
               <StopCircle className="w-4 h-4" />
             )}
-            {isCancelling ? "正在取消..." : "取消导入"}
+            {isCancelling ? t("import.cancelling") : t("import.cancelImport")}
           </Button>
         </div>
       )}
@@ -284,15 +287,15 @@ export function ImportProgress({
       <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确定要取消导入吗？</AlertDialogTitle>
+            <AlertDialogTitle>{t("import.cancelConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              已导入的内容会保留，后续未处理的文件将不会被导入。
+              {t("import.cancelConfirmDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>继续导入</AlertDialogCancel>
+            <AlertDialogCancel>{t("import.continueImport")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleCancelConfirm}>
-              确认取消
+              {t("import.confirmCancel")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

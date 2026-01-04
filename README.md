@@ -171,6 +171,13 @@ flowchart TB
 - **主色调**：`#3b82f6` (Blue-500)
 - **强调色**：`#10b981` (Emerald-500)
 
+注意：.icns 文件需要在 macOS 上使用 iconutil 命令重新生成，Linux 不支持此格式。如需发布 macOS 版本，请在 Mac 上运行：
+
+```bash
+cd apps/client/src-tauri/icons
+iconutil -c icns icon.iconset
+```
+
 ## 相关文档
 
 - [产品需求文档 (PRD)](../../_bmad-output/planning-artifacts/prd.md)

@@ -1,6 +1,7 @@
 /**
  * StatusBar - 底部状态栏组件
  * Story 2.14: Task 5 - AC #9, #12
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 底部状态栏布局
@@ -9,6 +10,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export interface CursorPosition {
@@ -35,6 +37,8 @@ export function StatusBar({
     leftContent,
     className,
 }: StatusBarProps) {
+    const { t } = useTranslation();
+
     return (
         <div
             data-testid="status-bar"
@@ -54,7 +58,7 @@ export function StatusBar({
             <div className="flex items-center gap-2" data-testid="status-bar-right">
                 {cursorPosition && (
                     <span data-testid="cursor-position">
-                        Ln {cursorPosition.line}, Col {cursorPosition.column}
+                        {t("editor.cursorPosition", { line: cursorPosition.line, col: cursorPosition.column })}
                     </span>
                 )}
             </div>

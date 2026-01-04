@@ -1,11 +1,13 @@
 /**
  * SyncResultToast - 同步结果 Toast 通知
  * Story 2.19: Task 3
+ * Story 2.26: 国际化支持
  *
  * 显示同步结果的 Toast 通知，包含新会话数和更新会话数
  */
 
 import { toast } from "sonner";
+import i18n from "@/i18n";
 import type { SyncResult } from "@/lib/project-ipc";
 
 // Re-export for convenience
@@ -24,18 +26,20 @@ export function showSyncResult(
   error?: Error,
   isForceSync?: boolean
 ): void {
+  const t = i18n.t.bind(i18n);
+
   // 错误状态
   if (error) {
-    toast.error(isForceSync ? "重新解析失败" : "同步失败", {
-      description: error.message || "请稍后重试",
+    toast.error(isForceSync ? t("sync.reParseFailed") : t("sync.syncFailed"), {
+      description: error.message || t("sync.retryLater"),
     });
     return;
   }
 
   // 空结果
   if (!result) {
-    toast.error(isForceSync ? "重新解析失败" : "同步失败", {
-      description: "未返回同步结果",
+    toast.error(isForceSync ? t("sync.reParseFailed") : t("sync.syncFailed"), {
+      description: t("sync.noResult"),
     });
     return;
   }
@@ -47,21 +51,21 @@ export function showSyncResult(
   // 强制重新解析模式
   if (isForceSync) {
     if (!hasNewSessions && !hasUpdates) {
-      toast.success("重新解析完成", {
-        description: `「${projectName}」所有会话已是最新数据`,
+      toast.success(t("sync.reParseComplete"), {
+        description: t("sync.allLatest", { name: projectName }),
       });
       return;
     }
 
     const parts: string[] = [];
     if (hasNewSessions) {
-      parts.push(`发现 ${new_sessions.length} 个新会话`);
+      parts.push(t("sync.foundNewSessions", { count: new_sessions.length }));
     }
     if (hasUpdates) {
-      parts.push(`重新解析 ${updated_sessions.length} 个会话`);
+      parts.push(t("sync.reparseSessionsCount", { count: updated_sessions.length }));
     }
 
-    toast.success("重新解析完成", {
+    toast.success(t("sync.reParseComplete"), {
       description: (
         <div className="flex flex-col gap-1">
           <div className="font-medium">🔃 {projectName}</div>
@@ -76,8 +80,8 @@ export function showSyncResult(
 
   // AC8: 无更新时显示「已是最新」
   if (!hasNewSessions && !hasUpdates) {
-    toast.success("已是最新", {
-      description: `「${projectName}」没有新内容`,
+    toast.success(t("sync.upToDate"), {
+      description: t("sync.noNewContent", { name: projectName }),
     });
     return;
   }
@@ -86,14 +90,14 @@ export function showSyncResult(
   const parts: string[] = [];
 
   if (hasNewSessions) {
-    parts.push(`发现 ${new_sessions.length} 个新会话`);
+    parts.push(t("sync.foundNewSessions", { count: new_sessions.length }));
   }
 
   if (hasUpdates) {
-    parts.push(`${updated_sessions.length} 个会话有新消息`);
+    parts.push(t("sync.sessionsUpdated", { count: updated_sessions.length }));
   }
 
-  toast.success("同步完成", {
+  toast.success(t("sync.syncComplete"), {
     description: (
       <div className="flex flex-col gap-1">
         <div className="font-medium">📁 {projectName}</div>

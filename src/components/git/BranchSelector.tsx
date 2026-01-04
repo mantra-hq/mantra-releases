@@ -1,6 +1,7 @@
 /**
  * BranchSelector - 分支选择器组件
  * Story 2.14: Task 6 - AC #10
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示当前分支名
@@ -8,6 +9,7 @@
  * - MVP: 只显示，不实现切换功能
  */
 
+import { useTranslation } from "react-i18next";
 import { GitBranch, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,8 @@ export function BranchSelector({
     isLoading = false,
     className,
 }: BranchSelectorProps) {
+    const { t } = useTranslation();
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -60,14 +64,14 @@ export function BranchSelector({
                     disabled={isLoading}
                 >
                     <GitBranch className="h-3 w-3" />
-                    <span data-testid="current-branch">{isLoading ? "加载中..." : currentBranch}</span>
+                    <span data-testid="current-branch">{isLoading ? t("git.loading") : currentBranch}</span>
                     <ChevronDown className="h-3 w-3 opacity-50" />
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[150px]">
                 {branches.length === 0 ? (
                     <DropdownMenuItem disabled>
-                        无其他分支
+                        {t("git.noOtherBranches")}
                     </DropdownMenuItem>
                 ) : (
                     branches.map((branch) => (

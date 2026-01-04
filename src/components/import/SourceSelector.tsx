@@ -2,6 +2,7 @@
  * SourceSelector Component - 导入来源选择
  * Story 2.9: Task 2
  * Story 2.24: AC5 官方品牌图标
+ * Story 2.26: 国际化支持
  *
  * 显示可用的导入来源选项：
  * - Claude Code (已支持)
@@ -10,6 +11,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 // Story 2.24: AC5 官方品牌图标
@@ -30,6 +32,8 @@ interface SourceConfig {
   iconComponent?: React.ComponentType<{ className?: string }>;
   disabled: boolean;
   badge?: string;
+  /** 是否显示 "(按工作区)" 后缀 */
+  showByWorkspace?: boolean;
 }
 
 /** 来源配置列表 */
@@ -51,9 +55,10 @@ const SOURCES: SourceConfig[] = [
   {
     id: "cursor",
     name: "Cursor",
-    defaultPath: "~/.config/Cursor (按工作区)",
+    defaultPath: "~/.config/Cursor",
     iconSrc: cursorIcon,
     disabled: false,
+    showByWorkspace: true, // 标记需要显示 "(按工作区)" 后缀
   },
 ];
 
@@ -72,10 +77,12 @@ function SourceCard({
   source,
   selected,
   onClick,
+  t,
 }: {
   source: SourceConfig;
   selected: boolean;
   onClick: () => void;
+  t: (key: string) => string;
 }) {
   const IconComponent = source.iconComponent;
 
@@ -91,6 +98,11 @@ function SourceCard({
       onClick();
     }
   };
+
+  // 构建显示路径，附加 "(按工作区)" 后缀
+  const displayPath = source.showByWorkspace
+    ? `${source.defaultPath} ${t("import.byWorkspace")}`
+    : source.defaultPath;
 
   return (
     <div
@@ -127,7 +139,7 @@ function SourceCard({
         {source.iconSrc ? (
           <img
             src={source.iconSrc}
-            alt={`${source.name} 图标`}
+            alt={source.name}
             className="w-8 h-8 object-contain"
           />
         ) : IconComponent ? (
@@ -142,7 +154,7 @@ function SourceCard({
 
       {/* 默认路径 */}
       <span className="text-xs text-muted-foreground font-mono">
-        {source.defaultPath}
+        {displayPath}
       </span>
 
       {/* 徽章 */}
@@ -160,11 +172,13 @@ function SourceCard({
  * 选择导入来源
  */
 export function SourceSelector({ value, onChange }: SourceSelectorProps) {
+  const { t } = useTranslation();
+
   return (
     <div
       data-testid="source-selector"
       role="radiogroup"
-      aria-label="选择导入来源"
+      aria-label={t("import.selectSourcePrompt")}
       className="grid grid-cols-3 gap-4"
     >
       {SOURCES.map((source) => (
@@ -173,6 +187,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
           source={source}
           selected={value === source.id}
           onClick={() => onChange(source.id)}
+          t={t}
         />
       ))}
     </div>

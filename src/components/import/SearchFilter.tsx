@@ -1,10 +1,12 @@
 /**
  * SearchFilter Component - 搜索过滤
  * Story 2.9 UX Redesign
+ * Story 2.26: 国际化支持
  *
  * 搜索输入框，支持实时过滤项目和会话
  */
 
+import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
 
 /** SearchFilter Props */
@@ -29,9 +31,11 @@ export function SearchFilter({
     onChange,
     resultCount,
     totalCount,
-    placeholder = "搜索项目或会话...",
+    placeholder,
 }: SearchFilterProps) {
+    const { t } = useTranslation();
     const hasQuery = value.trim().length > 0;
+    const displayPlaceholder = placeholder || t("import.searchProjectOrSession");
 
     return (
         <div className="relative">
@@ -44,9 +48,9 @@ export function SearchFilter({
                 role="searchbox"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
+                placeholder={displayPlaceholder}
                 className="w-full h-10 pl-10 pr-20 text-sm bg-muted/50 border border-border rounded-lg placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-                aria-label="搜索项目或会话"
+                aria-label={t("import.searchProjectOrSession")}
             />
 
             {/* 结果计数 / 清除按钮 */}
@@ -60,7 +64,7 @@ export function SearchFilter({
                             type="button"
                             onClick={() => onChange("")}
                             className="p-1 rounded hover:bg-muted transition-colors"
-                            aria-label="清除搜索"
+                            aria-label={t("common.clearSearch")}
                         >
                             <X className="w-3 h-3 text-muted-foreground" />
                         </button>

@@ -1,6 +1,7 @@
 /**
  * MessageFilterBar - 消息过滤栏主组件
  * Story 2.16: Task 5, 8
+ * Story 2.26: 国际化支持
  *
  * 组合 TypeChips, FilterSearchInput, FilterStats 和清除过滤按钮
  * 支持键盘快捷键 Cmd/Ctrl+F 和 Escape
@@ -8,6 +9,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +35,7 @@ export const MessageFilterBar = React.forwardRef<
     HTMLInputElement,
     MessageFilterBarProps
 >(({ filteredCount, totalCount, className }, ref) => {
+    const { t } = useTranslation();
     const { selectedTypes, searchQuery, clearFilters, setSearchQuery } = useMessageFilterStore();
     const searchInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -94,7 +97,7 @@ export const MessageFilterBar = React.forwardRef<
                     className="h-7 px-2 text-xs text-muted-foreground shrink-0"
                 >
                     <RotateCcw className="size-3 mr-1" />
-                    <span>清除过滤</span>
+                    <span>{t("filter.clearFilter")}</span>
                 </Button>
             )}
         </div>

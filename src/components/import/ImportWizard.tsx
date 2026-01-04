@@ -13,6 +13,7 @@
 
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { CheckIcon } from "lucide-react";
 import {
   Dialog,
@@ -42,12 +43,12 @@ interface StepConfig {
   number: number;
 }
 
-/** 步骤配置列表 */
+/** 步骤配置列表 (标签通过 i18n 动态获取) */
 const STEPS: StepConfig[] = [
-  { id: "source", label: "选择来源", number: 1 },
-  { id: "files", label: "选择文件", number: 2 },
-  { id: "progress", label: "导入中", number: 3 },
-  { id: "complete", label: "完成", number: 4 },
+  { id: "source", label: "import.steps.source", number: 1 },
+  { id: "files", label: "import.steps.files", number: 2 },
+  { id: "progress", label: "import.steps.progress", number: 3 },
+  { id: "complete", label: "import.steps.complete", number: 4 },
 ];
 
 /** ImportWizard Props */
@@ -83,9 +84,11 @@ function getStepState(
 function StepIndicator({
   step,
   state,
+  t,
 }: {
   step: StepConfig;
   state: "pending" | "active" | "completed";
+  t: (key: string) => string;
 }) {
   return (
     <div
@@ -119,7 +122,7 @@ function StepIndicator({
           state === "completed" && "text-emerald-500"
         )}
       >
-        {step.label}
+        {t(step.label)}
       </span>
     </div>
   );
@@ -136,6 +139,7 @@ export function ImportWizard({
   onComplete,
 }: ImportWizardProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // Store 状态
   const {
@@ -475,11 +479,11 @@ export function ImportWizard({
       feedback.retryResult(successCount, failedCount);
     } catch (err) {
       console.error("重试导入失败:", err);
-      feedback.error("重试导入", (err as Error).message);
+      feedback.error(t("import.retryImport"), (err as Error).message);
     } finally {
       setIsRetrying(false);
     }
-  }, [addImportedProject, mergeRetryResults]);
+  }, [addImportedProject, mergeRetryResults, t]);
 
   /**
    * 渲染当前步骤内容
@@ -559,9 +563,9 @@ export function ImportWizard({
       >
         {/* Header */}
         <DialogHeader>
-          <DialogTitle id="import-wizard-title">导入日志</DialogTitle>
+          <DialogTitle id="import-wizard-title">{t("import.title")}</DialogTitle>
           <DialogDescription className="sr-only">
-            多步骤导入向导，用于导入 AI 对话日志文件
+            {t("import.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -572,6 +576,7 @@ export function ImportWizard({
               <StepIndicator
                 step={step}
                 state={getStepState(step.id, currentStep)}
+                t={t}
               />
               {index < STEPS.length - 1 && (
                 <div className="flex-1 h-px bg-border" />
@@ -593,7 +598,7 @@ export function ImportWizard({
                 onClick={handleBack}
                 data-testid="back-button"
               >
-                返回
+                {t("common.back")}
               </Button>
             ) : (
               <div />
@@ -606,7 +611,7 @@ export function ImportWizard({
                 disabled={!canProceed || isLoading}
                 data-testid="next-button"
               >
-                {currentStep === "files" ? "开始导入" : "下一步"}
+                {currentStep === "files" ? t("import.startImport") : t("common.next")}
               </Button>
             )}
           </div>

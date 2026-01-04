@@ -1,10 +1,12 @@
 /**
  * RemoveProjectDialog Component - 移除项目确认对话框
  * Story 2.19: Task 2
+ * Story 2.26: 国际化支持
  *
  * 确认移除项目的对话框，明确说明不会影响原始代码项目
  */
 
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -42,6 +44,8 @@ export function RemoveProjectDialog({
   projectName,
   onConfirm,
 }: RemoveProjectDialogProps) {
+  const { t } = useTranslation();
+
   const handleConfirm = () => {
     onConfirm();
     onOpenChange(false);
@@ -52,23 +56,23 @@ export function RemoveProjectDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           {/* AC13: 标题包含警告图标 */}
-          <AlertDialogTitle>⚠️ 从 Mantra 移除项目</AlertDialogTitle>
+          <AlertDialogTitle>⚠️ {t("project.removeFromMantra")}</AlertDialogTitle>
           <AlertDialogDescription>
             {/* AC14: 明确说明不会影响原始代码项目 */}
-            确定要移除「{projectName}」吗？
+            {t("project.removeConfirm", { name: projectName })}
             <br />
             <br />
-            这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。
+            {t("project.removeDescription")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           {/* AC15: 确认按钮使用 destructive 样式 */}
           <AlertDialogAction
             onClick={handleConfirm}
             className={cn(buttonVariants({ variant: "destructive" }))}
           >
-            移除项目
+            {t("project.removeProject")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

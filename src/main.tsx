@@ -17,6 +17,8 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
 import { useGlobalShortcut } from "./hooks";
+// Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
+import "./i18n";
 import "./index.css";
 
 // Prevent flash of incorrect theme on initial load

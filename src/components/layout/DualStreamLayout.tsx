@@ -3,6 +3,7 @@
  * Story 2.2: AC #1, #2, #3, #6
  * Story 2.6: 集成 TimberLine 时间轴控制器
  * Story 2.15: 右侧面板固定双 Tab (代码编辑 + 终端)
+ * Story 2.26: 国际化支持
  *
  * 左侧: NarrativePanel (对话流) - 默认 40%
  * 右侧: CodePanel / Terminal (代码快照 + 终端) - 默认 60%
@@ -12,6 +13,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -152,6 +154,8 @@ export const DualStreamLayout = React.forwardRef<
     },
     ref
   ) => {
+    const { t } = useTranslation();
+
     // NarrativePanel ref
     const narrativePanelRef = React.useRef<NarrativePanelRef>(null);
 
@@ -255,7 +259,7 @@ export const DualStreamLayout = React.forwardRef<
       />
     ) : (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        点击会话中的终端类工具查看详情
+        {t("editor.terminalHint")}
       </div>
     );
 
@@ -287,7 +291,7 @@ export const DualStreamLayout = React.forwardRef<
             )}
           >
             <Code2 className="h-4 w-4" />
-            代码编辑
+            {t("editor.codeEdit")}
           </button>
           <button
             type="button"
@@ -300,7 +304,7 @@ export const DualStreamLayout = React.forwardRef<
             )}
           >
             <Terminal className="h-4 w-4" />
-            终端
+            {t("editor.terminalTab")}
           </button>
           {/* 动态工具详情 Tab - 仅当有 toolDetail 时显示 */}
           {toolDetail && (
@@ -315,7 +319,7 @@ export const DualStreamLayout = React.forwardRef<
               )}
             >
               <Wrench className="h-4 w-4" />
-              工具详情
+              {t("editor.toolDetails")}
             </button>
           )}
         </div>
@@ -400,13 +404,13 @@ export const DualStreamLayout = React.forwardRef<
               active={activeView === "narrative"}
               onClick={() => setActiveView("narrative")}
               icon={<MessageSquare className="size-4" />}
-              label="对话流"
+              label={t("editor.narrativeFlow")}
             />
             <TabButton
               active={activeView === "code"}
               onClick={() => setActiveView("code")}
               icon={<Code2 className="size-4" />}
-              label="代码快照"
+              label={t("editor.codeSnapshot")}
             />
           </div>
 
@@ -468,14 +472,14 @@ export const DualStreamLayout = React.forwardRef<
             active={activeView === "narrative"}
             onClick={() => setActiveView("narrative")}
             icon={<MessageSquare className="size-5" />}
-            label="对话"
+            label={t("editor.narrative")}
             variant="bottom"
           />
           <TabButton
             active={activeView === "code"}
             onClick={() => setActiveView("code")}
             icon={<Code2 className="size-5" />}
-            label="代码"
+            label={t("editor.code")}
             variant="bottom"
           />
         </div>

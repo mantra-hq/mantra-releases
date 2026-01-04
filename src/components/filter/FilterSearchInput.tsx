@@ -1,12 +1,14 @@
 /**
  * FilterSearchInput - 过滤搜索输入组件
  * Story 2.16: Task 3
+ * Story 2.26: 国际化支持
  *
  * 支持 debounce 的搜索输入框
  * AC: #8, #9
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMessageFilterStore } from "@/stores/useMessageFilterStore";
@@ -16,8 +18,6 @@ export interface FilterSearchInputProps {
     className?: string;
     /** Debounce 延迟时间 (ms)，默认 300ms */
     debounceMs?: number;
-    /** 占位符文本 */
-    placeholder?: string;
 }
 
 /**
@@ -27,7 +27,8 @@ export interface FilterSearchInputProps {
 export const FilterSearchInput = React.forwardRef<
     HTMLInputElement,
     FilterSearchInputProps
->(({ className, debounceMs = 300, placeholder = "搜索消息..." }, ref) => {
+>(({ className, debounceMs = 300 }, ref) => {
+    const { t } = useTranslation();
     const { searchQuery, setSearchQuery, setSearchFocused } = useMessageFilterStore();
     const [localValue, setLocalValue] = React.useState(searchQuery);
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -101,7 +102,7 @@ export const FilterSearchInput = React.forwardRef<
                 onChange={handleChange}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                placeholder={placeholder}
+                placeholder={t("search.searchMessages")}
                 className={cn(
                     "w-full h-8 pl-8 pr-8 rounded-md text-sm",
                     "bg-muted/50 border border-transparent",
@@ -109,7 +110,7 @@ export const FilterSearchInput = React.forwardRef<
                     "focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring",
                     "transition-colors"
                 )}
-                aria-label="搜索消息"
+                aria-label={t("search.searchMessages")}
             />
 
             {/* 清除按钮 */}
@@ -122,7 +123,7 @@ export const FilterSearchInput = React.forwardRef<
                         "text-muted-foreground hover:text-foreground",
                         "focus:outline-none focus:ring-2 focus:ring-ring"
                     )}
-                    aria-label="清除搜索"
+                    aria-label={t("common.clearSearch")}
                 >
                     <X className="size-3.5" />
                 </button>

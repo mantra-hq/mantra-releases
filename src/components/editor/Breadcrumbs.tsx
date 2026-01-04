@@ -1,6 +1,7 @@
 /**
  * Breadcrumbs - 面包屑导航组件
  * Story 2.13: Task 3 - AC #6, #7, #20
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示文件路径分段 (src > components > editor > CodeSnapshotView.tsx)
@@ -10,6 +11,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -81,6 +83,7 @@ export function Breadcrumbs({
     onReturnToCurrent,
     className,
 }: BreadcrumbsProps) {
+    const { t } = useTranslation();
     // 历史信息优先使用 historyInfo，否则回退到 timestamp
     const effectiveHistoryInfo = historyInfo || (timestamp ? { timestamp } : undefined);
     const segments = React.useMemo(() => {
@@ -209,7 +212,7 @@ export function Breadcrumbs({
                             )}
                         >
                             <ArrowLeft className="h-3 w-3 mr-1" />
-                            <span className="text-xs">退出快照</span>
+                            <span className="text-xs">{t("editor.exitSnapshot")}</span>
                         </Button>
                     )}
                 </div>

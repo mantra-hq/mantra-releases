@@ -1,6 +1,7 @@
 /**
  * EditorTabs - 编辑器标签页组件
  * Story 2.13: Task 2 - AC #1, #2, #3, #4, #5
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示打开的文件标签页
@@ -13,6 +14,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEditorStore, type EditorTab } from "@/stores/useEditorStore";
@@ -34,6 +36,7 @@ export interface EditorTabsProps {
  * 编辑器标签页组件 (纯标签管理)
  */
 export function EditorTabs({ className }: EditorTabsProps) {
+    const { t } = useTranslation();
     // 使用独立的选择器确保引用稳定
     const tabs = useEditorStore((state) => state.tabs);
     const activeTabId = useEditorStore((state) => state.activeTabId);
@@ -108,7 +111,7 @@ export function EditorTabs({ className }: EditorTabsProps) {
                     size="icon"
                     className="h-8 w-6 rounded-none flex-shrink-0"
                     onClick={() => scroll("left")}
-                    aria-label="向左滚动"
+                    aria-label={t("common.scrollLeft")}
                 >
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -128,8 +131,8 @@ export function EditorTabs({ className }: EditorTabsProps) {
                     // 格式化历史时间提示
                     const historyTooltip = isHistorical
                         ? tab.timestamp
-                            ? `历史版本 @ ${new Date(tab.timestamp).toLocaleString("zh-CN")}`
-                            : `历史版本 (${tab.commitHash?.slice(0, 7)})`
+                            ? t("editor.historyVersionAt", { time: new Date(tab.timestamp).toLocaleString() })
+                            : t("editor.historyVersion", { hash: tab.commitHash?.slice(0, 7) })
                         : undefined;
 
                     return (
@@ -171,7 +174,7 @@ export function EditorTabs({ className }: EditorTabsProps) {
                                             isActive && "opacity-100"
                                         )}
                                         onClick={(e) => handleCloseClick(tab, e)}
-                                        aria-label="关闭标签"
+                                        aria-label={t("common.closeTab")}
                                     >
                                         <X className="h-3 w-3" />
                                     </Button>
@@ -194,7 +197,7 @@ export function EditorTabs({ className }: EditorTabsProps) {
                     size="icon"
                     className="h-8 w-6 rounded-none flex-shrink-0"
                     onClick={() => scroll("right")}
-                    aria-label="向右滚动"
+                    aria-label={t("common.scrollRight")}
                 >
                     <ChevronRight className="h-4 w-4" />
                 </Button>

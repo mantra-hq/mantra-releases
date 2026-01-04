@@ -1,12 +1,14 @@
 /**
  * PlayerEmptyState Component - Player 空状态组件
  * Story 2.21: Task 1
+ * Story 2-26: i18n 国际化
  *
  * 无会话时显示的引导界面
  * 支持两种模式：有项目 vs 无项目
  */
 
 import { Play, FolderOpen, Rocket } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,8 @@ export function PlayerEmptyState({
   onOpenDrawer,
   onImport,
 }: PlayerEmptyStateProps) {
+  const { t } = useTranslation();
+
   if (hasProjects) {
     // 有项目时的 UI (AC #4-8)
     return (
@@ -57,21 +61,21 @@ export function PlayerEmptyState({
 
         {/* 主标题 (AC #6) */}
         <h2 className="text-xl font-semibold text-foreground mb-2">
-          选择一个会话开始回放
+          {t("player.selectSessionToPlay")}
         </h2>
 
         {/* 副标题 (AC #7) */}
         <p className="text-sm text-muted-foreground max-w-md mb-8">
-          从左侧项目列表中选择，或导入新的 AI 编程会话
+          {t("player.selectFromList")}
         </p>
 
         {/* CTA 按钮组 (AC #8) */}
         <div className="flex items-center gap-3">
           <Button onClick={onOpenDrawer} variant="default" size="lg">
-            打开项目列表
+            {t("player.openProjectList")}
           </Button>
           <Button onClick={onImport} variant="outline" size="lg">
-            导入项目
+            {t("player.importProject")}
           </Button>
         </div>
       </div>
@@ -103,23 +107,23 @@ export function PlayerEmptyState({
 
       {/* 主标题 (AC #9) */}
       <h2 className="text-xl font-semibold text-foreground mb-2">
-        还没有导入任何项目
+        {t("player.noProjectsYet")}
       </h2>
 
       {/* 副标题 (AC #9) */}
       <p className="text-sm text-muted-foreground max-w-md mb-8">
-        导入你的 AI 编程会话，开始探索和回放心法
+        {t("player.importPrompt")}
       </p>
 
       {/* 单个 CTA (AC #9) */}
       <Button onClick={onImport} size="lg" className="gap-2 mb-6">
         <Rocket className="w-4 h-4" />
-        导入第一个项目
+        {t("import.importFirstProject")}
       </Button>
 
       {/* 支持说明 (AC #9) */}
       <p className="text-xs text-muted-foreground">
-        支持: Claude Code · Cursor · Gemini CLI · Codex
+        {t("player.supportedLabel")} {t("import.supportedTools")}
       </p>
     </div>
   );

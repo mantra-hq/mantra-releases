@@ -2,6 +2,7 @@
  * ImportComplete Component - 导入完成确认
  * Story 2.9: Task 5
  * Story 2.23: Quick Navigation to Imported Projects
+ * Story 2.26: 国际化支持
  *
  * 显示导入完成信息：
  * - 导入统计
@@ -11,6 +12,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
 import { Button, ScrollArea } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -99,6 +101,7 @@ export function ImportComplete({
   onRetryFailed,
   isRetrying = false,
 }: ImportCompleteProps) {
+  const { t } = useTranslation();
   // Story 2.24: 默认折叠错误列表，避免界面遮挡
   const [errorsExpanded, setErrorsExpanded] = React.useState(false);
 
@@ -144,10 +147,10 @@ export function ImportComplete({
 
       {/* 标题 */}
       <div>
-        <h3 className="text-xl font-semibold text-foreground">导入完成</h3>
+        <h3 className="text-xl font-semibold text-foreground">{t("import.importComplete")}</h3>
         {hasFailures && (
           <p className="text-sm text-muted-foreground mt-1">
-            部分文件导入失败，请检查错误信息
+            {t("import.partialFailure")}
           </p>
         )}
       </div>
@@ -158,21 +161,21 @@ export function ImportComplete({
           testId="success-stat"
           icon={FileCheck}
           value={successCount}
-          label="成功导入"
+          label={t("import.importSuccess")}
           colorClass="text-emerald-500"
         />
         <StatCard
           testId="failure-stat"
           icon={FileX}
           value={failureCount}
-          label="导入失败"
+          label={t("import.importFailed")}
           colorClass="text-red-500"
         />
         <StatCard
           testId="project-stat"
           icon={FolderKanban}
           value={projectCount}
-          label="项目"
+          label={t("import.project")}
           colorClass="text-primary"
         />
       </div>
@@ -181,7 +184,7 @@ export function ImportComplete({
       {importedProjects.length > 0 && onNavigateToProject && (
         <div className="text-left">
           <h4 className="text-sm font-medium text-muted-foreground mb-2">
-            刚导入的项目
+            {t("import.justImported")}
           </h4>
           <ScrollArea className="max-h-[200px]">
             <div className="space-y-1">
@@ -224,7 +227,7 @@ export function ImportComplete({
             className="w-full flex items-center justify-between text-sm font-medium text-red-500 hover:text-red-400 transition-colors mb-2"
             data-testid="toggle-errors"
           >
-            <span>失败的文件 ({failureCount})</span>
+            <span>{t("import.failedFiles")} ({failureCount})</span>
             <ChevronDown
               className={cn(
                 "w-4 h-4 transition-transform",
@@ -269,7 +272,7 @@ export function ImportComplete({
               ) : (
                 <RefreshCw className="w-4 h-4" />
               )}
-              {isRetrying ? "重试中..." : `重试失败项 (${failureCount})`}
+              {isRetrying ? t("common.retrying") : `${t("import.retryFailed")} (${failureCount})`}
             </Button>
           )}
         </div>
@@ -278,9 +281,9 @@ export function ImportComplete({
       {/* 操作按钮 */}
       <div className="flex justify-center gap-3">
         <Button variant="outline" onClick={onContinueImport}>
-          继续导入
+          {t("import.continueImport")}
         </Button>
-        <Button onClick={onViewProjects}>查看项目</Button>
+        <Button onClick={onViewProjects}>{t("import.viewProject")}</Button>
       </div>
     </div>
   );

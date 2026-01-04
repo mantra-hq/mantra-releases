@@ -2,10 +2,12 @@
  * ProjectGroupList Component - 项目分组列表
  * Story 2.9 UX Redesign
  * Story 2.20: Import Status Enhancement
+ * Story 2.26: 国际化支持
  *
  * 项目分组列表，支持大量项目时的流畅滚动
  */
 
+import { useTranslation } from "react-i18next";
 import type { ProjectGroup, ProjectImportStatus } from "@/types/import";
 import { getProjectSelectionState } from "@/lib/import-utils";
 import { ProjectGroupItem } from "./ProjectGroupItem";
@@ -52,10 +54,12 @@ export function ProjectGroupList({
     onToggleSession,
     importedPaths,
 }: ProjectGroupListProps) {
+    const { t } = useTranslation();
+
     if (groups.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <span className="text-sm">没有找到匹配的项目</span>
+                <span className="text-sm">{t("project.noMatch")}</span>
             </div>
         );
     }

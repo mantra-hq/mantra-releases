@@ -1,12 +1,14 @@
 /**
  * EmptyFilterResult - 空过滤结果组件
  * Story 2.16: Task 7
+ * Story 2.26: 国际化支持
  *
  * 当过滤结果为空时显示的友好提示
  * AC: #11
  */
 
 
+import { useTranslation } from "react-i18next";
 import { SearchX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ export interface EmptyFilterResultProps {
  * 显示无匹配结果的友好提示和清除过滤按钮
  */
 export function EmptyFilterResult({ className }: EmptyFilterResultProps) {
+    const { t } = useTranslation();
     const { clearFilters } = useMessageFilterStore();
 
     return (
@@ -36,14 +39,14 @@ export function EmptyFilterResult({ className }: EmptyFilterResultProps) {
             </div>
             <div className="space-y-2">
                 <h3 className="text-lg font-semibold text-foreground">
-                    没有找到匹配的消息
+                    {t("filter.noMatch")}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                    尝试调整过滤条件或清除搜索关键词
+                    {t("filter.tryAdjustFilter")}
                 </p>
             </div>
             <Button variant="outline" size="sm" onClick={clearFilters}>
-                清除过滤条件
+                {t("filter.clearFilterCondition")}
             </Button>
         </div>
     );

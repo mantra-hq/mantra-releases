@@ -1,12 +1,14 @@
 /**
  * ToolCall - 工具调用组件
  * Story 2.4: Task 2
+ * Story 2.26: 国际化支持
  *
  * 显示 AI 的工具调用请求，包含工具名称和输入参数
  * AC: #3, #5, #6, #7
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight, Wrench, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -86,6 +88,7 @@ export function ToolCall({
   defaultOpen = false,
   className,
 }: ToolCallProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
   const formattedInput = formatJson(toolInput);
   const hasInput = toolInput && Object.keys(toolInput).length > 0;
@@ -171,7 +174,7 @@ export function ToolCall({
               "transition-colors duration-150",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             )}
-            title="在代码面板中查看"
+            title={t("message.viewInCodePanel")}
           >
             <Code2 className="h-4 w-4" />
           </button>

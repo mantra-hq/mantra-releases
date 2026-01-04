@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { BreadcrumbItem } from "./BreadcrumbItem";
 import { SessionDropdown } from "./SessionDropdown";
 import { TopBarActions } from "./TopBarActions";
+import mantraLogo from "@/assets/mantra.png";
 
 /**
  * 会话摘要信息
@@ -89,9 +90,16 @@ export function TopBar({
           />
 
           {/* Logo (Story 2.21 AC #14) */}
-          <span className="text-sm font-bold text-foreground whitespace-nowrap mr-2">
-            Mantra <span className="text-primary">心法</span>
-          </span>
+          <div className="flex items-center gap-1.5 mr-2">
+            <img
+              src={mantraLogo}
+              alt="Mantra"
+              className="h-6 w-6 rounded"
+            />
+            <span className="text-sm font-bold text-foreground whitespace-nowrap">
+              Mantra <span className="text-primary">心法</span>
+            </span>
+          </div>
 
           {/* 项目名 (AC3) */}
           <BreadcrumbItem

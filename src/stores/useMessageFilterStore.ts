@@ -27,23 +27,24 @@ export interface MessageTypeConfig {
 
 /**
  * 预定义的消息类型配置
+ * label 使用 i18n key，在 UI 组件中翻译
  */
 export const MESSAGE_TYPES: MessageTypeConfig[] = [
     {
         id: "conversation",
-        label: "对话",
+        label: "message.conversation",
         icon: "💬",
         match: (b) => b.type === "text",
     },
     {
         id: "tool",
-        label: "工具",
+        label: "message.tool",
         icon: "🔧",
         match: (b) => b.type === "tool_use" || b.type === "tool_result",
     },
     {
         id: "file",
-        label: "文件",
+        label: "message.file",
         icon: "📄",
         match: (b) =>
             b.type === "tool_use" &&
@@ -51,7 +52,7 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
     },
     {
         id: "terminal",
-        label: "命令",
+        label: "message.command",
         icon: "$",
         match: (b) =>
             b.type === "tool_use" &&
@@ -61,13 +62,13 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
     },
     {
         id: "thinking",
-        label: "思考",
+        label: "message.thinking",
         icon: "💭",
         match: (b) => b.type === "thinking",
     },
     {
         id: "search",
-        label: "搜索",
+        label: "common.search",
         icon: "🔍",
         match: (b) =>
             b.type === "tool_use" &&

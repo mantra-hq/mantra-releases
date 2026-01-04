@@ -2,10 +2,12 @@
  * SelectionStats Component - 选择统计栏
  * Story 2.9 UX Redesign
  * Story 2.20: Import Status Enhancement
+ * Story 2.26: 国际化支持
  *
  * 显示统计信息和批量操作按钮
  */
 
+import { useTranslation } from "react-i18next";
 import { Folder, FileJson, Import } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -48,6 +50,7 @@ export function SelectionStats({
     newProjectCount,
     onSelectAllNew,
 }: SelectionStatsProps) {
+    const { t } = useTranslation();
     // Story 2.20: 判断是否有导入状态区分
     const hasImportStatus = importedCount !== undefined && newProjectCount !== undefined;
 
@@ -61,14 +64,14 @@ export function SelectionStats({
             <div className="flex items-center gap-4 text-sm text-muted-foreground whitespace-nowrap">
                 <span className="flex items-center gap-1.5">
                     <Folder className="w-4 h-4" />
-                    {totalProjects} 个项目
-                    <span className="text-primary">已选 {selectedProjectCount}</span>
+                    {t("import.projectCount", { count: totalProjects })}
+                    <span className="text-primary">{t("import.selected", { count: selectedProjectCount })}</span>
                 </span>
                 <span className="text-border">|</span>
                 <span className="flex items-center gap-1.5">
                     <FileJson className="w-4 h-4" />
-                    {totalSessions} 个会话
-                    <span className="text-primary">已选 {selectedCount}</span>
+                    {t("import.sessionCount", { count: totalSessions })}
+                    <span className="text-primary">{t("import.selected", { count: selectedCount })}</span>
                 </span>
                 {/* Story 2.20: 已导入统计 */}
                 {hasImportStatus && importedCount > 0 && (
@@ -77,7 +80,7 @@ export function SelectionStats({
                         data-testid="imported-count-stat"
                     >
                         <Import className="w-4 h-4" />
-                        {importedCount} 个已导入
+                        {t("import.importedCount", { count: importedCount })}
                     </span>
                 )}
             </div>
@@ -94,7 +97,7 @@ export function SelectionStats({
                         className="text-xs h-7 px-2"
                         data-testid="select-all-new-button"
                     >
-                        全选新项目
+                        {t("import.selectAllNew")}
                     </Button>
                 ) : (
                     <Button
@@ -104,7 +107,7 @@ export function SelectionStats({
                         disabled={allSelected}
                         className="text-xs h-7 px-2"
                     >
-                        全选
+                        {t("import.selectAll")}
                     </Button>
                 )}
                 <Button
@@ -114,7 +117,7 @@ export function SelectionStats({
                     disabled={noneSelected}
                     className="text-xs h-7 px-2"
                 >
-                    清空
+                    {t("import.clearSelection")}
                 </Button>
                 <Button
                     variant="ghost"
@@ -123,7 +126,7 @@ export function SelectionStats({
                     disabled={totalSessions === 0}
                     className="text-xs h-7 px-2"
                 >
-                    反选
+                    {t("import.invertSelection")}
                 </Button>
             </div>
         </div>

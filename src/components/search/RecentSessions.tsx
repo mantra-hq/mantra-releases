@@ -1,11 +1,13 @@
 /**
  * RecentSessions - 最近会话组件
  * Story 2.10: Task 7.2
+ * Story 2.26: 国际化支持
  *
  * 输入为空时显示最近访问的会话列表
  */
 
 import { Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { RecentSession } from "@/stores/useSearchStore";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +30,7 @@ export interface RecentSessionsProps {
 /**
  * 格式化访问时间
  */
-function formatAccessTime(timestamp: number): string {
+function formatAccessTime(timestamp: number, t: (key: string, options?: Record<string, unknown>) => string): string {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -37,15 +39,15 @@ function formatAccessTime(timestamp: number): string {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffMinutes < 1) {
-        return "刚刚";
+        return t("time.justNow");
     } else if (diffMinutes < 60) {
-        return `${diffMinutes}分钟前`;
+        return t("time.minutesAgo", { count: diffMinutes });
     } else if (diffHours < 24) {
-        return `${diffHours}小时前`;
+        return t("time.hoursAgo", { count: diffHours });
     } else if (diffDays === 1) {
-        return "昨天";
+        return t("time.yesterday");
     } else if (diffDays < 7) {
-        return `${diffDays}天前`;
+        return t("time.daysAgo", { count: diffDays });
     } else {
         return date.toLocaleDateString("zh-CN", {
             month: "short",
@@ -64,15 +66,17 @@ export function RecentSessions({
     onHover,
     className,
 }: RecentSessionsProps) {
+    const { t } = useTranslation();
+
     if (sessions.length === 0) {
         return (
             <div className={cn("py-12 px-4 text-center", className)}>
                 <Clock className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground">
-                    暂无最近访问的会话
+                    {t("search.noRecentSessions")}
                 </p>
                 <p className="text-xs text-muted-foreground/70 mt-1">
-                    访问会话后将在此显示
+                    {t("search.recentSessionsHint")}
                 </p>
             </div>
         );
@@ -82,11 +86,11 @@ export function RecentSessions({
         <div className={className}>
             {/* 标题 */}
             <div className="px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/30">
-                最近访问
+                {t("search.recentAccess")}
             </div>
 
             {/* 会话列表 */}
-            <div role="listbox" aria-label="最近会话">
+            <div role="listbox" aria-label={t("search.recentSessions")}>
                 {sessions.map((session, index) => (
                     <div
                         key={session.sessionId}
@@ -114,7 +118,7 @@ export function RecentSessions({
                             </div>
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0">
-                            {formatAccessTime(session.accessedAt)}
+                            {formatAccessTime(session.accessedAt, t)}
                         </span>
                     </div>
                 ))}

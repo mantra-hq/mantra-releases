@@ -1,11 +1,13 @@
 /**
  * DrawerSearch Component - 抽屉搜索框
  * Story 2.18: Task 5
+ * Story 2.26: 国际化支持
  *
  * 搜索输入框，支持实时过滤项目和会话
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -31,9 +33,10 @@ export interface DrawerSearchProps {
 export function DrawerSearch({
   value,
   onChange,
-  placeholder = "搜索...",
+  placeholder,
   className,
 }: DrawerSearchProps) {
+  const { t } = useTranslation();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   // 清空搜索
@@ -50,7 +53,7 @@ export function DrawerSearch({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+        placeholder={placeholder || t("common.search")}
         className="pl-9 pr-8 h-9"
         data-testid="drawer-search-input"
       />
@@ -59,7 +62,7 @@ export function DrawerSearch({
           type="button"
           onClick={handleClear}
           className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded-sm hover:bg-muted"
-          aria-label="清空搜索"
+          aria-label={t("common.clearSearch")}
           data-testid="drawer-search-clear"
         >
           <X className="h-3 w-3 text-muted-foreground" />

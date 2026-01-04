@@ -2,6 +2,7 @@
  * ProjectGroupItem Component - 项目分组卡片
  * Story 2.9 UX Redesign
  * Story 2.20: Import Status Enhancement
+ * Story 2.26: 国际化支持
  *
  * 可折叠的项目卡片，使用 Radix Collapsible
  * - 点击复选框选中/取消该项目下所有会话
@@ -11,6 +12,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronRight, Folder } from "lucide-react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { Checkbox } from "@/components/ui";
@@ -54,6 +56,7 @@ export function ProjectGroupItem({
     onToggleSession,
     importStatus,
 }: ProjectGroupItemProps) {
+    const { t } = useTranslation();
     const [showAll, setShowAll] = React.useState(false);
 
     const { isSelected, isPartiallySelected, selectedCount } = selectionState;
@@ -96,7 +99,7 @@ export function ProjectGroupItem({
                     role="button"
                     tabIndex={0}
                     aria-expanded={isExpanded}
-                    aria-label={isExpanded ? "折叠" : "展开"}
+                    aria-label={isExpanded ? t("common.collapse") : t("common.expand")}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
@@ -125,7 +128,7 @@ export function ProjectGroupItem({
                                         : "unchecked"
                             }
                             onCheckedChange={onToggleProject}
-                            aria-label={`选择项目 ${group.projectName}`}
+                            aria-label={t("import.selectProject", { name: group.projectName })}
                             className={cn(
                                 "cursor-pointer",
                                 isImported && "cursor-not-allowed opacity-50"
@@ -154,7 +157,7 @@ export function ProjectGroupItem({
                             data-testid={`import-badge-imported-${group.projectPath}`}
                             className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0"
                         >
-                            已导入
+                            {t("import.imported")}
                         </span>
                     )}
                     {isNew && (
@@ -171,7 +174,7 @@ export function ProjectGroupItem({
                         {selectedCount > 0 && selectedCount < group.sessions.length
                             ? `${selectedCount}/`
                             : ""}
-                        {group.sessions.length} 个会话
+                        {t("import.sessionCount", { count: group.sessions.length })}
                     </span>
                 </div>
             </Collapsible.Trigger>
@@ -196,7 +199,7 @@ export function ProjectGroupItem({
                             onClick={() => setShowAll(true)}
                             className="w-full py-2 text-xs text-primary hover:text-primary/80 hover:bg-muted/50 transition-colors"
                         >
-                            显示更多 +{remainingCount}
+                            {t("import.showMore", { count: remainingCount })}
                         </button>
                     )}
                 </div>
