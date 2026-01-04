@@ -26,6 +26,7 @@ import { DrawerSearch } from "./DrawerSearch";
 import { ProjectTreeItem } from "./ProjectTreeItem";
 import { ProjectContextMenu } from "./ProjectContextMenu";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
+import { ProjectInfoDialog } from "./ProjectInfoDialog";
 import { showSyncResult } from "./SyncResultToast";
 import {
   syncProject,
@@ -106,6 +107,8 @@ export function ProjectDrawer({
   const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null);
   // Story 2.18 fix: 菜单打开的项目 ID（用于保持按钮可见）
   const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
+  // Story 2.27: 显示详情对话框的项目
+  const [infoProject, setInfoProject] = React.useState<Project | null>(null);
 
   // 过滤后的项目列表
   const filteredProjects = React.useMemo(() => {
@@ -359,6 +362,9 @@ export function ProjectDrawer({
                         setActiveProject(project);
                         setIsRemoveDialogOpen(true);
                       }}
+                      onViewInfo={() => {
+                        setInfoProject(project);
+                      }}
                     />
                   }
                 />
@@ -389,6 +395,16 @@ export function ProjectDrawer({
         onOpenChange={setIsRemoveDialogOpen}
         projectName={activeProject?.name ?? ""}
         onConfirm={handleRemoveConfirm}
+      />
+
+      {/* Story 2.27: 项目元信息对话框 */}
+      <ProjectInfoDialog
+        isOpen={infoProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setInfoProject(null);
+        }}
+        project={infoProject}
+        getProjectSessions={getProjectSessions}
       />
     </Sheet>
   );

@@ -137,6 +137,15 @@
     "removeDescription": "这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。",
     "removeProject": "移除项目"
   },
+  "projectInfo": {
+    "description": "项目详细信息",
+    "viewDetails": "查看详情",
+    "path": "项目路径",
+    "sessionCount": "会话数量",
+    "createdAt": "创建时间",
+    "lastActivity": "最后活动",
+    "gitPath": "Git 仓库"
+  },
   "sync": {
     "reParseFailed": "重新解析失败",
     "syncFailed": "同步失败",

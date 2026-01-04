@@ -6,10 +6,9 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectContextMenu } from "./ProjectContextMenu";
-import type { Project } from "@/types/project";
 
 // Radix UI PointerEvent polyfill
 beforeAll(() => {
@@ -40,24 +39,13 @@ afterEach(() => {
   cleanup();
 });
 
-const mockProject: Project = {
-  id: "proj-1",
-  name: "test-project",
-  cwd: "/home/user/test-project",
-  session_count: 5,
-  created_at: "2024-01-01T00:00:00Z",
-  last_activity: "2024-01-02T00:00:00Z",
-  git_repo_path: "/home/user/test-project",
-  has_git_repo: true,
-};
-
 describe("ProjectContextMenu", () => {
   const defaultProps = {
-    project: mockProject,
     onSync: vi.fn().mockResolvedValue(undefined),
     onForceSync: vi.fn().mockResolvedValue(undefined),
     onRename: vi.fn(),
     onRemove: vi.fn(),
+    onViewInfo: vi.fn(),
   };
 
   it("renders trigger button", () => {
@@ -190,6 +178,27 @@ describe("ProjectContextMenu", () => {
     });
 
     // 完成同步
-    resolveSync();
+    await act(async () => {
+      resolveSync();
+    });
+  });
+
+  // Story 2.27 AC1: 测试查看详情点击
+  it("calls onViewInfo when view details option clicked (Story 2.27 AC1)", async () => {
+    const onViewInfo = vi.fn();
+    const user = userEvent.setup();
+    render(<ProjectContextMenu {...defaultProps} onViewInfo={onViewInfo} />);
+
+    await user.click(screen.getByTestId("project-context-menu-trigger"));
+
+    await waitFor(() => {
+      expect(screen.getByText("查看详情")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("查看详情"));
+
+    await waitFor(() => {
+      expect(onViewInfo).toHaveBeenCalled();
+    });
   });
 });

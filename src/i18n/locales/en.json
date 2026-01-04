@@ -137,6 +137,15 @@
     "removeDescription": "This will only remove the imported session logs from Mantra, and will not affect your original code project.",
     "removeProject": "Remove Project"
   },
+  "projectInfo": {
+    "description": "Project Details",
+    "viewDetails": "View Details",
+    "path": "Project Path",
+    "sessionCount": "Session Count",
+    "createdAt": "Created At",
+    "lastActivity": "Last Activity",
+    "gitPath": "Git Repository"
+  },
   "sync": {
     "reParseFailed": "Re-parse Failed",
     "syncFailed": "Sync Failed",

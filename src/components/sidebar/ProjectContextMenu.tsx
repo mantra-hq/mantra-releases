@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, RotateCcw, Pencil, Trash2, Loader2, Settings } from "lucide-react";
+import { RefreshCw, RotateCcw, Pencil, Trash2, Loader2, Settings, Info } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +29,8 @@ export interface ProjectContextMenuProps {
   onRename: () => void;
   /** 移除回调 */
   onRemove: () => void;
+  /** 查看详情回调 (Story 2.27 AC1) */
+  onViewInfo: () => void;
   /** 菜单打开状态变化 */
   onOpenChange?: (open: boolean) => void;
 }
@@ -42,6 +44,7 @@ export function ProjectContextMenu({
   onForceSync,
   onRename,
   onRemove,
+  onViewInfo,
   onOpenChange,
 }: ProjectContextMenuProps) {
   const { t } = useTranslation();
@@ -88,6 +91,13 @@ export function ProjectContextMenu({
     setIsOpen(false);
   };
 
+  // Story 2.27 AC1: 处理查看详情
+  const handleViewInfo = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onViewInfo();
+    setIsOpen(false);
+  };
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -131,6 +141,12 @@ export function ProjectContextMenu({
               {t("sync.reparseAllSessions")}
             </span>
           </div>
+        </DropdownMenuItem>
+
+        {/* Story 2.27 AC1: 查看详情 */}
+        <DropdownMenuItem onClick={handleViewInfo}>
+          <Info className="h-4 w-4 mr-2" />
+          {t("projectInfo.viewDetails", "查看详情")}
         </DropdownMenuItem>
 
         {/* 重命名 (AC2) */}
