@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { ContentBlock } from "@/types/message";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { ChainOfThought } from "./ChainOfThought";
 import { ToolCall } from "./ToolCall";
 import { ToolCallCard, type ToolCallStatus } from "./ToolCallCard";
@@ -19,6 +20,7 @@ import { ToolOutput } from "./ToolOutput";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useToolPairingContext } from "@/contexts/ToolPairingContext";
 import { useEditorStore } from "@/stores/useEditorStore";
+import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
 
 export interface ContentBlockRendererProps {
   /** 内容块数据 */
@@ -117,6 +119,38 @@ export function ContentBlockRenderer({
 
   switch (block.type) {
     case "text":
+      // Story 2.22: 自定义代码块组件，添加复制功能 (AC2)
+      const markdownComponents: Components = {
+        code({ className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || "");
+          const language = match ? match[1] : undefined;
+          const codeString = String(children).replace(/\n$/, "");
+
+          // 代码块检测逻辑:
+          // 1. 有 language-xxx class → 明确是代码块 (来自 ```lang 语法)
+          // 2. 包含换行符 → 多行代码视为代码块
+          // 注: ReactMarkdown 对 ``` 代码块总会传递 className
+          const isCodeBlock =
+            className?.includes("language-") || codeString.includes("\n");
+
+          if (isCodeBlock) {
+            // 代码块使用 CodeBlockWithCopy (Task 5.5)
+            return <CodeBlockWithCopy code={codeString} language={language} />;
+          }
+
+          // 内联代码保持原样渲染 (Task 5.4)
+          return (
+            <code className={className} {...props}>
+              {children}
+            </code>
+          );
+        },
+        // 禁用默认的 pre 包装，因为 CodeBlockWithCopy 自带
+        pre({ children }) {
+          return <>{children}</>;
+        },
+      };
+
       return (
         <div
           className={cn(
@@ -124,7 +158,7 @@ export function ContentBlockRenderer({
             "prose prose-sm dark:prose-invert max-w-none",
             // 自定义 prose 样式覆盖
             "prose-p:my-1 prose-p:leading-relaxed",
-            "prose-pre:bg-muted prose-pre:text-foreground",
+            "prose-pre:bg-transparent prose-pre:p-0",
             "prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
             "prose-code:before:content-none prose-code:after:content-none",
             "prose-ul:my-1 prose-ol:my-1",
@@ -133,7 +167,10 @@ export function ContentBlockRenderer({
             className
           )}
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
             {block.content}
           </ReactMarkdown>
         </div>

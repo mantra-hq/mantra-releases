@@ -10,6 +10,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import type { NarrativeMessage } from "@/types/message";
 import { ContentBlockRenderer } from "./ContentBlockRenderer";
+import { CopyButton } from "@/components/common/CopyButton";
+import { getMessageCopyContent } from "@/lib/copy-utils";
 
 export interface MessageBubbleProps {
   /** 消息数据 */
@@ -48,6 +50,12 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
   ) => {
     const isUser = message.role === "user";
     const timestamp = formatTimestamp(message.timestamp);
+
+    // 获取消息可复制内容 (AC1)
+    const copyContent = React.useMemo(
+      () => getMessageCopyContent(message),
+      [message]
+    );
 
     // 合并 ref 用于虚拟化测量
     const combinedRef = React.useCallback(
@@ -99,7 +107,7 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
         <div
           className={cn(
             // Base bubble styles
-            "px-4 py-3 text-sm leading-relaxed",
+            "relative px-4 py-3 text-sm leading-relaxed",
             // Transition
             "transition-all duration-150",
             // Selection ring
@@ -137,6 +145,20 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
               />
             ))}
           </div>
+
+          {/* Story 2.22: 消息级复制按钮 - 悬浮时可见 */}
+          {/* M4 fix: 使用 -top-1 -right-1 避免遮挡短消息内容 */}
+          {copyContent && (
+            <div className="absolute -right-1 -top-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              <CopyButton
+                content={copyContent}
+                size="sm"
+                ariaLabel="复制消息"
+                tooltip="复制消息"
+                className="bg-background/80 backdrop-blur-sm"
+              />
+            </div>
+          )}
 
           {/* 时间戳 */}
           {timestamp && (
