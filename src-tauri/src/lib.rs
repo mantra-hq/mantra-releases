@@ -24,7 +24,7 @@ use commands::{
     sanitize_session, sanitize_text, validate_regex, scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
     // Story 2.19: Project management commands
-    sync_project, remove_project, restore_project, rename_project,
+    sync_project, remove_project, rename_project,
     // Story 2.20: Import wizard enhancement
     get_imported_project_paths,
     // Story 2.23: Import with progress events
@@ -101,7 +101,6 @@ pub fn run() {
             // Story 2.19: Project management
             sync_project,
             remove_project,
-            restore_project,
             rename_project,
             // Story 2.20: Import wizard enhancement
             get_imported_project_paths,

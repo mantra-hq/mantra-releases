@@ -556,30 +556,16 @@ pub async fn sync_project(
     })
 }
 
-/// Remove a project (soft delete)
+/// Remove a project and all its sessions
 ///
-/// Marks the project as deleted without actually removing data,
-/// allowing for undo within a time window.
+/// Permanently deletes the project and all associated session data.
 #[tauri::command]
 pub async fn remove_project(
     state: State<'_, AppState>,
     project_id: String,
 ) -> Result<(), AppError> {
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
-    db.soft_delete_project(&project_id)?;
-    Ok(())
-}
-
-/// Restore a removed project
-///
-/// Clears the deleted_at marker, making the project visible again.
-#[tauri::command]
-pub async fn restore_project(
-    state: State<'_, AppState>,
-    project_id: String,
-) -> Result<(), AppError> {
-    let db = state.db.lock().map_err(|_| AppError::LockError)?;
-    db.restore_project(&project_id)?;
+    db.delete_project(&project_id)?;
     Ok(())
 }
 

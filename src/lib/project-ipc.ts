@@ -172,16 +172,6 @@ export async function removeProject(projectId: string): Promise<void> {
 }
 
 /**
- * 恢复已移除的项目
- * Story 2.19: Task 9.2
- *
- * @param projectId - 项目 ID
- */
-export async function restoreProject(projectId: string): Promise<void> {
-  return invoke<void>("restore_project", { projectId });
-}
-
-/**
  * 重命名项目
  * Story 2.19: Task 9.3
  *
@@ -200,7 +190,7 @@ export async function renameProject(projectId: string, newName: string): Promise
  * 获取所有已导入项目的 cwd 路径列表
  * Story 2.20: Task 2
  *
- * 用于导入向导识别已导入的项目，排除软删除的项目
+ * 用于导入向导识别已导入的项目
  *
  * @returns 已导入项目的 cwd 路径列表
  */

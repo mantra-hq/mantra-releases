@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::database::Database;
 use super::error::StorageError;
 use crate::models::{
-    extract_project_name, ImportResult, MantraSession, Project, SessionSource, SessionSummary,
+    extract_project_name, normalize_cwd, ImportResult, MantraSession, Project, SessionSource, SessionSummary,
 };
 
 impl Database {
@@ -47,17 +47,20 @@ impl Database {
     /// Otherwise, creates a new project and returns it.
     ///
     /// # Arguments
-    /// * `cwd` - The working directory path
+    /// * `cwd` - The working directory path (will be normalized)
     ///
     /// # Returns
     /// A tuple of (Project, bool) where bool indicates if the project was newly created
     pub fn get_or_create_project(&self, cwd: &str) -> Result<(Project, bool), StorageError> {
+        // Story 2.25: Normalize cwd for consistent aggregation
+        let normalized_cwd = normalize_cwd(cwd);
+
         // Try to find existing project
         let mut stmt = self
             .connection()
             .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo FROM projects WHERE cwd = ?1")?;
 
-        let project_result = stmt.query_row(params![cwd], |row| {
+        let project_result = stmt.query_row(params![normalized_cwd], |row| {
             let created_at_str: String = row.get(3)?;
             let last_activity_str: String = row.get(4)?;
             let git_repo_path: Option<String> = row.get(5)?;
@@ -81,12 +84,6 @@ impl Database {
 
         match project_result {
             Ok(mut project) => {
-                // Restore project if it was soft-deleted (Story 2.19 fix)
-                self.connection().execute(
-                    "UPDATE projects SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
-                    params![project.id],
-                )?;
-                
                 // Get session count
                 let count: i32 = self.connection().query_row(
                     "SELECT COUNT(*) FROM sessions WHERE project_id = ?1",
@@ -97,21 +94,21 @@ impl Database {
                 Ok((project, false))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
-                // Create new project
+                // Create new project with normalized cwd
                 let id = Uuid::new_v4().to_string();
-                let name = extract_project_name(cwd);
+                let name = extract_project_name(&normalized_cwd);
                 let now = Utc::now();
                 let now_str = now.to_rfc3339();
 
                 self.connection().execute(
                     "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![id, name, cwd, now_str, now_str, Option::<String>::None, 0],
+                    params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0],
                 )?;
 
                 let project = Project {
                     id,
                     name,
-                    cwd: cwd.to_string(),
+                    cwd: normalized_cwd,
                     session_count: 0,
                     created_at: now,
                     last_activity: now,
@@ -125,13 +122,11 @@ impl Database {
     }
 
     /// List all projects ordered by last activity (descending)
-    /// Excludes soft-deleted projects
     pub fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
             "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
-             WHERE p.deleted_at IS NULL
              ORDER BY p.last_activity DESC",
         )?;
 
@@ -319,8 +314,11 @@ impl Database {
     /// Get a project by cwd
     ///
     /// # Arguments
-    /// * `cwd` - The project's working directory
+    /// * `cwd` - The project's working directory (will be normalized)
     pub fn get_project_by_cwd(&self, cwd: &str) -> Result<Option<Project>, StorageError> {
+        // Story 2.25: Normalize cwd for consistent lookup
+        let normalized_cwd = normalize_cwd(cwd);
+
         let mut stmt = self.connection().prepare(
             "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
@@ -328,7 +326,7 @@ impl Database {
              WHERE cwd = ?1",
         )?;
 
-        let result = stmt.query_row(params![cwd], |row| {
+        let result = stmt.query_row(params![normalized_cwd], |row| {
             let created_at_str: String = row.get(3)?;
             let last_activity_str: String = row.get(4)?;
             let git_repo_path: Option<String> = row.get(5)?;
@@ -399,6 +397,9 @@ impl Database {
         let tx = self.connection_mut().transaction()?;
 
         for session in sessions {
+            // Story 2.25: Normalize cwd for consistent aggregation
+            let normalized_cwd = normalize_cwd(&session.cwd);
+
             // Check for duplicate
             let exists: i32 = tx.query_row(
                 "SELECT COUNT(*) FROM sessions WHERE id = ?1",
@@ -407,12 +408,6 @@ impl Database {
             )?;
 
             if exists > 0 {
-                // Session already exists, but we should still restore the project if it was soft-deleted
-                // This fixes the bug where re-importing skipped sessions wouldn't restore deleted projects
-                let _ = tx.execute(
-                    "UPDATE projects SET deleted_at = NULL WHERE cwd = ?1 AND deleted_at IS NOT NULL",
-                    params![session.cwd],
-                );
                 result.skipped_count += 1;
                 continue;
             }
@@ -423,24 +418,18 @@ impl Database {
                     "SELECT id FROM projects WHERE cwd = ?1"
                 )?;
 
-                match stmt.query_row(params![session.cwd], |row: &rusqlite::Row| row.get::<_, String>(0)) {
+                match stmt.query_row(params![normalized_cwd], |row: &rusqlite::Row| row.get::<_, String>(0)) {
                     Ok(project_id) => {
-                        // Restore project if it was soft-deleted (Story 2.19 fix)
-                        // This ensures re-importing a deleted project makes it visible again
-                        tx.execute(
-                            "UPDATE projects SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
-                            params![project_id],
-                        )?;
                         Ok((project_id, false))
                     },
                     Err(rusqlite::Error::QueryReturnedNoRows) => {
                         let id = Uuid::new_v4().to_string();
-                        let name = extract_project_name(&session.cwd);
+                        let name = extract_project_name(&normalized_cwd);
                         let now = Utc::now().to_rfc3339();
 
                         tx.execute(
                             "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                            params![id, name, session.cwd, now, now, Option::<String>::None, 0],
+                            params![id, name, normalized_cwd, now, now, Option::<String>::None, 0],
                         )?;
                         Ok((id, true))
                     }
@@ -466,7 +455,7 @@ impl Database {
                             session.id,
                             project_id,
                             session.source.to_string(),
-                            session.cwd,
+                            normalized_cwd,
                             session.created_at.to_rfc3339(),
                             session.updated_at.to_rfc3339(),
                             session.messages.len() as i32,
@@ -523,34 +512,20 @@ impl Database {
         Ok(())
     }
 
-    /// Soft delete a project (set deleted_at timestamp)
+    /// Delete a project and all associated sessions
     ///
     /// # Arguments
     /// * `project_id` - The project ID to delete
-    pub fn soft_delete_project(&self, project_id: &str) -> Result<(), StorageError> {
-        let now = Utc::now().to_rfc3339();
-        let rows_affected = self.connection().execute(
-            "UPDATE projects SET deleted_at = ?1 WHERE id = ?2",
-            params![now, project_id],
+    pub fn delete_project(&self, project_id: &str) -> Result<(), StorageError> {
+        // First, delete all sessions associated with this project
+        self.connection().execute(
+            "DELETE FROM sessions WHERE project_id = ?1",
+            params![project_id],
         )?;
 
-        if rows_affected == 0 {
-            return Err(StorageError::NotFound(format!(
-                "Project with id {} not found",
-                project_id
-            )));
-        }
-
-        Ok(())
-    }
-
-    /// Restore a soft-deleted project
-    ///
-    /// # Arguments
-    /// * `project_id` - The project ID to restore
-    pub fn restore_project(&self, project_id: &str) -> Result<(), StorageError> {
+        // Then delete the project
         let rows_affected = self.connection().execute(
-            "UPDATE projects SET deleted_at = NULL WHERE id = ?1",
+            "DELETE FROM projects WHERE id = ?1",
             params![project_id],
         )?;
 
@@ -564,13 +539,13 @@ impl Database {
         Ok(())
     }
 
-    /// Get all imported project cwd paths (excluding soft-deleted)
+    /// Get all imported project cwd paths
     ///
-    /// Returns a list of cwd paths for all non-deleted projects.
+    /// Returns a list of cwd paths for all projects.
     /// Used by Story 2.20 to identify already-imported projects in ImportWizard.
     pub fn get_imported_project_paths(&self) -> Result<Vec<String>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT cwd FROM projects WHERE deleted_at IS NULL",
+            "SELECT cwd FROM projects",
         )?;
 
         let paths = stmt
@@ -836,20 +811,107 @@ mod tests {
         assert!(paths.contains(&"/home/user/project2".to_string()));
     }
 
+    // Story 2.25: Multi-source aggregation tests
     #[test]
-    fn test_get_imported_project_paths_excludes_deleted() {
-        let db = Database::new_in_memory().unwrap();
+    fn test_multi_source_aggregation_same_cwd() {
+        let mut db = Database::new_in_memory().unwrap();
 
-        // Add projects
-        let (project1, _) = db.get_or_create_project("/home/user/project1").unwrap();
-        db.get_or_create_project("/home/user/project2").unwrap();
+        // Create sessions from different sources with the same cwd
+        let claude_session = MantraSession::new(
+            "sess_claude_1".to_string(),
+            sources::CLAUDE.to_string(),
+            "/home/user/myproject".to_string(),
+        );
+        let gemini_session = MantraSession::new(
+            "sess_gemini_1".to_string(),
+            sources::GEMINI.to_string(),
+            "/home/user/myproject".to_string(),
+        );
+        let cursor_session = MantraSession::new(
+            "sess_cursor_1".to_string(),
+            sources::CURSOR.to_string(),
+            "/home/user/myproject".to_string(),
+        );
 
-        // Soft delete one
-        db.soft_delete_project(&project1.id).unwrap();
+        // Import all sessions
+        let result = db.import_sessions(&[claude_session, gemini_session, cursor_session]).unwrap();
 
-        let paths = db.get_imported_project_paths().unwrap();
-        assert_eq!(paths.len(), 1);
-        assert!(paths.contains(&"/home/user/project2".to_string()));
-        assert!(!paths.contains(&"/home/user/project1".to_string()));
+        // All should be imported
+        assert_eq!(result.imported_count, 3);
+        // Only ONE project should be created (aggregated by cwd)
+        assert_eq!(result.new_projects_count, 1);
+
+        // Verify only one project exists
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].session_count, 3);
+
+        // Verify all sessions are under the same project
+        let sessions = db.get_project_sessions(&projects[0].id).unwrap();
+        assert_eq!(sessions.len(), 3);
+
+        // Verify sources are preserved
+        let sources: Vec<&str> = sessions.iter().map(|s| s.source.as_str()).collect();
+        assert!(sources.contains(&"claude"));
+        assert!(sources.contains(&"gemini"));
+        assert!(sources.contains(&"cursor"));
+    }
+
+    #[test]
+    fn test_path_normalization_aggregation() {
+        let mut db = Database::new_in_memory().unwrap();
+
+        // Sessions with different path formats pointing to the same location
+        let session1 = MantraSession::new(
+            "sess_1".to_string(),
+            sources::CLAUDE.to_string(),
+            "/home/user/project".to_string(),
+        );
+        let session2 = MantraSession::new(
+            "sess_2".to_string(),
+            sources::GEMINI.to_string(),
+            "/home/user/project/".to_string(), // With trailing slash
+        );
+        let session3 = MantraSession::new(
+            "sess_3".to_string(),
+            sources::CURSOR.to_string(),
+            "/home/user/project//".to_string(), // Multiple trailing slashes
+        );
+
+        let result = db.import_sessions(&[session1, session2, session3]).unwrap();
+
+        assert_eq!(result.imported_count, 3);
+        assert_eq!(result.new_projects_count, 1); // All aggregated to one project
+
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].cwd, "/home/user/project"); // Normalized
+    }
+
+    #[test]
+    fn test_first_project_name_preserved() {
+        let mut db = Database::new_in_memory().unwrap();
+
+        // First import sets the project name
+        let session1 = MantraSession::new(
+            "sess_1".to_string(),
+            sources::CLAUDE.to_string(),
+            "/home/user/my-awesome-project".to_string(),
+        );
+        db.import_sessions(&[session1]).unwrap();
+
+        let projects = db.list_projects().unwrap();
+        let original_name = projects[0].name.clone();
+
+        // Second import with same cwd should NOT change the name
+        let session2 = MantraSession::new(
+            "sess_2".to_string(),
+            sources::GEMINI.to_string(),
+            "/home/user/my-awesome-project".to_string(),
+        );
+        db.import_sessions(&[session2]).unwrap();
+
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects[0].name, original_name);
     }
 }

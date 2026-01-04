@@ -55,7 +55,8 @@ impl Database {
             )?;
         }
 
-        // Migration: Add deleted_at column for soft delete (Story 2.19)
+        // Migration: Add deleted_at column (Story 2.19, deprecated - kept for backward compatibility)
+        // This column is no longer used after removing soft-delete logic
         let has_deleted_at: bool = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'deleted_at'",

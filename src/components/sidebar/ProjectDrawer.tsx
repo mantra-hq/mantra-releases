@@ -25,11 +25,9 @@ import { ProjectTreeItem } from "./ProjectTreeItem";
 import { ProjectContextMenu } from "./ProjectContextMenu";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
 import { showSyncResult } from "./SyncResultToast";
-import { useUndoableAction } from "@/hooks/useUndoableAction";
 import {
   syncProject,
   removeProject,
-  restoreProject,
   renameProject,
 } from "@/lib/project-ipc";
 import { toast } from "sonner";
@@ -105,9 +103,6 @@ export function ProjectDrawer({
   const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null);
   // Story 2.18 fix: 菜单打开的项目 ID（用于保持按钮可见）
   const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
-
-  // 可撤销操作 Hook
-  const undoableAction = useUndoableAction();
 
   // 过滤后的项目列表
   const filteredProjects = React.useMemo(() => {
@@ -214,31 +209,20 @@ export function ProjectDrawer({
     const isRemovingCurrentProject = projectToRemove.id === currentProjectId;
     setIsRemoveDialogOpen(false);
 
-    // 使用可撤销操作
-    undoableAction.trigger({
-      execute: async () => {
-        await removeProject(projectToRemove.id);
-        onProjectsChange?.();
-        // 如果移除的是当前正在查看的项目，导航到空状态
-        if (isRemovingCurrentProject) {
-          onCurrentProjectRemoved?.();
-        }
-        toast.success(`已移除「${projectToRemove.name}」`, {
-          action: {
-            label: "撤销",
-            onClick: () => undoableAction.cancel(),
-          },
-          duration: 5000,
-        });
-      },
-      undo: async () => {
-        await restoreProject(projectToRemove.id);
-        onProjectsChange?.();
-        toast.success("已恢复项目");
-      },
-      timeoutMs: 5000,
-    });
-  }, [activeProject, currentProjectId, undoableAction, onProjectsChange, onCurrentProjectRemoved]);
+    try {
+      await removeProject(projectToRemove.id);
+      onProjectsChange?.();
+      // 如果移除的是当前正在查看的项目，导航到空状态
+      if (isRemovingCurrentProject) {
+        onCurrentProjectRemoved?.();
+      }
+      toast.success(`已移除「${projectToRemove.name}」`);
+    } catch (error) {
+      toast.error("移除失败", {
+        description: (error as Error).message,
+      });
+    }
+  }, [activeProject, currentProjectId, onProjectsChange, onCurrentProjectRemoved]);
 
   // 空状态
   const isEmpty = !isLoading && projects.length === 0;
