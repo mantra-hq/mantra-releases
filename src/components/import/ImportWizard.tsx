@@ -2,6 +2,7 @@
  * ImportWizard Component - 导入向导 Modal
  * Story 2.9: Task 1, Task 8
  * Story 2.20: Import Status Enhancement
+ * Story 2.23: Import Progress Events
  *
  * 多步骤导入向导，包含：
  * - 步骤 1: 选择导入源
@@ -11,6 +12,7 @@
  */
 
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import { CheckIcon } from "lucide-react";
 import {
   Dialog,
@@ -22,11 +24,11 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useImportStore } from "@/stores";
-import { scanLogDirectory, selectLogFiles, parseLogFiles } from "@/lib/import-ipc";
+import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
 import { getImportedProjectPaths } from "@/lib/project-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
 import { FileSelector } from "./FileSelector";
-import { ImportProgress, type ImportProgressData } from "./ImportProgress";
+import { ImportProgress, type ImportProgressData, type RecentFile } from "./ImportProgress";
 import { ImportComplete } from "./ImportComplete";
 
 /** 导入步骤类型 */
@@ -132,6 +134,8 @@ export function ImportWizard({
   initialStep = "source",
   onComplete,
 }: ImportWizardProps) {
+  const navigate = useNavigate();
+
   // Store 状态
   const {
     step: currentStep,
@@ -145,6 +149,7 @@ export function ImportWizard({
     isLoading,
     errors,
     importedPaths,
+    importedProjects,
     setStep,
     setSource,
     setDiscoveredFiles,
@@ -162,7 +167,12 @@ export function ImportWizard({
     reset,
     setImportedPaths,
     selectAllNew,
+    addImportedProject,
+    mergeRetryResults,
   } = useImportStore();
+
+  // Story 2.23: 重试状态
+  const [isRetrying, setIsRetrying] = React.useState(false);
 
   // 当 initialStep 变化时同步 (用于测试)
   React.useEffect(() => {
@@ -234,8 +244,58 @@ export function ImportWizard({
     }
   }, [setLoading, setDiscoveredFiles]);
 
+  // Story 2.23: 自动扫描 - 进入文件选择步骤时自动开始扫描
+  // 使用 ref 跟踪是否已扫描，防止重复扫描。当用户返回 source 步骤时会重置此标记。
+  // 注意：如果用户快速切换步骤（source → files → source → files），第二次进入 files 步骤
+  // 会触发新的扫描，这是预期行为（用户可能更换了 source）。
+  const hasAutoScannedRef = React.useRef(false);
+  React.useEffect(() => {
+    // 当进入 files 步骤且有 source 且没有文件且未扫描过时，自动扫描
+    if (
+      currentStep === "files" &&
+      source &&
+      discoveredFiles.length === 0 &&
+      !isLoading &&
+      !hasAutoScannedRef.current
+    ) {
+      hasAutoScannedRef.current = true;
+      // 延迟 100ms 启动扫描，让 UI 有时间渲染
+      const timer = setTimeout(() => {
+        handleScan();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, source, discoveredFiles.length, isLoading, handleScan]);
+
+  // 重置自动扫描标记当返回到 source 步骤（允许用户更换 source 后重新扫描）
+  React.useEffect(() => {
+    if (currentStep === "source") {
+      hasAutoScannedRef.current = false;
+    }
+  }, [currentStep]);
+
+  // Story 2.23: 最近处理的文件列表状态
+  const [recentFiles, setRecentFiles] = React.useState<RecentFile[]>([]);
+
+  // Story 2.23: 取消导入状态
+  const [isCancelling, setIsCancelling] = React.useState(false);
+
   /**
-   * 开始导入
+   * 处理取消导入 (Story 2.23)
+   */
+  const handleCancelImport = React.useCallback(async () => {
+    setIsCancelling(true);
+    try {
+      await cancelImport();
+      // 取消事件会通过 onCancelled 回调处理跳转
+    } catch (err) {
+      console.error("取消导入失败:", err);
+    }
+    // 不在这里重置 isCancelling，让 onCancelled 回调处理
+  }, []);
+
+  /**
+   * 开始导入 (使用进度事件)
    */
   const handleStartImport = React.useCallback(async () => {
     const selectedPaths = Array.from(selectedFiles);
@@ -243,6 +303,7 @@ export function ImportWizard({
 
     setStep("progress");
     setLoading(true);
+    setRecentFiles([]);
 
     try {
       // 初始化进度
@@ -255,9 +316,39 @@ export function ImportWizard({
       };
       setProgress(initialProgress);
 
-      // 模拟逐个文件处理进度
-      const parseResults = await parseLogFiles(selectedPaths, (prog) => {
-        setProgress(prog);
+      // 使用带进度事件的导入函数
+      const parseResults = await importSessionsWithProgress(selectedPaths, {
+        onProgress: (event) => {
+          setProgress({
+            current: event.current,
+            total: event.total,
+            currentFile: event.currentFile,
+            successCount: event.successCount,
+            failureCount: event.failureCount,
+          });
+        },
+        onFileDone: (event) => {
+          // 更新最近处理的文件列表（最多保留 5 个）
+          setRecentFiles((prev) => {
+            const newFile: RecentFile = {
+              path: event.filePath,
+              success: event.success,
+              error: event.error,
+            };
+            const updated = [newFile, ...prev].slice(0, 5);
+            return updated;
+          });
+
+          // Story 2.23: 收集导入成功的项目信息
+          if (event.success && event.projectId && event.sessionId) {
+            addImportedProject(event.projectId, event.sessionId, event.filePath);
+          }
+        },
+        onCancelled: () => {
+          // 导入被取消，重置状态并跳转到完成页
+          setIsCancelling(false);
+          setStep("complete");
+        },
       });
 
       // 处理结果
@@ -288,6 +379,7 @@ export function ImportWizard({
       console.error("导入失败:", err);
     } finally {
       setLoading(false);
+      setIsCancelling(false);
     }
   }, [selectedFiles, setStep, setLoading, setProgress, addResult, addError]);
 
@@ -327,6 +419,46 @@ export function ImportWizard({
     reset();
     setStep("source");
   }, [reset, setStep]);
+
+  /**
+   * Story 2.23: 导航到项目的第一个会话
+   */
+  const handleNavigateToProject = React.useCallback((sessionId: string) => {
+    // 关闭导入向导
+    onOpenChange(false);
+    // 导航到会话
+    navigate(`/session/${sessionId}`);
+    // 触发完成回调
+    onComplete?.();
+  }, [onOpenChange, navigate, onComplete]);
+
+  /**
+   * Story 2.23: 重试失败的导入项
+   */
+  const handleRetryFailed = React.useCallback(async (failedPaths: string[]) => {
+    if (failedPaths.length === 0) return;
+
+    setIsRetrying(true);
+
+    try {
+      // 使用带进度事件的导入函数重试
+      const retryResults = await importSessionsWithProgress(failedPaths, {
+        onFileDone: (event) => {
+          // 收集重试成功的项目信息
+          if (event.success && event.projectId && event.sessionId) {
+            addImportedProject(event.projectId, event.sessionId, event.filePath);
+          }
+        },
+      });
+
+      // 合并重试结果到现有结果
+      mergeRetryResults(retryResults);
+    } catch (err) {
+      console.error("重试导入失败:", err);
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [addImportedProject, mergeRetryResults]);
 
   /**
    * 渲染当前步骤内容
@@ -371,14 +503,21 @@ export function ImportWizard({
               }
             }
             errors={errors}
+            recentFiles={recentFiles}
+            onCancel={handleCancelImport}
+            isCancelling={isCancelling}
           />
         );
       case "complete":
         return (
           <ImportComplete
             results={results}
+            importedProjects={importedProjects}
             onViewProjects={handleViewProjects}
             onContinueImport={handleContinueImport}
+            onNavigateToProject={handleNavigateToProject}
+            onRetryFailed={handleRetryFailed}
+            isRetrying={isRetrying}
           />
         );
     }

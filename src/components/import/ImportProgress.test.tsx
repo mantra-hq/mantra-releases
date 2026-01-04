@@ -1,12 +1,13 @@
 /**
  * ImportProgress 测试文件
  * Story 2.9: Task 4
+ * Story 2.23: Cancel Import UI
  *
  * 测试导入进度展示组件
  */
 
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ImportProgress, type ImportProgressData, type ImportError } from "./ImportProgress";
 
 /** 测试用进度数据 */
@@ -176,6 +177,72 @@ describe("ImportProgress", () => {
       // 100% 完成
       const progressbar = screen.getByRole("progressbar");
       expect(progressbar).toHaveAttribute("aria-valuenow", "100");
+    });
+  });
+
+  // Story 2.23: 取消导入按钮
+  describe("Cancel Import Button", () => {
+    it("shows cancel button when onCancel is provided", () => {
+      render(
+        <ImportProgress
+          progress={mockProgress}
+          errors={[]}
+          onCancel={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId("cancel-import-button")).toBeInTheDocument();
+    });
+
+    it("does not show cancel button when onCancel is not provided", () => {
+      render(<ImportProgress progress={mockProgress} errors={[]} />);
+
+      expect(screen.queryByTestId("cancel-import-button")).not.toBeInTheDocument();
+    });
+
+    it("calls onCancel when confirmed in dialog", () => {
+      const onCancel = vi.fn();
+      render(
+        <ImportProgress
+          progress={mockProgress}
+          errors={[]}
+          onCancel={onCancel}
+        />
+      );
+
+      // 点击取消按钮打开对话框
+      fireEvent.click(screen.getByTestId("cancel-import-button"));
+
+      // 点击确认取消
+      fireEvent.click(screen.getByText("确认取消"));
+      expect(onCancel).toHaveBeenCalled();
+    });
+
+    it("disables cancel button when isCancelling is true", () => {
+      render(
+        <ImportProgress
+          progress={mockProgress}
+          errors={[]}
+          onCancel={vi.fn()}
+          isCancelling={true}
+        />
+      );
+
+      const button = screen.getByTestId("cancel-import-button");
+      expect(button).toBeDisabled();
+    });
+
+    it("shows loading spinner when cancelling", () => {
+      render(
+        <ImportProgress
+          progress={mockProgress}
+          errors={[]}
+          onCancel={vi.fn()}
+          isCancelling={true}
+        />
+      );
+
+      expect(screen.getByText("正在取消...")).toBeInTheDocument();
     });
   });
 });

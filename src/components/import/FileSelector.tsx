@@ -128,6 +128,9 @@ export function FileSelector({
   const totalSessions = files.length;
   const filteredSessionCount = getTotalSessionCount(filteredGroups);
 
+  // Story 2.23: 根据是否已有文件决定按钮文案
+  const scanButtonText = files.length > 0 ? "重新扫描" : "扫描默认路径";
+
   return (
     <div data-testid="file-selector" className="space-y-4">
       {/* 操作按钮 */}
@@ -139,7 +142,7 @@ export function FileSelector({
           className="gap-2"
         >
           <Search className="w-4 h-4" />
-          扫描默认路径
+          {scanButtonText}
         </Button>
         <Button
           variant="outline"

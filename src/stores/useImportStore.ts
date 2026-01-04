@@ -2,6 +2,7 @@
  * useImportStore - 导入状态管理
  * Story 2.9: Task 7 + UX Redesign
  * Story 2.20: Import Status Enhancement
+ * Story 2.23: Import Progress + Quick Navigation
  *
  * 管理导入向导的所有状态:
  * - Modal 开关状态
@@ -13,10 +14,25 @@
  * - 导入进度
  * - 导入结果
  * - 已导入项目路径 (Story 2.20)
+ * - 刚导入的项目列表 (Story 2.23)
  */
 
 import { create } from "zustand";
 import type { ImportStep, ImportSource, DiscoveredFile, ImportProgressData, ImportResult, ImportError } from "@/components/import";
+
+/**
+ * Story 2.23: 刚导入的项目信息
+ */
+export interface ImportedProject {
+  /** 项目 ID */
+  id: string;
+  /** 项目名称 */
+  name: string;
+  /** 会话数量 */
+  sessionCount: number;
+  /** 第一个会话 ID (用于快速跳转) */
+  firstSessionId: string;
+}
 
 /**
  * 导入状态接口
@@ -47,6 +63,8 @@ export interface ImportState {
   errors: ImportError[];
   /** 已导入项目路径集合 (Story 2.20) */
   importedPaths: Set<string>;
+  /** 刚导入的项目列表 (Story 2.23) */
+  importedProjects: ImportedProject[];
 
   // ======== Actions ========
   /** 打开 Modal */
@@ -87,6 +105,14 @@ export interface ImportState {
   setImportedPaths: (paths: string[]) => void;
   /** 全选新项目 (Story 2.20) */
   selectAllNew: () => void;
+  /** 添加导入的项目 (Story 2.23) */
+  addImportedProject: (projectId: string, sessionId: string, filePath: string) => void;
+  /** 清空导入的项目列表 (Story 2.23) */
+  clearImportedProjects: () => void;
+  /** 清空错误列表 (Story 2.23) */
+  clearErrors: () => void;
+  /** 合并重试结果 (Story 2.23) */
+  mergeRetryResults: (newResults: ImportResult[]) => void;
 }
 
 /**
@@ -105,6 +131,7 @@ const initialState = {
   isLoading: false,
   errors: [] as ImportError[],
   importedPaths: new Set<string>(),
+  importedProjects: [] as ImportedProject[],
 };
 
 /**
@@ -279,6 +306,7 @@ export const useImportStore = create<ImportState>((set) => ({
       results: [],
       isLoading: false,
       errors: [],
+      importedProjects: [],
       // Note: importedPaths 不重置，保持已加载的数据
     }),
 
@@ -296,6 +324,92 @@ export const useImportStore = create<ImportState>((set) => ({
       );
       return {
         selectedFiles: new Set(newProjectFiles.map((f) => f.path)),
+      };
+    }),
+
+  // Story 2.23: 添加导入的项目
+  addImportedProject: (projectId, sessionId, filePath) =>
+    set((state) => {
+      // 从文件路径提取项目名称
+      const pathParts = filePath.split("/");
+      const projectName = pathParts[pathParts.length - 2] || pathParts[pathParts.length - 1] || "Unknown";
+
+      // 检查项目是否已存在
+      const existingProject = state.importedProjects.find((p) => p.id === projectId);
+      if (existingProject) {
+        // 更新会话数量
+        return {
+          importedProjects: state.importedProjects.map((p) =>
+            p.id === projectId
+              ? { ...p, sessionCount: p.sessionCount + 1 }
+              : p
+          ),
+        };
+      }
+
+      // 添加新项目（最多保留 10 个）
+      const newProject: ImportedProject = {
+        id: projectId,
+        name: projectName,
+        sessionCount: 1,
+        firstSessionId: sessionId,
+      };
+
+      return {
+        importedProjects: [newProject, ...state.importedProjects].slice(0, 10),
+      };
+    }),
+
+  // Story 2.23: 清空导入的项目列表
+  clearImportedProjects: () =>
+    set({
+      importedProjects: [],
+    }),
+
+  // Story 2.23: 清空错误列表
+  clearErrors: () =>
+    set({
+      errors: [],
+    }),
+
+  // Story 2.23: 合并重试结果
+  mergeRetryResults: (newResults) =>
+    set((state) => {
+      // 创建一个 map 用于快速查找原始结果
+      const resultsMap = new Map(
+        state.results.map((r) => [r.filePath, r])
+      );
+
+      // 用新结果替换失败的结果
+      for (const newResult of newResults) {
+        resultsMap.set(newResult.filePath, newResult);
+      }
+
+      // 更新错误列表：移除重试成功的文件
+      const successfulPaths = new Set(
+        newResults.filter((r) => r.success).map((r) => r.filePath)
+      );
+      const updatedErrors = state.errors.filter(
+        (e) => !successfulPaths.has(e.filePath)
+      );
+
+      // 添加新的失败
+      for (const newResult of newResults) {
+        if (!newResult.success && newResult.error) {
+          const existingError = updatedErrors.find((e) => e.filePath === newResult.filePath);
+          if (!existingError) {
+            updatedErrors.push({
+              filePath: newResult.filePath,
+              error: newResult.error,
+              message: newResult.error,
+            });
+          }
+        }
+      }
+
+      return {
+        results: Array.from(resultsMap.values()),
+        errors: updatedErrors,
       };
     }),
 }));

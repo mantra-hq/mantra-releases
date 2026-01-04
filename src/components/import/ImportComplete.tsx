@@ -1,17 +1,28 @@
 /**
  * ImportComplete Component - 导入完成确认
  * Story 2.9: Task 5
+ * Story 2.23: Quick Navigation to Imported Projects
  *
  * 显示导入完成信息：
  * - 导入统计
+ * - 刚导入的项目列表（可快速跳转）
  * - 查看项目按钮
  * - 继续导入按钮
  */
 
 import * as React from "react";
-import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX } from "lucide-react";
-import { Button } from "@/components/ui";
+import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
+import { Button, ScrollArea } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import type { ImportedProject } from "@/stores/useImportStore";
+
+/**
+ * 从文件路径获取文件名
+ */
+function getFileName(filePath: string): string {
+  const parts = filePath.split("/");
+  return parts[parts.length - 1] || filePath;
+}
 
 /** 导入结果 */
 export interface ImportResult {
@@ -31,10 +42,18 @@ export interface ImportResult {
 export interface ImportCompleteProps {
   /** 导入结果列表 */
   results: ImportResult[];
+  /** 刚导入的项目列表 (Story 2.23) */
+  importedProjects?: ImportedProject[];
   /** 查看项目回调 */
   onViewProjects: () => void;
   /** 继续导入回调 */
   onContinueImport: () => void;
+  /** 导航到项目回调 (Story 2.23) */
+  onNavigateToProject?: (sessionId: string) => void;
+  /** 重试失败项回调 (Story 2.23) */
+  onRetryFailed?: (failedPaths: string[]) => void;
+  /** 是否正在重试 (Story 2.23) */
+  isRetrying?: boolean;
 }
 
 /**
@@ -73,9 +92,15 @@ function StatCard({
  */
 export function ImportComplete({
   results,
+  importedProjects = [],
   onViewProjects,
   onContinueImport,
+  onNavigateToProject,
+  onRetryFailed,
+  isRetrying = false,
 }: ImportCompleteProps) {
+  const [errorsExpanded, setErrorsExpanded] = React.useState(true);
+
   // 计算统计数据
   const successCount = results.filter((r) => r.success).length;
   const failureCount = results.filter((r) => !r.success).length;
@@ -84,8 +109,19 @@ export function ImportComplete({
   );
   const projectCount = projectIds.size;
 
+  // 获取失败的文件
+  const failedResults = results.filter((r) => !r.success);
+
   const allSuccess = failureCount === 0;
   const hasFailures = failureCount > 0;
+
+  // 处理重试
+  const handleRetry = React.useCallback(() => {
+    if (onRetryFailed && failedResults.length > 0) {
+      const failedPaths = failedResults.map((r) => r.filePath);
+      onRetryFailed(failedPaths);
+    }
+  }, [onRetryFailed, failedResults]);
 
   return (
     <div data-testid="import-complete" className="space-y-6 text-center">
@@ -139,6 +175,104 @@ export function ImportComplete({
           colorClass="text-primary"
         />
       </div>
+
+      {/* Story 2.23: 失败文件列表和重试按钮 */}
+      {hasFailures && (
+        <div className="text-left">
+          <button
+            onClick={() => setErrorsExpanded(!errorsExpanded)}
+            className="w-full flex items-center justify-between text-sm font-medium text-red-500 hover:text-red-400 transition-colors mb-2"
+            data-testid="toggle-errors"
+          >
+            <span>失败的文件 ({failureCount})</span>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 transition-transform",
+                !errorsExpanded && "-rotate-90"
+              )}
+            />
+          </button>
+
+          {errorsExpanded && (
+            <ScrollArea className="max-h-[150px] mb-3">
+              <div className="space-y-1">
+                {failedResults.map((result) => (
+                  <div
+                    key={result.filePath}
+                    className="px-3 py-2 rounded-md bg-red-500/5 border border-red-500/20"
+                  >
+                    <div className="text-sm font-mono text-foreground truncate">
+                      {getFileName(result.filePath)}
+                    </div>
+                    {result.error && (
+                      <div className="text-xs text-red-400 mt-0.5 truncate">
+                        {result.error}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
+          {onRetryFailed && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="w-full gap-2 text-red-500 hover:text-red-400 border-red-500/30 hover:border-red-500/50"
+              data-testid="retry-failed-button"
+            >
+              {isRetrying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {isRetrying ? "重试中..." : `重试失败项 (${failureCount})`}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Story 2.23: 刚导入的项目列表 */}
+      {importedProjects.length > 0 && onNavigateToProject && (
+        <div className="text-left">
+          <h4 className="text-sm font-medium text-muted-foreground mb-2">
+            刚导入的项目
+          </h4>
+          <ScrollArea className="max-h-[200px]">
+            <div className="space-y-1">
+              {importedProjects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => onNavigateToProject(project.firstSessionId)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-md",
+                    "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
+                    "text-left group"
+                  )}
+                  data-testid={`project-${project.id}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
+                    <span className="text-sm text-foreground truncate">
+                      {project.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" />
+                      <span className="text-xs">{project.sessionCount}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
 
       {/* 操作按钮 */}
       <div className="flex justify-center gap-3">

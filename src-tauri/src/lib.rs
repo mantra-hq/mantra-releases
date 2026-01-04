@@ -27,6 +27,8 @@ use commands::{
     sync_project, remove_project, restore_project, rename_project,
     // Story 2.20: Import wizard enhancement
     get_imported_project_paths,
+    // Story 2.23: Import with progress events
+    import_sessions_with_progress, cancel_import,
 };
 
 use storage::Database;
@@ -102,7 +104,10 @@ pub fn run() {
             restore_project,
             rename_project,
             // Story 2.20: Import wizard enhancement
-            get_imported_project_paths
+            get_imported_project_paths,
+            // Story 2.23: Import with progress events
+            import_sessions_with_progress,
+            cancel_import
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

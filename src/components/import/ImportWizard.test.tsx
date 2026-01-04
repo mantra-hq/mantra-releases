@@ -1,12 +1,14 @@
 /**
  * ImportWizard 测试文件
  * Story 2.9: Task 1
+ * Story 2.23: Quick Navigation (requires Router context)
  *
  * 测试导入向导 Modal 的核心功能
  */
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { ImportWizard } from "./ImportWizard";
 import { useImportStore } from "@/stores";
 import { act } from "@testing-library/react";
@@ -16,7 +18,25 @@ vi.mock("@/lib/import-ipc", () => ({
   scanLogDirectory: vi.fn(),
   selectLogFiles: vi.fn(),
   parseLogFiles: vi.fn(),
+  importSessionsWithProgress: vi.fn(),
+  cancelImport: vi.fn(),
 }));
+
+// Mock project-ipc
+vi.mock("@/lib/project-ipc", () => ({
+  getImportedProjectPaths: vi.fn().mockResolvedValue([]),
+}));
+
+/**
+ * 包装组件以提供 Router 上下文
+ */
+function renderWithRouter(ui: React.ReactElement) {
+  return render(
+    <MemoryRouter>
+      {ui}
+    </MemoryRouter>
+  );
+}
 
 describe("ImportWizard", () => {
   beforeEach(() => {
@@ -28,21 +48,21 @@ describe("ImportWizard", () => {
   // Task 1.1 & 1.2: Modal 容器
   describe("Modal Container", () => {
     it("renders dialog when open", () => {
-      render(<ImportWizard open={true} onOpenChange={vi.fn()} />);
+      renderWithRouter(<ImportWizard open={true} onOpenChange={vi.fn()} />);
 
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       expect(screen.getByText("导入日志")).toBeInTheDocument();
     });
 
     it("does not render dialog when closed", () => {
-      render(<ImportWizard open={false} onOpenChange={vi.fn()} />);
+      renderWithRouter(<ImportWizard open={false} onOpenChange={vi.fn()} />);
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
     it("calls onOpenChange when close button is clicked", () => {
       const onOpenChange = vi.fn();
-      render(<ImportWizard open={true} onOpenChange={onOpenChange} />);
+      renderWithRouter(<ImportWizard open={true} onOpenChange={onOpenChange} />);
 
       // 点击关闭按钮
       const closeButton = screen.getByRole("button", { name: /close/i });
@@ -55,7 +75,7 @@ describe("ImportWizard", () => {
   // Task 1.3: 步骤指示器
   describe("Step Indicator", () => {
     it("shows all four steps", () => {
-      render(<ImportWizard open={true} onOpenChange={vi.fn()} />);
+      renderWithRouter(<ImportWizard open={true} onOpenChange={vi.fn()} />);
 
       expect(screen.getByText("选择来源")).toBeInTheDocument();
       expect(screen.getByText("选择文件")).toBeInTheDocument();
@@ -64,7 +84,7 @@ describe("ImportWizard", () => {
     });
 
     it("marks current step as active", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="source" />
       );
 
@@ -73,7 +93,7 @@ describe("ImportWizard", () => {
     });
 
     it("marks completed steps correctly", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="files" />
       );
 
@@ -88,7 +108,7 @@ describe("ImportWizard", () => {
   // Task 1.4: 步骤 1 - 选择来源
   describe("Step 1: Source Selection", () => {
     it("shows source selection content on first step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="source" />
       );
 
@@ -99,7 +119,7 @@ describe("ImportWizard", () => {
   // Task 1.5: 步骤 2 - 选择文件
   describe("Step 2: File Selection", () => {
     it("shows file selector content on second step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="files" />
       );
 
@@ -110,7 +130,7 @@ describe("ImportWizard", () => {
   // Task 1.6: 步骤 3 - 导入进度
   describe("Step 3: Import Progress", () => {
     it("shows progress content on third step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard
           open={true}
           onOpenChange={vi.fn()}
@@ -125,7 +145,7 @@ describe("ImportWizard", () => {
   // Task 1.7: 步骤 4 - 完成确认
   describe("Step 4: Completion", () => {
     it("shows completion content on final step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard
           open={true}
           onOpenChange={vi.fn()}
@@ -140,7 +160,7 @@ describe("ImportWizard", () => {
   // 导航测试
   describe("Navigation", () => {
     it("has back button disabled on first step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="source" />
       );
 
@@ -152,7 +172,7 @@ describe("ImportWizard", () => {
     });
 
     it("has next button on first step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="source" />
       );
 
@@ -163,14 +183,14 @@ describe("ImportWizard", () => {
   // 无障碍测试
   describe("Accessibility", () => {
     it("has proper aria-label on dialog", () => {
-      render(<ImportWizard open={true} onOpenChange={vi.fn()} />);
+      renderWithRouter(<ImportWizard open={true} onOpenChange={vi.fn()} />);
 
       const dialog = screen.getByRole("dialog");
       expect(dialog).toHaveAttribute("aria-labelledby");
     });
 
     it("has aria-current on active step", () => {
-      render(
+      renderWithRouter(
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="files" />
       );
 

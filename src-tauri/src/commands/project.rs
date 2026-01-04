@@ -4,11 +4,13 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use git2::Repository;
+use once_cell::sync::Lazy;
 use serde::Serialize;
 use tauri::async_runtime::spawn_blocking;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
@@ -52,6 +54,60 @@ pub struct UpdatedSession {
     pub old_message_count: u32,
     /// New message count
     pub new_message_count: u32,
+}
+
+// ============================================================================
+// Story 2.23: Import Progress Events and Cancellation
+// ============================================================================
+
+/// Global flag for import cancellation
+static IMPORT_CANCELLED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+
+/// Progress event sent before processing each file
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportProgressEvent {
+    /// Current file index (0-based)
+    pub current: usize,
+    /// Total number of files
+    pub total: usize,
+    /// Current file path being processed
+    pub current_file: String,
+    /// Number of successfully processed files so far
+    pub success_count: usize,
+    /// Number of failed files so far
+    pub failure_count: usize,
+}
+
+/// Event sent after each file is processed
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFileDoneEvent {
+    /// File path that was processed
+    pub file_path: String,
+    /// Whether the import was successful
+    pub success: bool,
+    /// Error message if failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Project ID if successful
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    /// Session ID if successful
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+/// Event sent when import is cancelled
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportCancelledEvent {
+    /// Number of files processed before cancellation
+    pub processed_count: usize,
+    /// Number of successful imports before cancellation
+    pub success_count: usize,
+    /// Number of failed imports before cancellation
+    pub failure_count: usize,
 }
 
 /// List all projects ordered by last activity
@@ -353,7 +409,7 @@ pub async fn sync_project(
     let mut all_sessions: Vec<MantraSession> = Vec::new();
 
     // Try different session file locations based on tool type
-    // Claude: ~/.claude/projects/{hash}/sessions/
+    // Claude: ~/.claude/projects/{project-hash}/*.jsonl
     // Gemini: {cwd}/.gemini/history/
     // Cursor: {cwd}/.cursor/ directory
 
@@ -364,9 +420,11 @@ pub async fn sync_project(
             // Search for session files that match this project's cwd
             if let Ok(entries) = std::fs::read_dir(&claude_projects_dir) {
                 for entry in entries.flatten() {
-                    let sessions_dir = entry.path().join("sessions");
-                    if sessions_dir.exists() {
-                        if let Ok(session_files) = std::fs::read_dir(&sessions_dir) {
+                    let project_dir = entry.path();
+                    // Claude Code stores JSONL files directly in the project directory
+                    // (not in a sessions/ subdirectory)
+                    if project_dir.is_dir() {
+                        if let Ok(session_files) = std::fs::read_dir(&project_dir) {
                             for session_file in session_files.flatten() {
                                 let path = session_file.path();
                                 if path.extension().is_some_and(|e| e == "jsonl") {
@@ -513,6 +571,160 @@ pub async fn get_imported_project_paths(
 ) -> Result<Vec<String>, AppError> {
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
     db.get_imported_project_paths().map_err(Into::into)
+}
+
+// ============================================================================
+// Story 2.23: Import with Progress Events
+// ============================================================================
+
+/// Import sessions with real-time progress events
+///
+/// Similar to `import_sessions` but emits events for each file:
+/// - `import-progress`: Before processing each file
+/// - `import-file-done`: After each file is processed
+/// - `import-cancelled`: When import is cancelled by user
+#[tauri::command]
+pub async fn import_sessions_with_progress(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<ImportResult, AppError> {
+    // Reset cancellation flag at start
+    IMPORT_CANCELLED.store(false, Ordering::SeqCst);
+
+    let total = paths.len();
+    let mut success_count = 0usize;
+    let mut failure_count = 0usize;
+    let mut all_sessions: Vec<MantraSession> = Vec::new();
+    let mut parse_errors: Vec<String> = Vec::new();
+
+    let claude_parser = ClaudeParser::new();
+    let cursor_parser = CursorParser::new();
+    let gemini_parser = GeminiParser::new();
+
+    for (index, path) in paths.iter().enumerate() {
+        // Check for cancellation
+        if IMPORT_CANCELLED.load(Ordering::SeqCst) {
+            // Emit cancellation event
+            let _ = app_handle.emit("import-cancelled", ImportCancelledEvent {
+                processed_count: index,
+                success_count,
+                failure_count,
+            });
+            break;
+        }
+
+        // Emit progress event before processing
+        let _ = app_handle.emit("import-progress", ImportProgressEvent {
+            current: index,
+            total,
+            current_file: path.clone(),
+            success_count,
+            failure_count,
+        });
+
+        let path_buf = PathBuf::from(path);
+        let mut file_success = false;
+        let mut file_error: Option<String> = None;
+        let mut file_project_id: Option<String> = None;
+        let mut file_session_id: Option<String> = None;
+
+        if path_buf.is_dir() {
+            // Cursor workspace (directory)
+            match cursor_parser.parse_workspace(&path_buf) {
+                Ok(sessions) => {
+                    if sessions.is_empty() {
+                        file_error = Some("工作区中未找到对话".to_string());
+                        parse_errors.push(format!("{}: 工作区中未找到对话", path));
+                    } else {
+                        file_success = true;
+                        file_project_id = Some(generate_project_id(&sessions[0].cwd));
+                        file_session_id = Some(format!("{} 个会话", sessions.len()));
+                        all_sessions.extend(sessions);
+                    }
+                }
+                Err(e) => {
+                    file_error = Some(e.to_string());
+                    parse_errors.push(format!("{}: {}", path, e));
+                }
+            }
+        } else {
+            // Detect file type by path pattern
+            let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
+            let is_json = path.ends_with(".json");
+            let is_jsonl = path.ends_with(".jsonl");
+
+            let parse_result = if is_gemini && is_json {
+                gemini_parser.parse_file(path)
+            } else if is_jsonl {
+                claude_parser.parse_file(path)
+            } else if is_json {
+                gemini_parser.parse_file(path)
+                    .or_else(|_| claude_parser.parse_file(path))
+            } else {
+                claude_parser.parse_file(path)
+            };
+
+            match parse_result {
+                Ok(session) => {
+                    file_success = true;
+                    file_project_id = Some(generate_project_id(&session.cwd));
+                    file_session_id = Some(session.id.clone());
+                    all_sessions.push(session);
+                }
+                Err(e) => {
+                    file_error = Some(e.to_string());
+                    parse_errors.push(format!("{}: {}", path, e));
+                }
+            }
+        }
+
+        // Update counts
+        if file_success {
+            success_count += 1;
+        } else {
+            failure_count += 1;
+        }
+
+        // Emit file done event
+        let _ = app_handle.emit("import-file-done", ImportFileDoneEvent {
+            file_path: path.clone(),
+            success: file_success,
+            error: file_error,
+            project_id: file_project_id,
+            session_id: file_session_id,
+        });
+    }
+
+    // Import all parsed sessions to database
+    let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let mut scanner = ProjectScanner::new(&mut db);
+    let mut result = scanner.scan_and_import(all_sessions)?;
+
+    // Add parse errors to result
+    result.errors.extend(parse_errors);
+
+    Ok(result)
+}
+
+/// Cancel the current import operation
+///
+/// Sets a flag that will be checked by import_sessions_with_progress
+/// to stop processing further files.
+#[tauri::command]
+pub async fn cancel_import() -> Result<(), AppError> {
+    IMPORT_CANCELLED.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Helper function to generate project ID from cwd
+fn generate_project_id(cwd: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    cwd.hash(&mut hasher);
+    format!("proj_{:x}", hasher.finish())
 }
 
 #[cfg(test)]
