@@ -107,7 +107,7 @@ export function ProjectTreeItem({
             />
           ) : (
             <>
-              <span className="flex-1 truncate text-sm">
+              <span className="flex-1 truncate text-sm" title={project.name}>
                 <HighlightText text={project.name} keyword={searchKeyword} />
               </span>
 

@@ -103,73 +103,76 @@ export function ProjectGroupItem({
                         }
                     }}
                 >
-                {/* 展开/折叠箭头 */}
-                <ChevronRight
-                    className={cn(
-                        "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0",
-                        isExpanded && "rotate-90"
-                    )}
-                />
-
-                {/* 项目复选框 - 独立点击区域 */}
-                <div onClick={handleCheckboxClick}>
-                    <Checkbox
-                        data-testid={`project-checkbox-${group.projectPath}`}
-                        checked={isSelected}
-                        disabled={isImported}
-                        data-state={
-                            isSelected
-                                ? "checked"
-                                : isPartiallySelected
-                                    ? "indeterminate"
-                                    : "unchecked"
-                        }
-                        onCheckedChange={onToggleProject}
-                        aria-label={`选择项目 ${group.projectName}`}
+                    {/* 展开/折叠箭头 */}
+                    <ChevronRight
                         className={cn(
-                            "cursor-pointer",
-                            isImported && "cursor-not-allowed opacity-50"
+                            "w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0",
+                            isExpanded && "rotate-90"
                         )}
                     />
-                </div>
 
-                {/* 项目图标和名称 */}
-                <Folder className={cn(
-                    "w-4 h-4 shrink-0",
-                    isImported ? "text-muted-foreground" : "text-primary"
-                )} />
-                <span className={cn(
-                    "text-sm font-medium flex-1 truncate text-left",
-                    isImported ? "text-muted-foreground" : "text-foreground"
-                )}>
-                    {group.projectName}
-                </span>
+                    {/* 项目复选框 - 独立点击区域 */}
+                    <div onClick={handleCheckboxClick}>
+                        <Checkbox
+                            data-testid={`project-checkbox-${group.projectPath}`}
+                            checked={isSelected}
+                            disabled={isImported}
+                            data-state={
+                                isSelected
+                                    ? "checked"
+                                    : isPartiallySelected
+                                        ? "indeterminate"
+                                        : "unchecked"
+                            }
+                            onCheckedChange={onToggleProject}
+                            aria-label={`选择项目 ${group.projectName}`}
+                            className={cn(
+                                "cursor-pointer",
+                                isImported && "cursor-not-allowed opacity-50"
+                            )}
+                        />
+                    </div>
 
-                {/* Story 2.20: 导入状态标签 */}
-                {isImported && (
+                    {/* 项目图标和名称 */}
+                    <Folder className={cn(
+                        "w-4 h-4 shrink-0",
+                        isImported ? "text-muted-foreground" : "text-primary"
+                    )} />
                     <span
-                        data-testid={`import-badge-imported-${group.projectPath}`}
-                        className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0"
+                        className={cn(
+                            "text-sm font-medium flex-1 truncate text-left",
+                            isImported ? "text-muted-foreground" : "text-foreground"
+                        )}
+                        title={group.projectName}
                     >
-                        已导入
+                        {group.projectName}
                     </span>
-                )}
-                {isNew && (
-                    <span
-                        data-testid={`import-badge-new-${group.projectPath}`}
-                        className="text-xs text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium shrink-0"
-                    >
-                        NEW
-                    </span>
-                )}
 
-                {/* 会话统计 */}
-                <span className="text-xs text-muted-foreground shrink-0">
-                    {selectedCount > 0 && selectedCount < group.sessions.length
-                        ? `${selectedCount}/`
-                        : ""}
-                    {group.sessions.length} 个会话
-                </span>
+                    {/* Story 2.20: 导入状态标签 */}
+                    {isImported && (
+                        <span
+                            data-testid={`import-badge-imported-${group.projectPath}`}
+                            className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0"
+                        >
+                            已导入
+                        </span>
+                    )}
+                    {isNew && (
+                        <span
+                            data-testid={`import-badge-new-${group.projectPath}`}
+                            className="text-xs text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium shrink-0"
+                        >
+                            NEW
+                        </span>
+                    )}
+
+                    {/* 会话统计 */}
+                    <span className="text-xs text-muted-foreground shrink-0">
+                        {selectedCount > 0 && selectedCount < group.sessions.length
+                            ? `${selectedCount}/`
+                            : ""}
+                        {group.sessions.length} 个会话
+                    </span>
                 </div>
             </Collapsible.Trigger>
 

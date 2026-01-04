@@ -128,6 +128,18 @@ export function FileSelector({
   const totalSessions = files.length;
   const filteredSessionCount = getTotalSessionCount(filteredGroups);
 
+  // Story 2.24 AC2: 计算已选项目数（至少有一个会话被选中的项目）
+  const selectedProjectCount = React.useMemo(() => {
+    let count = 0;
+    for (const group of projectGroups) {
+      const hasSelectedSession = group.sessions.some((s) => selectedFiles.has(s.path));
+      if (hasSelectedSession) {
+        count++;
+      }
+    }
+    return count;
+  }, [projectGroups, selectedFiles]);
+
   // Story 2.23: 根据是否已有文件决定按钮文案
   const scanButtonText = files.length > 0 ? "重新扫描" : "扫描默认路径";
 
@@ -191,6 +203,7 @@ export function FileSelector({
             totalProjects={totalProjects}
             totalSessions={totalSessions}
             selectedCount={selectedFiles.size}
+            selectedProjectCount={selectedProjectCount}
             onSelectAll={onSelectAll}
             onClearAll={onClearAll}
             onInvertSelection={onInvertSelection}

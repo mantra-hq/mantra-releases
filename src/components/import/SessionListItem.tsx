@@ -99,7 +99,7 @@ export function SessionListItem({
 
             {/* 文件信息 */}
             <div className="flex-1 min-w-0">
-                <div className="text-sm text-foreground truncate">{session.name}</div>
+                <div className="text-sm text-foreground truncate" title={session.name}>{session.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">
                         {formatFileSize(session.size)}

@@ -170,6 +170,9 @@ export function ImportWizard({
     selectAllNew,
     addImportedProject,
     mergeRetryResults,
+    lastScannedSource,
+    setLastScannedSource,
+    clearDiscoveredFiles,
   } = useImportStore();
 
   // Story 2.23: 重试状态
@@ -220,12 +223,14 @@ export function ImportWizard({
     try {
       const files = await scanLogDirectory(source);
       setDiscoveredFiles(files);
+      // Story 2.24: 记录当前扫描的源
+      setLastScannedSource(source);
     } catch (err) {
       console.error("扫描失败:", err);
     } finally {
       setLoading(false);
     }
-  }, [source, setLoading, setDiscoveredFiles]);
+  }, [source, setLoading, setDiscoveredFiles, setLastScannedSource]);
 
   /**
    * 手动选择目录
@@ -267,6 +272,15 @@ export function ImportWizard({
       return () => clearTimeout(timer);
     }
   }, [currentStep, source, discoveredFiles.length, isLoading, handleScan]);
+
+  // Story 2.24: 检测源变化时清除文件并重置扫描标记
+  React.useEffect(() => {
+    if (source && lastScannedSource && source !== lastScannedSource) {
+      // 源已变化，清除发现的文件
+      clearDiscoveredFiles();
+      hasAutoScannedRef.current = false;
+    }
+  }, [source, lastScannedSource, clearDiscoveredFiles]);
 
   // 重置自动扫描标记当返回到 source 步骤（允许用户更换 source 后重新扫描）
   React.useEffect(() => {

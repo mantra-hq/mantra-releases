@@ -15,6 +15,7 @@
  * - 导入结果
  * - 已导入项目路径 (Story 2.20)
  * - 刚导入的项目列表 (Story 2.23)
+ * - 上次扫描的源 (Story 2.24)
  */
 
 import { create } from "zustand";
@@ -65,6 +66,8 @@ export interface ImportState {
   importedPaths: Set<string>;
   /** 刚导入的项目列表 (Story 2.23) */
   importedProjects: ImportedProject[];
+  /** 上次扫描的源 (Story 2.24) */
+  lastScannedSource: ImportSource | null;
 
   // ======== Actions ========
   /** 打开 Modal */
@@ -113,6 +116,10 @@ export interface ImportState {
   clearErrors: () => void;
   /** 合并重试结果 (Story 2.23) */
   mergeRetryResults: (newResults: ImportResult[]) => void;
+  /** 设置上次扫描的源 (Story 2.24) */
+  setLastScannedSource: (source: ImportSource | null) => void;
+  /** 清除发现的文件（源变化时） (Story 2.24) */
+  clearDiscoveredFiles: () => void;
 }
 
 /**
@@ -132,6 +139,7 @@ const initialState = {
   errors: [] as ImportError[],
   importedPaths: new Set<string>(),
   importedProjects: [] as ImportedProject[],
+  lastScannedSource: null as ImportSource | null,
 };
 
 /**
@@ -307,6 +315,7 @@ export const useImportStore = create<ImportState>((set) => ({
       isLoading: false,
       errors: [],
       importedProjects: [],
+      lastScannedSource: null,
       // Note: importedPaths 不重置，保持已加载的数据
     }),
 
@@ -407,6 +416,21 @@ export const useImportStore = create<ImportState>((set) => ({
         results: Array.from(resultsMap.values()),
         errors: updatedErrors,
       };
+    }),
+
+  // Story 2.24: 设置上次扫描的源
+  setLastScannedSource: (source) =>
+    set({
+      lastScannedSource: source,
+    }),
+
+  // Story 2.24: 清除发现的文件（源变化时）
+  clearDiscoveredFiles: () =>
+    set({
+      discoveredFiles: [],
+      selectedFiles: new Set(),
+      expandedProjects: new Set(),
+      searchQuery: "",
     }),
 }));
 

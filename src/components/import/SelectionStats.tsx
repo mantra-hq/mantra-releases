@@ -6,7 +6,7 @@
  * 显示统计信息和批量操作按钮
  */
 
-import { Folder, FileJson, CheckSquare, Import } from "lucide-react";
+import { Folder, FileJson, Import } from "lucide-react";
 import { Button } from "@/components/ui";
 
 /** SelectionStats Props */
@@ -17,6 +17,8 @@ export interface SelectionStatsProps {
     totalSessions: number;
     /** 已选会话数 */
     selectedCount: number;
+    /** 已选项目数 (Story 2.24 AC2) */
+    selectedProjectCount: number;
     /** 全选回调 */
     onSelectAll: () => void;
     /** 清空选择回调 */
@@ -38,6 +40,7 @@ export function SelectionStats({
     totalProjects,
     totalSessions,
     selectedCount,
+    selectedProjectCount,
     onSelectAll,
     onClearAll,
     onInvertSelection,
@@ -54,19 +57,18 @@ export function SelectionStats({
 
     return (
         <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border border-border rounded-lg">
-            {/* 统计信息 */}
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            {/* Story 2.24 AC2: 统计信息 - 分别显示项目和会话的已选数 */}
+            <div className="flex items-center gap-4 text-sm text-muted-foreground whitespace-nowrap">
                 <span className="flex items-center gap-1.5">
                     <Folder className="w-4 h-4" />
                     {totalProjects} 个项目
+                    <span className="text-primary">已选 {selectedProjectCount}</span>
                 </span>
+                <span className="text-border">|</span>
                 <span className="flex items-center gap-1.5">
                     <FileJson className="w-4 h-4" />
                     {totalSessions} 个会话
-                </span>
-                <span className="flex items-center gap-1.5 text-primary">
-                    <CheckSquare className="w-4 h-4" />
-                    已选 {selectedCount} 个{hasImportStatus && "新项目"}
+                    <span className="text-primary">已选 {selectedCount}</span>
                 </span>
                 {/* Story 2.20: 已导入统计 */}
                 {hasImportStatus && importedCount > 0 && (

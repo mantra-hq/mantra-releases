@@ -276,7 +276,7 @@ export function ProjectDrawer({
         </div>
 
         {/* 项目树列表 */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground">
               加载中...

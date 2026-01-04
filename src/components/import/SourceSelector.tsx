@@ -1,6 +1,7 @@
 /**
  * SourceSelector Component - 导入来源选择
  * Story 2.9: Task 2
+ * Story 2.24: AC5 官方品牌图标
  *
  * 显示可用的导入来源选项：
  * - Claude Code (已支持)
@@ -9,8 +10,12 @@
  */
 
 import * as React from "react";
-import { Sparkles, MessageSquare, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Story 2.24: AC5 官方品牌图标
+import { ClaudeIcon } from "./SourceIcons";  // SVG 组件
+import cursorIcon from "@/assets/source-icons/cursor.png";
+import geminiIcon from "@/assets/source-icons/gemini.png";
 
 /** 导入来源类型 */
 export type ImportSource = "claude" | "gemini" | "cursor";
@@ -20,7 +25,9 @@ interface SourceConfig {
   id: ImportSource;
   name: string;
   defaultPath: string;
-  icon: React.ComponentType<{ className?: string }>;
+  /** 图标图片路径 (PNG) 或 React 组件 */
+  iconSrc?: string;
+  iconComponent?: React.ComponentType<{ className?: string }>;
   disabled: boolean;
   badge?: string;
 }
@@ -31,21 +38,21 @@ const SOURCES: SourceConfig[] = [
     id: "claude",
     name: "Claude Code",
     defaultPath: "~/.claude/projects",
-    icon: Sparkles,
+    iconComponent: ClaudeIcon,
     disabled: false,
   },
   {
     id: "gemini",
     name: "Gemini CLI",
     defaultPath: "~/.gemini/tmp",
-    icon: MessageSquare,
+    iconSrc: geminiIcon,
     disabled: false,
   },
   {
     id: "cursor",
     name: "Cursor",
     defaultPath: "~/.config/Cursor (按工作区)",
-    icon: Terminal,
+    iconSrc: cursorIcon,
     disabled: false,
   },
 ];
@@ -70,7 +77,7 @@ function SourceCard({
   selected: boolean;
   onClick: () => void;
 }) {
-  const Icon = source.icon;
+  const IconComponent = source.iconComponent;
 
   const handleClick = () => {
     if (!source.disabled) {
@@ -113,11 +120,19 @@ function SourceCard({
         className={cn(
           "w-12 h-12 rounded-lg flex items-center justify-center mb-3",
           source.id === "claude" && "bg-orange-500/10 text-orange-500",
-          source.id === "gemini" && "bg-blue-500/10 text-blue-500",
-          source.id === "cursor" && "bg-purple-500/10 text-purple-500"
+          source.id === "gemini" && "bg-blue-500/10",
+          source.id === "cursor" && "bg-purple-500/10"
         )}
       >
-        <Icon className="w-6 h-6" />
+        {source.iconSrc ? (
+          <img
+            src={source.iconSrc}
+            alt={`${source.name} 图标`}
+            className="w-8 h-8 object-contain"
+          />
+        ) : IconComponent ? (
+          <IconComponent className="w-6 h-6" />
+        ) : null}
       </div>
 
       {/* 名称 */}
