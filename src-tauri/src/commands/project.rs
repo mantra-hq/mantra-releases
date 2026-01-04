@@ -428,9 +428,33 @@ pub async fn sync_project(
                             for session_file in session_files.flatten() {
                                 let path = session_file.path();
                                 if path.extension().is_some_and(|e| e == "jsonl") {
-                                    if let Ok(session) = claude_parser.parse_file(path.to_string_lossy().as_ref()) {
-                                        if session.cwd == cwd {
-                                            all_sessions.push(session);
+                                    // 跳过 agent- 开头的文件
+                                    if path.file_name()
+                                        .and_then(|n| n.to_str())
+                                        .is_some_and(|n| n.starts_with("agent-"))
+                                    {
+                                        continue;
+                                    }
+
+                                    match claude_parser.parse_file(path.to_string_lossy().as_ref()) {
+                                        Ok(session) => {
+                                            eprintln!(
+                                                "[sync_project] Parsed session {} from {:?}: cwd={}, messages={}",
+                                                session.id,
+                                                path.file_name(),
+                                                session.cwd,
+                                                session.messages.len()
+                                            );
+                                            if session.cwd == cwd {
+                                                all_sessions.push(session);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!(
+                                                "[sync_project] Failed to parse {:?}: {:?}",
+                                                path.file_name(),
+                                                e
+                                            );
                                         }
                                     }
                                 }
@@ -470,14 +494,33 @@ pub async fn sync_project(
     let mut updated_sessions: Vec<UpdatedSession> = Vec::new();
     let mut unchanged_count: u32 = 0;
 
+    eprintln!(
+        "[sync_project] Processing {} sessions for project {} (force={})",
+        all_sessions.len(),
+        project_id,
+        force
+    );
+
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
 
     for session in all_sessions {
         if let Some(&old_count) = existing_session_map.get(&session.id) {
             let new_count = session.messages.len() as u32;
+            eprintln!(
+                "[sync_project] Session {}: old_count={}, new_count={}, force={}",
+                session.id,
+                old_count,
+                new_count,
+                force
+            );
             // Update if: new messages added OR force re-parse requested
             if new_count > old_count || force {
                 // Session has updates or force re-parse
+                eprintln!(
+                    "[sync_project] Updating session {} with {} messages",
+                    session.id,
+                    session.messages.len()
+                );
                 db.update_session(&session)?;
                 updated_sessions.push(UpdatedSession {
                     session_id: session.id.clone(),

@@ -744,4 +744,45 @@ mod tests {
         assert_eq!(session.metadata.title, Some("Test Session Title".to_string()));
         assert_eq!(session.messages.len(), 2);
     }
+
+    #[test]
+    fn test_parse_real_problematic_file() {
+        let file_path = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-capsule/4fe9325e-4c69-4633-ac6f-d879ca16d6c5.jsonl";
+
+        let content = std::fs::read_to_string(file_path).expect("Failed to read file");
+        println!("\n=== DEBUG: File Info ===");
+        println!("Content length: {} bytes", content.len());
+        println!("Lines: {}", content.lines().count());
+
+        // 使用 parse_file 而不是 parse_string（这是实际导入流程使用的方法）
+        let parser = ClaudeParser::new();
+        let result = parser.parse_file(file_path);
+
+        match result {
+            Ok(session) => {
+                println!("\n=== DEBUG: Parse Result ===");
+                println!("Session ID: {}", session.id);
+                println!("Messages: {}", session.messages.len());
+
+                for (i, msg) in session.messages.iter().enumerate() {
+                    let block_types: Vec<&str> = msg.content_blocks.iter().map(|b| {
+                        match b {
+                            ContentBlock::Text { .. } => "text",
+                            ContentBlock::Thinking { .. } => "thinking",
+                            ContentBlock::ToolUse { .. } => "tool_use",
+                            ContentBlock::ToolResult { .. } => "tool_result",
+                            _ => "other",
+                        }
+                    }).collect();
+                    println!("  Msg {}: {:?} - {:?}", i + 1, msg.role, block_types);
+                }
+
+                // 期望 12 条消息
+                assert!(session.messages.len() >= 10, "Expected at least 10 messages, got {}", session.messages.len());
+            }
+            Err(e) => {
+                panic!("Parse failed: {:?}", e);
+            }
+        }
+    }
 }
