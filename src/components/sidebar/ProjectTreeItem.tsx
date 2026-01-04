@@ -76,7 +76,7 @@ export function ProjectTreeItem({
         className={cn(
           "w-full flex items-center gap-2 px-4 py-2",
           "hover:bg-muted/50 transition-colors",
-          "group relative"
+          "group"
         )}
       >
         {/* 可点击区域 - 展开/折叠 */}
@@ -157,12 +157,7 @@ export function ProjectTreeItem({
 
       {/* 会话列表 (展开时显示) */}
       {isExpanded && (
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200",
-            isExpanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
-          )}
-        >
+        <div className="transition-opacity duration-200 opacity-100">
           {isLoading ? (
             <div className="flex items-center gap-2 pl-10 pr-4 py-2 text-sm text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
