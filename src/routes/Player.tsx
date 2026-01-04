@@ -746,10 +746,12 @@ export default function Player() {
         projects={allProjects}
         isLoading={projectsLoading}
         currentSessionId={sessionId}
+        currentProjectId={currentProject?.id}
         onSessionSelect={handleDrawerSessionSelect}
         onImportClick={handleDrawerImport}
         getProjectSessions={fetchProjectSessions}
         onProjectsChange={refetchProjects}
+        onCurrentProjectRemoved={() => navigate("/player")}
       />
     </div>
   );

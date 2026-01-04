@@ -50,6 +50,8 @@ export interface ProjectDrawerProps {
   isLoading?: boolean;
   /** 当前会话 ID（用于高亮当前选中） */
   currentSessionId?: string;
+  /** 当前项目 ID（用于检测移除当前项目） */
+  currentProjectId?: string;
   /** 会话点击回调 */
   onSessionSelect: (sessionId: string, projectId: string) => void;
   /** 导入按钮点击回调 */
@@ -58,6 +60,8 @@ export interface ProjectDrawerProps {
   getProjectSessions: (projectId: string) => Promise<SessionSummary[]>;
   /** Story 2.19: 项目列表变更回调（用于刷新列表） */
   onProjectsChange?: () => void;
+  /** 当前项目被移除时的回调（用于导航到空状态） */
+  onCurrentProjectRemoved?: () => void;
 }
 
 /**
@@ -70,10 +74,12 @@ export function ProjectDrawer({
   projects,
   isLoading = false,
   currentSessionId,
+  currentProjectId,
   onSessionSelect,
   onImportClick,
   getProjectSessions,
   onProjectsChange,
+  onCurrentProjectRemoved,
 }: ProjectDrawerProps) {
   // 搜索关键词状态
   const [searchKeyword, setSearchKeyword] = React.useState("");
@@ -205,6 +211,7 @@ export function ProjectDrawer({
     if (!activeProject) return;
 
     const projectToRemove = activeProject;
+    const isRemovingCurrentProject = projectToRemove.id === currentProjectId;
     setIsRemoveDialogOpen(false);
 
     // 使用可撤销操作
@@ -212,6 +219,10 @@ export function ProjectDrawer({
       execute: async () => {
         await removeProject(projectToRemove.id);
         onProjectsChange?.();
+        // 如果移除的是当前正在查看的项目，导航到空状态
+        if (isRemovingCurrentProject) {
+          onCurrentProjectRemoved?.();
+        }
         toast.success(`已移除「${projectToRemove.name}」`, {
           action: {
             label: "撤销",
@@ -227,7 +238,7 @@ export function ProjectDrawer({
       },
       timeoutMs: 5000,
     });
-  }, [activeProject, undoableAction, onProjectsChange]);
+  }, [activeProject, currentProjectId, undoableAction, onProjectsChange, onCurrentProjectRemoved]);
 
   // 空状态
   const isEmpty = !isLoading && projects.length === 0;
