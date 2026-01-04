@@ -41,6 +41,14 @@ export const feedback = {
   deleted: (name?: string) =>
     toast.success(name ? `「${name}」${t("feedback.deleted")}` : t("feedback.deleted")),
 
+  /**
+   * 复制成功
+   * Story 2.28: AC3
+   * @param message - 可选，自定义消息
+   */
+  copied: (message?: string) =>
+    toast.success(message || t("feedback.copiedToClipboard")),
+
   // ============================================================
   // 批量操作
   // ============================================================

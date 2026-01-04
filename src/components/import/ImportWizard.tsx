@@ -25,6 +25,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { feedback } from "@/lib/feedback";
+import { appLog } from "@/lib/log-actions";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
 import { getImportedProjectPaths } from "@/lib/project-ipc";
@@ -335,6 +336,9 @@ export function ImportWizard({
       };
       setProgress(initialProgress);
 
+      // Story 2.28: 记录导入开始日志
+      appLog.importStart(source || "unknown", selectedPaths.length);
+
       // 使用带进度事件的导入函数
       const parseResults = await importSessionsWithProgress(selectedPaths, {
         onProgress: (event) => {
@@ -361,6 +365,11 @@ export function ImportWizard({
           // Story 2.23: 收集导入成功的项目信息
           if (event.success && event.projectId && event.sessionId && event.projectName) {
             addImportedProject(event.projectId, event.sessionId, event.projectName);
+            // Story 2.28: 记录导入成功日志
+            appLog.importFileSuccess(event.filePath, event.projectName);
+          } else if (!event.success && event.error) {
+            // Story 2.28: 记录导入失败日志
+            appLog.importFileError(event.filePath, event.error);
           }
         },
         onCancelled: () => {
@@ -391,6 +400,9 @@ export function ImportWizard({
         failureCount: parseResults.filter((r) => !r.success).length,
       };
       setProgress(finalProgress);
+
+      // Story 2.28: 记录导入完成日志
+      appLog.importComplete(finalProgress.successCount, finalProgress.failureCount);
 
       // 跳转到完成步骤
       setStep("complete");

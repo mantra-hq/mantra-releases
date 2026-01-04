@@ -8,13 +8,14 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2 } from 'lucide-react';
 import { RuleList } from '@/components/settings/RuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
 import { feedback } from '@/lib/feedback';
+import { useLogStore } from '@/stores';
 
 export function Settings() {
     const { t } = useTranslation();
@@ -22,6 +23,8 @@ export function Settings() {
     const { rules, importRules: storeImportRules } = useSanitizationRulesStore();
     const [isImporting, setIsImporting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [isCopyingLogs, setIsCopyingLogs] = useState(false);
+    const copyLogsToClipboard = useLogStore((state) => state.copyToClipboard);
 
     const handleImport = useCallback(async () => {
         setIsImporting(true);
@@ -52,6 +55,23 @@ export function Settings() {
         }
     }, [rules, t]);
 
+    // Story 2.28: 复制运行日志
+    const handleCopyLogs = useCallback(async () => {
+        setIsCopyingLogs(true);
+        try {
+            const success = await copyLogsToClipboard();
+            if (success) {
+                feedback.copied(t("settings.logsCopied"));
+            } else {
+                feedback.error(t("common.copy"), t("feedback.copyFailed"));
+            }
+        } catch (err) {
+            feedback.error(t("common.copy"), (err as Error).message);
+        } finally {
+            setIsCopyingLogs(false);
+        }
+    }, [copyLogsToClipboard, t]);
+
 
     return (
         <div className="min-h-screen bg-background">
@@ -75,11 +95,43 @@ export function Settings() {
             </header>
 
             {/* Content */}
-            <main className="container px-4 py-6 max-w-4xl">
+            <main className="container px-4 py-6 max-w-4xl mx-auto">
                 <div className="space-y-8">
                     {/* Story 2-26: 语言设置 (AC #1) */}
                     <section className="rounded-lg border bg-card p-4">
                         <LanguageSwitcher />
+                    </section>
+
+                    {/* Story 2.28: 帮助 - 复制运行日志 (AC #1, AC #3) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <h2 className="text-lg font-semibold mb-3">
+                            {t("settings.helpSection")}
+                        </h2>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium">
+                                    {t("settings.copyLogs")}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {t("settings.logsDescription")}
+                                </p>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleCopyLogs}
+                                disabled={isCopyingLogs}
+                                className="gap-2"
+                                data-testid="copy-logs-button"
+                            >
+                                {isCopyingLogs ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <ClipboardCopy className="h-4 w-4" />
+                                )}
+                                {t("common.copy")}
+                            </Button>
+                        </div>
                     </section>
 
                     {/* 规则列表 */}

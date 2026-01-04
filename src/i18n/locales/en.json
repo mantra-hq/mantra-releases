@@ -307,7 +307,11 @@
     "testing": "Testing...",
     "runTest": "Run Test",
     "sanitizedResult": "Sanitized Result",
-    "noMatchFound": "No sensitive information matched"
+    "noMatchFound": "No sensitive information matched",
+    "helpSection": "Help",
+    "copyLogs": "Copy Logs",
+    "logsDescription": "Copy application logs for issue reporting",
+    "logsCopied": "Logs copied to clipboard"
   },
   "sanitizer": {
     "willShareSanitized": "Will share the sanitized version",

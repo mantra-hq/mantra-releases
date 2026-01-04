@@ -7,3 +7,4 @@ export { useTimeTravelStore, type TimeTravelState, type CommitInfo } from "./use
 export { useImportStore, type ImportState } from "./useImportStore";
 export { useSearchStore, type SearchState, type SearchResult, type RecentSession } from "./useSearchStore";
 export { useEditorStore, type EditorState, type EditorTab } from "./useEditorStore";
+export { useLogStore, type LogState, type LogEntry, type LogLevel } from "./useLogStore";

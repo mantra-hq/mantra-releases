@@ -34,6 +34,7 @@ import {
   renameProject,
 } from "@/lib/project-ipc";
 import { toast } from "sonner";
+import { appLog } from "@/lib/log-actions";
 import type { Project } from "@/types/project";
 import type { SessionSummary } from "./types";
 
@@ -191,6 +192,9 @@ export function ProjectDrawer({
 
       try {
         await renameProject(renamingProjectId, newName);
+        // Story 2.28: 记录重命名日志
+        const oldProject = projects.find((p) => p.id === renamingProjectId);
+        appLog.projectRenamed(oldProject?.name || renamingProjectId, newName);
         onProjectsChange?.();
         setRenamingProjectId(null);
       } catch (error) {
@@ -223,6 +227,8 @@ export function ProjectDrawer({
         onCurrentProjectRemoved?.();
       }
       toast.success(t("project.removed", { name: projectToRemove.name }));
+      // Story 2.28: 记录移除日志
+      appLog.projectRemoved(projectToRemove.name);
     } catch (error) {
       toast.error(t("project.removeFailed"), {
         description: (error as Error).message,
@@ -331,9 +337,11 @@ export function ProjectDrawer({
                         setMenuOpenProjectId(open ? project.id : null);
                       }}
                       onSync={async () => {
+                        appLog.syncStart(project.name);
                         try {
                           const result = await syncProject(project.id);
                           showSyncResult(project.name, result);
+                          appLog.syncComplete(project.name, result.new_sessions.length, result.updated_sessions.length);
                           if (result.new_sessions.length > 0 || result.updated_sessions.length > 0) {
                             const sessions = await getProjectSessions(project.id);
                             setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
@@ -341,18 +349,22 @@ export function ProjectDrawer({
                           }
                         } catch (error) {
                           showSyncResult(project.name, null, error as Error);
+                          appLog.syncError(project.name, (error as Error).message);
                         }
                       }}
                       onForceSync={async () => {
+                        appLog.syncStart(project.name + " (force)");
                         try {
                           const result = await syncProject(project.id, true);
                           showSyncResult(project.name, result, undefined, true);
+                          appLog.syncComplete(project.name, result.new_sessions.length, result.updated_sessions.length);
                           // 强制重新解析后总是刷新会话列表
                           const sessions = await getProjectSessions(project.id);
                           setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
                           onProjectsChange?.();
                         } catch (error) {
                           showSyncResult(project.name, null, error as Error);
+                          appLog.syncError(project.name, (error as Error).message);
                         }
                       }}
                       onRename={() => {

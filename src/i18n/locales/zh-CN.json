@@ -307,7 +307,11 @@
     "testing": "测试中...",
     "runTest": "运行测试",
     "sanitizedResult": "清洗结果",
-    "noMatchFound": "未匹配到任何敏感信息"
+    "noMatchFound": "未匹配到任何敏感信息",
+    "helpSection": "帮助",
+    "copyLogs": "复制运行日志",
+    "logsDescription": "复制应用运行日志，用于反馈问题",
+    "logsCopied": "日志已复制到剪贴板"
   },
   "sanitizer": {
     "willShareSanitized": "将以清洗后的版本进行分享",
