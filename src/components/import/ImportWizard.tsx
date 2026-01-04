@@ -160,7 +160,6 @@ export function ImportWizard({
     setSource,
     setDiscoveredFiles,
     toggleFile,
-    selectAll,
     clearAll,
     invertSelection,
     toggleProject,
@@ -516,15 +515,11 @@ export function ImportWizard({
             onScan={handleScan}
             onSelectFiles={handleSelectFiles}
             onToggleFile={toggleFile}
-            onSelectAll={selectAll}
-            onClearAll={clearAll}
-            onInvertSelection={invertSelection}
             onToggleProject={toggleProject}
             onToggleProjectExpand={toggleProjectExpand}
             onSearchChange={setSearchQuery}
             loading={isLoading}
             importedPaths={importedPaths}
-            onSelectAllNew={selectAllNew}
           />
         );
       case "progress":
@@ -603,8 +598,40 @@ export function ImportWizard({
         {/* Footer */}
         {!isCompleteStep && (
           <div className="flex justify-between pt-4 border-t border-border">
-            {/* 返回按钮 */}
-            {!isFirstStep && !isProgressStep ? (
+            {/* 左侧：返回按钮或批量操作按钮 */}
+            {currentStep === "files" ? (
+              // 文件选择步骤：显示批量操作按钮
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllNew}
+                  className="text-xs h-7 px-2"
+                  data-testid="select-all-new-button"
+                >
+                  {t("import.selectAllNew")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAll}
+                  disabled={selectedFiles.size === 0}
+                  className="text-xs h-7 px-2"
+                >
+                  {t("import.clearSelection")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={invertSelection}
+                  disabled={discoveredFiles.length === 0}
+                  className="text-xs h-7 px-2"
+                >
+                  {t("import.invertSelection")}
+                </Button>
+              </div>
+            ) : !isFirstStep && !isProgressStep ? (
+              // 其他步骤：显示返回按钮
               <Button
                 variant="outline"
                 onClick={handleBack}
@@ -616,16 +643,30 @@ export function ImportWizard({
               <div />
             )}
 
-            {/* 下一步按钮 */}
-            {!isProgressStep && (
-              <Button
-                onClick={handleNext}
-                disabled={!canProceed || isLoading}
-                data-testid="next-button"
-              >
-                {currentStep === "files" ? t("import.startImport") : t("common.next")}
-              </Button>
-            )}
+            {/* 右侧：导航按钮 */}
+            <div className="flex items-center gap-2">
+              {/* 文件选择步骤：显示返回按钮 */}
+              {currentStep === "files" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBack}
+                  data-testid="back-button"
+                >
+                  {t("common.back")}
+                </Button>
+              )}
+              {/* 下一步/开始导入按钮 */}
+              {!isProgressStep && (
+                <Button
+                  onClick={handleNext}
+                  disabled={!canProceed || isLoading}
+                  data-testid="next-button"
+                >
+                  {currentStep === "files" ? t("import.startImport") : t("common.next")}
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </DialogContent>

@@ -8,6 +8,7 @@
 
 import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /** SearchFilter Props */
 export interface SearchFilterProps {
@@ -49,7 +50,10 @@ export function SearchFilter({
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={displayPlaceholder}
-                className="w-full h-10 pl-10 pr-20 text-sm bg-muted/50 border border-border rounded-lg placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                className={cn(
+                    "w-full h-10 pl-10 text-sm bg-muted/50 border border-border rounded-lg placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors",
+                    hasQuery ? "pr-20" : "pr-4"
+                )}
                 aria-label={t("import.searchProjectOrSession")}
             />
 

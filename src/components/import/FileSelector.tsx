@@ -13,7 +13,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FolderOpen, Loader2, FileJson } from "lucide-react";
+import { Radar, FolderOpen, Loader2, FileJson } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { groupByProject, filterGroups, getTotalSessionCount } from "@/lib/import-utils";
@@ -51,12 +51,6 @@ export interface FileSelectorProps {
   onSelectFiles: () => void;
   /** 切换单个文件选择 */
   onToggleFile: (path: string) => void;
-  /** 全选 */
-  onSelectAll: () => void;
-  /** 清空选择 */
-  onClearAll: () => void;
-  /** 反选 */
-  onInvertSelection: () => void;
   /** 切换项目选择 */
   onToggleProject: (projectPath: string) => void;
   /** 切换项目展开 */
@@ -67,8 +61,6 @@ export interface FileSelectorProps {
   loading: boolean;
   /** 已导入项目路径集合 (Story 2.20) */
   importedPaths?: Set<string>;
-  /** 全选新项目回调 (Story 2.20) */
-  onSelectAllNew?: () => void;
 }
 
 /**
@@ -83,15 +75,11 @@ export function FileSelector({
   onScan,
   onSelectFiles,
   onToggleFile,
-  onSelectAll,
-  onClearAll,
-  onInvertSelection,
   onToggleProject,
   onToggleProjectExpand,
   onSearchChange,
   loading,
   importedPaths,
-  onSelectAllNew,
 }: FileSelectorProps) {
   const { t } = useTranslation();
 
@@ -110,21 +98,18 @@ export function FileSelector({
     [projectGroups, debouncedQuery]
   );
 
-  // Story 2.20: 计算新项目和已导入项目数量
-  const { newProjectCount, importedCount } = React.useMemo(() => {
+  // Story 2.20: 计算已导入项目数量
+  const importedCount = React.useMemo(() => {
     if (!importedPaths) {
-      return { newProjectCount: undefined, importedCount: undefined };
+      return undefined;
     }
-    let newCount = 0;
-    let importedCountVal = 0;
+    let count = 0;
     for (const group of projectGroups) {
       if (importedPaths.has(group.projectPath)) {
-        importedCountVal++;
-      } else {
-        newCount++;
+        count++;
       }
     }
-    return { newProjectCount: newCount, importedCount: importedCountVal };
+    return count;
   }, [projectGroups, importedPaths]);
 
   // 统计数据
@@ -148,27 +133,43 @@ export function FileSelector({
   const scanButtonText = files.length > 0 ? t("import.rescan") : t("import.scanDefault");
 
   return (
-    <div data-testid="file-selector" className="space-y-4">
-      {/* 操作按钮 */}
-      <div className="flex gap-3">
-        <Button
-          variant="outline"
-          onClick={onScan}
-          disabled={loading}
-          className="gap-2"
-        >
-          <Search className="w-4 h-4" />
-          {scanButtonText}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={onSelectFiles}
-          disabled={loading}
-          className="gap-2"
-        >
-          <FolderOpen className="w-4 h-4" />
-          {t("import.selectManually")}
-        </Button>
+    <div data-testid="file-selector" className="space-y-3">
+      {/* 工具栏：操作按钮 + 搜索框 */}
+      <div className="flex items-center justify-between gap-3">
+        {/* 左侧：操作按钮 */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onScan}
+            disabled={loading}
+            className="gap-1.5"
+          >
+            <Radar className="w-4 h-4" />
+            {scanButtonText}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSelectFiles}
+            disabled={loading}
+            className="gap-1.5"
+          >
+            <FolderOpen className="w-4 h-4" />
+            {t("import.selectManually")}
+          </Button>
+        </div>
+        {/* 右侧：搜索框（仅有文件时显示） */}
+        {files.length > 0 && (
+          <div className="w-[300px]">
+            <SearchFilter
+              value={searchQuery}
+              onChange={onSearchChange}
+              resultCount={filteredSessionCount}
+              totalCount={totalSessions}
+            />
+          </div>
+        )}
       </div>
 
       {/* 加载状态 */}
@@ -191,29 +192,16 @@ export function FileSelector({
         </div>
       )}
 
-      {/* 有文件时显示搜索、统计和列表 */}
+      {/* 有文件时显示统计和列表 */}
       {!loading && files.length > 0 && (
         <>
-          {/* 搜索框 */}
-          <SearchFilter
-            value={searchQuery}
-            onChange={onSearchChange}
-            resultCount={filteredSessionCount}
-            totalCount={totalSessions}
-          />
-
           {/* 统计栏 */}
           <SelectionStats
             totalProjects={totalProjects}
             totalSessions={totalSessions}
             selectedCount={selectedFiles.size}
             selectedProjectCount={selectedProjectCount}
-            onSelectAll={onSelectAll}
-            onClearAll={onClearAll}
-            onInvertSelection={onInvertSelection}
             importedCount={importedCount}
-            newProjectCount={newProjectCount}
-            onSelectAllNew={onSelectAllNew}
           />
 
           {/* 项目分组列表 */}
