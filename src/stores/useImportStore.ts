@@ -106,7 +106,7 @@ export interface ImportState {
   /** 全选新项目 (Story 2.20) */
   selectAllNew: () => void;
   /** 添加导入的项目 (Story 2.23) */
-  addImportedProject: (projectId: string, sessionId: string, filePath: string) => void;
+  addImportedProject: (projectId: string, sessionId: string, projectName: string) => void;
   /** 清空导入的项目列表 (Story 2.23) */
   clearImportedProjects: () => void;
   /** 清空错误列表 (Story 2.23) */
@@ -328,12 +328,8 @@ export const useImportStore = create<ImportState>((set) => ({
     }),
 
   // Story 2.23: 添加导入的项目
-  addImportedProject: (projectId, sessionId, filePath) =>
+  addImportedProject: (projectId, sessionId, projectName) =>
     set((state) => {
-      // 从文件路径提取项目名称
-      const pathParts = filePath.split("/");
-      const projectName = pathParts[pathParts.length - 2] || pathParts[pathParts.length - 1] || "Unknown";
-
       // 检查项目是否已存在
       const existingProject = state.importedProjects.find((p) => p.id === projectId);
       if (existingProject) {

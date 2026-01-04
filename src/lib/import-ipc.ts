@@ -120,7 +120,10 @@ export interface ImportFileDoneEvent {
   error?: string;
   projectId?: string;
   sessionId?: string;
+  /** Project name from database (Story 2.23 fix) */
+  projectName?: string;
 }
+
 
 /** 导入取消事件载荷 */
 export interface ImportCancelledEvent {

@@ -341,8 +341,8 @@ export function ImportWizard({
           });
 
           // Story 2.23: 收集导入成功的项目信息
-          if (event.success && event.projectId && event.sessionId) {
-            addImportedProject(event.projectId, event.sessionId, event.filePath);
+          if (event.success && event.projectId && event.sessionId && event.projectName) {
+            addImportedProject(event.projectId, event.sessionId, event.projectName);
           }
         },
         onCancelled: () => {
@@ -446,8 +446,8 @@ export function ImportWizard({
       const retryResults = await importSessionsWithProgress(failedPaths, {
         onFileDone: (event) => {
           // 收集重试成功的项目信息
-          if (event.success && event.projectId && event.sessionId) {
-            addImportedProject(event.projectId, event.sessionId, event.filePath);
+          if (event.success && event.projectId && event.sessionId && event.projectName) {
+            addImportedProject(event.projectId, event.sessionId, event.projectName);
           }
         },
       });

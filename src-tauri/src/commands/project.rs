@@ -96,6 +96,9 @@ pub struct ImportFileDoneEvent {
     /// Session ID if successful
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// Project name if successful (Story 2.23 fix)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
 }
 
 /// Event sent when import is cancelled
@@ -638,8 +641,10 @@ pub async fn import_sessions_with_progress(
     let total = paths.len();
     let mut success_count = 0usize;
     let mut failure_count = 0usize;
-    let mut all_sessions: Vec<MantraSession> = Vec::new();
-    let mut parse_errors: Vec<String> = Vec::new();
+    let mut total_imported = 0u32;
+    let mut total_skipped = 0u32;
+    let mut total_new_projects = 0u32;
+    let mut all_errors: Vec<String> = Vec::new();
 
     let claude_parser = ClaudeParser::new();
     let cursor_parser = CursorParser::new();
@@ -671,6 +676,7 @@ pub async fn import_sessions_with_progress(
         let mut file_error: Option<String> = None;
         let mut file_project_id: Option<String> = None;
         let mut file_session_id: Option<String> = None;
+        let mut file_project_name: Option<String> = None;
 
         if path_buf.is_dir() {
             // Cursor workspace (directory)
@@ -678,17 +684,31 @@ pub async fn import_sessions_with_progress(
                 Ok(sessions) => {
                     if sessions.is_empty() {
                         file_error = Some("工作区中未找到对话".to_string());
-                        parse_errors.push(format!("{}: 工作区中未找到对话", path));
+                        all_errors.push(format!("{}: 工作区中未找到对话", path));
                     } else {
+                        // Import sessions immediately to get real project_id
+                        let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                        let result = db.import_sessions(&sessions)?;
+                        
+                        total_imported += result.imported_count;
+                        total_skipped += result.skipped_count;
+                        total_new_projects += result.new_projects_count;
+                        all_errors.extend(result.errors);
+                        
                         file_success = true;
-                        file_project_id = Some(generate_project_id(&sessions[0].cwd));
-                        file_session_id = Some(format!("{} 个会话", sessions.len()));
-                        all_sessions.extend(sessions);
+                        // Get project info from database
+                        if let Some(first_session) = sessions.first() {
+                            if let Ok(Some(project)) = db.get_project_by_cwd(&first_session.cwd) {
+                                file_project_id = Some(project.id);
+                                file_project_name = Some(project.name);
+                            }
+                            file_session_id = Some(first_session.id.clone());
+                        }
                     }
                 }
                 Err(e) => {
                     file_error = Some(e.to_string());
-                    parse_errors.push(format!("{}: {}", path, e));
+                    all_errors.push(format!("{}: {}", path, e));
                 }
             }
         } else {
@@ -710,14 +730,27 @@ pub async fn import_sessions_with_progress(
 
             match parse_result {
                 Ok(session) => {
+                    // Import session immediately to get real project_id
+                    let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                    let result = db.import_sessions(&[session.clone()])?;
+                    
+                    total_imported += result.imported_count;
+                    total_skipped += result.skipped_count;
+                    total_new_projects += result.new_projects_count;
+                    all_errors.extend(result.errors);
+                    
                     file_success = true;
-                    file_project_id = Some(generate_project_id(&session.cwd));
                     file_session_id = Some(session.id.clone());
-                    all_sessions.push(session);
+                    
+                    // Get project info from database
+                    if let Ok(Some(project)) = db.get_project_by_cwd(&session.cwd) {
+                        file_project_id = Some(project.id);
+                        file_project_name = Some(project.name);
+                    }
                 }
                 Err(e) => {
                     file_error = Some(e.to_string());
-                    parse_errors.push(format!("{}: {}", path, e));
+                    all_errors.push(format!("{}: {}", path, e));
                 }
             }
         }
@@ -729,26 +762,26 @@ pub async fn import_sessions_with_progress(
             failure_count += 1;
         }
 
-        // Emit file done event
+        // Emit file done event with real project_id and project_name
         let _ = app_handle.emit("import-file-done", ImportFileDoneEvent {
             file_path: path.clone(),
             success: file_success,
             error: file_error,
             project_id: file_project_id,
             session_id: file_session_id,
+            project_name: file_project_name,
         });
     }
 
-    // Import all parsed sessions to database
-    let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
-    let mut scanner = ProjectScanner::new(&mut db);
-    let mut result = scanner.scan_and_import(all_sessions)?;
-
-    // Add parse errors to result
-    result.errors.extend(parse_errors);
-
-    Ok(result)
+    // Return aggregated result
+    Ok(ImportResult {
+        imported_count: total_imported,
+        skipped_count: total_skipped,
+        new_projects_count: total_new_projects,
+        errors: all_errors,
+    })
 }
+
 
 /// Cancel the current import operation
 ///
@@ -760,17 +793,8 @@ pub async fn cancel_import() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Helper function to generate project ID from cwd
-fn generate_project_id(cwd: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
-    cwd.hash(&mut hasher);
-    format!("proj_{:x}", hasher.finish())
-}
-
 #[cfg(test)]
+
 mod tests {
     use super::*;
     use crate::models::sources;
