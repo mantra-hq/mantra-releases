@@ -99,7 +99,8 @@ export function ImportComplete({
   onRetryFailed,
   isRetrying = false,
 }: ImportCompleteProps) {
-  const [errorsExpanded, setErrorsExpanded] = React.useState(true);
+  // Story 2.24: 默认折叠错误列表，避免界面遮挡
+  const [errorsExpanded, setErrorsExpanded] = React.useState(false);
 
   // 计算统计数据
   const successCount = results.filter((r) => r.success).length;

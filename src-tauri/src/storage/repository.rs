@@ -407,6 +407,12 @@ impl Database {
             )?;
 
             if exists > 0 {
+                // Session already exists, but we should still restore the project if it was soft-deleted
+                // This fixes the bug where re-importing skipped sessions wouldn't restore deleted projects
+                let _ = tx.execute(
+                    "UPDATE projects SET deleted_at = NULL WHERE cwd = ?1 AND deleted_at IS NOT NULL",
+                    params![session.cwd],
+                );
                 result.skipped_count += 1;
                 continue;
             }

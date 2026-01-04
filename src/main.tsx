@@ -14,6 +14,7 @@ import { Player } from "./routes";
 import { Settings } from "./routes/Settings";
 import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
 import { useGlobalShortcut } from "./hooks";
 import "./index.css";
@@ -66,6 +67,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             </Routes>
             {/* 全局搜索 Modal (Story 2.10) */}
             <GlobalSearch />
+            {/* 全局 Toast 通知 */}
+            <Toaster />
           </GlobalShortcutProvider>
         </BrowserRouter>
       </TooltipProvider>

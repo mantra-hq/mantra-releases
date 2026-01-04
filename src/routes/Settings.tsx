@@ -11,6 +11,7 @@ import { RuleList } from '@/components/settings/RuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
+import { feedback } from '@/lib/feedback';
 
 export function Settings() {
     const navigate = useNavigate();
@@ -24,10 +25,10 @@ export function Settings() {
             const imported = await importRules();
             if (imported && imported.length > 0) {
                 storeImportRules(imported);
-                console.log(`导入成功: 已导入 ${imported.length} 条规则`);
+                feedback.imported(imported.length, "规则");
             }
         } catch (err) {
-            console.error('导入失败:', (err as Error).message);
+            feedback.error("导入", (err as Error).message);
         } finally {
             setIsImporting(false);
         }
@@ -38,10 +39,10 @@ export function Settings() {
         try {
             const success = await exportRules(rules);
             if (success) {
-                console.log(`导出成功: 已导出 ${rules.length} 条规则`);
+                feedback.exported(rules.length, "规则");
             }
         } catch (err) {
-            console.error('导出失败:', (err as Error).message);
+            feedback.error("导出", (err as Error).message);
         } finally {
             setIsExporting(false);
         }

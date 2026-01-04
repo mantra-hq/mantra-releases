@@ -23,6 +23,7 @@ import {
   Button,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { feedback } from "@/lib/feedback";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
 import { getImportedProjectPaths } from "@/lib/project-ipc";
@@ -453,8 +454,14 @@ export function ImportWizard({
 
       // 合并重试结果到现有结果
       mergeRetryResults(retryResults);
+
+      // 显示重试结果反馈
+      const successCount = retryResults.filter((r) => r.success).length;
+      const failedCount = retryResults.filter((r) => !r.success).length;
+      feedback.retryResult(successCount, failedCount);
     } catch (err) {
       console.error("重试导入失败:", err);
+      feedback.error("重试导入", (err as Error).message);
     } finally {
       setIsRetrying(false);
     }

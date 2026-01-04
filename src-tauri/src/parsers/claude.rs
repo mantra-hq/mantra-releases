@@ -34,6 +34,11 @@ impl ClaudeParser {
         let mut version: Option<String> = None;
         let mut summary: Option<String> = None;
 
+        // Track what types of records we've seen for better error messages
+        let mut has_system_events = false;
+        let mut has_summary_only = false;
+        let mut valid_line_count = 0;
+
         for line in content.lines() {
             let line = line.trim();
             if line.is_empty() {
@@ -46,20 +51,26 @@ impl ClaudeParser {
                 Err(_) => continue, // Skip invalid lines
             };
 
+            valid_line_count += 1;
             let record_type = record.get("type").and_then(|t| t.as_str()).unwrap_or("");
 
             // Extract summary from summary records (Claude Code stores session title here)
             if record_type == "summary" {
                 if let Some(s) = record.get("summary").and_then(|s| s.as_str()) {
                     summary = Some(s.to_string());
+                    has_summary_only = true;
                 }
                 continue;
             }
 
-            // Skip non-message records (file-history-snapshot, etc.)
+            // Track system events (file-history-snapshot, etc.)
             if record_type != "user" && record_type != "assistant" {
+                has_system_events = true;
                 continue;
             }
+
+            // We have a user or assistant message, so it's not summary-only
+            has_summary_only = false;
 
             // Extract session metadata from first valid record
             if session_id.is_none() {
@@ -112,8 +123,24 @@ impl ClaudeParser {
             }
         }
 
-        // Validate we got a session ID
-        let id = session_id.ok_or_else(|| ParseError::missing_field("sessionId"))?;
+        // Provide better error messages based on what we found
+        if session_id.is_none() {
+            // No session ID found - determine why
+            if valid_line_count == 0 {
+                // File has content but no valid JSON lines
+                return Err(ParseError::EmptyFile);
+            } else if has_summary_only && !has_system_events {
+                // Only summary records (e.g., "Invalid API key" messages)
+                return Err(ParseError::NoValidConversation);
+            } else if has_system_events {
+                // Only system events (file-history-snapshot, etc.)
+                return Err(ParseError::SystemEventsOnly);
+            } else {
+                return Err(ParseError::missing_field("sessionId"));
+            }
+        }
+
+        let id = session_id.unwrap();
 
         // Build the session
         let mut session = MantraSession::new(
@@ -296,12 +323,22 @@ impl ClaudeToolResultContent {
 impl LogParser for ClaudeParser {
     fn parse_file(&self, path: &str) -> Result<MantraSession, ParseError> {
         let content = fs::read_to_string(path)?;
-        
-        // Detect format: JSONL (lines) vs JSON (single object)
-        // JSONL files typically start with { on first line and have multiple lines
+
+        // Check for empty file
+        if content.trim().is_empty() {
+            return Err(ParseError::EmptyFile);
+        }
+
+        // Detect format: JSONL vs JSON
+        // JSONL: each line is a separate JSON object with "type" field
+        // JSON: single object with "id" and "messages" fields
         let first_line = content.lines().next().unwrap_or("").trim();
-        let is_jsonl = first_line.starts_with('{') && content.lines().count() > 1;
-        
+
+        // Check if it looks like a JSONL record (has "type" field)
+        // This handles both single-line and multi-line JSONL files
+        let is_jsonl = first_line.starts_with('{') &&
+            (first_line.contains("\"type\"") || content.lines().count() > 1);
+
         if is_jsonl {
             self.parse_jsonl(&content)
         } else {

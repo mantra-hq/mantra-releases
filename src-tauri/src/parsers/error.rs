@@ -39,6 +39,18 @@ pub enum ParseError {
     /// Workspace not found
     #[error("工作区未找到: {0}")]
     WorkspaceNotFound(String),
+
+    /// Empty file (0 bytes)
+    #[error("跳过: 空会话文件")]
+    EmptyFile,
+
+    /// File contains only system events (no conversation)
+    #[error("跳过: 仅包含系统事件，无对话内容")]
+    SystemEventsOnly,
+
+    /// File contains only error/status messages (e.g., "Invalid API key")
+    #[error("跳过: 无有效对话 (仅包含状态消息)")]
+    NoValidConversation,
 }
 
 impl ParseError {

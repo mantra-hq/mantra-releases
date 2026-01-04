@@ -415,14 +415,16 @@ describe("ImportComplete", () => {
       );
 
       const toggleButton = screen.getByTestId("toggle-errors");
-      // 默认展开
+      // Story 2.24: 默认折叠
+      expect(screen.queryByText("file4.json")).not.toBeInTheDocument();
+
+      // 点击展开
+      fireEvent.click(toggleButton);
       expect(screen.getByText("file4.json")).toBeInTheDocument();
 
-      // 点击折叠
+      // 再次点击折叠
       fireEvent.click(toggleButton);
-      // 再次点击展开
-      fireEvent.click(toggleButton);
-      expect(screen.getByText("file4.json")).toBeInTheDocument();
+      expect(screen.queryByText("file4.json")).not.toBeInTheDocument();
     });
   });
 });

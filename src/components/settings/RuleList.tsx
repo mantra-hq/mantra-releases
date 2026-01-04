@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Pencil, Trash2, FileUp, FileDown, Shield } from 'lucide-react';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
+import { feedback } from '@/lib/feedback';
 import { RuleEditor } from './RuleEditor';
 import type { CustomRule, RuleFormData } from './types';
 
@@ -52,11 +53,18 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
     const handleSave = (data: RuleFormData) => {
         if (editingRule) {
             updateRule(editingRule.id, data);
+            feedback.saved(data.name);
         } else {
             addRule(data);
+            feedback.saved(data.name);
         }
         setIsEditorOpen(false);
         setEditingRule(null);
+    };
+
+    const handleDelete = (rule: CustomRule) => {
+        deleteRule(rule.id);
+        feedback.deleted(rule.name);
     };
 
     return (
@@ -157,7 +165,7 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                                         <AlertDialogFooter>
                                             <AlertDialogCancel>取消</AlertDialogCancel>
                                             <AlertDialogAction
-                                                onClick={() => deleteRule(rule.id)}
+                                                onClick={() => handleDelete(rule)}
                                                 data-testid={`confirm-delete-${rule.id}`}
                                             >
                                                 删除
