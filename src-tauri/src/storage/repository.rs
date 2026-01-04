@@ -255,17 +255,19 @@ impl Database {
     /// Update project's Git repository information
     ///
     /// # Arguments
-    /// * `cwd` - The project's working directory
+    /// * `cwd` - The project's working directory (will be normalized)
     /// * `git_repo_path` - The Git repository root path (None if no Git repo)
     pub fn update_project_git_info(
         &self,
         cwd: &str,
         git_repo_path: Option<String>,
     ) -> Result<(), StorageError> {
+        // Story 2.25: Normalize cwd for consistent lookup
+        let normalized_cwd = normalize_cwd(cwd);
         let has_git_repo = if git_repo_path.is_some() { 1 } else { 0 };
         self.connection().execute(
             "UPDATE projects SET git_repo_path = ?1, has_git_repo = ?2 WHERE cwd = ?3",
-            params![git_repo_path, has_git_repo, cwd],
+            params![git_repo_path, has_git_repo, normalized_cwd],
         )?;
         Ok(())
     }

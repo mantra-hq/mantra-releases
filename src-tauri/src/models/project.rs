@@ -103,6 +103,37 @@ pub fn extract_project_name(cwd: &str) -> String {
         .to_string()
 }
 
+/// Normalize cwd path for consistent aggregation (Story 2.25)
+///
+/// - Removes trailing slashes
+/// - Converts backslashes to forward slashes (cross-platform)
+/// - Trims whitespace
+///
+/// # Examples
+/// ```
+/// use client_lib::models::project::normalize_cwd;
+/// assert_eq!(normalize_cwd("/home/user/project/"), "/home/user/project");
+/// assert_eq!(normalize_cwd("C:\\Users\\test\\project"), "C:/Users/test/project");
+/// ```
+pub fn normalize_cwd(cwd: &str) -> String {
+    let normalized = cwd
+        .trim()
+        .replace('\\', "/"); // Cross-platform: backslashes to forward slashes
+
+    // Remove trailing slashes (but keep root "/" or "C:/")
+    let trimmed = normalized.trim_end_matches('/');
+
+    // Handle edge cases: root paths
+    if trimmed.is_empty() {
+        "/".to_string()
+    } else if trimmed.ends_with(':') {
+        // Windows drive letter like "C:" -> "C:/"
+        format!("{}/", trimmed)
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +247,48 @@ mod tests {
         assert_eq!(result.skipped_count, 0);
         assert_eq!(result.new_projects_count, 0);
         assert!(result.errors.is_empty());
+    }
+
+    // Story 2.25: normalize_cwd tests
+    #[test]
+    fn test_normalize_cwd_trailing_slash() {
+        assert_eq!(normalize_cwd("/home/user/project/"), "/home/user/project");
+        assert_eq!(normalize_cwd("/home/user/project"), "/home/user/project");
+        assert_eq!(normalize_cwd("/path/to/dir///"), "/path/to/dir");
+    }
+
+    #[test]
+    fn test_normalize_cwd_backslashes() {
+        assert_eq!(normalize_cwd("C:\\Users\\test\\project"), "C:/Users/test/project");
+        assert_eq!(normalize_cwd("C:\\Users\\test\\project\\"), "C:/Users/test/project");
+    }
+
+    #[test]
+    fn test_normalize_cwd_whitespace() {
+        assert_eq!(normalize_cwd("  /home/user/project  "), "/home/user/project");
+        assert_eq!(normalize_cwd("\t/path/to/dir\n"), "/path/to/dir");
+    }
+
+    #[test]
+    fn test_normalize_cwd_edge_cases() {
+        // Root paths
+        assert_eq!(normalize_cwd("/"), "/");
+        assert_eq!(normalize_cwd("C:"), "C:/");
+        assert_eq!(normalize_cwd("C:\\"), "C:/");
+        // Empty/whitespace
+        assert_eq!(normalize_cwd(""), "/");
+        assert_eq!(normalize_cwd("   "), "/");
+    }
+
+    #[test]
+    fn test_normalize_cwd_aggregation_scenario() {
+        // Different formats of the same path should normalize to the same value
+        let paths = vec![
+            "/home/user/myproject",
+            "/home/user/myproject/",
+            "/home/user/myproject//",
+        ];
+        let normalized: Vec<String> = paths.iter().map(|p| normalize_cwd(p)).collect();
+        assert!(normalized.iter().all(|p| p == "/home/user/myproject"));
     }
 }

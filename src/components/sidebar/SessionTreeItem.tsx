@@ -1,16 +1,17 @@
 /**
  * SessionTreeItem Component - 会话树节点
- * Story 2.18: Task 4
+ * Story 2.18: Task 4, Story 2.25: AC3
  *
  * 会话节点，显示会话信息和当前选中状态
+ * 使用官方来源图标区分不同 AI 工具
  */
 
 import * as React from "react";
-import { MessageCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { HighlightText } from "./DrawerSearch";
+import { SourceIcon } from "@/components/import/SourceIcons";
 import type { SessionSummary } from "./types";
 
 /**
@@ -25,22 +26,6 @@ export interface SessionTreeItemProps {
   searchKeyword?: string;
   /** 点击回调 */
   onClick: () => void;
-}
-
-/**
- * 获取会话来源图标颜色
- */
-function getSourceColor(source: string): string {
-  switch (source) {
-    case "claude":
-      return "text-orange-500";
-    case "gemini":
-      return "text-blue-500";
-    case "cursor":
-      return "text-purple-500";
-    default:
-      return "text-muted-foreground";
-  }
 }
 
 /**
@@ -105,9 +90,10 @@ export function SessionTreeItem({
         <span className="w-2 shrink-0" />
       )}
 
-      {/* 会话图标 */}
-      <MessageCircle
-        className={cn("h-3.5 w-3.5 shrink-0", getSourceColor(session.source))}
+      {/* 来源图标 (Story 2.25: AC3) */}
+      <SourceIcon
+        source={session.source}
+        className="h-3.5 w-3.5 shrink-0"
       />
 
       {/* 会话名称 */}
