@@ -83,7 +83,7 @@ export function ProjectTreeItem({
         <button
           type="button"
           onClick={onToggle}
-          className="flex items-center gap-2 flex-1 text-left min-w-0"
+          className="flex items-center gap-2 flex-1 text-left min-w-0 cursor-pointer"
           data-testid={`project-toggle-${project.id}`}
           disabled={isRenaming}
         >
@@ -143,7 +143,7 @@ export function ProjectTreeItem({
                 onSettingsClick();
               }}
               className={cn(
-                "h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0 transition-opacity",
+                "h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0 transition-opacity cursor-pointer",
                 "opacity-0 group-hover:opacity-100"
               )}
               aria-label="项目设置"

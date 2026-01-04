@@ -38,7 +38,7 @@ export function TypeChips({ className }: TypeChipsProps) {
                         aria-pressed={isSelected}
                         className={cn(
                             // 基础样式
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer",
                             "transition-all duration-150 select-none",
                             // 未选中样式
                             !isSelected && [

@@ -44,6 +44,9 @@ pub struct SessionSummary {
     pub updated_at: DateTime<Utc>,
     /// Message count
     pub message_count: u32,
+    /// Session title (from metadata, if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// Import result statistics
@@ -192,15 +195,18 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             message_count: 10,
+            title: Some("Test Session".to_string()),
         };
         let json = serde_json::to_string(&summary).unwrap();
         assert!(json.contains(r#""id":"sess_123""#));
         assert!(json.contains(r#""source":"claude""#));
         assert!(json.contains(r#""message_count":10"#));
+        assert!(json.contains(r#""title":"Test Session""#));
 
         let deserialized: SessionSummary = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, summary.id);
         assert_eq!(deserialized.message_count, 10);
+        assert_eq!(deserialized.title, Some("Test Session".to_string()));
     }
 
     #[test]

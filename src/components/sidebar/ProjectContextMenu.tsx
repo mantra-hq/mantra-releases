@@ -90,7 +90,7 @@ export function ProjectContextMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0"
+          className="h-6 w-6 flex items-center justify-center rounded-sm hover:bg-muted shrink-0 cursor-pointer"
           aria-label="项目设置"
           data-testid="project-context-menu-trigger"
         >

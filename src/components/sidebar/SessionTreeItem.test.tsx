@@ -15,6 +15,12 @@ const mockSession = {
   message_count: 15,
 };
 
+const mockSessionWithTitle = {
+  ...mockSession,
+  id: "sess-xyz789",
+  title: "实现用户认证功能",
+};
+
 describe("SessionTreeItem", () => {
   const defaultProps = {
     session: mockSession,
@@ -57,5 +63,18 @@ describe("SessionTreeItem", () => {
     // The relative time should be displayed (e.g., "1 天前")
     const item = screen.getByTestId("session-tree-item-sess-abc123def456");
     expect(item).toBeInTheDocument();
+  });
+
+  it("displays title when available instead of ID", () => {
+    render(
+      <SessionTreeItem
+        {...defaultProps}
+        session={mockSessionWithTitle}
+      />
+    );
+    // Should display the title instead of the ID
+    expect(screen.getByText("实现用户认证功能")).toBeInTheDocument();
+    // ID-based name should not be displayed
+    expect(screen.queryByText("xyz789")).not.toBeInTheDocument();
   });
 });

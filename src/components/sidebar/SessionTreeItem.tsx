@@ -45,16 +45,20 @@ function getSourceColor(source: string): string {
 
 /**
  * 格式化会话名称
- * 使用会话 ID 的最后部分作为简短名称
+ * 优先使用会话 title，否则使用 ID 的最后部分作为简短名称
  */
-function formatSessionName(id: string): string {
+function formatSessionName(session: SessionSummary): string {
+  // 优先使用 title
+  if (session.title) {
+    return session.title;
+  }
   // 如果 ID 包含下划线或连字符，取最后一部分
-  const parts = id.split(/[-_]/);
+  const parts = session.id.split(/[-_]/);
   if (parts.length > 1) {
     return parts[parts.length - 1].slice(0, 8);
   }
   // 否则取前 8 个字符
-  return id.slice(0, 8);
+  return session.id.slice(0, 8);
 }
 
 /**
@@ -79,8 +83,8 @@ export function SessionTreeItem({
     }
   }, [session.updated_at]);
 
-  // 会话名称（使用 ID 的简短形式）
-  const sessionName = formatSessionName(session.id);
+  // 会话名称（优先使用 title，否则使用 ID 的简短形式）
+  const sessionName = formatSessionName(session);
 
   return (
     <button
@@ -88,7 +92,7 @@ export function SessionTreeItem({
       onClick={onClick}
       className={cn(
         "w-full flex items-center gap-2 pl-10 pr-4 py-1.5",
-        "hover:bg-muted/50 transition-colors",
+        "hover:bg-muted/50 transition-colors cursor-pointer",
         "text-left text-sm",
         isCurrent && "bg-muted"
       )}

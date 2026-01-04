@@ -32,6 +32,7 @@ impl ClaudeParser {
         let mut first_timestamp: Option<DateTime<Utc>> = None;
         let mut last_timestamp: Option<DateTime<Utc>> = None;
         let mut version: Option<String> = None;
+        let mut summary: Option<String> = None;
 
         for line in content.lines() {
             let line = line.trim();
@@ -45,8 +46,17 @@ impl ClaudeParser {
                 Err(_) => continue, // Skip invalid lines
             };
 
-            // Skip non-message records (file-history-snapshot, etc.)
             let record_type = record.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+            // Extract summary from summary records (Claude Code stores session title here)
+            if record_type == "summary" {
+                if let Some(s) = record.get("summary").and_then(|s| s.as_str()) {
+                    summary = Some(s.to_string());
+                }
+                continue;
+            }
+
+            // Skip non-message records (file-history-snapshot, etc.)
             if record_type != "user" && record_type != "assistant" {
                 continue;
             }
@@ -122,7 +132,7 @@ impl ClaudeParser {
         session.messages = messages;
         session.metadata = SessionMetadata {
             model: version, // Use version as model info for now
-            title: None,
+            title: summary, // Use summary from summary record as title
             total_tokens: None,
             original_path: None,
         };
@@ -678,5 +688,23 @@ mod tests {
         // Only user message should be included, system role is skipped
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].role, Role::User);
+    }
+
+    #[test]
+    fn test_parse_jsonl_with_summary() {
+        // Simulate Claude Code JSONL format with summary record
+        let jsonl = r#"{"type":"summary","summary":"Test Session Title","leafUuid":"abc123"}
+{"parentUuid":"root","isSidechain":false,"userType":"external","cwd":"/test/project","sessionId":"sess-001","version":"2.0.76","gitBranch":"","message":{"role":"user","content":"Hello"},"type":"user","uuid":"msg-1","timestamp":"2024-01-01T00:00:00Z"}
+{"parentUuid":"msg-1","isSidechain":false,"userType":"external","cwd":"/test/project","sessionId":"sess-001","version":"2.0.76","gitBranch":"","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"}]},"type":"assistant","uuid":"msg-2","timestamp":"2024-01-01T00:00:01Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let result = parser.parse_jsonl(jsonl);
+        assert!(result.is_ok());
+
+        let session = result.unwrap();
+        assert_eq!(session.id, "sess-001");
+        assert_eq!(session.cwd, "/test/project");
+        assert_eq!(session.metadata.title, Some("Test Session Title".to_string()));
+        assert_eq!(session.messages.len(), 2);
     }
 }

@@ -143,7 +143,7 @@ export function CopyButton({
         // Normal state
         "text-muted-foreground",
         // Hover state (非禁用)
-        !isDisabled && "hover:bg-muted hover:text-foreground",
+        !isDisabled && "hover:bg-muted hover:text-foreground cursor-pointer",
         // Disabled state
         isDisabled && "cursor-not-allowed opacity-50",
         // Focus state (AC5)

@@ -106,6 +106,8 @@ export interface SessionSummary {
   updated_at: string;
   /** 消息数量 */
   message_count: number;
+  /** 会话标题（来自 metadata，可选） */
+  title?: string;
 }
 
 /**

@@ -168,7 +168,8 @@ impl Database {
     /// * `project_id` - The project ID to get sessions for
     pub fn get_project_sessions(&self, project_id: &str) -> Result<Vec<SessionSummary>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT id, source, created_at, updated_at, message_count
+            "SELECT id, source, created_at, updated_at, message_count,
+                    json_extract(raw_data, '$.metadata.title') as title
              FROM sessions
              WHERE project_id = ?1
              ORDER BY updated_at DESC",
@@ -179,6 +180,7 @@ impl Database {
                 let source_str: String = row.get(1)?;
                 let created_at_str: String = row.get(2)?;
                 let updated_at_str: String = row.get(3)?;
+                let title: Option<String> = row.get(5)?;
 
                 Ok(SessionSummary {
                     id: row.get(0)?,
@@ -190,6 +192,7 @@ impl Database {
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
                     message_count: row.get::<_, i32>(4)? as u32,
+                    title,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
