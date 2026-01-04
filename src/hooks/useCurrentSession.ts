@@ -20,6 +20,8 @@ interface RustSessionSummary {
   created_at: string;
   updated_at: string;
   message_count: number;
+  /** 会话标题（来自 metadata，可选） */
+  title?: string;
 }
 
 /**
@@ -65,9 +67,12 @@ function convertToSessionSummary(
 function convertRustSessionSummary(
   rustSession: RustSessionSummary
 ): SessionSummary {
+  // 优先使用 title，否则使用 ID 前缀
+  const name = rustSession.title || `Session ${rustSession.id.slice(0, 8)}`;
+
   return {
     id: rustSession.id,
-    name: `Session ${rustSession.id.slice(0, 8)}`,
+    name,
     messageCount: rustSession.message_count,
     lastActiveAt: new Date(rustSession.updated_at).getTime(),
   };

@@ -91,7 +91,7 @@ export function SessionDropdown({
           )}
         >
           <MessageSquare className="h-4 w-4 shrink-0" />
-          <span className="truncate max-w-[120px] md:max-w-[200px] lg:max-w-none">
+          <span className="truncate max-w-[120px] md:max-w-[200px] lg:max-w-[300px]">
             {currentSessionName}
           </span>
           <span className="text-xs text-muted-foreground shrink-0">

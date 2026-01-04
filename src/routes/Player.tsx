@@ -687,7 +687,7 @@ export default function Player() {
       {/* Story 2.17: TopBar 面包屑导航 */}
       <TopBar
         sessionId={sessionId}
-        sessionName={`Session ${sessionId.slice(0, 8)}`}
+        sessionName={projectSessions.find(s => s.id === sessionId)?.name ?? `Session ${sessionId.slice(0, 8)}`}
         messageCount={messages.length}
         projectId={currentProject?.id ?? ""}
         projectName={currentProject?.name ?? sessionCwd?.split("/").pop() ?? "项目"}
