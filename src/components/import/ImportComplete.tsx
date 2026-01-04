@@ -177,7 +177,46 @@ export function ImportComplete({
         />
       </div>
 
-      {/* Story 2.23: 失败文件列表和重试按钮 */}
+      {/* Story 2.23: 刚导入的项目列表 - 优先展示成功项目 */}
+      {importedProjects.length > 0 && onNavigateToProject && (
+        <div className="text-left">
+          <h4 className="text-sm font-medium text-muted-foreground mb-2">
+            刚导入的项目
+          </h4>
+          <ScrollArea className="max-h-[200px]">
+            <div className="space-y-1">
+              {importedProjects.map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => onNavigateToProject(project.firstSessionId)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-md",
+                    "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
+                    "text-left group"
+                  )}
+                  data-testid={`project-${project.id}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
+                    <span className="text-sm text-foreground truncate">
+                      {project.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" />
+                      <span className="text-xs">{project.sessionCount}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* Story 2.23: 失败文件列表和重试按钮 - 次要信息放在后面 */}
       {hasFailures && (
         <div className="text-left">
           <button
@@ -233,45 +272,6 @@ export function ImportComplete({
               {isRetrying ? "重试中..." : `重试失败项 (${failureCount})`}
             </Button>
           )}
-        </div>
-      )}
-
-      {/* Story 2.23: 刚导入的项目列表 */}
-      {importedProjects.length > 0 && onNavigateToProject && (
-        <div className="text-left">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">
-            刚导入的项目
-          </h4>
-          <ScrollArea className="max-h-[200px]">
-            <div className="space-y-1">
-              {importedProjects.map((project) => (
-                <button
-                  key={project.id}
-                  onClick={() => onNavigateToProject(project.firstSessionId)}
-                  className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-md",
-                    "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
-                    "text-left group"
-                  )}
-                  data-testid={`project-${project.id}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-sm text-foreground truncate">
-                      {project.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <MessageSquare className="w-3 h-3" />
-                      <span className="text-xs">{project.sessionCount}</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </ScrollArea>
         </div>
       )}
 
