@@ -21,7 +21,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
-import { getProjectByCwd, getRepresentativeFile, detectGitRepo } from "@/lib/project-ipc";
+import { getProjectByCwd, getRepresentativeFile, detectGitRepo, syncProject } from "@/lib/project-ipc";
 import type { NarrativeMessage } from "@/types/message";
 import {
   messagesToTimelineEvents,
@@ -48,6 +48,7 @@ import { ImportWizard } from "@/components/import";
 import { useCurrentSession } from "@/hooks";
 // Story 2.18: ProjectDrawer 项目抽屉
 import { ProjectDrawer } from "@/components/sidebar";
+import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 import { PlayerEmptyState } from "@/components/player";
@@ -120,6 +121,9 @@ export default function Player() {
 
   // Story 2.17: ImportWizard 状态
   const [importOpen, setImportOpen] = React.useState(false);
+
+  // 同步状态
+  const [isSyncing, setIsSyncing] = React.useState(false);
 
   // Story 2.18: ProjectDrawer 状态
   // Story 2.21 AC #2: 无 sessionId 时默认展开抽屉
@@ -449,12 +453,26 @@ export default function Player() {
     [sessionId, navigate]
   );
 
-  // 同步项目 (AC10) - 预留接口，Story 2.19 实现
-  const handleSync = React.useCallback(() => {
-    // TODO: Story 2.19 实现 sync_project IPC
-    console.log("[Player] Sync project:", currentProject?.id);
-    refetchCurrentSession();
-  }, [currentProject, refetchCurrentSession]);
+  // 同步项目 (AC10)
+  const handleSync = React.useCallback(async () => {
+    if (!currentProject?.id || isSyncing) return;
+
+    setIsSyncing(true);
+    try {
+      const result = await syncProject(currentProject.id);
+      showSyncResult(currentProject.name, result);
+
+      // 同步成功后刷新数据
+      if (result.new_sessions.length > 0 || result.updated_sessions.length > 0) {
+        refetchCurrentSession();
+        refetchProjects();
+      }
+    } catch (error) {
+      showSyncResult(currentProject.name, null, error as Error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [currentProject, isSyncing, refetchCurrentSession, refetchProjects]);
 
   // 导入完成回调
   const handleImportComplete = React.useCallback(() => {
@@ -696,6 +714,7 @@ export default function Player() {
         onSessionSelect={handleSessionSelect}
         onSync={handleSync}
         onImport={() => setImportOpen(true)}
+        isSyncing={isSyncing}
       />
 
       {/* Main Content - DualStreamLayout */}

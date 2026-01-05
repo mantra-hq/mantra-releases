@@ -51,6 +51,8 @@ export interface TopBarProps {
   onSync: () => void;
   /** 导入回调 */
   onImport: () => void;
+  /** 是否正在同步 */
+  isSyncing?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ export function TopBar({
   onSessionSelect,
   onSync,
   onImport,
+  isSyncing = false,
 }: TopBarProps) {
   return (
     <header
@@ -127,7 +130,7 @@ export function TopBar({
         </div>
 
         {/* 右侧: 操作按钮 (AC10, AC11, AC12) */}
-        <TopBarActions onSync={onSync} onImport={onImport} />
+        <TopBarActions onSync={onSync} onImport={onImport} isSyncing={isSyncing} />
       </div>
     </header>
   );
