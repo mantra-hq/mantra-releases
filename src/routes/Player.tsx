@@ -29,9 +29,8 @@ import {
   type TimelineEvent,
 } from "@/types/timeline";
 import { TimberLine } from "@/components/timeline";
-import { ArrowLeft, AlertCircle, Loader2, Menu, Plus, Search, Settings } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useEditorStore } from "@/stores/useEditorStore";
@@ -545,58 +544,11 @@ export default function Player() {
     return (
       <div className="h-screen flex flex-col bg-background">
         {/* Story 2.21 AC #4: 简化版 TopBar（无会话信息） */}
-        <header
-          className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-        >
-          <div className="flex h-14 items-center justify-between px-4 gap-2">
-            {/* 左侧: 汉堡菜单 + Logo */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setDrawerOpen(true)}
-                aria-label="打开项目抽屉"
-                className="h-8 w-8"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
-              <span className="text-lg font-bold text-foreground">
-                Mantra <span className="text-primary">心法</span>
-              </span>
-            </div>
-            {/* 右侧: 简化操作按钮（无同步）- Story 2.21 AC #15, #16 */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => useSearchStore.getState().open()}
-                aria-label="全局搜索 (⌘K)"
-                className="h-8 w-8"
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setImportOpen(true)}
-                aria-label="导入会话"
-                className="h-8 w-8"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/settings")}
-                aria-label="设置"
-                className="h-8 w-8"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <ThemeToggle />
-            </div>
-          </div>
-        </header>
+        <TopBar
+          mode="minimal"
+          onDrawerOpen={() => setDrawerOpen(true)}
+          onImport={() => setImportOpen(true)}
+        />
         {/* Story 2.21 AC #4-9: Player 空状态 */}
         <main className="flex-1 min-h-0">
           <PlayerEmptyState
@@ -631,16 +583,7 @@ export default function Player() {
   if (loading) {
     return (
       <div className="h-screen flex flex-col bg-background">
-        <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur">
-          <div className="flex h-14 items-center px-4">
-            <Button variant="ghost" size="icon" onClick={handleBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-xl font-bold text-foreground ml-2">
-              Mantra <span className="text-primary">心法</span>
-            </span>
-          </div>
-        </header>
+        <TopBar mode="loading" onBack={handleBack} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" />
@@ -655,16 +598,7 @@ export default function Player() {
   if (error) {
     return (
       <div className="h-screen flex flex-col bg-background">
-        <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur">
-          <div className="flex h-14 items-center px-4">
-            <Button variant="ghost" size="icon" onClick={handleBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-xl font-bold text-foreground ml-2">
-              Mantra <span className="text-primary">心法</span>
-            </span>
-          </div>
-        </header>
+        <TopBar mode="error" onBack={handleBack} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
@@ -681,16 +615,7 @@ export default function Player() {
   if (messages.length === 0) {
     return (
       <div className="h-screen flex flex-col bg-background">
-        <header className="shrink-0 sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur">
-          <div className="flex h-14 items-center px-4">
-            <Button variant="ghost" size="icon" onClick={handleBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="text-xl font-bold text-foreground ml-2">
-              Mantra <span className="text-primary">心法</span>
-            </span>
-          </div>
-        </header>
+        <TopBar mode="error" onBack={handleBack} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
