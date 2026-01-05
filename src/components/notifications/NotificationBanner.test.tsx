@@ -68,19 +68,23 @@ describe("NotificationBanner", () => {
   });
 
   describe("优先级样式", () => {
-    it("普通优先级应该使用蓝色边框", () => {
+    it("应该使用不透明卡片背景", () => {
       render(<NotificationBanner banner={mockBanner} onDismiss={mockOnDismiss} />);
       const banner = screen.getByTestId("notification-banner-banner-1");
-      expect(banner).toHaveClass("bg-blue-500/10");
-      expect(banner).toHaveClass("border-blue-500/20");
+      expect(banner).toHaveClass("bg-card");
     });
 
-    it("高优先级应该使用红色边框", () => {
+    it("普通优先级应该使用主色边框", () => {
+      render(<NotificationBanner banner={mockBanner} onDismiss={mockOnDismiss} />);
+      const banner = screen.getByTestId("notification-banner-banner-1");
+      expect(banner).toHaveClass("border-primary/50");
+    });
+
+    it("高优先级应该使用警告色边框", () => {
       const highPriorityBanner = { ...mockBanner, priority: "high" as const };
       render(<NotificationBanner banner={highPriorityBanner} onDismiss={mockOnDismiss} />);
       const banner = screen.getByTestId("notification-banner-banner-1");
-      expect(banner).toHaveClass("bg-destructive/10");
-      expect(banner).toHaveClass("border-destructive/20");
+      expect(banner).toHaveClass("border-destructive/50");
     });
   });
 

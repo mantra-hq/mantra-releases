@@ -6,7 +6,7 @@
  * - 最多显示 3 条
  * - 垂直排列
  * - z-index: 40（低于 Dialog/Sheet 的 50）
- * - 固定在视口顶部
+ * - 固定在 TopBar (h-14) 下方，避免被导航栏遮挡
  */
 
 import * as React from "react";
@@ -61,7 +61,8 @@ export function NotificationBannerStack() {
   return (
     <div
       className={cn(
-        "fixed top-0 left-0 right-0 z-40",
+        // 定位在 TopBar (h-14) 下方，z-index 低于 Dialog/Sheet
+        "fixed top-14 left-0 right-0 z-40",
         "px-4 pt-2 pb-1",
         "pointer-events-none"
       )}

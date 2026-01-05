@@ -58,10 +58,14 @@ export function NotificationBanner({
     <div
       className={cn(
         "relative flex items-start gap-3 px-4 py-3 rounded-lg border",
-        // 优先级样式
+        // 不透明背景 - 确保文字清晰可读
+        "bg-card",
+        // 左侧色条 - 增强类型辨识
+        "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:rounded-l-lg",
+        // 优先级样式 - 边框和色条颜色
         isHighPriority
-          ? "bg-destructive/10 border-destructive/20"
-          : "bg-blue-500/10 border-blue-500/20",
+          ? "border-destructive/50 before:bg-destructive"
+          : "border-primary/50 before:bg-primary",
         // 动画 - 使用 data-state 模式
         "transition-all duration-200",
         !isExiting && "animate-in slide-in-from-top duration-300",
