@@ -245,7 +245,9 @@
     "totalResults": "共 {{count}} 个结果",
     "recentAccess": "最近访问",
     "noRecentSessions": "暂无最近访问的会话",
-    "recentSessionsHint": "访问会话后将在此显示"
+    "recentSessionsHint": "访问会话后将在此显示",
+    "noResultsFor": "未找到包含 \"{{query}}\" 的结果",
+    "tryDifferentKeywords": "尝试使用不同的关键词或检查拼写"
   },
   "timeline": {
     "sessionTimeline": "会话时间轴",

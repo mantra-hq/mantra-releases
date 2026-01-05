@@ -245,7 +245,9 @@
     "totalResults": "{{count}} results",
     "recentAccess": "Recent Access",
     "noRecentSessions": "No recent sessions",
-    "recentSessionsHint": "Sessions you visit will appear here"
+    "recentSessionsHint": "Sessions you visit will appear here",
+    "noResultsFor": "No results found for \"{{query}}\"",
+    "tryDifferentKeywords": "Try different keywords or check your spelling"
   },
   "timeline": {
     "sessionTimeline": "Session Timeline",

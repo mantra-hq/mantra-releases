@@ -101,7 +101,7 @@ export function SessionTreeItem({
       />
 
       {/* 会话名称 */}
-      <span className="flex-1 truncate">
+      <span className="flex-1 truncate" title={sessionName}>
         <HighlightText text={sessionName} keyword={searchKeyword} />
       </span>
 

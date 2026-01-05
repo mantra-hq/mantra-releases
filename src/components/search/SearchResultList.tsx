@@ -1,11 +1,13 @@
 /**
  * SearchResultList - 搜索结果列表组件
  * Story 2.10: Task 3.1
+ * Story 2.26: 国际化支持
  *
  * 虚拟化列表展示搜索结果，支持键盘导航
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { SearchResultItem } from "./SearchResultItem";
 import type { SearchResult } from "@/stores/useSearchStore";
@@ -41,6 +43,7 @@ export function SearchResultList({
     onHover,
     className,
 }: SearchResultListProps) {
+    const { t } = useTranslation();
     // 滚动容器 ref
     const parentRef = React.useRef<HTMLDivElement>(null);
 
@@ -72,7 +75,7 @@ export function SearchResultList({
         <div
             ref={parentRef}
             role="listbox"
-            aria-label="搜索结果"
+            aria-label={t("search.searchResults")}
             className={cn("overflow-y-auto max-h-[400px]", className)}
         >
             <div
