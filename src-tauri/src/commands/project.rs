@@ -16,7 +16,7 @@ use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
 use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
-use crate::storage::Database;
+use crate::storage::{Database, SearchResult};
 
 /// Application state containing the database connection
 pub struct AppState {
@@ -777,6 +777,37 @@ pub async fn import_sessions_with_progress(
 pub async fn cancel_import() -> Result<(), AppError> {
     IMPORT_CANCELLED.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+// ============================================================================
+// Story 2.10: Global Search Command
+// ============================================================================
+
+/// Search sessions by content
+///
+/// Searches through all session messages for the given query.
+/// Returns matching results with snippets and highlight positions.
+#[tauri::command]
+pub async fn search_sessions(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<SearchResult>, AppError> {
+    let limit = limit.unwrap_or(50);
+
+    eprintln!("[search_sessions] Query: '{}', limit: {}", query, limit);
+
+    if query.trim().is_empty() {
+        eprintln!("[search_sessions] Empty query, returning empty results");
+        return Ok(Vec::new());
+    }
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let results = db.search_sessions(&query, limit)?;
+
+    eprintln!("[search_sessions] Found {} results", results.len());
+
+    Ok(results)
 }
 
 #[cfg(test)]

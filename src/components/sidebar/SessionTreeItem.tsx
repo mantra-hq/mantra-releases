@@ -11,7 +11,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { cn, formatSessionName } from "@/lib/utils";
 import { HighlightText } from "./DrawerSearch";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import type { SessionSummary } from "./types";
@@ -28,24 +28,6 @@ export interface SessionTreeItemProps {
   searchKeyword?: string;
   /** 点击回调 */
   onClick: () => void;
-}
-
-/**
- * 格式化会话名称
- * 优先使用会话 title，否则使用 ID 的最后部分作为简短名称
- */
-function formatSessionName(session: SessionSummary): string {
-  // 优先使用 title
-  if (session.title) {
-    return session.title;
-  }
-  // 如果 ID 包含下划线或连字符，取最后一部分
-  const parts = session.id.split(/[-_]/);
-  if (parts.length > 1) {
-    return parts[parts.length - 1].slice(0, 8);
-  }
-  // 否则取前 8 个字符
-  return session.id.slice(0, 8);
 }
 
 /**
@@ -73,7 +55,7 @@ export function SessionTreeItem({
   }, [session.updated_at, i18n.language]);
 
   // 会话名称（优先使用 title，否则使用 ID 的简短形式）
-  const sessionName = formatSessionName(session);
+  const sessionName = formatSessionName(session.id, session.title);
 
   return (
     <button

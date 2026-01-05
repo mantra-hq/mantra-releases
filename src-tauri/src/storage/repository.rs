@@ -4,13 +4,38 @@
 
 use chrono::{DateTime, Utc};
 use rusqlite::params;
+use serde::Serialize;
 use uuid::Uuid;
 
 use super::database::Database;
 use super::error::StorageError;
 use crate::models::{
-    extract_project_name, normalize_cwd, ImportResult, MantraSession, Project, SessionSource, SessionSummary,
+    extract_project_name, normalize_cwd, ContentBlock, ImportResult, MantraSession, Project,
+    SessionSource, SessionSummary,
 };
+
+/// Search result item
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    /// Unique ID (session_id-message_index)
+    pub id: String,
+    /// Session ID
+    pub session_id: String,
+    /// Project ID
+    pub project_id: String,
+    /// Project name
+    pub project_name: String,
+    /// Session name (title or formatted ID)
+    pub session_name: String,
+    /// Message ID (index as string)
+    pub message_id: String,
+    /// Matched content snippet
+    pub content: String,
+    /// Match positions [start, end]
+    pub match_positions: Vec<(usize, usize)>,
+    /// Timestamp
+    pub timestamp: i64,
+}
 
 impl Database {
     /// Insert a session into the database
@@ -586,6 +611,143 @@ impl Database {
             ],
         )?;
         Ok(())
+    }
+
+    /// Search sessions by content
+    ///
+    /// Searches through all session messages for the given query.
+    /// Returns matching results with snippets and highlight positions.
+    ///
+    /// # Arguments
+    /// * `query` - The search query (case-insensitive)
+    /// * `limit` - Maximum number of results to return
+    pub fn search_sessions(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, StorageError> {
+        let query_lower = query.to_lowercase();
+        let mut results: Vec<SearchResult> = Vec::new();
+
+        // Query sessions with project info where raw_data contains the query
+        let mut stmt = self.connection().prepare(
+            "SELECT s.id, s.project_id, s.raw_data, s.updated_at,
+                    p.name as project_name,
+                    json_extract(s.raw_data, '$.metadata.title') as session_title
+             FROM sessions s
+             JOIN projects p ON s.project_id = p.id
+             WHERE s.raw_data LIKE ?1
+             ORDER BY s.updated_at DESC",
+        )?;
+
+        let search_pattern = format!("%{}%", query);
+        eprintln!("[search_sessions] SQL pattern: {}", search_pattern);
+
+        let rows = stmt.query_map(params![search_pattern], |row| {
+            Ok((
+                row.get::<_, String>(0)?,  // session_id
+                row.get::<_, String>(1)?,  // project_id
+                row.get::<_, String>(2)?,  // raw_data
+                row.get::<_, String>(3)?,  // updated_at
+                row.get::<_, String>(4)?,  // project_name
+                row.get::<_, Option<String>>(5)?, // session_title
+            ))
+        })?;
+
+        let mut session_count = 0;
+        for row_result in rows {
+            session_count += 1;
+            if results.len() >= limit {
+                break;
+            }
+
+            let (session_id, project_id, raw_data, updated_at, project_name, session_title) =
+                row_result?;
+
+            eprintln!("[search_sessions] Processing session: {}", session_id);
+
+            // Parse session JSON
+            let session: MantraSession = match serde_json::from_str(&raw_data) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[search_sessions] Failed to parse session {}: {}", session_id, e);
+                    continue;
+                }
+            };
+
+            // Format session name
+            let session_name = session_title.unwrap_or_else(|| {
+                let parts: Vec<&str> = session_id.split(|c| c == '-' || c == '_').collect();
+                if parts.len() > 1 {
+                    parts.last().unwrap_or(&"").chars().take(8).collect()
+                } else {
+                    session_id.chars().take(8).collect()
+                }
+            });
+
+            // Parse timestamp
+            let timestamp = DateTime::parse_from_rfc3339(&updated_at)
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0);
+
+            // Search through messages
+            for (msg_idx, message) in session.messages.iter().enumerate() {
+                if results.len() >= limit {
+                    break;
+                }
+
+                // Extract text content from content blocks
+                for block in &message.content_blocks {
+                    let text = match block {
+                        ContentBlock::Text { text } => text.clone(),
+                        ContentBlock::Thinking { thinking } => thinking.clone(),
+                        ContentBlock::ToolResult { content, .. } => content.clone(),
+                        _ => continue,
+                    };
+
+                    let text_lower = text.to_lowercase();
+                    if let Some(start_pos) = text_lower.find(&query_lower) {
+                        // Calculate snippet with context (use char indices for UTF-8 safety)
+                        let chars: Vec<char> = text.chars().collect();
+                        let char_count = chars.len();
+
+                        // Find char index for start_pos (byte position -> char position)
+                        let char_start_pos = text[..start_pos].chars().count();
+                        let query_char_len = query.chars().count();
+
+                        let snippet_char_start = char_start_pos.saturating_sub(30);
+                        let snippet_char_end = (char_start_pos + query_char_len + 70).min(char_count);
+
+                        let snippet: String = chars[snippet_char_start..snippet_char_end].iter().collect();
+
+                        // Adjust match position for snippet
+                        let match_start_in_snippet = char_start_pos - snippet_char_start;
+                        let match_end_in_snippet = match_start_in_snippet + query_char_len;
+
+                        eprintln!("[search_sessions] Found match in session {} message {}", session_id, msg_idx);
+
+                        results.push(SearchResult {
+                            id: format!("{}-{}", session_id, msg_idx),
+                            session_id: session_id.clone(),
+                            project_id: project_id.clone(),
+                            project_name: project_name.clone(),
+                            session_name: session_name.clone(),
+                            message_id: msg_idx.to_string(),
+                            content: snippet,
+                            match_positions: vec![(match_start_in_snippet, match_end_in_snippet)],
+                            timestamp,
+                        });
+
+                        // Only one result per message
+                        break;
+                    }
+                }
+            }
+        }
+
+        eprintln!("[search_sessions] Processed {} sessions, found {} results", session_count, results.len());
+
+        Ok(results)
     }
 }
 

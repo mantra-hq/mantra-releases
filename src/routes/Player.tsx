@@ -114,6 +114,7 @@ export default function Player() {
 
   // Story 2.17: 获取当前会话和项目信息
   const {
+    session: currentSession,
     project: currentProject,
     sessions: projectSessions,
     refetch: refetchCurrentSession,
@@ -230,15 +231,17 @@ export default function Player() {
     if (sessionId && sessionCwd && !loading && messages.length > 0) {
       // 从 cwd 提取项目名
       const projectName = sessionCwd.split("/").pop() || sessionCwd;
+      // 使用会话的真正 title（如果有的话）
+      const sessionTitle = currentSession?.metadata?.title;
       addRecentSession({
         projectId: sessionCwd, // 使用 cwd 作为临时 projectId
         projectName,
         sessionId,
-        sessionName: `Session ${sessionId.slice(0, 8)}`,
+        sessionName: sessionTitle || sessionId,
         accessedAt: Date.now(),
       });
     }
-  }, [sessionId, sessionCwd, loading, messages.length, addRecentSession]);
+  }, [sessionId, sessionCwd, loading, messages.length, currentSession, addRecentSession]);
 
   // Git 仓库检测 + 初始代码加载 (FR-GIT-001, Story 2.11 AC1, AC2)
   const setCode = useTimeTravelStore((state) => state.setCode);

@@ -13,6 +13,7 @@ import type { SearchResult } from "@/stores/useSearchStore";
  * Tanzou 搜索结果 (后端格式)
  */
 interface TanzouSearchResult {
+    id: string;
     session_id: string;
     project_id: string;
     project_name: string;
@@ -40,13 +41,16 @@ export async function searchSessions(
     }
 
     try {
+        console.log("[search-ipc] Calling search_sessions with query:", query);
         const results = await invoke<TanzouSearchResult[]>("search_sessions", {
             query: query.trim(),
             limit,
         });
 
+        console.log("[search-ipc] Received results:", results);
+
         return results.map((r) => ({
-            id: `${r.session_id}-${r.message_id}`,
+            id: r.id,
             projectId: r.project_id,
             projectName: r.project_name,
             sessionId: r.session_id,

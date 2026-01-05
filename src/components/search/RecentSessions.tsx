@@ -9,7 +9,7 @@
 import { Clock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { RecentSession } from "@/stores/useSearchStore";
-import { cn } from "@/lib/utils";
+import { cn, formatSessionName } from "@/lib/utils";
 
 /**
  * RecentSessions Props
@@ -95,37 +95,42 @@ export function RecentSessions({
 
             {/* 会话列表 */}
             <div role="listbox" aria-label={t("search.recentSessions")}>
-                {sessions.map((session, index) => (
-                    <div
-                        key={session.sessionId}
-                        role="option"
-                        aria-selected={index === selectedIndex}
-                        onClick={() => onSelect(session)}
-                        onMouseEnter={() => onHover?.(index)}
-                        className={cn(
-                            "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-150",
-                            index === selectedIndex
-                                ? "bg-primary/10"
-                                : "hover:bg-accent"
-                        )}
-                    >
-                        <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-primary font-medium truncate max-w-[180px]">
-                                    {session.projectName}
-                                </span>
-                                <span className="text-muted-foreground">/</span>
-                                <span className="text-foreground truncate flex-1">
-                                    {session.sessionName}
-                                </span>
+                {sessions.map((session, index) => {
+                    // 格式化会话名称
+                    const displaySessionName = formatSessionName(session.sessionId, session.sessionName);
+
+                    return (
+                        <div
+                            key={session.sessionId}
+                            role="option"
+                            aria-selected={index === selectedIndex}
+                            onClick={() => onSelect(session)}
+                            onMouseEnter={() => onHover?.(index)}
+                            className={cn(
+                                "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-150",
+                                index === selectedIndex
+                                    ? "bg-primary/10"
+                                    : "hover:bg-accent"
+                            )}
+                        >
+                            <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-primary font-medium truncate max-w-[180px]">
+                                        {session.projectName}
+                                    </span>
+                                    <span className="text-muted-foreground">/</span>
+                                    <span className="text-foreground truncate flex-1" title={displaySessionName}>
+                                        {displaySessionName}
+                                    </span>
+                                </div>
                             </div>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                                {formatAccessTime(session.accessedAt, i18n.language, t)}
+                            </span>
                         </div>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                            {formatAccessTime(session.accessedAt, i18n.language, t)}
-                        </span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

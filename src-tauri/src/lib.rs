@@ -29,6 +29,8 @@ use commands::{
     get_imported_project_paths,
     // Story 2.23: Import with progress events
     import_sessions_with_progress, cancel_import,
+    // Story 2.10: Global search
+    search_sessions,
 };
 
 use storage::Database;
@@ -106,7 +108,9 @@ pub fn run() {
             get_imported_project_paths,
             // Story 2.23: Import with progress events
             import_sessions_with_progress,
-            cancel_import
+            cancel_import,
+            // Story 2.10: Global search
+            search_sessions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

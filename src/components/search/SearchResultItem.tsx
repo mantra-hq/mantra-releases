@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
+import { cn, formatSessionName } from "@/lib/utils";
 import type { SearchResult } from "@/stores/useSearchStore";
 
 /**
@@ -110,6 +110,9 @@ export function SearchResultItem({
 }: SearchResultItemProps) {
     const { t, i18n } = useTranslation();
 
+    // 格式化会话名称
+    const displaySessionName = formatSessionName(result.sessionId, result.sessionName);
+
     return (
         <div
             role="option"
@@ -129,8 +132,8 @@ export function SearchResultItem({
                     {result.projectName}
                 </span>
                 <span className="text-muted-foreground">/</span>
-                <span className="text-foreground truncate flex-1">
-                    {result.sessionName}
+                <span className="text-foreground truncate flex-1" title={displaySessionName}>
+                    {displaySessionName}
                 </span>
                 <span className="text-xs text-muted-foreground shrink-0">
                     {formatTimestamp(result.timestamp, i18n.language, t)}

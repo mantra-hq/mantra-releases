@@ -136,7 +136,7 @@ export function SessionDropdown({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="truncate font-medium">
+                      <span className="truncate font-medium" title={session.name}>
                         {session.name}
                       </span>
                     </div>
