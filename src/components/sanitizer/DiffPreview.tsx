@@ -19,6 +19,7 @@ export function DiffPreview({
     onConfirm,
     onCancel,
     isLoading = false,
+    hideActions = false,
 }: DiffPreviewProps) {
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -62,7 +63,7 @@ export function DiffPreview({
     return (
         <div className="flex flex-col h-full" data-testid="diff-preview">
             {/* 统计摘要 */}
-            <SanitizationSummary stats={stats} />
+            {!hideActions && <SanitizationSummary stats={stats} />}
 
             {/* Diff 视图 */}
             <div className="flex-1 min-h-0 overflow-hidden">
@@ -87,53 +88,55 @@ export function DiffPreview({
                 </ScrollArea>
             </div>
 
-            {/* 操作区域 */}
-            <div className="border-t p-4 space-y-3 bg-background">
-                {/* 滚动提示 */}
-                {!hasScrolledToBottom && hasDiff && (
-                    <button
-                        onClick={scrollToBottom}
-                        className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
-                    >
-                        <ArrowDown className="h-4 w-4 animate-bounce" />
-                        请滚动到底部查看所有变更
-                    </button>
-                )}
+            {/* 操作区域 - 可通过 hideActions 隐藏 */}
+            {!hideActions && (
+                <div className="border-t p-4 space-y-3 bg-background">
+                    {/* 滚动提示 */}
+                    {!hasScrolledToBottom && hasDiff && (
+                        <button
+                            onClick={scrollToBottom}
+                            className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                        >
+                            <ArrowDown className="h-4 w-4 animate-bounce" />
+                            请滚动到底部查看所有变更
+                        </button>
+                    )}
 
-                {/* 确认提示 */}
-                <p
-                    className="text-sm text-center text-muted-foreground"
-                    data-testid="confirm-message"
-                >
-                    将以清洗后的版本进行分享
-                </p>
+                    {/* 确认提示 */}
+                    <p
+                        className="text-sm text-center text-muted-foreground"
+                        data-testid="confirm-message"
+                    >
+                        将以清洗后的版本进行分享
+                    </p>
 
-                {/* 按钮区域 */}
-                <div className="flex gap-2 justify-end">
-                    <Button
-                        variant="outline"
-                        onClick={onCancel}
-                        disabled={isLoading}
-                        data-testid="cancel-button"
-                    >
-                        取消
-                    </Button>
-                    <Button
-                        onClick={onConfirm}
-                        disabled={!hasScrolledToBottom || isLoading}
-                        data-testid="confirm-button"
-                    >
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                处理中...
-                            </>
-                        ) : (
-                            '确认分享'
-                        )}
-                    </Button>
+                    {/* 按钮区域 */}
+                    <div className="flex gap-2 justify-end">
+                        <Button
+                            variant="outline"
+                            onClick={onCancel}
+                            disabled={isLoading}
+                            data-testid="cancel-button"
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            onClick={onConfirm}
+                            disabled={!hasScrolledToBottom || isLoading}
+                            data-testid="confirm-button"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    处理中...
+                                </>
+                            ) : (
+                                '确认分享'
+                            )}
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

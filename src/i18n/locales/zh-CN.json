@@ -33,7 +33,8 @@
     "closeTab": "关闭标签",
     "clear": "清除",
     "clearSearch": "清除搜索",
-    "learnMore": "了解更多"
+    "learnMore": "了解更多",
+    "comingSoon": "即将上线"
   },
   "time": {
     "justNow": "刚刚",
@@ -120,7 +121,10 @@
     "importFirstProject": "导入第一个项目",
     "supportedTools": "Claude Code · Cursor · Gemini CLI · Codex",
     "noProjectsYet": "还没有导入任何项目",
-    "importPrompt": "导入 AI 编程会话，开始回放心法"
+    "importPrompt": "导入 AI 编程会话，开始回放心法",
+    "skipEmptySessions": "跳过空会话",
+    "skippedEmpty": "跳过空会话",
+    "noFiles": "暂无文件"
   },
   "project": {
     "myProjects": "我的项目",
@@ -364,6 +368,7 @@
     "detectedCount": "检测到 {{count}} 处敏感信息",
     "willAutoSanitize": "分享时将自动脱敏处理，保护您的隐私安全",
     "safeToShare": "此内容可以安全分享",
+    "safeToShareFull": "此内容可以安全分享 · 分享后可随时撤回",
     "canWithdraw": "分享后可随时撤回",
     "viewDetails": "查看详情",
     "skipToShare": "跳过直接分享",
@@ -383,7 +388,15 @@
     "shareInfo": "分享说明",
     "uploadToCloud": "内容将上传至 Mantra 云平台",
     "autoSanitize": "敏感信息将自动脱敏处理",
-    "viewFullDiff": "查看完整 Diff"
+    "viewFullDiff": "查看完整 Diff",
+    "viewOriginal": "查看原文",
+    "scanning": "正在扫描敏感信息...",
+    "jumpToLine": "跳转到第 {{line}} 行",
+    "autoSanitizeHint": "敏感信息将自动脱敏 · 分享后可随时撤回",
+    "shareSuccess": "分享成功",
+    "shareSuccessWithSanitize": "已脱敏 {{count}} 处敏感信息并分享成功",
+    "shareFailed": "分享失败",
+    "noSessionSelected": "没有选中的会话"
   },
   "player": {
     "selectSessionToPlay": "选择一个会话开始回放",

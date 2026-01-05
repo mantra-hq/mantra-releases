@@ -41,11 +41,5 @@ export {
     type UseCurrentSessionResult,
 } from "./useCurrentSession";
 
-// 脱敏预览 hook
-export {
-    useSanitizePreview,
-    type UseSanitizePreviewResult,
-} from "./useSanitizePreview";
-
 // 通知系统初始化 hook
 export { useNotificationInit } from "./useNotificationInit";

@@ -6,6 +6,7 @@
  * Story 2.12: AC5 (文件不存在处理)
  * Story 2.13: Task 9 (集成 EditorTabs, Breadcrumbs, FileTree, QuickOpen)
  * Story 2.26: 国际化支持
+ * Story 3.4: 脱敏预览主视图原生模式
  *
  * 右侧面板，完整的代码浏览器:
  * - 文件标签页 (EditorTabs)
@@ -13,6 +14,7 @@
  * - 文件树侧边栏 (FileTree)
  * - 快速打开 (QuickOpen)
  * - 快捷键支持
+ * - 脱敏预览模式 (Story 3.4)
  */
 
 import * as React from "react";
@@ -28,7 +30,9 @@ import {
     type TreeNode,
     type SiblingItem,
 } from "@/components/editor";
+import { SanitizeStatusBanner } from "@/components/sanitizer";
 import { useEditorStore } from "@/stores/useEditorStore";
+import { useSanitizePreviewStore } from "@/stores/useSanitizePreviewStore";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
@@ -118,6 +122,55 @@ export function CodePanel({
     const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
     const collapseAllFolders = useEditorStore((state) => state.collapseAllFolders);
     const exitSnapshot = useEditorStore((state) => state.exitSnapshot);
+    const setDiffMode = useEditorStore((state) => state.setDiffMode);
+
+    // Story 3.4: 脱敏预览状态
+    const sanitizeMode = useSanitizePreviewStore((state) => state.mode);
+    const sanitizeIsLoading = useSanitizePreviewStore((state) => state.isLoading);
+    const sanitizeOriginalText = useSanitizePreviewStore((state) => state.originalText);
+    const sanitizedText = useSanitizePreviewStore((state) => state.sanitizedText);
+    const sanitizeStats = useSanitizePreviewStore((state) => state.stats);
+    const sanitizeError = useSanitizePreviewStore((state) => state.error);
+    const sanitizeMatches = useSanitizePreviewStore((state) => state.sensitiveMatches);
+    const exitPreviewMode = useSanitizePreviewStore((state) => state.exitPreviewMode);
+    const confirmShare = useSanitizePreviewStore((state) => state.confirmShare);
+
+    // 是否处于脱敏预览模式
+    const isInSanitizePreview = sanitizeMode === 'preview';
+
+    // Monaco Editor ref (用于行跳转)
+    const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
+
+    // Story 3.4: ESC 键退出脱敏预览模式
+    React.useEffect(() => {
+        if (!isInSanitizePreview) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                exitPreviewMode();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isInSanitizePreview, exitPreviewMode]);
+
+    // Story 3.4: 进入脱敏预览模式时强制使用并排 Diff 模式
+    // 注意：只依赖 isInSanitizePreview，避免 diffMode 变化时再次触发导致无限循环
+    React.useEffect(() => {
+        if (isInSanitizePreview) {
+            setDiffMode('side-by-side');
+        }
+    }, [isInSanitizePreview, setDiffMode]);
+
+    // Story 3.4: 跳转到指定行 (用于敏感信息标签点击)
+    const handleJumpToLine = React.useCallback((lineNumber: number) => {
+        if (editorRef.current) {
+            editorRef.current.revealLineInCenter(lineNumber);
+            editorRef.current.setPosition({ lineNumber, column: 1 });
+            editorRef.current.focus();
+        }
+    }, []);
 
     // QuickOpen 状态
     const [quickOpenVisible, setQuickOpenVisible] = React.useState(false);
@@ -386,7 +439,8 @@ export function CodePanel({
     );
 
     // Story 2.11 AC6: 无 Git 仓库时显示警告
-    if (showNoGitWarning && !code && tabs.length === 0) {
+    // Story 3.4: 脱敏预览模式下不显示 NoGitWarning，因为脱敏预览可以正常工作
+    if (showNoGitWarning && !code && tabs.length === 0 && !isInSanitizePreview) {
         return (
             <div className={cn("h-full", className)}>
                 <NoGitWarning projectPath={projectPath} onLearnMore={onLearnMore} />
@@ -396,8 +450,8 @@ export function CodePanel({
 
     return (
         <div className={cn("h-full flex", className)}>
-            {/* 文件树侧边栏 (AC #8-14) */}
-            {sidebarOpen && repoPath && (
+            {/* 文件树侧边栏 (AC #8-14) - 脱敏预览模式下隐藏 */}
+            {sidebarOpen && repoPath && !isInSanitizePreview && (
                 <div className="w-60 border-r border-border flex flex-col bg-muted/30 shrink-0">
                     {/* 侧边栏头部 */}
                     <div className="flex items-center justify-between px-3 py-2 border-b border-border">
@@ -449,27 +503,29 @@ export function CodePanel({
 
             {/* 主内容区 */}
             <div className="flex-1 flex flex-col min-w-0">
-                {/* 工具栏 (包含侧边栏切换按钮) */}
-                <div className="flex items-center border-b border-border bg-muted/30">
-                    {/* 侧边栏切换按钮 (AC #8) */}
-                    {repoPath && !sidebarOpen && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0"
-                            onClick={toggleSidebar}
-                            aria-label={t("editor.openSidebar")}
-                        >
-                            <PanelLeft className="h-4 w-4" />
-                        </Button>
-                    )}
+                {/* 工具栏 (包含侧边栏切换按钮) - 脱敏预览模式下隐藏 */}
+                {!isInSanitizePreview && (
+                    <div className="flex items-center border-b border-border bg-muted/30">
+                        {/* 侧边栏切换按钮 (AC #8) */}
+                        {repoPath && !sidebarOpen && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                onClick={toggleSidebar}
+                                aria-label={t("editor.openSidebar")}
+                            >
+                                <PanelLeft className="h-4 w-4" />
+                            </Button>
+                        )}
 
-                    {/* 文件标签页 (AC #1-5) - UX 优化方案 B: 纯标签管理 */}
-                    <EditorTabs className="flex-1 border-b-0" />
-                </div>
+                        {/* 文件标签页 (AC #1-5) - UX 优化方案 B: 纯标签管理 */}
+                        <EditorTabs className="flex-1 border-b-0" />
+                    </div>
+                )}
 
-                {/* 面包屑导航 (UX 优化方案 B: 完整路径 + 历史信息 + Diff 切换 + 返回当前) */}
-                {displayFilePath && (
+                {/* 面包屑导航 (UX 优化方案 B: 完整路径 + 历史信息 + Diff 切换 + 返回当前) - 脱敏预览模式下隐藏 */}
+                {displayFilePath && !isInSanitizePreview && (
                     <Breadcrumbs
                         filePath={displayFilePath}
                         siblings={siblings}
@@ -488,22 +544,49 @@ export function CodePanel({
                     />
                 )}
 
+                {/* Story 3.4: 脱敏预览状态横幅 */}
+                {isInSanitizePreview && (
+                    <SanitizeStatusBanner
+                        stats={sanitizeStats}
+                        sensitiveMatches={sanitizeMatches}
+                        isLoading={sanitizeIsLoading}
+                        error={sanitizeError}
+                        onCancel={exitPreviewMode}
+                        onConfirm={confirmShare}
+                        onJumpToLine={handleJumpToLine}
+                    />
+                )}
+
+                {/* Story 3.4: 脱敏预览 Diff 标签行 (AC1: 左原始、右脱敏) */}
+                {isInSanitizePreview && sanitizeStats.total > 0 && (
+                    <div className="flex border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                        <div className="flex-1 px-3 py-1.5 border-r border-border">
+                            {t("sanitizer.originalContent")}
+                        </div>
+                        <div className="flex-1 px-3 py-1.5">
+                            {t("sanitizer.sanitizedContent")}
+                        </div>
+                    </div>
+                )}
+
                 {/* 代码编辑器 */}
                 <div className="flex-1 overflow-hidden">
                     <CodeSnapshotView
-                        code={displayCode}
-                        filePath={displayFilePath}
+                        code={isInSanitizePreview ? sanitizedText : displayCode}
+                        filePath={isInSanitizePreview ? 'session.json' : displayFilePath}
                         timestamp={timestampMs}
                         commitHash={displayCommitHash}
                         commitMessage={commitMessage}
-                        previousCode={displayPreviousCode}
-                        isHistoricalMode={isHistoricalMode || !!activeTab?.commitHash}
+                        previousCode={isInSanitizePreview ? sanitizeOriginalText : displayPreviousCode}
+                        isHistoricalMode={isInSanitizePreview ? false : (isHistoricalMode || !!activeTab?.commitHash)}
                         onReturnToCurrent={handleReturnToCurrent}
                         fileNotFound={fileNotFound}
                         notFoundPath={notFoundPath}
                         onDismissNotFound={onDismissNotFound}
-                        viewState={activeTab?.viewState}
-                        onViewStateChange={handleViewStateChange}
+                        viewState={isInSanitizePreview ? undefined : activeTab?.viewState}
+                        onViewStateChange={isInSanitizePreview ? undefined : handleViewStateChange}
+                        onEditorRef={(editor) => { editorRef.current = editor; }}
+                        forceSideBySide={isInSanitizePreview}
                     />
                 </div>
 

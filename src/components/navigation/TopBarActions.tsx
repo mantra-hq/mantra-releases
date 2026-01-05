@@ -3,20 +3,20 @@
  * Story 2.17: Task 4
  * Story 2.21: Task 4.2-4.4 (添加全局搜索按钮、设置按钮)
  * Story 2-26: i18n 国际化
+ * Story 3.4: 脱敏预览主视图原生模式
  * Tech-Spec: 通知系统 Task 13
  *
  * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 通知 → 设置 → 主题切换
  */
 
+import { useEffect } from "react";
 import { RefreshCw, Plus, Search, Settings, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSearchStore } from "@/stores/useSearchStore";
-import { useSanitizePreview } from "@/hooks";
-import { SanitizePreviewModal } from "@/components/sanitizer";
-import { NotificationBell, NotificationInbox } from "@/components/notifications";
+import { useSanitizePreviewStore } from "@/stores/useSanitizePreviewStore";
 import {
   Tooltip,
   TooltipContent,
@@ -55,22 +55,19 @@ export function TopBarActions({
   const navigate = useNavigate();
   const openSearch = useSearchStore((state) => state.open);
 
-  // 脱敏预览
-  const {
-    isOpen: isSanitizeOpen,
-    isLoading: isSanitizeLoading,
-    originalText,
-    sanitizedText,
-    stats,
-    currentStep,
-    sensitiveMatches,
-    currentMatchIndex,
-    openPreview,
-    closePreview,
-    goToStep,
-    nextMatch,
-    previousMatch,
-  } = useSanitizePreview(sessionId ?? null);
+  // 脱敏预览 Store
+  const mode = useSanitizePreviewStore((state) => state.mode);
+  const isLoading = useSanitizePreviewStore((state) => state.isLoading);
+  const setSessionId = useSanitizePreviewStore((state) => state.setSessionId);
+  const enterPreviewMode = useSanitizePreviewStore((state) => state.enterPreviewMode);
+
+  // 同步 sessionId 到 store
+  useEffect(() => {
+    setSessionId(sessionId ?? null);
+  }, [sessionId, setSessionId]);
+
+  // 是否处于预览模式
+  const isInPreviewMode = mode === 'preview';
 
   return (
     <div
@@ -97,15 +94,15 @@ export function TopBarActions({
           </TooltipContent>
         </Tooltip>
 
-        {/* 脱敏预览按钮 - 有会话时显示 (AC3) */}
+        {/* 脱敏预览按钮 - 有会话时显示 (AC3, AC4) */}
         {sessionId && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="ghost"
+                variant={isInPreviewMode ? "secondary" : "ghost"}
                 size="sm"
-                onClick={openPreview}
-                disabled={isSanitizeLoading}
+                onClick={enterPreviewMode}
+                disabled={isLoading || isInPreviewMode}
                 aria-label={t("topbar.securityCheck")}
                 data-testid="topbar-sanitize-button"
                 className="h-8 gap-1.5 px-2"
@@ -188,23 +185,6 @@ export function TopBarActions({
 
       {/* 主题切换 (AC12) */}
       <ThemeToggle />
-
-      {/* 脱敏预览 Modal */}
-      <SanitizePreviewModal
-        isOpen={isSanitizeOpen}
-        onClose={closePreview}
-        originalText={originalText}
-        sanitizedText={sanitizedText}
-        stats={stats}
-        onConfirm={closePreview}
-        isLoading={isSanitizeLoading}
-        currentStep={currentStep}
-        sensitiveMatches={sensitiveMatches}
-        currentMatchIndex={currentMatchIndex}
-        goToStep={goToStep}
-        nextMatch={nextMatch}
-        previousMatch={previousMatch}
-      />
 
       {/* TODO: 通知功能暂未开放 */}
       {/* <NotificationInbox /> */}

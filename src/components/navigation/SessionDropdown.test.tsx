@@ -40,7 +40,7 @@ const mockSessions: SessionSummary[] = [
   {
     id: "session-3",
     name: "Another Session",
-    messageCount: 15,
+    messageCount: 3,
     lastActiveAt: Date.now() - 86400000, // 1 day ago
   },
 ];

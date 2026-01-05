@@ -33,7 +33,8 @@
     "closeTab": "Close Tab",
     "clear": "Clear",
     "clearSearch": "Clear Search",
-    "learnMore": "Learn More"
+    "learnMore": "Learn More",
+    "comingSoon": "Coming Soon"
   },
   "time": {
     "justNow": "Just now",
@@ -120,7 +121,10 @@
     "importFirstProject": "Import Your First Project",
     "supportedTools": "Claude Code · Cursor · Gemini CLI · Codex",
     "noProjectsYet": "No projects imported yet",
-    "importPrompt": "Import AI coding sessions to start playback"
+    "importPrompt": "Import AI coding sessions to start playback",
+    "skipEmptySessions": "Skip empty sessions",
+    "skippedEmpty": "Skipped empty sessions",
+    "noFiles": "No files found"
   },
   "project": {
     "myProjects": "My Projects",
@@ -364,6 +368,7 @@
     "detectedCount": "Detected {{count}} sensitive items",
     "willAutoSanitize": "Sensitive info will be auto-sanitized to protect your privacy",
     "safeToShare": "This content is safe to share",
+    "safeToShareFull": "This content is safe to share · Can be withdrawn anytime",
     "canWithdraw": "Can be withdrawn anytime after sharing",
     "viewDetails": "View Details",
     "skipToShare": "Skip and Share",
@@ -383,7 +388,15 @@
     "shareInfo": "Share Info",
     "uploadToCloud": "Content will be uploaded to Mantra cloud",
     "autoSanitize": "Sensitive info will be auto-sanitized",
-    "viewFullDiff": "View Full Diff"
+    "viewFullDiff": "View Full Diff",
+    "viewOriginal": "View Original",
+    "scanning": "Scanning for sensitive information...",
+    "jumpToLine": "Jump to line {{line}}",
+    "autoSanitizeHint": "Sensitive info will be auto-sanitized · Can be withdrawn anytime",
+    "shareSuccess": "Shared successfully",
+    "shareSuccessWithSanitize": "Sanitized {{count}} sensitive items and shared successfully",
+    "shareFailed": "Share failed",
+    "noSessionSelected": "No session selected"
   },
   "player": {
     "selectSessionToPlay": "Select a session to start playback",
