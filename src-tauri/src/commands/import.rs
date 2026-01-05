@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser, ParseError};
 use crate::parsers::cursor::CursorPaths;
 use crate::parsers::gemini::GeminiPaths;
 
@@ -55,6 +55,9 @@ pub struct FileImportResult {
     /// Error message (if failed)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Whether this file was skipped (e.g., empty session)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<bool>,
 }
 
 /// Get the default log directory for a given source
@@ -146,6 +149,8 @@ fn path_to_discovered_file(path: &PathBuf) -> Option<DiscoveredFile> {
         project_path,
     })
 }
+
+
 
 /// Scan the default log directory for a given source
 ///
@@ -443,6 +448,7 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
                                 project_id: None,
                                 session_id: None,
                                 error: Some("工作区中未找到对话".to_string()),
+                                skipped: None,
                             });
                         } else {
                             // 返回会话数量作为成功指示
@@ -453,16 +459,19 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
                                 project_id: Some(generate_project_id(&first_session.cwd)),
                                 session_id: Some(format!("{} 个会话", sessions.len())),
                                 error: None,
+                                skipped: None,
                             });
                         }
                     }
                     Err(e) => {
+                        let is_skippable = e.is_skippable();
                         results.push(FileImportResult {
                             success: false,
                             file_path: path,
                             project_id: None,
                             session_id: None,
                             error: Some(e.to_string()),
+                            skipped: if is_skippable { Some(true) } else { None },
                         });
                     }
                 }
@@ -495,15 +504,18 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
                             project_id: Some(generate_project_id(&session.cwd)),
                             session_id: Some(session.id.clone()),
                             error: None,
+                            skipped: None,
                         });
                     }
                     Err(e) => {
+                        let is_skippable = e.is_skippable();
                         results.push(FileImportResult {
                             success: false,
                             file_path: path,
                             project_id: None,
                             session_id: None,
                             error: Some(e.to_string()),
+                            skipped: if is_skippable { Some(true) } else { None },
                         });
                     }
                 }

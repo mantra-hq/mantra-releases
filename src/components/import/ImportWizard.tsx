@@ -177,6 +177,8 @@ export function ImportWizard({
     lastScannedSource,
     setLastScannedSource,
     clearDiscoveredFiles,
+    skipEmptySessions,
+    setSkipEmptySessions,
   } = useImportStore();
 
   // Story 2.23: 重试状态
@@ -317,8 +319,8 @@ export function ImportWizard({
    * 开始导入 (使用进度事件)
    */
   const handleStartImport = React.useCallback(async () => {
-    const selectedPaths = Array.from(selectedFiles);
-    if (selectedPaths.length === 0) return;
+    const pathsToImport = Array.from(selectedFiles);
+    if (pathsToImport.length === 0) return;
 
     setStep("progress");
     setLoading(true);
@@ -328,7 +330,7 @@ export function ImportWizard({
       // 初始化进度
       const initialProgress: ImportProgressData = {
         current: 0,
-        total: selectedPaths.length,
+        total: pathsToImport.length,
         currentFile: "",
         successCount: 0,
         failureCount: 0,
@@ -336,10 +338,10 @@ export function ImportWizard({
       setProgress(initialProgress);
 
       // Story 2.28: 记录导入开始日志
-      appLog.importStart(source || "unknown", selectedPaths.length);
+      appLog.importStart(source || "unknown", pathsToImport.length);
 
       // 使用带进度事件的导入函数
-      const parseResults = await importSessionsWithProgress(selectedPaths, {
+      const parseResults = await importSessionsWithProgress(pathsToImport, {
         onProgress: (event) => {
           setProgress({
             current: event.current,
@@ -376,7 +378,7 @@ export function ImportWizard({
           setIsCancelling(false);
           setStep("complete");
         },
-      });
+      }, skipEmptySessions);
 
       // 处理结果
       for (const result of parseResults) {
@@ -392,8 +394,8 @@ export function ImportWizard({
 
       // 更新最终进度
       const finalProgress: ImportProgressData = {
-        current: selectedPaths.length,
-        total: selectedPaths.length,
+        current: pathsToImport.length,
+        total: pathsToImport.length,
         currentFile: "",
         successCount: parseResults.filter((r) => r.success).length,
         failureCount: parseResults.filter((r) => !r.success).length,
@@ -520,6 +522,8 @@ export function ImportWizard({
             onSearchChange={setSearchQuery}
             loading={isLoading}
             importedPaths={importedPaths}
+            skipEmptySessions={skipEmptySessions}
+            onSkipEmptySessionsChange={setSkipEmptySessions}
           />
         );
       case "progress":

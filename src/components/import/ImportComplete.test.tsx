@@ -211,6 +211,42 @@ describe("ImportComplete", () => {
     });
   });
 
+  // Skipped 状态
+  describe("Skipped State", () => {
+    it("displays skipped count when there are skipped sessions", () => {
+      const skippedResults: ImportResult[] = [
+        { success: true, filePath: "/path/file1.json", projectId: "proj-1", sessionId: "sess-1", skipped: true },
+        { success: true, filePath: "/path/file2.json", projectId: "proj-1", sessionId: "sess-2" },
+      ];
+
+      render(
+        <ImportComplete
+          results={skippedResults}
+          onViewProjects={vi.fn()}
+          onContinueImport={vi.fn()}
+        />
+      );
+
+      // Should show success count as 1 (excluding skipped)
+      expect(screen.getByTestId("success-stat")).toHaveTextContent("1");
+      // Should show skipped count as 1
+      expect(screen.getByTestId("skipped-stat")).toHaveTextContent("1");
+      expect(screen.getByText("跳过空会话")).toBeInTheDocument();
+    });
+
+    it("does not display skipped stat when count is 0", () => {
+      render(
+        <ImportComplete
+          results={mockResults}
+          onViewProjects={vi.fn()}
+          onContinueImport={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByTestId("skipped-stat")).not.toBeInTheDocument();
+    });
+  });
+
   // 部分失败状态
   describe("Partial Failure State", () => {
     it("shows warning when some imports failed", () => {
@@ -401,7 +437,7 @@ describe("ImportComplete", () => {
         />
       );
 
-      expect(screen.getByText("重试中...")).toBeInTheDocument();
+      expect(screen.getByText("重试中")).toBeInTheDocument();
     });
 
     it("can toggle error list visibility", () => {

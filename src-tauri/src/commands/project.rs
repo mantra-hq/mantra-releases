@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser, ParseError};
 use crate::scanner::ProjectScanner;
 use crate::storage::{Database, SearchResult};
 
@@ -99,6 +99,9 @@ pub struct ImportFileDoneEvent {
     /// Project name if successful (Story 2.23 fix)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
+    /// Whether the file was skipped (empty session)
+    #[serde(default)]
+    pub skipped: bool,
 }
 
 /// Event sent when import is cancelled
@@ -173,6 +176,7 @@ pub async fn get_session(
 pub async fn import_sessions(
     state: State<'_, AppState>,
     paths: Vec<String>,
+    skip_empty: bool,
 ) -> Result<ImportResult, AppError> {
     let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
     let mut scanner = ProjectScanner::new(&mut db);
@@ -227,8 +231,19 @@ pub async fn import_sessions(
         }
     }
 
+    // Filter out empty sessions if requested
+    let mut empty_skipped = 0;
+    if skip_empty {
+        let initial_len = all_sessions.len();
+        all_sessions.retain(|s| !s.messages.is_empty());
+        empty_skipped = (initial_len - all_sessions.len()) as u32;
+    }
+
     // Import parsed sessions
     let mut result = scanner.scan_and_import(all_sessions)?;
+
+    // Add skipped count
+    result.skipped_count += empty_skipped;
 
     // Add parse errors to result
     result.errors.extend(parse_errors);
@@ -620,6 +635,7 @@ pub async fn import_sessions_with_progress(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     paths: Vec<String>,
+    skip_empty: bool,
 ) -> Result<ImportResult, AppError> {
     // Reset cancellation flag at start
     IMPORT_CANCELLED.store(false, Ordering::SeqCst);
@@ -663,6 +679,7 @@ pub async fn import_sessions_with_progress(
         let mut file_project_id: Option<String> = None;
         let mut file_session_id: Option<String> = None;
         let mut file_project_name: Option<String> = None;
+        let mut file_skipped = false;
 
         if path_buf.is_dir() {
             // Cursor workspace (directory)
@@ -672,29 +689,59 @@ pub async fn import_sessions_with_progress(
                         file_error = Some("工作区中未找到对话".to_string());
                         all_errors.push(format!("{}: 工作区中未找到对话", path));
                     } else {
-                        // Import sessions immediately to get real project_id
-                        let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
-                        let result = db.import_sessions(&sessions)?;
-                        
-                        total_imported += result.imported_count;
-                        total_skipped += result.skipped_count;
-                        total_new_projects += result.new_projects_count;
-                        all_errors.extend(result.errors);
-                        
-                        file_success = true;
-                        // Get project info from database
-                        if let Some(first_session) = sessions.first() {
-                            if let Ok(Some(project)) = db.get_project_by_cwd(&first_session.cwd) {
-                                file_project_id = Some(project.id);
-                                file_project_name = Some(project.name);
+                        // Check if we should skip empty sessions (only if ALL sessions in workspace are empty?)
+                        // For workspaces, we might want to filter individual sessions.
+                        // But db.import_sessions takes a list.
+                        // Let's filter here first.
+                        let mut sessions_to_import = sessions;
+                        if skip_empty {
+                            sessions_to_import.retain(|s| !s.messages.is_empty());
+                        }
+
+                        if sessions_to_import.is_empty() && skip_empty {
+                            // All sessions were empty and skipped
+                            file_success = true; // Treated as success but skipped
+                            file_skipped = true;
+                            total_skipped += 1;
+                        } else if !sessions_to_import.is_empty() {
+                             // Import sessions immediately to get real project_id
+                            let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                            let result = db.import_sessions(&sessions_to_import)?;
+                            
+                            total_imported += result.imported_count;
+                            total_skipped += result.skipped_count;
+                            total_new_projects += result.new_projects_count;
+                            all_errors.extend(result.errors);
+                            
+                            file_success = true;
+                            // Get project info from database
+                            if let Some(first_session) = sessions_to_import.first() {
+                                if let Ok(Some(project)) = db.get_project_by_cwd(&first_session.cwd) {
+                                    file_project_id = Some(project.id);
+                                    file_project_name = Some(project.name);
+                                }
+                                file_session_id = Some(first_session.id.clone());
                             }
-                            file_session_id = Some(first_session.id.clone());
+                        } else {
+                             // Original sessions were empty? handled by outer if
+                             // Should not reach here if outer if checks sessions.is_empty()
+                             // But wait, outer if checked !sessions.is_empty().
+                             // So if sessions_to_import is empty here, it means they were all filtered out.
+                             // Logic handled above.
                         }
                     }
                 }
                 Err(e) => {
-                    file_error = Some(e.to_string());
-                    all_errors.push(format!("{}: {}", path, e));
+                    // Check if this is a skippable error
+                    if skip_empty && e.is_skippable() {
+                        file_success = true;
+                        file_skipped = true;
+                        file_error = Some(e.to_string());
+                        total_skipped += 1;
+                    } else {
+                        file_error = Some(e.to_string());
+                        all_errors.push(format!("{}: {}", path, e));
+                    }
                 }
             }
         } else {
@@ -716,27 +763,42 @@ pub async fn import_sessions_with_progress(
 
             match parse_result {
                 Ok(session) => {
-                    // Import session immediately to get real project_id
-                    let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
-                    let result = db.import_sessions(&[session.clone()])?;
-                    
-                    total_imported += result.imported_count;
-                    total_skipped += result.skipped_count;
-                    total_new_projects += result.new_projects_count;
-                    all_errors.extend(result.errors);
-                    
-                    file_success = true;
-                    file_session_id = Some(session.id.clone());
-                    
-                    // Get project info from database
-                    if let Ok(Some(project)) = db.get_project_by_cwd(&session.cwd) {
-                        file_project_id = Some(project.id);
-                        file_project_name = Some(project.name);
+                    if skip_empty && session.messages.is_empty() {
+                        file_success = true;
+                        file_skipped = true;
+                        total_skipped += 1;
+                    } else {
+                        // Import session immediately to get real project_id
+                        let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                        let result = db.import_sessions(&[session.clone()])?;
+
+                        total_imported += result.imported_count;
+                        total_skipped += result.skipped_count;
+                        total_new_projects += result.new_projects_count;
+                        all_errors.extend(result.errors);
+
+                        file_success = true;
+                        file_session_id = Some(session.id.clone());
+
+                        // Get project info from database
+                        if let Ok(Some(project)) = db.get_project_by_cwd(&session.cwd) {
+                            file_project_id = Some(project.id);
+                            file_project_name = Some(project.name);
+                        }
                     }
                 }
                 Err(e) => {
-                    file_error = Some(e.to_string());
-                    all_errors.push(format!("{}: {}", path, e));
+                    // Check if this is a skippable error (empty session, system events only, etc.)
+                    if skip_empty && e.is_skippable() {
+                        // Treat skippable errors as success with skipped flag
+                        file_success = true;
+                        file_skipped = true;
+                        file_error = Some(e.to_string()); // Keep the message for UI display
+                        total_skipped += 1;
+                    } else {
+                        file_error = Some(e.to_string());
+                        all_errors.push(format!("{}: {}", path, e));
+                    }
                 }
             }
         }
@@ -756,6 +818,7 @@ pub async fn import_sessions_with_progress(
             project_id: file_project_id,
             session_id: file_session_id,
             project_name: file_project_name,
+            skipped: file_skipped,
         });
     }
 

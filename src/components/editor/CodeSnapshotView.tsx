@@ -96,6 +96,10 @@ export interface CodeSnapshotViewProps {
   viewState?: editor.ICodeEditorViewState | null;
   /** ViewState 变更回调 (Story 2.13 AC #5) */
   onViewStateChange?: (viewState: editor.ICodeEditorViewState) => void;
+  /** Story 3.4: 编辑器 ref 回调 (用于外部行跳转) */
+  onEditorRef?: (editor: editor.IStandaloneCodeEditor | null) => void;
+  /** Story 3.4: 强制使用并排 Diff 模式 (用于脱敏预览) */
+  forceSideBySide?: boolean;
 }
 
 /**
@@ -189,6 +193,8 @@ export function CodeSnapshotView({
   className,
   viewState,
   onViewStateChange,
+  onEditorRef,
+  forceSideBySide = false,
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
   const diffMode = useEditorStore((state) => state.diffMode);
@@ -221,13 +227,18 @@ export function CodeSnapshotView({
   const hasDiffData = !!(previousCode && previousCode !== code);
 
   // 是否使用并排 Diff 模式
-  const useSideBySideDiff = hasDiffData && diffMode === "side-by-side";
+  // Story 3.4: forceSideBySide 用于脱敏预览，即使内容相同也显示并排视图
+  const useSideBySideDiff = (hasDiffData && diffMode === "side-by-side") ||
+                            (forceSideBySide && previousCode !== undefined);
 
   // 事件监听器清理引用
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([]);
   // ViewState 回调 ref (避免依赖变化导致重新绑定)
   const onViewStateChangeRef = useRef(onViewStateChange);
   onViewStateChangeRef.current = onViewStateChange;
+  // Story 3.4: 编辑器 ref 回调引用 (避免依赖变化导致重新绑定)
+  const onEditorRefRef = useRef(onEditorRef);
+  onEditorRefRef.current = onEditorRef;
   // 跟踪是否需要恢复 ViewState
   const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null);
   // 跟踪是否正在恢复 ViewState（避免循环）
@@ -236,6 +247,8 @@ export function CodeSnapshotView({
   // 编辑器挂载回调 (不依赖 viewState，避免重新挂载)
   const handleEditorMount: OnMount = useCallback((editor, _monaco) => {
     editorRef.current = editor;
+    // Story 3.4: 通知外部编辑器 ref
+    onEditorRefRef.current?.(editor);
 
     // 清理旧的监听器
     disposablesRef.current.forEach(d => d.dispose());
@@ -269,6 +282,8 @@ export function CodeSnapshotView({
     // 获取修改后的编辑器 (右侧)
     const modifiedEditor = diffEditor.getModifiedEditor();
     editorRef.current = modifiedEditor;
+    // Story 3.4: 通知外部编辑器 ref
+    onEditorRefRef.current?.(modifiedEditor);
 
     // 清理旧的监听器
     disposablesRef.current.forEach(d => d.dispose());
@@ -276,12 +291,18 @@ export function CodeSnapshotView({
 
     // 恢复 ViewState (如果有)
     if (pendingViewStateRef.current) {
+      isRestoringViewStateRef.current = true;
       modifiedEditor.restoreViewState(pendingViewStateRef.current);
       pendingViewStateRef.current = null;
+      requestAnimationFrame(() => {
+        isRestoringViewStateRef.current = false;
+      });
     }
 
     // 监听滚动/光标变化
     const saveViewState = () => {
+      // 正在恢复 ViewState 时跳过保存，避免循环
+      if (isRestoringViewStateRef.current) return;
       const state = modifiedEditor.saveViewState();
       if (state && onViewStateChangeRef.current) {
         onViewStateChangeRef.current(state);
@@ -313,8 +334,21 @@ export function CodeSnapshotView({
     return () => {
       disposablesRef.current.forEach(d => d.dispose());
       disposablesRef.current = [];
+      // 清理 editor ref，通知外部
+      if (onEditorRefRef.current) {
+        onEditorRefRef.current(null);
+      }
     };
   }, []);
+
+  // Story 3.4: 编辑器类型切换时清理 ref，避免 TextModel disposed 错误
+  useEffect(() => {
+    // 当切换编辑器类型时，清理旧的 editor ref
+    return () => {
+      editorRef.current = null;
+      diffEditorRef.current = null;
+    };
+  }, [useSideBySideDiff]);
 
   // 是否已初始化（避免首次挂载时触发动画）
   const isInitializedRef = useRef(false);
@@ -420,6 +454,7 @@ export function CodeSnapshotView({
         {/* 并排 Diff 模式 */}
         {useSideBySideDiff ? (
           <DiffEditor
+            key="diff-editor"
             height="100%"
             language={language}
             original={previousCode || ""}
@@ -427,6 +462,8 @@ export function CodeSnapshotView({
             theme={monacoTheme}
             options={DIFF_EDITOR_OPTIONS}
             onMount={handleDiffEditorMount}
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
             loading={
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 加载 Diff 编辑器中...
@@ -436,12 +473,14 @@ export function CodeSnapshotView({
         ) : (
           /* 普通编辑器 (inline diff 使用装饰器) */
           <Editor
+            key="normal-editor"
             height="100%"
             language={language}
             value={code}
             theme={monacoTheme}
             options={EDITOR_OPTIONS}
             onMount={handleEditorMount}
+            keepCurrentModel={true}
             loading={
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 加载编辑器中...

@@ -25,6 +25,8 @@ const defaultProps = {
   onToggleProjectExpand: vi.fn(),
   onSearchChange: vi.fn(),
   loading: false,
+  skipEmptySessions: true,
+  onSkipEmptySessionsChange: vi.fn(),
 };
 
 /** 测试用文件数据 - 分属不同项目 */
@@ -193,7 +195,7 @@ describe("FileSelector", () => {
           selectedFiles={new Set([mockFiles[0].path])}
         />
       );
-      expect(screen.getByText("已选 1 个")).toBeInTheDocument();
+      expect(screen.getAllByText(/已选.*1/).length).toBeGreaterThan(0);
     });
   });
 

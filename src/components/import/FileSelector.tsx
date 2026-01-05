@@ -14,7 +14,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Radar, FolderOpen, Loader2, FileJson } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Checkbox } from "@/components/ui";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { groupByProject, filterGroups, getTotalSessionCount } from "@/lib/import-utils";
 import { SearchFilter } from "./SearchFilter";
@@ -61,6 +61,10 @@ export interface FileSelectorProps {
   loading: boolean;
   /** 已导入项目路径集合 (Story 2.20) */
   importedPaths?: Set<string>;
+  /** 跳过空会话 (Story 2.29) */
+  skipEmptySessions: boolean;
+  /** 设置跳过空会话 (Story 2.29) */
+  onSkipEmptySessionsChange: (skip: boolean) => void;
 }
 
 /**
@@ -80,6 +84,8 @@ export function FileSelector({
   onSearchChange,
   loading,
   importedPaths,
+  skipEmptySessions,
+  onSkipEmptySessionsChange,
 }: FileSelectorProps) {
   const { t } = useTranslation();
 
@@ -171,6 +177,24 @@ export function FileSelector({
           </div>
         )}
       </div>
+
+      {/* Story 2.29: Skip empty sessions checkbox */}
+      {files.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="skip-empty-checkbox"
+            data-testid="skip-empty-checkbox"
+            checked={skipEmptySessions}
+            onCheckedChange={(checked) => onSkipEmptySessionsChange(checked === true)}
+          />
+          <label
+            htmlFor="skip-empty-checkbox"
+            className="text-sm text-muted-foreground cursor-pointer"
+          >
+            {t("import.skipEmptySessions")}
+          </label>
+        </div>
+      )}
 
       {/* 加载状态 */}
       {loading && (

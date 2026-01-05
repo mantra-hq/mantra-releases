@@ -68,6 +68,8 @@ export interface ImportState {
   importedProjects: ImportedProject[];
   /** 上次扫描的源 (Story 2.24) */
   lastScannedSource: ImportSource | null;
+  /** 跳过空会话 (Story 2.29) */
+  skipEmptySessions: boolean;
 
   // ======== Actions ========
   /** 打开 Modal */
@@ -120,6 +122,8 @@ export interface ImportState {
   setLastScannedSource: (source: ImportSource | null) => void;
   /** 清除发现的文件（源变化时） (Story 2.24) */
   clearDiscoveredFiles: () => void;
+  /** 设置跳过空会话 (Story 2.29) */
+  setSkipEmptySessions: (skip: boolean) => void;
 }
 
 /**
@@ -140,6 +144,7 @@ const initialState = {
   importedPaths: new Set<string>(),
   importedProjects: [] as ImportedProject[],
   lastScannedSource: null as ImportSource | null,
+  skipEmptySessions: true,
 };
 
 /**
@@ -172,12 +177,12 @@ export const useImportStore = create<ImportState>((set) => ({
   setDiscoveredFiles: (files) =>
     set((state) => {
       // Story 2.20: 默认仅选中新项目的文件
-      const newProjectFiles = files.filter(
+      const selectableFiles = files.filter(
         (f) => !state.importedPaths.has(f.projectPath)
       );
       return {
         discoveredFiles: files,
-        selectedFiles: new Set(newProjectFiles.map((f) => f.path)),
+        selectedFiles: new Set(selectableFiles.map((f) => f.path)),
         expandedProjects: new Set<string>(),
         searchQuery: "",
       };
@@ -431,6 +436,12 @@ export const useImportStore = create<ImportState>((set) => ({
       selectedFiles: new Set(),
       expandedProjects: new Set(),
       searchQuery: "",
+    }),
+
+  // Story 2.29: 设置跳过空会话
+  setSkipEmptySessions: (skip) =>
+    set({
+      skipEmptySessions: skip,
     }),
 }));
 

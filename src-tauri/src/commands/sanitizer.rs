@@ -56,8 +56,8 @@ pub async fn sanitize_session(
     // 从数据库获取 session
     let session = db.get_session(&session_id)?;
 
-    // 序列化 session 为 JSON
-    let session_json = serde_json::to_string(&session)
+    // 序列化 session 为格式化 JSON (与前端保持一致)
+    let session_json = serde_json::to_string_pretty(&session)
         .map_err(|e| AppError::internal(format!("序列化失败: {}", e)))?;
 
     // 构建 sanitizer

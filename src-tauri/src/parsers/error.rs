@@ -73,6 +73,15 @@ impl ParseError {
     pub fn workspace_not_found(path: impl Into<String>) -> Self {
         Self::WorkspaceNotFound(path.into())
     }
+
+    /// Check if this error represents a skippable condition
+    /// (empty sessions that should be silently skipped, not treated as failures)
+    pub fn is_skippable(&self) -> bool {
+        matches!(
+            self,
+            Self::EmptyFile | Self::SystemEventsOnly | Self::NoValidConversation
+        )
+    }
 }
 
 #[cfg(test)]
@@ -110,5 +119,20 @@ mod tests {
         let json_err = serde_json::from_str::<serde_json::Value>(json_str).unwrap_err();
         let parse_err: ParseError = json_err.into();
         assert!(matches!(parse_err, ParseError::InvalidJson(_)));
+    }
+
+    #[test]
+    fn test_is_skippable() {
+        // Skippable errors - empty sessions that should be silently skipped
+        assert!(ParseError::EmptyFile.is_skippable());
+        assert!(ParseError::SystemEventsOnly.is_skippable());
+        assert!(ParseError::NoValidConversation.is_skippable());
+
+        // Non-skippable errors - real failures that should be reported
+        assert!(!ParseError::EmptyConversation.is_skippable());
+        assert!(!ParseError::missing_field("id").is_skippable());
+        assert!(!ParseError::invalid_format("bad").is_skippable());
+        assert!(!ParseError::database_error("fail").is_skippable());
+        assert!(!ParseError::workspace_not_found("/path").is_skippable());
     }
 }

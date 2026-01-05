@@ -45,11 +45,12 @@ interface BackendImportResult {
  */
 export async function parseLogFiles(
   paths: string[],
-  _onProgress: (progress: ImportProgressData) => void
+  _onProgress: (progress: ImportProgressData) => void,
+  skipEmpty: boolean = true
 ): Promise<ImportResult[]> {
   // 调用 import_sessions 而不是 parse_log_files
   // import_sessions 会解析文件并将会话保存到数据库
-  const backendResult = await invoke<BackendImportResult>("import_sessions", { paths });
+  const backendResult = await invoke<BackendImportResult>("import_sessions", { paths, skipEmpty });
 
   // 将后端结果转换为前端期望的格式
   // 由于后端返回的是汇总统计，我们为每个路径生成对应结果
@@ -122,6 +123,8 @@ export interface ImportFileDoneEvent {
   sessionId?: string;
   /** Project name from database (Story 2.23 fix) */
   projectName?: string;
+  /** Whether the file was skipped (e.g. empty session) */
+  skipped?: boolean;
 }
 
 
@@ -147,11 +150,13 @@ export interface ImportProgressCallbacks {
  *
  * @param paths - 要导入的文件路径列表
  * @param callbacks - 进度回调函数集合
+ * @param skipEmpty - 是否跳过空会话
  * @returns 导入结果列表
  */
 export async function importSessionsWithProgress(
   paths: string[],
-  callbacks: ImportProgressCallbacks
+  callbacks: ImportProgressCallbacks,
+  skipEmpty: boolean = true
 ): Promise<ImportResult[]> {
   const unlisteners: UnlistenFn[] = [];
   const results: ImportResult[] = [];
@@ -182,7 +187,7 @@ export async function importSessionsWithProgress(
     }
 
     // 调用后端命令
-    await invoke<BackendImportResult>("import_sessions_with_progress", { paths });
+    await invoke<BackendImportResult>("import_sessions_with_progress", { paths, skipEmpty });
 
     // 从文件结果构建返回值
     for (const path of paths) {
@@ -194,6 +199,7 @@ export async function importSessionsWithProgress(
           projectId: fileResult.projectId,
           sessionId: fileResult.sessionId,
           error: fileResult.error,
+          skipped: fileResult.skipped,
         });
       } else {
         // 文件可能在取消前未处理

@@ -38,6 +38,8 @@ export interface ImportResult {
   sessionId?: string;
   /** 错误信息 (失败时) */
   error?: string;
+  /** Whether skipped (e.g. empty) */
+  skipped?: boolean;
 }
 
 /** ImportComplete Props */
@@ -106,10 +108,11 @@ export function ImportComplete({
   const [errorsExpanded, setErrorsExpanded] = React.useState(false);
 
   // 计算统计数据
-  const successCount = results.filter((r) => r.success).length;
+  const successCount = results.filter((r) => r.success && !r.skipped).length;
   const failureCount = results.filter((r) => !r.success).length;
+  const skippedCount = results.filter((r) => r.skipped).length;
   const projectIds = new Set(
-    results.filter((r) => r.success && r.projectId).map((r) => r.projectId)
+    results.filter((r) => r.success && r.projectId && !r.skipped).map((r) => r.projectId)
   );
   const projectCount = projectIds.size;
 
@@ -178,6 +181,15 @@ export function ImportComplete({
           label={t("import.project")}
           colorClass="text-primary"
         />
+        {skippedCount > 0 && (
+          <StatCard
+            testId="skipped-stat"
+            icon={FileCheck} // Recycled icon, or maybe AlertCircle? Using FileCheck for now but with gray/muted color
+            value={skippedCount}
+            label={t("import.skippedEmpty")}
+            colorClass="text-muted-foreground"
+          />
+        )}
       </div>
 
       {/* Story 2.23: 刚导入的项目列表 - 优先展示成功项目 */}
