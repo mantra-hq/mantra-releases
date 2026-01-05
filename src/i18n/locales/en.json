@@ -292,7 +292,9 @@
   },
   "topbar": {
     "globalSearchShortcut": "Global Search (⌘K)",
-    "sanitizePreview": "Preview Sanitization"
+    "sanitizePreview": "Preview Sanitization",
+    "securityCheck": "Security Check",
+    "securityCheckTooltip": "Check sensitive info and share"
   },
   "session": {
     "selectSession": "Select Session",
@@ -347,7 +349,41 @@
     "willShareSanitized": "Will share the sanitized version",
     "detectedSensitive": "Detected {{count}} sensitive items",
     "noSensitiveFound": "No sensitive information detected",
-    "confirmShare": "Confirm Share"
+    "confirmShare": "Confirm Share",
+    "scanResult": "Security Scan Result",
+    "scanResultDesc": "Scan complete, please review the results",
+    "sensitiveDetails": "Sensitive Info Details",
+    "sensitiveDetailsDesc": "Review detected sensitive information one by one",
+    "confirmShareDesc": "Content will be shared after sanitization",
+    "step": {
+      "summary": "Scan",
+      "details": "Details",
+      "confirm": "Confirm"
+    },
+    "stepProgress": "Step Progress",
+    "detectedCount": "Detected {{count}} sensitive items",
+    "willAutoSanitize": "Sensitive info will be auto-sanitized to protect your privacy",
+    "safeToShare": "This content is safe to share",
+    "canWithdraw": "Can be withdrawn anytime after sharing",
+    "viewDetails": "View Details",
+    "skipToShare": "Skip and Share",
+    "lineNumber": "Line {{line}}",
+    "originalContent": "Original Content",
+    "sanitizedContent": "Sanitized Content",
+    "viewContext": "View Context",
+    "backToSummary": "Back",
+    "previous": "Previous",
+    "next": "Next",
+    "finish": "Finish",
+    "skipRemaining": "Skip Remaining",
+    "reviewComplete": "Review Complete",
+    "readyToShare": "Ready to Share",
+    "itemsWillBeSanitized": "{{count}} items will be auto-sanitized",
+    "noChangesNeeded": "No sanitization needed",
+    "shareInfo": "Share Info",
+    "uploadToCloud": "Content will be uploaded to Mantra cloud",
+    "autoSanitize": "Sensitive info will be auto-sanitized",
+    "viewFullDiff": "View Full Diff"
   },
   "player": {
     "selectSessionToPlay": "Select a session to start playback",
@@ -379,5 +415,29 @@
   },
   "navigation": {
     "backToTop": "Back to Top"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "emptyHint": "New messages will appear here",
+    "unread": "Unread",
+    "unreadCount": "{{count}} unread notifications",
+    "openInbox": "Open notifications ({{count}} unread)",
+    "markAllRead": "Mark all as read",
+    "inboxDescription": "View all notification messages",
+    "dismissBanner": "Dismiss notification",
+    "moreOptions": "More options",
+    "dismissOnce": "Dismiss for now",
+    "dismissForever": "Don't show again",
+    "loadError": "Failed to load notifications",
+    "types": {
+      "system": "System Announcement",
+      "follow": "New Follower",
+      "comment": "Comment Reply",
+      "like": "Like & Favorite",
+      "transaction": "Transaction",
+      "invite": "Collaboration Invite",
+      "review": "Review Result"
+    }
   }
 }

@@ -3,6 +3,7 @@
  * Story 2.8: Task 1
  * Story 2.10: Task 2.4 (Global Search Integration)
  * Story 2.21: Task 5 (移除 Dashboard，首页即 Player)
+ * Tech-Spec: 通知系统 Task 14
  *
  * 配置路由和全局 Providers
  */
@@ -16,7 +17,8 @@ import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
-import { useGlobalShortcut } from "./hooks";
+import { NotificationBannerStack } from "./components/notifications";
+import { useGlobalShortcut, useNotificationInit } from "./hooks";
 // Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
 import "./i18n";
 import "./index.css";
@@ -46,6 +48,7 @@ initTheme();
  */
 function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
   useGlobalShortcut();
+  useNotificationInit();
   return <>{children}</>;
 }
 
@@ -55,6 +58,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <TooltipProvider delayDuration={300}>
         <BrowserRouter>
           <GlobalShortcutProvider>
+            {/* 通知 Banner 堆叠 (Tech-Spec: 通知系统) */}
+            <NotificationBannerStack />
             <Routes>
               {/* Story 2.21: 首页即 Player (空状态) */}
               <Route path="/" element={<Player />} />

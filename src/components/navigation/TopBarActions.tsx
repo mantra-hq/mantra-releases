@@ -3,8 +3,9 @@
  * Story 2.17: Task 4
  * Story 2.21: Task 4.2-4.4 (添加全局搜索按钮、设置按钮)
  * Story 2-26: i18n 国际化
+ * Tech-Spec: 通知系统 Task 13
  *
- * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 设置 → 主题切换
+ * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 通知 → 设置 → 主题切换
  */
 
 import { RefreshCw, Plus, Search, Settings, Shield } from "lucide-react";
@@ -15,6 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useSanitizePreview } from "@/hooks";
 import { SanitizePreviewModal } from "@/components/sanitizer";
+import { NotificationBell, NotificationInbox } from "@/components/notifications";
 import {
   Tooltip,
   TooltipContent,
@@ -154,6 +156,9 @@ export function TopBarActions({
           </TooltipContent>
         </Tooltip>
 
+        {/* 通知铃铛 (Tech-Spec: 通知系统) */}
+        <NotificationBell />
+
         {/* 设置按钮 (Story 2.21 AC #16) */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -187,6 +192,9 @@ export function TopBarActions({
         onConfirm={closePreview}
         isLoading={isSanitizeLoading}
       />
+
+      {/* 通知收件箱 (Tech-Spec: 通知系统) */}
+      <NotificationInbox />
     </div>
   );
 }
