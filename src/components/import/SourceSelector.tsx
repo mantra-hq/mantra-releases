@@ -18,9 +18,11 @@ import { cn } from "@/lib/utils";
 import { ClaudeIcon } from "./SourceIcons";  // SVG 组件
 import cursorIcon from "@/assets/source-icons/cursor.png";
 import geminiIcon from "@/assets/source-icons/gemini.png";
+import codexIcon from "@/assets/source-icons/codex.svg";
+import antigravityIcon from "@/assets/source-icons/antigravity.png";
 
 /** 导入来源类型 */
-export type ImportSource = "claude" | "gemini" | "cursor";
+export type ImportSource = "claude" | "gemini" | "cursor" | "codex" | "antigravity";
 
 /** 来源配置 */
 interface SourceConfig {
@@ -31,9 +33,8 @@ interface SourceConfig {
   iconSrc?: string;
   iconComponent?: React.ComponentType<{ className?: string }>;
   disabled: boolean;
-  badge?: string;
-  /** 是否显示 "(按工作区)" 后缀 */
-  showByWorkspace?: boolean;
+  /** i18n key for badge */
+  badgeKey?: string;
 }
 
 /** 来源配置列表 */
@@ -41,14 +42,14 @@ const SOURCES: SourceConfig[] = [
   {
     id: "claude",
     name: "Claude Code",
-    defaultPath: "~/.claude/projects",
+    defaultPath: "~/.claude",
     iconComponent: ClaudeIcon,
     disabled: false,
   },
   {
     id: "gemini",
     name: "Gemini CLI",
-    defaultPath: "~/.gemini/tmp",
+    defaultPath: "~/.gemini",
     iconSrc: geminiIcon,
     disabled: false,
   },
@@ -58,7 +59,22 @@ const SOURCES: SourceConfig[] = [
     defaultPath: "~/.config/Cursor",
     iconSrc: cursorIcon,
     disabled: false,
-    showByWorkspace: true, // 标记需要显示 "(按工作区)" 后缀
+  },
+  {
+    id: "codex",
+    name: "Codex CLI",
+    defaultPath: "~/.codex",
+    iconSrc: codexIcon,
+    disabled: true,
+    badgeKey: "common.comingSoon",
+  },
+  {
+    id: "antigravity",
+    name: "Antigravity",
+    defaultPath: "~/.gemini/antigravity",
+    iconSrc: antigravityIcon,
+    disabled: true,
+    badgeKey: "common.comingSoon",
   },
 ];
 
@@ -99,10 +115,8 @@ function SourceCard({
     }
   };
 
-  // 构建显示路径，附加 "(按工作区)" 后缀
-  const displayPath = source.showByWorkspace
-    ? `${source.defaultPath} ${t("import.byWorkspace")}`
-    : source.defaultPath;
+  // 直接使用默认路径
+  const displayPath = source.defaultPath;
 
   return (
     <div
@@ -133,7 +147,9 @@ function SourceCard({
           "w-12 h-12 rounded-lg flex items-center justify-center mb-3",
           source.id === "claude" && "bg-orange-500/10 text-orange-500",
           source.id === "gemini" && "bg-blue-500/10",
-          source.id === "cursor" && "bg-purple-500/10"
+          source.id === "cursor" && "bg-purple-500/10",
+          source.id === "codex" && "bg-green-500/10",
+          source.id === "antigravity" && "bg-cyan-500/10"
         )}
       >
         {source.iconSrc ? (
@@ -158,9 +174,9 @@ function SourceCard({
       </span>
 
       {/* 徽章 */}
-      {source.badge && (
+      {source.badgeKey && (
         <span className="mt-2 px-2 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">
-          {source.badge}
+          {t(source.badgeKey)}
         </span>
       )}
     </div>
@@ -179,7 +195,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
       data-testid="source-selector"
       role="radiogroup"
       aria-label={t("import.selectSourcePrompt")}
-      className="grid grid-cols-3 gap-4"
+      className="grid grid-cols-3 gap-4 max-h-[400px] overflow-y-auto"
     >
       {SOURCES.map((source) => (
         <SourceCard
