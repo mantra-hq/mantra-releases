@@ -1,0 +1,12 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f47dcc287e1b8dc5ad2f3a05fbb3d48009285085c2db8f4bc05c57bcc24bd032 # shrinks to _dummy = ()
+cc f0a12abaecd9f37e0d986d6d4004b3699c2dc8340d47fd40f91dd9dc3be40b38 # shrinks to prefix = "ghp", suffix = "AaAa00A0AA0Aa00aaAAaAAA0AAaa0aAAa0AA"
+cc 7733add910eaf9bd2737fa52972c541360de564d0180f381b5c4478a3e3c11dd # shrinks to suffix = "0AaA000AAa0aa0aaaAaA0a0a"
+cc d91e11180dc9214c20048a09f1c75b27729c78e07cfc08fa3b6773eef4b741fa # shrinks to text = ""
+cc 0e2969397a8cd3264d80e34cef5514c3d617bf5f3fe935d5f692b6a13a242ee7 # shrinks to text = ""
+cc 089ec7c66549004b2553d2c4f7820b700984e0a037df5b54a5131708b660753b # shrinks to text = ""

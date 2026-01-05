@@ -13,3 +13,6 @@ pub use patterns::{SanitizationRule, SensitiveType, BUILTIN_RULES};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod extended_tests;

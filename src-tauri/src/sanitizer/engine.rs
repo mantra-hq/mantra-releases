@@ -119,20 +119,91 @@ impl Sanitizer {
             let rule = &self.enabled_rules[idx];
             let regex = &self.regexes[idx];
 
-            // 特殊处理: IP 地址需要过滤 localhost (127.x.x.x)
+            // 特殊处理: IP 地址需要过滤 localhost (127.x.x.x) 和版本号 (v1.2.3.4)
             if rule.sensitive_type == SensitiveType::IpAddress {
                 let replacement = format!("[REDACTED:{}]", rule.sensitive_type.as_str());
                 let mut count = 0;
+
+                // 使用闭包检查每个匹配的上下文
+                let text_bytes = result.as_bytes();
                 result = regex.replace_all(&result, |caps: &regex::Captures| {
-                    let matched = caps.get(0).unwrap().as_str();
+                    let m = caps.get(0).unwrap();
+                    let matched = m.as_str();
+                    let start = m.start();
+
                     // 保留 localhost (127.x.x.x)
                     if matched.starts_with("127.") {
-                        matched.to_string()
-                    } else {
-                        count += 1;
-                        replacement.clone()
+                        return matched.to_string();
                     }
+
+                    // 保留版本号 (前面是字母的 IP，如 v1.2.3.4)
+                    if start > 0 {
+                        let prev_char = text_bytes[start - 1] as char;
+                        if prev_char.is_ascii_alphabetic() {
+                            return matched.to_string();
+                        }
+                    }
+
+                    count += 1;
+                    replacement.clone()
                 }).to_string();
+
+                if count > 0 {
+                    stats.record(rule.sensitive_type, count);
+                }
+            } else if rule.sensitive_type == SensitiveType::Secret {
+                // 特殊处理: Generic Secret 需要排除已知 token 格式
+                let replacement = format!("[REDACTED:{}]", rule.sensitive_type.as_str());
+                let mut count = 0;
+
+                result = regex.replace_all(&result, |caps: &regex::Captures| {
+                    let matched = caps.get(0).unwrap().as_str();
+
+                    // 提取值部分 (去掉 password=, token: 等前缀和引号)
+                    let value = matched
+                        .split([':', '='])
+                        .nth(1)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'');
+
+                    // 跳过已被其他规则脱敏的内容
+                    if value.starts_with("[REDACTED") {
+                        return matched.to_string();
+                    }
+
+                    // 跳过已知 token 格式 (让更具体的规则处理)
+                    // GitHub token: ghp_, gho_, ghs_, ghu_, ghr_
+                    if value.len() >= 4 && value.starts_with("gh") {
+                        let third_char = value.chars().nth(2);
+                        let fourth_char = value.chars().nth(3);
+                        if matches!(third_char, Some('p' | 'o' | 's' | 'u' | 'r'))
+                           && fourth_char == Some('_') {
+                            return matched.to_string();
+                        }
+                    }
+                    if value.starts_with("sk-") {
+                        // OpenAI or Anthropic key
+                        return matched.to_string();
+                    }
+                    if value.starts_with("eyJ") {
+                        // JWT token
+                        return matched.to_string();
+                    }
+                    if value.starts_with("AKIA") {
+                        // AWS Access Key
+                        return matched.to_string();
+                    }
+                    if value.starts_with("AIza") {
+                        // Google Cloud Key
+                        return matched.to_string();
+                    }
+
+                    count += 1;
+                    replacement.clone()
+                }).to_string();
+
                 if count > 0 {
                     stats.record(rule.sensitive_type, count);
                 }
@@ -149,10 +220,11 @@ impl Sanitizer {
             }
         }
 
+        let has_matches = stats.total > 0;
         SanitizationResult {
             sanitized_text: result,
             stats,
-            has_matches: true,
+            has_matches,
         }
     }
 

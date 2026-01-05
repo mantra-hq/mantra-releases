@@ -125,7 +125,7 @@ pub static BUILTIN_RULES: Lazy<Vec<SanitizationRule>> = Lazy::new(|| {
             r"AIza[0-9A-Za-z\-_]{35}",
             SensitiveType::GoogleCloudKey,
         ),
-        // IPv4 地址 (匹配所有 IPv4，localhost 通过后处理过滤)
+        // IPv4 地址 (版本号如 v1.2.3.4 通过后处理过滤)
         SanitizationRule::new(
             "IPv4 Address",
             r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
@@ -150,6 +150,7 @@ pub static BUILTIN_RULES: Lazy<Vec<SanitizationRule>> = Lazy::new(|| {
             SensitiveType::JwtToken,
         ),
         // Generic Secret/Password patterns
+        // 已知 token 格式 (GitHub, OpenAI, Anthropic, JWT) 通过后处理过滤
         SanitizationRule::new(
             "Generic Secret",
             r#"(?i)(password|secret|token|api_key|apikey)\s*[:=]\s*["']?[^\s,;'"]{8,}["']?"#,
