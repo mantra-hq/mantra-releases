@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   Button,
+  Checkbox,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { feedback } from "@/lib/feedback";
@@ -522,8 +523,6 @@ export function ImportWizard({
             onSearchChange={setSearchQuery}
             loading={isLoading}
             importedPaths={importedPaths}
-            skipEmptySessions={skipEmptySessions}
-            onSkipEmptySessionsChange={setSkipEmptySessions}
           />
         );
       case "progress":
@@ -649,6 +648,19 @@ export function ImportWizard({
 
             {/* 右侧：导航按钮 */}
             <div className="flex items-center gap-2">
+              {/* 文件选择步骤：跳过空会话 Checkbox */}
+              {currentStep === "files" && (
+                <label className="flex items-center gap-1.5 cursor-pointer mr-2">
+                  <Checkbox
+                    checked={skipEmptySessions}
+                    onCheckedChange={(checked) => setSkipEmptySessions(checked === true)}
+                    data-testid="skip-empty-sessions-checkbox"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {t("import.skipEmptySessions")}
+                  </span>
+                </label>
+              )}
               {/* 文件选择步骤：显示返回按钮 */}
               {currentStep === "files" && (
                 <Button
