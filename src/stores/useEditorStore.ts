@@ -107,6 +107,8 @@ export interface EditorState {
     closeCurrentTab: () => void;
     /** 清除所有标签 */
     closeAllTabs: () => void;
+    /** 折叠所有文件夹 */
+    collapseAllFolders: () => void;
 
     // Story 2.14: 快照管理
     /** 退出快照模式 (AC #7, #8) */
@@ -322,6 +324,8 @@ export const useEditorStore = create<EditorState>()(
             },
 
             closeAllTabs: () => set({ tabs: [], activeTabId: null }),
+
+            collapseAllFolders: () => set({ expandedFolders: new Set<string>() }),
 
             // Story 2.14: 快照管理
             findLiveTab: (path) => {

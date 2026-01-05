@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { FolderOpen, Plus, Rocket } from "lucide-react";
+import { FolderOpen, Plus, Rocket, ChevronsDownUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -110,6 +110,11 @@ export function ProjectDrawer({
   const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
   // Story 2.27: 显示详情对话框的项目
   const [infoProject, setInfoProject] = React.useState<Project | null>(null);
+
+  // 一键折叠所有项目
+  const handleCollapseAll = React.useCallback(() => {
+    setExpandedProjects(new Set());
+  }, []);
 
   // 过滤后的项目列表
   const filteredProjects = React.useMemo(() => {
@@ -256,6 +261,18 @@ export function ProjectDrawer({
           <SheetTitle className="flex items-center gap-2 text-base">
             <FolderOpen className="h-5 w-5" />
             {t("project.myProjects")}
+            {expandedProjects.size > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 ml-1"
+                onClick={handleCollapseAll}
+                aria-label={t("common.collapseAll")}
+                title={t("common.collapseAll")}
+              >
+                <ChevronsDownUp className="h-4 w-4" />
+              </Button>
+            )}
           </SheetTitle>
           <SheetDescription className="sr-only">
             {t("project.browseAndManage")}

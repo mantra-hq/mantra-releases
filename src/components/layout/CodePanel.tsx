@@ -32,7 +32,7 @@ import { useEditorStore } from "@/stores/useEditorStore";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
-import { Files, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Files, PanelLeftClose, PanelLeft, ChevronsDownUp } from "lucide-react";
 import type { editor } from "monaco-editor";
 import { StatusBar, type CursorPosition } from "./StatusBar";
 import { BranchSelector } from "@/components/git/BranchSelector";
@@ -112,9 +112,11 @@ export function CodePanel({
     const tabs = useEditorStore((state) => state.tabs);
     const activeTabId = useEditorStore((state) => state.activeTabId);
     const sidebarOpen = useEditorStore((state) => state.sidebarOpen);
+    const expandedFolders = useEditorStore((state) => state.expandedFolders);
     const openTab = useEditorStore((state) => state.openTab);
     const updateViewState = useEditorStore((state) => state.updateViewState);
     const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
+    const collapseAllFolders = useEditorStore((state) => state.collapseAllFolders);
     const exitSnapshot = useEditorStore((state) => state.exitSnapshot);
 
     // QuickOpen 状态
@@ -403,15 +405,29 @@ export function CodePanel({
                             <Files className="h-4 w-4" />
                             <span>{t("editor.explorer")}</span>
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={toggleSidebar}
-                            aria-label={t("editor.closeSidebar")}
-                        >
-                            <PanelLeftClose className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                            {expandedFolders.size > 0 && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={collapseAllFolders}
+                                    aria-label={t("common.collapseAll")}
+                                    title={t("common.collapseAll")}
+                                >
+                                    <ChevronsDownUp className="h-4 w-4" />
+                                </Button>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={toggleSidebar}
+                                aria-label={t("editor.closeSidebar")}
+                            >
+                                <PanelLeftClose className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
 
                     {/* 文件树 */}
