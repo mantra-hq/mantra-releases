@@ -219,14 +219,10 @@ iconutil -c icns icon.iconset
 
 ## Related Documentation
 
-- [Product Requirements (PRD)](../../_bmad-output/planning-artifacts/prd.md)
-- [System Architecture](../../_bmad-output/planning-artifacts/architecture.md)
-- [UX Design Specification](../../_bmad-output/planning-artifacts/ux-design-specification.md)
-
 ## Contributing
 
 Contributions are welcome! Please read the project's contribution guidelines before submitting PRs.
 
 ## License
 
-See the root repository for license information.
+This project is licensed under the [MIT License](./LICENSE).

@@ -219,14 +219,10 @@ iconutil -c icns icon.iconset
 
 ## 相关文档
 
-- [产品需求文档 (PRD)](../../_bmad-output/planning-artifacts/prd.md)
-- [系统架构文档](../../_bmad-output/planning-artifacts/architecture.md)
-- [UX 设计规范](../../_bmad-output/planning-artifacts/ux-design-specification.md)
-
 ## 贡献
 
 欢迎贡献代码！提交 PR 前请阅读项目的贡献指南。
 
 ## 许可证
 
-请查看根仓库了解许可证信息。
+本项目采用 [MIT 许可证](./LICENSE) 开源。
