@@ -62,8 +62,14 @@ export function TopBarActions({
     originalText,
     sanitizedText,
     stats,
+    currentStep,
+    sensitiveMatches,
+    currentMatchIndex,
     openPreview,
     closePreview,
+    goToStep,
+    nextMatch,
+    previousMatch,
   } = useSanitizePreview(sessionId ?? null);
 
   return (
@@ -91,24 +97,25 @@ export function TopBarActions({
           </TooltipContent>
         </Tooltip>
 
-        {/* 脱敏预览按钮 - 有会话时显示 */}
+        {/* 脱敏预览按钮 - 有会话时显示 (AC3) */}
         {sessionId && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={openPreview}
                 disabled={isSanitizeLoading}
-                aria-label={t("topbar.sanitizePreview")}
+                aria-label={t("topbar.securityCheck")}
                 data-testid="topbar-sanitize-button"
-                className="h-8 w-8"
+                className="h-8 gap-1.5 px-2"
               >
                 <Shield className="h-4 w-4" />
+                <span className="text-sm">{t("topbar.securityCheck")}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{t("topbar.sanitizePreview")}</p>
+              <p>{t("topbar.securityCheckTooltip")}</p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -156,8 +163,8 @@ export function TopBarActions({
           </TooltipContent>
         </Tooltip>
 
-        {/* 通知铃铛 (Tech-Spec: 通知系统) */}
-        <NotificationBell />
+        {/* TODO: 通知功能暂未开放 */}
+        {/* <NotificationBell /> */}
 
         {/* 设置按钮 (Story 2.21 AC #16) */}
         <Tooltip>
@@ -191,10 +198,16 @@ export function TopBarActions({
         stats={stats}
         onConfirm={closePreview}
         isLoading={isSanitizeLoading}
+        currentStep={currentStep}
+        sensitiveMatches={sensitiveMatches}
+        currentMatchIndex={currentMatchIndex}
+        goToStep={goToStep}
+        nextMatch={nextMatch}
+        previousMatch={previousMatch}
       />
 
-      {/* 通知收件箱 (Tech-Spec: 通知系统) */}
-      <NotificationInbox />
+      {/* TODO: 通知功能暂未开放 */}
+      {/* <NotificationInbox /> */}
     </div>
   );
 }
