@@ -39,7 +39,8 @@
     "yesterday": "Yesterday",
     "daysAgo": "{{count}} days ago",
     "minutesAgo": "{{count}} minutes ago",
-    "hoursAgo": "{{count}} hours ago"
+    "hoursAgo": "{{count}} hours ago",
+    "unknownTime": "Unknown time"
   },
   "language": {
     "title": "Language",
@@ -188,6 +189,9 @@
     "viewingHistory": "Viewing History",
     "backToCurrent": "Back to Current",
     "noGitRepo": "No Git repository detected",
+    "noGitRepoDesc": "This project has no Git repository, unable to display code snapshots.",
+    "timeTravelStillWorks": "Conversation time travel still works",
+    "ensureGitFolder": "Please ensure the project directory contains a .git folder",
     "exitSnapshot": "Exit Snapshot",
     "historyVersionAt": "History version @ {{time}}",
     "historyVersion": "History version ({{hash}})",
@@ -203,7 +207,17 @@
     "narrativeFlow": "Narrative",
     "codeSnapshot": "Code Snapshot",
     "narrative": "Chat",
-    "code": "Code"
+    "code": "Code",
+    "closeDetailPanel": "Close detail panel",
+    "inputParams": "Input Parameters",
+    "outputResult": "Output Result",
+    "noDetailContent": "No detail content",
+    "quickOpenFile": "Quick Open File",
+    "loadingFiles": "Loading files...",
+    "noMatchingFiles": "No matching files found",
+    "quickOpenSelect": "Select",
+    "quickOpenOpen": "Open",
+    "quickOpenClose": "Close"
   },
   "git": {
     "loading": "Loading...",
@@ -227,12 +241,17 @@
     "navigate": "Navigate",
     "select": "Select",
     "resultsCount": "{{count}} results",
+    "totalFiles": "{{count}} files",
+    "totalResults": "{{count}} results",
     "recentAccess": "Recent Access",
     "noRecentSessions": "No recent sessions",
     "recentSessionsHint": "Sessions you visit will appear here"
   },
   "timeline": {
-    "sessionTimeline": "Session Timeline"
+    "sessionTimeline": "Session Timeline",
+    "userMessage": "User Message",
+    "aiResponse": "AI Response",
+    "gitCommit": "Git Commit"
   },
   "message": {
     "thinking": "Thinking",
@@ -256,6 +275,8 @@
     "results": "{{count}} results",
     "items": "{{count}} items",
     "tasks": "{{count}} tasks",
+    "todoCompleted": "{{completed}}/{{total}} done",
+    "todoInProgress": "{{count}} in progress",
     "details": "Details"
   },
   "filter": {
@@ -271,7 +292,9 @@
   },
   "session": {
     "selectSession": "Select Session",
-    "searchSession": "Search Sessions"
+    "searchSession": "Search Sessions",
+    "noMatchingSessions": "No matching sessions",
+    "messageCountLabel": "{{count}} messages"
   },
   "settings": {
     "title": "Settings",

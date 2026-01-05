@@ -1,11 +1,13 @@
 /**
  * TimeTooltip - 时间戳提示组件
  * Story 2.6: AC #5
+ * Story 2.26: 国际化支持
  */
 
 import { format, isToday } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import type { TimeTooltipProps } from "@/types/timeline";
@@ -14,14 +16,15 @@ import type { TimeTooltipProps } from "@/types/timeline";
  * 格式化时间戳为可读字符串
  * 当天显示 HH:mm:ss，否则显示完整日期时间
  */
-function formatTimestamp(timestamp: number): string {
+function formatTimestamp(timestamp: number, language: string): string {
     const date = new Date(timestamp);
+    const locale = language === "zh-CN" ? zhCN : enUS;
 
     if (isToday(date)) {
-        return format(date, "HH:mm:ss", { locale: zhCN });
+        return format(date, "HH:mm:ss", { locale });
     }
 
-    return format(date, "yyyy-MM-dd HH:mm:ss", { locale: zhCN });
+    return format(date, "yyyy-MM-dd HH:mm:ss", { locale });
 }
 
 /**
@@ -34,9 +37,11 @@ export const TimeTooltip = React.memo(function TimeTooltip({
     label,
     style,
 }: TimeTooltipProps) {
+    const { i18n } = useTranslation();
+
     if (!visible) return null;
 
-    const formattedTime = formatTimestamp(timestamp);
+    const formattedTime = formatTimestamp(timestamp, i18n.language);
 
     return (
         <div

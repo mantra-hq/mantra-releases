@@ -1,6 +1,7 @@
 /**
  * QuickOpen - 快速打开命令面板
  * Story 2.13: Task 6 - AC #15
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 模糊搜索文件名
@@ -9,6 +10,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -58,6 +60,7 @@ export function QuickOpen({
     onSelect,
     loading = false,
 }: QuickOpenProps) {
+    const { t } = useTranslation();
     const [query, setQuery] = React.useState("");
     const [selectedIndex, setSelectedIndex] = React.useState(0);
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -134,13 +137,13 @@ export function QuickOpen({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="p-0 max-w-2xl gap-0" onKeyDown={handleKeyDown} showCloseButton={false} aria-describedby={undefined}>
                 {/* 隐藏的标题 (无障碍) */}
-                <DialogTitle className="sr-only">快速打开文件</DialogTitle>
+                <DialogTitle className="sr-only">{t("editor.quickOpenFile")}</DialogTitle>
                 {/* 搜索输入 */}
                 <div className="flex items-center border-b border-border px-3">
                     <Search className="h-4 w-4 text-muted-foreground shrink-0" />
                     <Input
                         ref={inputRef}
-                        placeholder="输入文件名搜索..."
+                        placeholder={t("editor.searchFile")}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -152,11 +155,11 @@ export function QuickOpen({
                     <div ref={listRef} className="py-1">
                         {loading ? (
                             <div className="px-3 py-8 text-center text-muted-foreground">
-                                加载文件列表...
+                                {t("editor.loadingFiles")}
                             </div>
                         ) : filteredFiles.length === 0 ? (
                             <div className="px-3 py-8 text-center text-muted-foreground">
-                                未找到匹配的文件
+                                {t("editor.noMatchingFiles")}
                             </div>
                         ) : (
                             filteredFiles.map((file, index) => {
@@ -186,13 +189,13 @@ export function QuickOpen({
                 {/* 底部提示 */}
                 <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground flex items-center gap-4">
                     <span>
-                        <kbd className="px-1 bg-muted rounded">↑↓</kbd> 选择
+                        <kbd className="px-1 bg-muted rounded">↑↓</kbd> {t("editor.quickOpenSelect")}
                     </span>
                     <span>
-                        <kbd className="px-1 bg-muted rounded">Enter</kbd> 打开
+                        <kbd className="px-1 bg-muted rounded">Enter</kbd> {t("editor.quickOpenOpen")}
                     </span>
                     <span>
-                        <kbd className="px-1 bg-muted rounded">Esc</kbd> 关闭
+                        <kbd className="px-1 bg-muted rounded">Esc</kbd> {t("editor.quickOpenClose")}
                     </span>
                 </div>
             </DialogContent>

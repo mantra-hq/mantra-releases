@@ -39,7 +39,8 @@
     "yesterday": "昨天",
     "daysAgo": "{{count}}天前",
     "minutesAgo": "{{count}}分钟前",
-    "hoursAgo": "{{count}}小时前"
+    "hoursAgo": "{{count}}小时前",
+    "unknownTime": "未知时间"
   },
   "language": {
     "title": "语言",
@@ -188,6 +189,9 @@
     "viewingHistory": "查看历史状态",
     "backToCurrent": "返回当前",
     "noGitRepo": "未检测到 Git 仓库",
+    "noGitRepoDesc": "此项目未检测到 Git 仓库，无法显示代码快照。",
+    "timeTravelStillWorks": "对话时间旅行功能仍可正常使用",
+    "ensureGitFolder": "请确保项目目录包含 .git 文件夹",
     "exitSnapshot": "退出快照",
     "historyVersionAt": "历史版本 @ {{time}}",
     "historyVersion": "历史版本 ({{hash}})",
@@ -203,7 +207,17 @@
     "narrativeFlow": "对话流",
     "codeSnapshot": "代码快照",
     "narrative": "对话",
-    "code": "代码"
+    "code": "代码",
+    "closeDetailPanel": "关闭详情面板",
+    "inputParams": "输入参数",
+    "outputResult": "输出结果",
+    "noDetailContent": "暂无详情内容",
+    "quickOpenFile": "快速打开文件",
+    "loadingFiles": "加载文件列表...",
+    "noMatchingFiles": "未找到匹配的文件",
+    "quickOpenSelect": "选择",
+    "quickOpenOpen": "打开",
+    "quickOpenClose": "关闭"
   },
   "git": {
     "loading": "加载中...",
@@ -227,12 +241,17 @@
     "navigate": "导航",
     "select": "选择",
     "resultsCount": "{{count}} 个结果",
+    "totalFiles": "共 {{count}} 个文件",
+    "totalResults": "共 {{count}} 个结果",
     "recentAccess": "最近访问",
     "noRecentSessions": "暂无最近访问的会话",
     "recentSessionsHint": "访问会话后将在此显示"
   },
   "timeline": {
-    "sessionTimeline": "会话时间轴"
+    "sessionTimeline": "会话时间轴",
+    "userMessage": "用户消息",
+    "aiResponse": "AI 回复",
+    "gitCommit": "Git 提交"
   },
   "message": {
     "thinking": "思考",
@@ -256,6 +275,8 @@
     "results": "{{count}} 个结果",
     "items": "{{count}} 项",
     "tasks": "{{count}} 个任务",
+    "todoCompleted": "{{completed}}/{{total}} 完成",
+    "todoInProgress": "{{count}} 进行中",
     "details": "详情"
   },
   "filter": {
@@ -271,7 +292,9 @@
   },
   "session": {
     "selectSession": "选择会话",
-    "searchSession": "搜索会话"
+    "searchSession": "搜索会话",
+    "noMatchingSessions": "没有匹配的会话",
+    "messageCountLabel": "{{count}} 条消息"
   },
   "settings": {
     "title": "设置",

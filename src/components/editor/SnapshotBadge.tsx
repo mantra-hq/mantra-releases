@@ -1,6 +1,7 @@
 /**
  * SnapshotBadge - 历史状态徽章组件
  * Story 2.14: Task 1 - AC #2, #3, #4, #5
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示历史状态类型标识
@@ -10,6 +11,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Camera, GitCommit } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,9 +61,9 @@ const STYLES = {
 /**
  * 格式化快照时间为 HH:MM 格式
  */
-function formatSnapshotTime(timestamp: number): string {
+function formatSnapshotTime(timestamp: number, locale: string): string {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString("zh-CN", {
+    return date.toLocaleTimeString(locale, {
         hour: "2-digit",
         minute: "2-digit",
     });
@@ -78,6 +80,7 @@ export function SnapshotBadge({
     relativeTime,
     className,
 }: SnapshotBadgeProps) {
+    const { i18n } = useTranslation();
     const styles = STYLES[type];
     const Icon = type === "snapshot" ? Camera : GitCommit;
 
@@ -95,7 +98,7 @@ export function SnapshotBadge({
     const pillContent = React.useMemo(() => {
         if (type === "snapshot" && timestamp) {
             // 会话快照: 📸 10:32
-            return formatSnapshotTime(timestamp);
+            return formatSnapshotTime(timestamp, i18n.language);
         }
         if (type === "git-history" && commitHash) {
             // Git 历史: 🔖 abc1234 · 3天前
@@ -103,7 +106,7 @@ export function SnapshotBadge({
             return relativeTime ? `${shortHash} · ${relativeTime}` : shortHash;
         }
         return null;
-    }, [type, timestamp, commitHash, relativeTime]);
+    }, [type, timestamp, commitHash, relativeTime, i18n.language]);
 
     if (!pillContent) return null;
 

@@ -1,11 +1,13 @@
 /**
  * SearchResultRenderer - 搜索结果渲染器
  * Story 2.15: Task 6.4
+ * Story 2.26: 国际化支持
  *
  * 显示搜索结果列表
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +91,7 @@ export function SearchResultRenderer({
     autoHeight = true,
     className,
 }: SearchResultRendererProps) {
+    const { t } = useTranslation();
     const results = React.useMemo(() => parseSearchResults(content), [content]);
 
     if (results.length === 0) {
@@ -117,7 +120,9 @@ export function SearchResultRenderer({
             )}
         >
             <div className="text-xs text-muted-foreground mb-2">
-                共 {results.length} 个{results[0]?.line === 0 ? "文件" : "结果"}
+                {results[0]?.line === 0
+                    ? t("search.totalFiles", { count: results.length })
+                    : t("search.totalResults", { count: results.length })}
             </div>
 
             <div className="space-y-1">

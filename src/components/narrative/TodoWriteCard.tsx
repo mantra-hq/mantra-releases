@@ -6,6 +6,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
     ChevronDown,
@@ -95,6 +96,7 @@ export function TodoWriteCard({
     onHover,
     className,
 }: TodoWriteCardProps) {
+    const { t } = useTranslation();
     const [isExpanded, setIsExpanded] = React.useState(false);
     const todos = parseTodos(toolInput);
     const { completed, inProgress, total } = getStats(todos);
@@ -131,8 +133,8 @@ export function TodoWriteCard({
                     <span className="font-medium text-sm text-foreground">TodoWrite</span>
                     <span className="text-muted-foreground">·</span>
                     <span className="text-sm text-muted-foreground">
-                        {completed}/{total} 完成
-                        {inProgress > 0 && `, ${inProgress} 进行中`}
+                        {t("message.todoCompleted", { completed, total })}
+                        {inProgress > 0 && `, ${t("message.todoInProgress", { count: inProgress })}`}
                     </span>
 
                     <div className="flex-1" />
@@ -156,7 +158,7 @@ export function TodoWriteCard({
                             "text-muted-foreground hover:text-foreground",
                             "transition-colors"
                         )}
-                        title={isExpanded ? "收起" : "展开"}
+                        title={isExpanded ? t("common.collapse") : t("common.expand")}
                     >
                         {isExpanded ? (
                             <ChevronUp className="h-3.5 w-3.5" />

@@ -1,14 +1,16 @@
 /**
  * SessionTreeItem Component - 会话树节点
  * Story 2.18: Task 4, Story 2.25: AC3
+ * Story 2.26: 国际化支持
  *
  * 会话节点，显示会话信息和当前选中状态
  * 使用官方来源图标区分不同 AI 工具
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { HighlightText } from "./DrawerSearch";
 import { SourceIcon } from "@/components/import/SourceIcons";
@@ -56,17 +58,19 @@ export function SessionTreeItem({
   searchKeyword,
   onClick,
 }: SessionTreeItemProps) {
+  const { i18n } = useTranslation();
+
   // 格式化相对时间
   const relativeTime = React.useMemo(() => {
     try {
       return formatDistanceToNow(new Date(session.updated_at), {
         addSuffix: true,
-        locale: zhCN,
+        locale: i18n.language === "zh-CN" ? zhCN : enUS,
       });
     } catch {
       return "";
     }
-  }, [session.updated_at]);
+  }, [session.updated_at, i18n.language]);
 
   // 会话名称（优先使用 title，否则使用 ID 的简短形式）
   const sessionName = formatSessionName(session);

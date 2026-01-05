@@ -22,7 +22,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import { DiffModeToggle } from "./DiffModeToggle";
 import { SnapshotBadge, type SnapshotType } from "./SnapshotBadge";
 
@@ -83,7 +83,7 @@ export function Breadcrumbs({
     onReturnToCurrent,
     className,
 }: BreadcrumbsProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     // 历史信息优先使用 historyInfo，否则回退到 timestamp
     const effectiveHistoryInfo = historyInfo || (timestamp ? { timestamp } : undefined);
     const segments = React.useMemo(() => {
@@ -191,7 +191,7 @@ export function Breadcrumbs({
                             commitHash={effectiveHistoryInfo.commitHash}
                             relativeTime={formatDistanceToNow(new Date(effectiveHistoryInfo.timestamp), {
                                 addSuffix: false,
-                                locale: zhCN,
+                                locale: i18n.language === "zh-CN" ? zhCN : enUS,
                             })}
                         />
                     )}

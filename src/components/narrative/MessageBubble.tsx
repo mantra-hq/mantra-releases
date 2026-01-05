@@ -1,12 +1,14 @@
 /**
  * MessageBubble - 消息气泡组件
  * Story 2.3: Task 3, Story 2.4: Task 5
+ * Story 2.26: 国际化支持
  *
  * 支持 User 和 AI 两种消息样式变体
  * 使用 ContentBlockRenderer 渲染所有内容块类型
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { NarrativeMessage } from "@/types/message";
 import { ContentBlockRenderer } from "./ContentBlockRenderer";
@@ -31,10 +33,10 @@ export interface MessageBubbleProps {
 /**
  * 格式化时间戳显示
  */
-function formatTimestamp(timestamp: string): string {
+function formatTimestamp(timestamp: string, locale: string): string {
   try {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString("zh-CN", {
+    return date.toLocaleTimeString(locale, {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -48,8 +50,9 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
     { message, isSelected = false, onClick, measureElement, index, className },
     ref
   ) => {
+    const { i18n } = useTranslation();
     const isUser = message.role === "user";
-    const timestamp = formatTimestamp(message.timestamp);
+    const timestamp = formatTimestamp(message.timestamp, i18n.language);
 
     // 获取消息可复制内容 (AC1)
     const copyContent = React.useMemo(

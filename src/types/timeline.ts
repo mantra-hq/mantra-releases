@@ -115,7 +115,7 @@ export function messagesToTimelineEvents(
     timestamp: new Date(msg.timestamp).getTime(),
     type: msg.role === 'user' ? 'user-message' : 'ai-response' as TimelineEventType,
     messageIndex: index,
-    label: msg.role === 'user' ? '用户消息' : 'AI 回复',
+    // label 由组件根据 type 进行国际化翻译
   }));
 }
 

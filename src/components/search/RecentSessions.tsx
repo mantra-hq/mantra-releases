@@ -30,7 +30,11 @@ export interface RecentSessionsProps {
 /**
  * 格式化访问时间
  */
-function formatAccessTime(timestamp: number, t: (key: string, options?: Record<string, unknown>) => string): string {
+function formatAccessTime(
+    timestamp: number,
+    locale: string,
+    t: (key: string, options?: Record<string, unknown>) => string
+): string {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -49,7 +53,7 @@ function formatAccessTime(timestamp: number, t: (key: string, options?: Record<s
     } else if (diffDays < 7) {
         return t("time.daysAgo", { count: diffDays });
     } else {
-        return date.toLocaleDateString("zh-CN", {
+        return date.toLocaleDateString(locale, {
             month: "short",
             day: "numeric",
         });
@@ -66,7 +70,7 @@ export function RecentSessions({
     onHover,
     className,
 }: RecentSessionsProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
 
     if (sessions.length === 0) {
         return (
@@ -118,7 +122,7 @@ export function RecentSessions({
                             </div>
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0">
-                            {formatAccessTime(session.accessedAt, t)}
+                            {formatAccessTime(session.accessedAt, i18n.language, t)}
                         </span>
                     </div>
                 ))}

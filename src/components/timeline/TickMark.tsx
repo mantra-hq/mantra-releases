@@ -1,6 +1,7 @@
 /**
  * TickMark - 时间轴刻度标记组件
  * Story 2.6: AC #2
+ * Story 2.26: 国际化支持
  *
  * 在时间轴上标记关键节点:
  * - user-message: 蓝色圆点
@@ -9,6 +10,7 @@
  */
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import type { TickMarkProps, TimelineEvent } from "@/types/timeline";
@@ -62,7 +64,24 @@ function TickMarkComponent({
     onClick,
     onHover,
 }: TickMarkProps) {
+    const { t } = useTranslation();
     const [showTooltip, setShowTooltip] = React.useState(false);
+
+    // 根据事件类型获取翻译后的标签
+    const getEventLabel = React.useCallback((type: TimelineEvent["type"]): string => {
+        switch (type) {
+            case "user-message":
+                return t("timeline.userMessage");
+            case "ai-response":
+                return t("timeline.aiResponse");
+            case "git-commit":
+                return t("timeline.gitCommit");
+            default:
+                return type;
+        }
+    }, [t]);
+
+    const eventLabel = event.label || getEventLabel(event.type);
 
     const handleMouseEnter = React.useCallback(() => {
         setShowTooltip(true);
@@ -94,14 +113,14 @@ function TickMarkComponent({
                 onClick={handleClick}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
-                aria-label={event.label || `${event.type} at ${new Date(event.timestamp).toLocaleTimeString()}`}
+                aria-label={eventLabel}
             />
 
             {/* Tooltip */}
             <TimeTooltip
                 timestamp={event.timestamp}
                 visible={showTooltip}
-                label={event.label}
+                label={eventLabel}
             />
         </div>
     );

@@ -1,11 +1,13 @@
 /**
  * NoGitWarning - Git 仓库未关联警告组件
  * Story 2.11: Task 7 (AC6, AC7)
+ * Story 2.26: 国际化支持
  *
  * 当项目未检测到 Git 仓库时显示友好的警告提示
  * 提供操作引导指导用户如何关联 Git 仓库
  */
 
+import { useTranslation } from "react-i18next";
 import { GitBranch, AlertTriangle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,12 +30,17 @@ export interface NoGitWarningProps {
  * - 提供"了解更多"链接 (AC7)
  */
 export function NoGitWarning({ className, projectPath, onLearnMore }: NoGitWarningProps) {
+  const { t, i18n } = useTranslation();
+
   const handleLearnMore = () => {
     if (onLearnMore) {
       onLearnMore();
     } else {
       // 默认打开 Git 文档
-      window.open("https://git-scm.com/book/zh/v2", "_blank");
+      const gitDocUrl = i18n.language === "zh-CN"
+        ? "https://git-scm.com/book/zh/v2"
+        : "https://git-scm.com/book/en/v2";
+      window.open(gitDocUrl, "_blank");
     }
   };
 
@@ -52,17 +59,17 @@ export function NoGitWarning({ className, projectPath, onLearnMore }: NoGitWarni
 
       {/* 标题 */}
       <h3 className="mb-2 text-base font-semibold text-foreground">
-        未检测到 Git 仓库
+        {t("editor.noGitRepo")}
       </h3>
 
       {/* 说明文字 (AC6) */}
       <p className="mb-2 max-w-[320px] text-sm text-muted-foreground">
-        此项目未检测到 Git 仓库，无法显示代码快照。
+        {t("editor.noGitRepoDesc")}
       </p>
 
       {/* 对话时间旅行提示 */}
       <p className="mb-4 max-w-[320px] text-xs text-emerald-500/80">
-        对话时间旅行功能仍可正常使用
+        {t("editor.timeTravelStillWorks")}
       </p>
 
       {/* 项目路径提示 */}
@@ -83,7 +90,7 @@ export function NoGitWarning({ className, projectPath, onLearnMore }: NoGitWarni
         )}
       >
         <AlertTriangle className="size-4" />
-        <span>请确保项目目录包含 .git 文件夹</span>
+        <span>{t("editor.ensureGitFolder")}</span>
       </div>
 
       {/* 了解更多链接 (AC7) */}
@@ -93,7 +100,7 @@ export function NoGitWarning({ className, projectPath, onLearnMore }: NoGitWarni
         onClick={handleLearnMore}
         className="gap-2"
       >
-        了解更多
+        {t("common.learnMore")}
         <ExternalLink className="size-4" />
       </Button>
     </div>

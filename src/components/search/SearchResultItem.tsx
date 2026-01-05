@@ -1,11 +1,13 @@
 /**
  * SearchResultItem - 搜索结果项组件
  * Story 2.10: Task 3.2
+ * Story 2.26: 国际化支持
  *
  * 显示单个搜索结果项，包含项目名、会话名和匹配片段
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { SearchResult } from "@/stores/useSearchStore";
 
@@ -70,23 +72,27 @@ function renderHighlightedText(
 /**
  * 格式化时间戳
  */
-function formatTimestamp(timestamp: number): string {
+function formatTimestamp(
+    timestamp: number,
+    locale: string,
+    t: (key: string, options?: Record<string, unknown>) => string
+): string {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) {
-        return date.toLocaleTimeString("zh-CN", {
+        return date.toLocaleTimeString(locale, {
             hour: "2-digit",
             minute: "2-digit",
         });
     } else if (diffDays === 1) {
-        return "昨天";
+        return t("time.yesterday");
     } else if (diffDays < 7) {
-        return `${diffDays}天前`;
+        return t("time.daysAgo", { count: diffDays });
     } else {
-        return date.toLocaleDateString("zh-CN", {
+        return date.toLocaleDateString(locale, {
             month: "short",
             day: "numeric",
         });
@@ -102,6 +108,8 @@ export function SearchResultItem({
     onClick,
     onMouseEnter,
 }: SearchResultItemProps) {
+    const { t, i18n } = useTranslation();
+
     return (
         <div
             role="option"
@@ -125,7 +133,7 @@ export function SearchResultItem({
                     {result.sessionName}
                 </span>
                 <span className="text-xs text-muted-foreground shrink-0">
-                    {formatTimestamp(result.timestamp)}
+                    {formatTimestamp(result.timestamp, i18n.language, t)}
                 </span>
             </div>
 

@@ -124,16 +124,15 @@ function getFileName(path: string): string {
 
 /**
  * 格式化历史标签显示名称
+ * 使用数字格式避免语言依赖
  */
 function formatHistoryLabel(path: string, timestamp?: number): string {
     const fileName = getFileName(path);
     if (timestamp) {
         const date = new Date(timestamp);
-        const timeStr = date.toLocaleTimeString("zh-CN", {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
-        return `${fileName} @ ${timeStr}`;
+        const hours = date.getHours().toString().padStart(2, "0");
+        const minutes = date.getMinutes().toString().padStart(2, "0");
+        return `${fileName} @ ${hours}:${minutes}`;
     }
     return fileName;
 }

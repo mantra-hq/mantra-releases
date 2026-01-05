@@ -1,14 +1,16 @@
 /**
  * SessionDropdown Component - 会话下拉选择器
  * Story 2.17: Task 3
+ * Story 2.26: 国际化支持
  *
  * 使用 Popover + Command 实现搜索和选择
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronsUpDown, MessageSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +55,7 @@ export function SessionDropdown({
   sessions,
   onSessionSelect,
 }: SessionDropdownProps) {
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = React.useState(false);
 
   // 处理会话选择
@@ -70,7 +73,7 @@ export function SessionDropdown({
   const formatRelativeTime = (timestamp: number) => {
     return formatDistanceToNow(new Date(timestamp), {
       addSuffix: true,
-      locale: zhCN,
+      locale: i18n.language === "zh-CN" ? zhCN : enUS,
     });
   };
 
@@ -82,7 +85,7 @@ export function SessionDropdown({
           size="sm"
           role="combobox"
           aria-expanded={open}
-          aria-label="选择会话"
+          aria-label={t("session.selectSession")}
           data-testid="session-dropdown-trigger"
           className={cn(
             "h-8 px-2 gap-1.5 min-w-0",
@@ -108,11 +111,11 @@ export function SessionDropdown({
         <Command>
           {/* 搜索输入框 (AC8) */}
           <CommandInput
-            placeholder="搜索会话..."
+            placeholder={t("session.searchSession")}
             data-testid="session-search-input"
           />
           <CommandList>
-            <CommandEmpty>未找到匹配的会话</CommandEmpty>
+            <CommandEmpty>{t("session.noMatchingSessions")}</CommandEmpty>
             <CommandGroup>
               {sessions.map((session) => (
                 <CommandItem
@@ -139,7 +142,7 @@ export function SessionDropdown({
                     </div>
                     {/* 会话元信息 (AC7) */}
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{session.messageCount} 条消息</span>
+                      <span>{t("session.messageCountLabel", { count: session.messageCount })}</span>
                       <span>·</span>
                       <span>{formatRelativeTime(session.lastActiveAt)}</span>
                     </div>

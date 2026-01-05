@@ -1,12 +1,14 @@
 /**
  * ToolDetailPanel - 工具详情面板组件
  * Story 2.15: Task 4
+ * Story 2.26: 国际化支持
  *
  * 在右侧面板显示完整的 Call + Output 详情
  * AC: #7, #10
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { X, Wrench, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolOutputRenderer } from "./renderers";
@@ -58,6 +60,7 @@ export function ToolDetailPanel({
     renderOutput,
     className,
 }: ToolDetailPanelProps) {
+    const { t } = useTranslation();
     const hasInput = toolInput && Object.keys(toolInput).length > 0;
     const hasOutput = Boolean(toolOutput);
 
@@ -107,7 +110,7 @@ export function ToolDetailPanel({
                             "p-1 rounded hover:bg-muted",
                             "transition-colors"
                         )}
-                        aria-label="关闭详情面板"
+                        aria-label={t("editor.closeDetailPanel")}
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -121,7 +124,7 @@ export function ToolDetailPanel({
                     <div className="border-b border-border shrink-0">
                         <div className="px-4 py-2 bg-muted/30">
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                输入参数
+                                {t("editor.inputParams")}
                             </span>
                         </div>
                         <div className="px-4 py-3 max-h-40 overflow-auto">
@@ -137,7 +140,7 @@ export function ToolDetailPanel({
                     <div className="flex-1 flex flex-col min-h-0">
                         <div className="px-4 py-2 bg-muted/30 shrink-0">
                             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                输出结果
+                                {t("editor.outputResult")}
                             </span>
                         </div>
                         <div className="flex-1 min-h-0 overflow-auto p-2">
@@ -158,7 +161,7 @@ export function ToolDetailPanel({
                 {/* 无内容提示 */}
                 {!hasInput && !hasOutput && (
                     <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-                        暂无详情内容
+                        {t("editor.noDetailContent")}
                     </div>
                 )}
             </div>

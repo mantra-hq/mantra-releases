@@ -1,6 +1,7 @@
 /**
  * HistoryBanner - 历史状态 Banner
  * Story 2.7: Task 4 - AC #6
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 显示当前查看的历史时间戳
@@ -9,11 +10,12 @@
  * - 使用警告色强调历史状态
  */
 
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { History, GitCommit, ArrowLeft, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 
 export interface HistoryBannerProps {
     /** 当前查看的时间戳 (Unix ms) */
@@ -31,13 +33,13 @@ export interface HistoryBannerProps {
 /**
  * 格式化时间戳为可读格式
  */
-function formatTimestamp(timestamp: number): string {
+function formatTimestamp(timestamp: number, language: string, fallbackText: string): string {
     try {
         return format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss", {
-            locale: zhCN,
+            locale: language === "zh-CN" ? zhCN : enUS,
         });
     } catch {
-        return "未知时间";
+        return fallbackText;
     }
 }
 
@@ -60,7 +62,8 @@ export function HistoryBanner({
     onReturnToCurrent,
     className,
 }: HistoryBannerProps) {
-    const formattedTime = formatTimestamp(timestamp);
+    const { t, i18n } = useTranslation();
+    const formattedTime = formatTimestamp(timestamp, i18n.language, t("time.unknownTime"));
     const shortHash = commitHash?.slice(0, 7);
     const truncatedMessage = truncateMessage(commitMessage);
 
@@ -78,7 +81,7 @@ export function HistoryBanner({
                 className
             )}
             role="banner"
-            aria-label="历史模式提示"
+            aria-label={t("editor.historyModeHint")}
         >
             {/* 左侧信息 */}
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -92,7 +95,7 @@ export function HistoryBanner({
                     {/* 第一行: 时间信息 */}
                     <div className="flex items-center gap-2 text-sm">
                         <Clock className="size-3.5 text-muted-foreground" />
-                        <span className="text-foreground font-medium">查看历史状态:</span>
+                        <span className="text-foreground font-medium">{t("editor.viewingHistory")}:</span>
                         <span className="font-mono text-muted-foreground">
                             {formattedTime}
                         </span>
@@ -128,7 +131,7 @@ export function HistoryBanner({
                 )}
             >
                 <ArrowLeft className="size-4 mr-1" />
-                <span>返回当前</span>
+                <span>{t("editor.backToCurrent")}</span>
             </Button>
         </div>
     );

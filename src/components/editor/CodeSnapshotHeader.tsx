@@ -1,11 +1,13 @@
 /**
  * CodeSnapshotHeader - 代码快照头部组件
  * Story 2.5: Task 3
+ * Story 2.26: 国际化支持
  *
  * 显示文件路径和历史状态指示器
  */
 
 import { FileCode, History, Copy, Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useState, useCallback } from "react";
 
@@ -25,13 +27,14 @@ export interface CodeSnapshotHeaderProps {
 /**
  * 格式化时间戳为友好显示
  * @param isoTimestamp - ISO 8601 格式时间戳
+ * @param locale - 语言环境
  * @returns 格式化后的时间字符串
  */
-function formatTimestamp(isoTimestamp: string): string {
+function formatTimestamp(isoTimestamp: string, locale: string): string {
   try {
     const date = new Date(isoTimestamp);
     // 使用简洁格式: "12/30 14:30"
-    return date.toLocaleString("zh-CN", {
+    return date.toLocaleString(locale, {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
@@ -58,6 +61,7 @@ export function CodeSnapshotHeader({
   isHistorical = false,
   className,
 }: CodeSnapshotHeaderProps) {
+  const { t, i18n } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   // 复制文件路径到剪贴板
@@ -73,10 +77,10 @@ export function CodeSnapshotHeader({
   }, [filePath]);
 
   // 显示的路径文本
-  const displayPath = filePath || "未选择文件";
+  const displayPath = filePath || t("editor.noFileSelected");
 
   // 格式化时间戳
-  const formattedTime = timestamp ? formatTimestamp(timestamp) : null;
+  const formattedTime = timestamp ? formatTimestamp(timestamp, i18n.language) : null;
 
   return (
     <div

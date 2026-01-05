@@ -1,11 +1,13 @@
 /**
  * SessionListItem Component - 会话列表项
  * Story 2.9 UX Redesign
+ * Story 2.26: 国际化支持
  *
  * 单个会话的列表项，显示文件名、大小、时间
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FileJson } from "lucide-react";
 import { Checkbox } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -35,7 +37,11 @@ function formatFileSize(bytes: number): string {
 /**
  * 格式化相对时间
  */
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(
+    timestamp: number,
+    locale: string,
+    t: (key: string, options?: Record<string, unknown>) => string
+): string {
     const now = Date.now();
     const diff = now - timestamp;
 
@@ -43,11 +49,11 @@ function formatRelativeTime(timestamp: number): string {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return "刚刚";
-    if (minutes < 60) return `${minutes} 分钟前`;
-    if (hours < 24) return `${hours} 小时前`;
-    if (days < 7) return `${days} 天前`;
-    return new Date(timestamp).toLocaleDateString("zh-CN");
+    if (minutes < 1) return t("time.justNow");
+    if (minutes < 60) return t("time.minutesAgo", { count: minutes });
+    if (hours < 24) return t("time.hoursAgo", { count: hours });
+    if (days < 7) return t("time.daysAgo", { count: days });
+    return new Date(timestamp).toLocaleDateString(locale);
 }
 
 /**
@@ -59,6 +65,8 @@ export function SessionListItem({
     onToggle,
     disabled = false,
 }: SessionListItemProps) {
+    const { t, i18n } = useTranslation();
+
     // 处理复选框点击，阻止事件冒泡
     const handleCheckboxClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -106,7 +114,7 @@ export function SessionListItem({
                     </span>
                     <span className="text-xs text-muted-foreground">·</span>
                     <span className="text-xs text-muted-foreground">
-                        {formatRelativeTime(session.modifiedAt)}
+                        {formatRelativeTime(session.modifiedAt, i18n.language, t)}
                     </span>
                 </div>
             </div>

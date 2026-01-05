@@ -1,16 +1,18 @@
 /**
  * FileNotFoundBanner - 文件不存在提示组件
  * Story 2.12: Task 3 - AC #5
+ * Story 2.26: 国际化支持
  *
  * 当选中的文件在历史 commit 中不存在时，显示友好的提示信息
  * 并提供保持当前视图或关闭提示的选项
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FileQuestion, History, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 export interface FileNotFoundBannerProps {
@@ -39,18 +41,20 @@ export function FileNotFoundBanner({
   onKeepCurrent,
   className,
 }: FileNotFoundBannerProps) {
+  const { t, i18n } = useTranslation();
+
   // 格式化时间为相对时间
   const timeAgo = React.useMemo(() => {
     if (!timestamp) return null;
     try {
       return formatDistanceToNow(new Date(timestamp), {
         addSuffix: true,
-        locale: zhCN,
+        locale: i18n.language === "zh-CN" ? zhCN : enUS,
       });
     } catch {
       return null;
     }
-  }, [timestamp]);
+  }, [timestamp, i18n.language]);
 
   return (
     <div
@@ -71,7 +75,7 @@ export function FileNotFoundBanner({
         {/* 文本内容 */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-amber-200">
-            文件在该时间点不存在
+            {t("editor.fileNotExist")}
           </p>
           <p className="text-xs text-amber-200/70 truncate mt-0.5">
             <code className="bg-amber-500/20 px-1 rounded">{filePath}</code>
@@ -96,7 +100,7 @@ export function FileNotFoundBanner({
               onClick={onKeepCurrent}
               className="text-amber-200 hover:text-amber-100 hover:bg-amber-500/20"
             >
-              保持当前视图
+              {t("editor.keepCurrentView")}
             </Button>
           )}
           {onDismiss && (
@@ -105,7 +109,7 @@ export function FileNotFoundBanner({
               size="icon"
               onClick={onDismiss}
               className="text-amber-200/50 hover:text-amber-200 h-8 w-8"
-              aria-label="关闭提示"
+              aria-label={t("editor.closeTip")}
             >
               <X className="w-4 h-4" />
             </Button>

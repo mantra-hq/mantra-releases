@@ -1,6 +1,7 @@
 /**
  * TimberLine - 时间轴控制器主组件
  * Story 2.6: AC #1, #3, #4, #5, #6, #7
+ * Story 2.26: 国际化支持
  *
  * 功能:
  * - 水平时间轴覆盖整个会话时间范围
@@ -11,6 +12,7 @@
  */
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import type {
@@ -39,6 +41,8 @@ export const TimberLine = React.memo(function TimberLine({
     className,
     disabled = false,
 }: TimberLineProps) {
+    const { t } = useTranslation();
+
     // Refs
     const trackRef = React.useRef<HTMLDivElement>(null);
 
@@ -271,7 +275,7 @@ export const TimberLine = React.memo(function TimberLine({
                 className
             )}
             role="slider"
-            aria-label="会话时间轴"
+            aria-label={t("timeline.sessionTimeline")}
             aria-valuemin={startTime}
             aria-valuemax={endTime}
             aria-valuenow={currentTime}
