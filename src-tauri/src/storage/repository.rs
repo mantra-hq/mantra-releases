@@ -566,20 +566,20 @@ impl Database {
         Ok(())
     }
 
-    /// Get all imported project cwd paths
+    /// Get all imported session IDs
     ///
-    /// Returns a list of cwd paths for all projects.
-    /// Used by Story 2.20 to identify already-imported projects in ImportWizard.
-    pub fn get_imported_project_paths(&self) -> Result<Vec<String>, StorageError> {
+    /// Returns a list of session IDs for all imported sessions.
+    /// Used by ImportWizard to identify already-imported files.
+    pub fn get_imported_session_ids(&self) -> Result<Vec<String>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT cwd FROM projects",
+            "SELECT id FROM sessions",
         )?;
 
-        let paths = stmt
+        let ids = stmt
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(paths)
+        Ok(ids)
     }
 
     /// Get session message count for a specific session
@@ -970,9 +970,15 @@ mod tests {
         db.get_or_create_project("/home/user/project2").unwrap();
 
         let paths = db.get_imported_project_paths().unwrap();
-        assert_eq!(paths.len(), 2);
+        // Each project returns 2 paths: original cwd + log directory format
+        assert_eq!(paths.len(), 4);
+        // Original cwd paths
         assert!(paths.contains(&"/home/user/project1".to_string()));
         assert!(paths.contains(&"/home/user/project2".to_string()));
+        // Log directory format paths should contain the converted format
+        // /home/user/project1 -> -home-user-project1
+        let has_log_format = paths.iter().any(|p| p.contains("-home-user-project1"));
+        assert!(has_log_format, "Should contain log directory format path");
     }
 
     // Story 2.25: Multi-source aggregation tests

@@ -785,4 +785,48 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_parse_empty_session_files() {
+        let parser = ClaudeParser::new();
+
+        // Test file with only file-history-snapshot records
+        let file1 = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-input-poc/1239d15e-5b17-4607-961f-ba103d232021.jsonl";
+        if std::path::Path::new(file1).exists() {
+            let result = parser.parse_file(file1);
+            println!("\nFile 1 (file-history-snapshot only):");
+            println!("  Result: {:?}", result);
+            assert!(result.is_err(), "Should return error for file-history-snapshot only file");
+            if let Err(e) = result {
+                println!("  Error type: {:?}", e);
+                assert!(e.is_skippable(), "Error should be skippable");
+            }
+        }
+
+        // Test file with only summary record
+        let file2 = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-input-poc/b7485bbe-3a7d-460c-8452-54ec4ce4a3a5.jsonl";
+        if std::path::Path::new(file2).exists() {
+            let result = parser.parse_file(file2);
+            println!("\nFile 2 (summary only):");
+            println!("  Result: {:?}", result);
+            assert!(result.is_err(), "Should return error for summary only file");
+            if let Err(e) = result {
+                println!("  Error type: {:?}", e);
+                assert!(e.is_skippable(), "Error should be skippable");
+            }
+        }
+
+        // Test file with actual conversation
+        let file3 = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-input-poc/06e56ded-b41d-4904-9760-f83361dd76ae.jsonl";
+        if std::path::Path::new(file3).exists() {
+            let result = parser.parse_file(file3);
+            println!("\nFile 3 (real conversation):");
+            println!("  Result: {:?}", result.as_ref().map(|s| format!("Ok({} messages)", s.messages.len())));
+            assert!(result.is_ok(), "Should successfully parse file with real conversation");
+            if let Ok(session) = result {
+                assert!(!session.messages.is_empty(), "Should have messages");
+                println!("  Messages: {}", session.messages.len());
+            }
+        }
+    }
 }

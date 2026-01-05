@@ -29,7 +29,7 @@ import { feedback } from "@/lib/feedback";
 import { appLog } from "@/lib/log-actions";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
-import { getImportedProjectPaths } from "@/lib/project-ipc";
+import { getImportedSessionIds } from "@/lib/project-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
 import { FileSelector } from "./FileSelector";
 import { ImportProgress, type ImportProgressData, type RecentFile } from "./ImportProgress";
@@ -155,7 +155,7 @@ export function ImportWizard({
     results,
     isLoading,
     errors,
-    importedPaths,
+    importedSessionIds,
     importedProjects,
     setStep,
     setSource,
@@ -171,7 +171,7 @@ export function ImportWizard({
     setLoading,
     addError,
     reset,
-    setImportedPaths,
+    setImportedSessionIds,
     selectAllNew,
     addImportedProject,
     mergeRetryResults,
@@ -197,18 +197,18 @@ export function ImportWizard({
     }
   }, [open, reset]);
 
-  // Story 2.20: 加载已导入项目路径
+  // Story 2.20 改进: 加载已导入会话 ID
   React.useEffect(() => {
     if (open) {
-      getImportedProjectPaths()
-        .then((paths) => {
-          setImportedPaths(paths);
+      getImportedSessionIds()
+        .then((ids) => {
+          setImportedSessionIds(ids);
         })
         .catch((err) => {
-          console.error("Failed to load imported project paths:", err);
+          console.error("Failed to load imported session IDs:", err);
         });
     }
-  }, [open, setImportedPaths]);
+  }, [open, setImportedSessionIds]);
 
   /**
    * 处理来源选择
@@ -522,7 +522,7 @@ export function ImportWizard({
             onToggleProjectExpand={toggleProjectExpand}
             onSearchChange={setSearchQuery}
             loading={isLoading}
-            importedPaths={importedPaths}
+            importedSessionIds={importedSessionIds}
           />
         );
       case "progress":
@@ -596,7 +596,7 @@ export function ImportWizard({
         </div>
 
         {/* 内容区域 */}
-        <div className="flex-1 overflow-y-auto py-4">{renderStepContent()}</div>
+        <div className="flex-1 overflow-hidden py-4 min-h-0">{renderStepContent()}</div>
 
         {/* Footer */}
         {!isCompleteStep && (

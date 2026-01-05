@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser, ParseError};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
 use crate::parsers::cursor::CursorPaths;
 use crate::parsers::gemini::GeminiPaths;
 
@@ -34,8 +34,11 @@ pub struct DiscoveredFile {
     pub size: u64,
     /// Modified time (Unix timestamp ms)
     pub modified_at: u64,
-    /// Project path (inferred from cwd)
+    /// Project path (parent directory for grouping)
     pub project_path: String,
+    /// Session ID (extracted from file content, used for import status detection)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 /// Single file import result
@@ -138,8 +141,11 @@ fn path_to_discovered_file(path: &PathBuf) -> Option<DiscoveredFile> {
         .ok()?
         .as_millis() as u64;
 
-    // Extract project path from parent
+    // Use parent directory as project_path (for grouping)
     let project_path = path.parent()?.to_str()?.to_string();
+
+    // Extract session_id from file content
+    let session_id = extract_session_id_from_file(path);
 
     Some(DiscoveredFile {
         path: path_str,
@@ -147,7 +153,47 @@ fn path_to_discovered_file(path: &PathBuf) -> Option<DiscoveredFile> {
         size,
         modified_at,
         project_path,
+        session_id,
     })
+}
+
+/// Extract sessionId from a log file (Claude/Gemini JSONL format)
+fn extract_session_id_from_file(path: &Path) -> Option<String> {
+    use std::io::{BufRead, BufReader};
+
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    // Read up to 10 lines to find sessionId
+    for line in reader.lines().take(10) {
+        if let Ok(line) = line {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Parse as JSON and try to extract sessionId
+            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(session_id) = record.get("sessionId").and_then(|v| v.as_str()) {
+                    if !session_id.is_empty() {
+                        return Some(session_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract sessionId from a Gemini JSON session file
+fn extract_session_id_from_gemini_file(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    json.get("sessionId")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
 }
 
 
@@ -241,6 +287,8 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
                     size,
                     modified_at,
                     project_path: folder_path,
+                    // Cursor workspaces contain multiple sessions, so no single session_id
+                    session_id: None,
                 }
             })
             .collect()
@@ -283,12 +331,16 @@ async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
                     .ok()?
                     .as_millis() as u64;
 
+                // Extract session_id from Gemini JSON file
+                let session_id = extract_session_id_from_gemini_file(&session_file.path);
+
                 Some(DiscoveredFile {
                     path: session_file.path.to_string_lossy().to_string(),
                     name: format!("{} (Gemini CLI)", session_file.filename),
                     size: metadata.len(),
                     modified_at,
                     project_path: format!("gemini-project:{}", session_file.project_hash),
+                    session_id,
                 })
             })
             .collect()
@@ -375,6 +427,8 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
                                 size,
                                 modified_at,
                                 project_path: folder_path,
+                                // Cursor workspaces contain multiple sessions, so no single session_id
+                                session_id: None,
                             }
                         })
                         .collect();
@@ -577,6 +631,63 @@ mod tests {
     fn test_path_to_discovered_file() {
         // This test requires a real file, skip in unit tests
         // Integration tests should cover this
+    }
+
+    #[test]
+    fn test_extract_cwd_from_file() {
+        use std::io::Write;
+
+        // Create a temp file with Claude Code JSONL format
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_claude_session.jsonl");
+
+        let content = r#"{"type":"summary","summary":"Test Session"}
+{"parentUuid":"root","cwd":"/mnt/disk0/project/newx/nextalk-voice-capsule","sessionId":"test-123","type":"user","message":{"role":"user","content":"Hello"}}
+"#;
+
+        let mut file = std::fs::File::create(&test_file).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+
+        // Test extraction
+        let result = extract_cwd_from_file(&test_file);
+        assert_eq!(result, Some("/mnt/disk0/project/newx/nextalk-voice-capsule".to_string()));
+
+        // Clean up
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_extract_cwd_from_real_file() {
+        // Test with a real Claude Code session file if it exists
+        let real_file = std::path::PathBuf::from(
+            "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-capsule"
+        );
+
+        if real_file.exists() {
+            if let Ok(entries) = std::fs::read_dir(&real_file) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|ext| ext == "jsonl") {
+                        let result = extract_cwd_from_file(&path);
+                        println!("File: {:?}", path);
+                        println!("Extracted cwd: {:?}", result);
+
+                        // The cwd should be the real project path, not the log directory
+                        if let Some(cwd) = result {
+                            assert!(
+                                cwd.starts_with("/mnt/disk0/project"),
+                                "cwd should be the real project path, got: {}", cwd
+                            );
+                            assert!(
+                                !cwd.contains("-mnt-"),
+                                "cwd should not contain encoded path format, got: {}", cwd
+                            );
+                        }
+                        break; // Only test one file
+                    }
+                }
+            }
+        }
     }
 
     #[test]

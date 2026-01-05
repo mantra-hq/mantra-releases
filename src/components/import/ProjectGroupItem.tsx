@@ -41,6 +41,8 @@ export interface ProjectGroupItemProps {
     onToggleSession: (path: string) => void;
     /** 导入状态 (Story 2.20) */
     importStatus?: ProjectImportStatus;
+    /** 已导入会话 ID 集合 (Story 2.20 改进) */
+    importedSessionIds?: Set<string>;
 }
 
 /**
@@ -55,6 +57,7 @@ export function ProjectGroupItem({
     onToggleExpand,
     onToggleSession,
     importStatus,
+    importedSessionIds,
 }: ProjectGroupItemProps) {
     const { t } = useTranslation();
     const [showAll, setShowAll] = React.useState(false);
@@ -63,7 +66,17 @@ export function ProjectGroupItem({
 
     // Story 2.20: 导入状态判断
     const isImported = importStatus === "imported";
+    const isPartiallyImported = importStatus === "partial";
     const isNew = importStatus === "new";
+
+    // 检查单个会话是否已导入
+    const isSessionImported = React.useCallback(
+        (session: { sessionId?: string }) => {
+            if (!importedSessionIds) return false;
+            return session.sessionId ? importedSessionIds.has(session.sessionId) : false;
+        },
+        [importedSessionIds]
+    );
 
     // 显示的会话列表
     const visibleSessions =
@@ -160,6 +173,14 @@ export function ProjectGroupItem({
                             {t("import.imported")}
                         </span>
                     )}
+                    {isPartiallyImported && (
+                        <span
+                            data-testid={`import-badge-partial-${group.projectPath}`}
+                            className="text-xs text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded shrink-0"
+                        >
+                            {t("import.partialImported")}
+                        </span>
+                    )}
                     {isNew && (
                         <span
                             data-testid={`import-badge-new-${group.projectPath}`}
@@ -182,15 +203,19 @@ export function ProjectGroupItem({
             {/* 会话列表 */}
             <Collapsible.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
                 <div className="bg-muted/20">
-                    {visibleSessions.map((session) => (
-                        <SessionListItem
-                            key={session.path}
-                            session={session}
-                            selected={selectedFiles.has(session.path)}
-                            onToggle={() => onToggleSession(session.path)}
-                            disabled={isImported}
-                        />
-                    ))}
+                    {visibleSessions.map((session) => {
+                        const sessionImported = isSessionImported(session);
+                        return (
+                            <SessionListItem
+                                key={session.path}
+                                session={session}
+                                selected={selectedFiles.has(session.path)}
+                                onToggle={() => onToggleSession(session.path)}
+                                disabled={sessionImported}
+                                isImported={sessionImported}
+                            />
+                        );
+                    })}
 
                     {/* 显示更多按钮 */}
                     {!showAll && remainingCount > 0 && (

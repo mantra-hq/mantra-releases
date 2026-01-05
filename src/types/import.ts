@@ -8,8 +8,11 @@ import type { DiscoveredFile } from "@/components/import";
 /**
  * 项目导入状态
  * Story 2.20: AC #2-4
+ * - "new": 所有会话都是新的
+ * - "imported": 所有会话都已导入
+ * - "partial": 部分会话已导入
  */
-export type ProjectImportStatus = "new" | "imported";
+export type ProjectImportStatus = "new" | "imported" | "partial";
 
 /**
  * 项目分组

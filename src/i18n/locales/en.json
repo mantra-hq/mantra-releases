@@ -116,6 +116,7 @@
     "retryFailed": "Retry Failed",
     "retryImport": "Retry Import",
     "imported": "Imported",
+    "partialImported": "Partial",
     "searchProjectOrSession": "Search projects or sessions",
     "importSession": "Import Session",
     "importFirstProject": "Import Your First Project",

@@ -26,7 +26,7 @@ use commands::{
     // Story 2.19: Project management commands
     sync_project, remove_project, rename_project,
     // Story 2.20: Import wizard enhancement
-    get_imported_project_paths,
+    get_imported_session_ids,
     // Story 2.23: Import with progress events
     import_sessions_with_progress, cancel_import,
     // Story 2.10: Global search
@@ -105,7 +105,7 @@ pub fn run() {
             remove_project,
             rename_project,
             // Story 2.20: Import wizard enhancement
-            get_imported_project_paths,
+            get_imported_session_ids,
             // Story 2.23: Import with progress events
             import_sessions_with_progress,
             cancel_import,

@@ -14,7 +14,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Radar, FolderOpen, Loader2, FileJson } from "lucide-react";
-import { Button, Checkbox } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { groupByProject, filterGroups, getTotalSessionCount } from "@/lib/import-utils";
 import { SearchFilter } from "./SearchFilter";
@@ -33,6 +33,8 @@ export interface DiscoveredFile {
   modifiedAt: number;
   /** 项目路径 (从 cwd 推断) */
   projectPath: string;
+  /** 会话 ID (用于识别已导入状态) */
+  sessionId?: string;
 }
 
 /** FileSelector Props */
@@ -59,8 +61,8 @@ export interface FileSelectorProps {
   onSearchChange: (query: string) => void;
   /** 是否正在加载 */
   loading: boolean;
-  /** 已导入项目路径集合 (Story 2.20) */
-  importedPaths?: Set<string>;
+  /** 已导入会话 ID 集合 (Story 2.20 改进) */
+  importedSessionIds?: Set<string>;
 }
 
 /**
@@ -79,7 +81,7 @@ export function FileSelector({
   onToggleProjectExpand,
   onSearchChange,
   loading,
-  importedPaths,
+  importedSessionIds,
 }: FileSelectorProps) {
   const { t } = useTranslation();
 
@@ -98,19 +100,19 @@ export function FileSelector({
     [projectGroups, debouncedQuery]
   );
 
-  // Story 2.20: 计算已导入项目数量
+  // Story 2.20 改进: 计算已导入会话数量
   const importedCount = React.useMemo(() => {
-    if (!importedPaths) {
+    if (!importedSessionIds) {
       return undefined;
     }
     let count = 0;
-    for (const group of projectGroups) {
-      if (importedPaths.has(group.projectPath)) {
+    for (const file of files) {
+      if (file.sessionId && importedSessionIds.has(file.sessionId)) {
         count++;
       }
     }
     return count;
-  }, [projectGroups, importedPaths]);
+  }, [files, importedSessionIds]);
 
   // 统计数据
   const totalProjects = projectGroups.length;
@@ -212,7 +214,7 @@ export function FileSelector({
             onToggleProject={onToggleProject}
             onToggleExpand={onToggleProjectExpand}
             onToggleSession={onToggleFile}
-            importedPaths={importedPaths}
+            importedSessionIds={importedSessionIds}
           />
         </>
       )}

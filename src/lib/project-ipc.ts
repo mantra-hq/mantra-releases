@@ -187,13 +187,13 @@ export async function renameProject(projectId: string, newName: string): Promise
 // =============================================================================
 
 /**
- * 获取所有已导入项目的 cwd 路径列表
- * Story 2.20: Task 2
+ * 获取所有已导入会话的 ID 列表
+ * Story 2.20: Task 2 (改进：使用 sessionId 匹配)
  *
- * 用于导入向导识别已导入的项目
+ * 用于导入向导识别已导入的会话
  *
- * @returns 已导入项目的 cwd 路径列表
+ * @returns 已导入会话的 ID 列表
  */
-export async function getImportedProjectPaths(): Promise<string[]> {
-  return invoke<string[]>("get_imported_project_paths");
+export async function getImportedSessionIds(): Promise<string[]> {
+  return invoke<string[]>("get_imported_session_ids");
 }

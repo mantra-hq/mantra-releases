@@ -1,7 +1,7 @@
 /**
  * ProjectGroupList Component - 项目分组列表
  * Story 2.9 UX Redesign
- * Story 2.20: Import Status Enhancement
+ * Story 2.20: Import Status Enhancement (改进：使用 sessionId 匹配)
  * Story 2.26: 国际化支持
  *
  * 项目分组列表，支持大量项目时的流畅滚动
@@ -26,20 +26,36 @@ export interface ProjectGroupListProps {
     onToggleExpand: (projectPath: string) => void;
     /** 切换单个会话选择 */
     onToggleSession: (filePath: string) => void;
-    /** 已导入项目路径集合 (Story 2.20) */
-    importedPaths?: Set<string>;
+    /** 已导入会话 ID 集合 (Story 2.20 改进) */
+    importedSessionIds?: Set<string>;
 }
 
 /**
  * 计算项目的导入状态
- * Story 2.20
+ * Story 2.20 改进: 基于 sessionId 匹配
  */
 function getImportStatus(
-    projectPath: string,
-    importedPaths?: Set<string>
+    group: ProjectGroup,
+    importedSessionIds?: Set<string>
 ): ProjectImportStatus | undefined {
-    if (!importedPaths) return undefined;
-    return importedPaths.has(projectPath) ? "imported" : "new";
+    if (!importedSessionIds) return undefined;
+
+    // 检查每个会话的导入状态
+    let importedCount = 0;
+    let totalCount = 0;
+
+    for (const session of group.sessions) {
+        totalCount++;
+        // 如果会话有 sessionId 且该 sessionId 已导入
+        if (session.sessionId && importedSessionIds.has(session.sessionId)) {
+            importedCount++;
+        }
+    }
+
+    if (totalCount === 0) return "new";
+    if (importedCount === totalCount) return "imported";
+    if (importedCount > 0) return "partial";
+    return "new";
 }
 
 /**
@@ -52,7 +68,7 @@ export function ProjectGroupList({
     onToggleProject,
     onToggleExpand,
     onToggleSession,
-    importedPaths,
+    importedSessionIds,
 }: ProjectGroupListProps) {
     const { t } = useTranslation();
 
@@ -71,7 +87,7 @@ export function ProjectGroupList({
         >
             {groups.map((group) => {
                 const selectionState = getProjectSelectionState(group, selectedFiles);
-                const importStatus = getImportStatus(group.projectPath, importedPaths);
+                const importStatus = getImportStatus(group, importedSessionIds);
 
                 return (
                     <ProjectGroupItem
@@ -84,6 +100,7 @@ export function ProjectGroupList({
                         onToggleExpand={() => onToggleExpand(group.projectPath)}
                         onToggleSession={onToggleSession}
                         importStatus={importStatus}
+                        importedSessionIds={importedSessionIds}
                     />
                 );
             })}

@@ -23,6 +23,8 @@ export interface SessionListItemProps {
     onToggle: () => void;
     /** 是否禁用 (Story 2.20: 已导入项目的会话) */
     disabled?: boolean;
+    /** 是否已导入 (Story 2.20 改进: 显示导入状态) */
+    isImported?: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export function SessionListItem({
     selected,
     onToggle,
     disabled = false,
+    isImported = false,
 }: SessionListItemProps) {
     const { t, i18n } = useTranslation();
 
@@ -107,7 +110,14 @@ export function SessionListItem({
 
             {/* 文件信息 */}
             <div className="flex-1 min-w-0">
-                <div className="text-sm text-foreground truncate" title={session.name}>{session.name}</div>
+                <div className="flex items-center gap-2">
+                    <div className="text-sm text-foreground truncate" title={session.name}>{session.name}</div>
+                    {isImported && (
+                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                            {t("import.imported")}
+                        </span>
+                    )}
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">
                         {formatFileSize(session.size)}

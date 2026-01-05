@@ -131,167 +131,170 @@ export function ImportComplete({
   }, [onRetryFailed, failedResults]);
 
   return (
-    <div data-testid="import-complete" className="space-y-6 text-center">
-      {/* 状态图标 */}
-      <div className="flex justify-center">
-        {allSuccess ? (
-          <div
-            data-testid="success-icon"
-            className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center"
-          >
-            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-          </div>
-        ) : (
-          <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center">
-            <AlertTriangle className="w-8 h-8 text-yellow-500" />
-          </div>
-        )}
-      </div>
-
-      {/* 标题 */}
-      <div>
-        <h3 className="text-xl font-semibold text-foreground">{t("import.importComplete")}</h3>
-        {hasFailures && (
-          <p className="text-sm text-muted-foreground mt-1">
-            {t("import.partialFailure")}
-          </p>
-        )}
-      </div>
-
-      {/* 统计数据 */}
-      <div className="flex justify-center gap-2 border border-border rounded-lg divide-x divide-border">
-        <StatCard
-          testId="success-stat"
-          icon={FileCheck}
-          value={successCount}
-          label={t("import.importSuccess")}
-          colorClass="text-emerald-500"
-        />
-        <StatCard
-          testId="failure-stat"
-          icon={FileX}
-          value={failureCount}
-          label={t("import.importFailed")}
-          colorClass="text-red-500"
-        />
-        <StatCard
-          testId="project-stat"
-          icon={FolderKanban}
-          value={projectCount}
-          label={t("import.project")}
-          colorClass="text-primary"
-        />
-        {skippedCount > 0 && (
-          <StatCard
-            testId="skipped-stat"
-            icon={FileCheck} // Recycled icon, or maybe AlertCircle? Using FileCheck for now but with gray/muted color
-            value={skippedCount}
-            label={t("import.skippedEmpty")}
-            colorClass="text-muted-foreground"
-          />
-        )}
-      </div>
-
-      {/* Story 2.23: 刚导入的项目列表 - 优先展示成功项目 */}
-      {importedProjects.length > 0 && onNavigateToProject && (
-        <div className="text-left">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">
-            {t("import.justImported")}
-          </h4>
-          <ScrollArea className="max-h-[200px]">
-            <div className="space-y-1">
-              {importedProjects.map((project) => (
-                <button
-                  key={project.id}
-                  onClick={() => onNavigateToProject(project.firstSessionId)}
-                  className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-md",
-                    "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
-                    "text-left group"
-                  )}
-                  data-testid={`project-${project.id}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-sm text-foreground truncate">
-                      {project.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <MessageSquare className="w-3 h-3" />
-                      <span className="text-xs">{project.sessionCount}</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
-              ))}
+    <div data-testid="import-complete" className="flex flex-col h-full">
+      {/* 可滚动的内容区域 */}
+      <div className="flex-1 overflow-y-auto space-y-6 text-center min-h-0">
+        {/* 状态图标 */}
+        <div className="flex justify-center">
+          {allSuccess ? (
+            <div
+              data-testid="success-icon"
+              className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center"
+            >
+              <CheckCircle2 className="w-8 h-8 text-emerald-500" />
             </div>
-          </ScrollArea>
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-8 h-8 text-yellow-500" />
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Story 2.23: 失败文件列表和重试按钮 - 次要信息放在后面 */}
-      {hasFailures && (
-        <div className="text-left">
-          <button
-            onClick={() => setErrorsExpanded(!errorsExpanded)}
-            className="w-full flex items-center justify-between text-sm font-medium text-red-500 hover:text-red-400 transition-colors mb-2"
-            data-testid="toggle-errors"
-          >
-            <span>{t("import.failedFiles")} ({failureCount})</span>
-            <ChevronDown
-              className={cn(
-                "w-4 h-4 transition-transform",
-                !errorsExpanded && "-rotate-90"
-              )}
+        {/* 标题 */}
+        <div>
+          <h3 className="text-xl font-semibold text-foreground">{t("import.importComplete")}</h3>
+          {hasFailures && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("import.partialFailure")}
+            </p>
+          )}
+        </div>
+
+        {/* 统计数据 */}
+        <div className="flex justify-center gap-2 border border-border rounded-lg divide-x divide-border">
+          <StatCard
+            testId="success-stat"
+            icon={FileCheck}
+            value={successCount}
+            label={t("import.importSuccess")}
+            colorClass="text-emerald-500"
+          />
+          <StatCard
+            testId="failure-stat"
+            icon={FileX}
+            value={failureCount}
+            label={t("import.importFailed")}
+            colorClass="text-red-500"
+          />
+          <StatCard
+            testId="project-stat"
+            icon={FolderKanban}
+            value={projectCount}
+            label={t("import.project")}
+            colorClass="text-primary"
+          />
+          {skippedCount > 0 && (
+            <StatCard
+              testId="skipped-stat"
+              icon={FileCheck} // Recycled icon, or maybe AlertCircle? Using FileCheck for now but with gray/muted color
+              value={skippedCount}
+              label={t("import.skippedEmpty")}
+              colorClass="text-muted-foreground"
             />
-          </button>
+          )}
+        </div>
 
-          {errorsExpanded && (
-            <ScrollArea className="max-h-[150px] mb-3">
+        {/* Story 2.23: 刚导入的项目列表 - 优先展示成功项目 */}
+        {importedProjects.length > 0 && onNavigateToProject && (
+          <div className="text-left">
+            <h4 className="text-sm font-medium text-muted-foreground mb-2">
+              {t("import.justImported")}
+            </h4>
+            <ScrollArea className="max-h-[150px]">
               <div className="space-y-1">
-                {failedResults.map((result) => (
-                  <div
-                    key={result.filePath}
-                    className="px-3 py-2 rounded-md bg-red-500/5 border border-red-500/20"
-                  >
-                    <div className="text-sm font-mono text-foreground truncate">
-                      {getFileName(result.filePath)}
-                    </div>
-                    {result.error && (
-                      <div className="text-xs text-red-400 mt-0.5 truncate">
-                        {result.error}
-                      </div>
+                {importedProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    onClick={() => onNavigateToProject(project.firstSessionId)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-md",
+                      "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
+                      "text-left group"
                     )}
-                  </div>
+                    data-testid={`project-${project.id}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="text-sm text-foreground truncate">
+                        {project.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <MessageSquare className="w-3 h-3" />
+                        <span className="text-xs">{project.sessionCount}</span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
                 ))}
               </div>
             </ScrollArea>
-          )}
+          </div>
+        )}
 
-          {onRetryFailed && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="w-full gap-2 text-red-500 hover:text-red-400 border-red-500/30 hover:border-red-500/50"
-              data-testid="retry-failed-button"
+        {/* Story 2.23: 失败文件列表和重试按钮 - 次要信息放在后面 */}
+        {hasFailures && (
+          <div className="text-left">
+            <button
+              onClick={() => setErrorsExpanded(!errorsExpanded)}
+              className="w-full flex items-center justify-between text-sm font-medium text-red-500 hover:text-red-400 transition-colors mb-2"
+              data-testid="toggle-errors"
             >
-              {isRetrying ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              {isRetrying ? t("common.retrying") : `${t("import.retryFailed")} (${failureCount})`}
-            </Button>
-          )}
-        </div>
-      )}
+              <span>{t("import.failedFiles")} ({failureCount})</span>
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 transition-transform",
+                  !errorsExpanded && "-rotate-90"
+                )}
+              />
+            </button>
 
-      {/* 操作按钮 */}
-      <div className="flex justify-center gap-3">
+            {errorsExpanded && (
+              <ScrollArea className="max-h-[120px] mb-3">
+                <div className="space-y-1">
+                  {failedResults.map((result) => (
+                    <div
+                      key={result.filePath}
+                      className="px-3 py-2 rounded-md bg-red-500/5 border border-red-500/20"
+                    >
+                      <div className="text-sm font-mono text-foreground truncate">
+                        {getFileName(result.filePath)}
+                      </div>
+                      {result.error && (
+                        <div className="text-xs text-red-400 mt-0.5 truncate">
+                          {result.error}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+
+            {onRetryFailed && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="w-full gap-2 text-red-500 hover:text-red-400 border-red-500/30 hover:border-red-500/50"
+                data-testid="retry-failed-button"
+              >
+                {isRetrying ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {isRetrying ? t("common.retrying") : `${t("import.retryFailed")} (${failureCount})`}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 操作按钮 - 固定在底部 */}
+      <div className="flex justify-center gap-3 pt-4 border-t border-border mt-4 flex-shrink-0">
         <Button variant="outline" onClick={onContinueImport}>
           {t("import.continueImport")}
         </Button>

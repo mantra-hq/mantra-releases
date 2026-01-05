@@ -13,7 +13,7 @@
  * - 搜索过滤
  * - 导入进度
  * - 导入结果
- * - 已导入项目路径 (Story 2.20)
+ * - 已导入会话 ID (Story 2.20 改进)
  * - 刚导入的项目列表 (Story 2.23)
  * - 上次扫描的源 (Story 2.24)
  */
@@ -62,8 +62,8 @@ export interface ImportState {
   isLoading: boolean;
   /** 错误列表 */
   errors: ImportError[];
-  /** 已导入项目路径集合 (Story 2.20) */
-  importedPaths: Set<string>;
+  /** 已导入会话 ID 集合 (Story 2.20 改进) */
+  importedSessionIds: Set<string>;
   /** 刚导入的项目列表 (Story 2.23) */
   importedProjects: ImportedProject[];
   /** 上次扫描的源 (Story 2.24) */
@@ -106,8 +106,8 @@ export interface ImportState {
   addError: (error: ImportError) => void;
   /** 重置状态 */
   reset: () => void;
-  /** 设置已导入路径 (Story 2.20) */
-  setImportedPaths: (paths: string[]) => void;
+  /** 设置已导入会话 ID (Story 2.20 改进) */
+  setImportedSessionIds: (ids: string[]) => void;
   /** 全选新项目 (Story 2.20) */
   selectAllNew: () => void;
   /** 添加导入的项目 (Story 2.23) */
@@ -141,7 +141,7 @@ const initialState = {
   results: [] as ImportResult[],
   isLoading: false,
   errors: [] as ImportError[],
-  importedPaths: new Set<string>(),
+  importedSessionIds: new Set<string>(),
   importedProjects: [] as ImportedProject[],
   lastScannedSource: null as ImportSource | null,
   skipEmptySessions: true,
@@ -176,9 +176,9 @@ export const useImportStore = create<ImportState>((set) => ({
 
   setDiscoveredFiles: (files) =>
     set((state) => {
-      // Story 2.20: 默认仅选中新项目的文件
+      // Story 2.20 改进: 使用 sessionId 匹配，仅选中未导入的会话
       const selectableFiles = files.filter(
-        (f) => !state.importedPaths.has(f.projectPath)
+        (f) => !f.sessionId || !state.importedSessionIds.has(f.sessionId)
       );
       return {
         discoveredFiles: files,
@@ -190,10 +190,10 @@ export const useImportStore = create<ImportState>((set) => ({
 
   toggleFile: (path) =>
     set((state) => {
-      // Story 2.20: 检查文件是否属于已导入项目
+      // Story 2.20 改进: 检查文件是否已导入（使用 sessionId）
       const file = state.discoveredFiles.find((f) => f.path === path);
-      if (file && state.importedPaths.has(file.projectPath)) {
-        // 不允许选中已导入项目的文件
+      if (file?.sessionId && state.importedSessionIds.has(file.sessionId)) {
+        // 不允许选中已导入的会话文件
         return state;
       }
 
@@ -208,9 +208,9 @@ export const useImportStore = create<ImportState>((set) => ({
 
   selectAll: () =>
     set((state) => {
-      // Story 2.20: 全选也应该排除已导入项目
+      // Story 2.20 改进: 全选也应该排除已导入会话
       const selectableFiles = state.discoveredFiles.filter(
-        (f) => !state.importedPaths.has(f.projectPath)
+        (f) => !f.sessionId || !state.importedSessionIds.has(f.sessionId)
       );
       return {
         selectedFiles: new Set(selectableFiles.map((f) => f.path)),
@@ -224,9 +224,9 @@ export const useImportStore = create<ImportState>((set) => ({
 
   invertSelection: () =>
     set((state) => {
-      // Story 2.20: 反选时排除已导入项目
+      // Story 2.20 改进: 反选时排除已导入会话
       const selectableFiles = state.discoveredFiles.filter(
-        (f) => !state.importedPaths.has(f.projectPath)
+        (f) => !f.sessionId || !state.importedSessionIds.has(f.sessionId)
       );
       const newSelected = new Set<string>();
       for (const file of selectableFiles) {
@@ -239,31 +239,38 @@ export const useImportStore = create<ImportState>((set) => ({
 
   toggleProject: (projectPath) =>
     set((state) => {
-      // Story 2.20: 不允许切换已导入项目
-      if (state.importedPaths.has(projectPath)) {
-        return state;
-      }
-
+      // Story 2.20 改进: 只操作未导入的会话文件
       const projectFiles = state.discoveredFiles.filter(
         (f) => f.projectPath === projectPath
       );
-      const projectFilePaths = projectFiles.map((f) => f.path);
 
-      // 检查项目下所有文件是否都已选中
-      const allSelected = projectFilePaths.every((p) =>
+      // 过滤出可选择的文件（未导入的）
+      const selectableProjectFiles = projectFiles.filter(
+        (f) => !f.sessionId || !state.importedSessionIds.has(f.sessionId)
+      );
+
+      // 如果没有可选择的文件，不执行任何操作
+      if (selectableProjectFiles.length === 0) {
+        return state;
+      }
+
+      const selectableFilePaths = selectableProjectFiles.map((f) => f.path);
+
+      // 检查可选择的文件是否都已选中
+      const allSelected = selectableFilePaths.every((p) =>
         state.selectedFiles.has(p)
       );
 
       const newSelected = new Set(state.selectedFiles);
 
       if (allSelected) {
-        // 取消选择项目下所有文件
-        for (const path of projectFilePaths) {
+        // 取消选择项目下所有可选文件
+        for (const path of selectableFilePaths) {
           newSelected.delete(path);
         }
       } else {
-        // 选择项目下所有文件
-        for (const path of projectFilePaths) {
+        // 选择项目下所有可选文件
+        for (const path of selectableFilePaths) {
           newSelected.add(path);
         }
       }
@@ -321,23 +328,23 @@ export const useImportStore = create<ImportState>((set) => ({
       errors: [],
       importedProjects: [],
       lastScannedSource: null,
-      // Note: importedPaths 不重置，保持已加载的数据
+      // Note: importedSessionIds 不重置，保持已加载的数据
     }),
 
-  // Story 2.20: 设置已导入路径
-  setImportedPaths: (paths) =>
+  // Story 2.20 改进: 设置已导入会话 ID
+  setImportedSessionIds: (ids) =>
     set({
-      importedPaths: new Set(paths),
+      importedSessionIds: new Set(ids),
     }),
 
-  // Story 2.20: 全选新项目
+  // Story 2.20 改进: 全选未导入的会话
   selectAllNew: () =>
     set((state) => {
-      const newProjectFiles = state.discoveredFiles.filter(
-        (f) => !state.importedPaths.has(f.projectPath)
+      const newSessionFiles = state.discoveredFiles.filter(
+        (f) => !f.sessionId || !state.importedSessionIds.has(f.sessionId)
       );
       return {
-        selectedFiles: new Set(newProjectFiles.map((f) => f.path)),
+        selectedFiles: new Set(newSessionFiles.map((f) => f.path)),
       };
     }),
 

@@ -116,6 +116,7 @@
     "retryFailed": "重试失败项",
     "retryImport": "重试导入",
     "imported": "已导入",
+    "partialImported": "部分导入",
     "searchProjectOrSession": "搜索项目或会话",
     "importSession": "导入会话",
     "importFirstProject": "导入第一个项目",

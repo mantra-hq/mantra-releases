@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser, ParseError};
+use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
 use crate::storage::{Database, SearchResult};
 
@@ -610,14 +610,14 @@ pub async fn rename_project(
 
 /// Get all imported project cwd paths
 ///
-/// Returns a list of cwd paths for all non-deleted projects.
-/// Used by ImportWizard to identify already-imported projects.
+/// Returns a list of session IDs for all imported sessions.
+/// Used by ImportWizard to identify already-imported files.
 #[tauri::command]
-pub async fn get_imported_project_paths(
+pub async fn get_imported_session_ids(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
-    db.get_imported_project_paths().map_err(Into::into)
+    db.get_imported_session_ids().map_err(Into::into)
 }
 
 // ============================================================================
