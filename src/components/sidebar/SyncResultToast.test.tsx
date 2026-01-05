@@ -27,8 +27,8 @@ describe("showSyncResult", () => {
   it("shows success message with new and updated sessions (AC7)", async () => {
     const result: SyncResult = {
       new_sessions: [
-        { id: "sess-1", source: "claude", created_at: "", updated_at: "", message_count: 5 },
-        { id: "sess-2", source: "gemini", created_at: "", updated_at: "", message_count: 3 },
+        { id: "sess-1", source: "claude", created_at: "", updated_at: "", message_count: 5, is_empty: false },
+        { id: "sess-2", source: "gemini", created_at: "", updated_at: "", message_count: 3, is_empty: false },
       ],
       updated_sessions: [
         { session_id: "sess-3", old_message_count: 5, new_message_count: 10 },
@@ -51,7 +51,7 @@ describe("showSyncResult", () => {
   it("shows only new sessions when no updates (AC7)", async () => {
     const result: SyncResult = {
       new_sessions: [
-        { id: "sess-1", source: "claude", created_at: "", updated_at: "", message_count: 5 },
+        { id: "sess-1", source: "claude", created_at: "", updated_at: "", message_count: 5, is_empty: false },
       ],
       updated_sessions: [],
       unchanged_count: 3,

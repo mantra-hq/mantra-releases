@@ -24,6 +24,88 @@ impl ClaudeParser {
         Self
     }
 
+    /// Create an empty session from file path (Story 2.29 V2)
+    /// 
+    /// When a file contains only system events or no valid conversation,
+    /// we still import it as an empty session with is_empty = true
+    fn create_empty_session_from_path(&self, path: &str) -> Result<MantraSession, ParseError> {
+        use std::path::Path;
+        
+        let path_buf = Path::new(path);
+        
+        // Extract session ID from filename (e.g., "b7485bbe-3a7d-460c-8452-54ec4ce4a3a5.jsonl" -> "b7485bbe-3a7d-460c-8452-54ec4ce4a3a5")
+        let session_id = path_buf
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("empty-{}", uuid::Uuid::new_v4()));
+        
+        // Try to extract cwd from file content first (read first few lines)
+        // This handles the case where the file has some system events with cwd info
+        let cwd = Self::extract_cwd_from_file_content(path)
+            .or_else(|| {
+                // Fallback: decode the parent directory name
+                // Claude stores sessions in ~/.claude/projects/<encoded-path>/<session-id>.jsonl
+                // The encoded path looks like: -mnt-disk0-project-foo -> /mnt/disk0/project/foo
+                path_buf
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str())
+                    .map(|encoded_path| Self::decode_claude_path(encoded_path))
+            })
+            .unwrap_or_default();
+        
+        // Create empty session
+        let session = MantraSession::new(
+            session_id,
+            sources::CLAUDE.to_string(),
+            cwd,
+        );
+        
+        Ok(session)
+    }
+    
+    /// Try to extract cwd from file content by reading the first few lines
+    fn extract_cwd_from_file_content(path: &str) -> Option<String> {
+        use std::io::{BufRead, BufReader};
+        
+        let file = std::fs::File::open(path).ok()?;
+        let reader = BufReader::new(file);
+        
+        for line in reader.lines().take(20) {
+            if let Ok(line) = line {
+                if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if let Some(cwd) = record.get("cwd").and_then(|v| v.as_str()) {
+                        if !cwd.is_empty() {
+                            return Some(cwd.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    /// Decode Claude's encoded project path
+    /// Claude encodes paths by replacing / with -
+    /// e.g., -mnt-disk0-project-foo -> /mnt/disk0/project/foo
+    /// 
+    /// Note: This simple replacement works because Claude's encoding is straightforward.
+    /// Project names with hyphens will be decoded incorrectly, but since we primarily
+    /// need this for matching with existing sessions that have the real cwd, this is
+    /// acceptable - the key is consistency within the same project folder.
+    fn decode_claude_path(encoded_path: &str) -> String {
+        if !encoded_path.starts_with('-') {
+            return encoded_path.to_string();
+        }
+        
+        // Claude encodes paths by replacing / with -
+        // Simply replace all - with / to decode
+        encoded_path.replace('-', "/")
+    }
+
+
+
     /// Parse JSONL format (one JSON object per line)
     fn parse_jsonl(&self, content: &str) -> Result<MantraSession, ParseError> {
         let mut session_id: Option<String> = None;
@@ -326,7 +408,8 @@ impl LogParser for ClaudeParser {
 
         // Check for empty file
         if content.trim().is_empty() {
-            return Err(ParseError::EmptyFile);
+            // Story 2.29 V2: Return empty session instead of error
+            return self.create_empty_session_from_path(path);
         }
 
         // Detect format: JSONL vs JSON
@@ -339,10 +422,20 @@ impl LogParser for ClaudeParser {
         let is_jsonl = first_line.starts_with('{') &&
             (first_line.contains("\"type\"") || content.lines().count() > 1);
 
-        if is_jsonl {
+        let result = if is_jsonl {
             self.parse_jsonl(&content)
         } else {
             self.parse_string(&content)
+        };
+
+        // Story 2.29 V2: Handle skippable errors by returning empty session
+        match result {
+            Ok(session) => Ok(session),
+            Err(e) if e.is_skippable() => {
+                // Create an empty session from the file path
+                self.create_empty_session_from_path(path)
+            }
+            Err(e) => Err(e),
         }
     }
 

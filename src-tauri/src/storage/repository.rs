@@ -49,9 +49,11 @@ impl Database {
         project_id: &str,
     ) -> Result<(), StorageError> {
         let raw_data = serde_json::to_string(session)?;
+        // Story 2.29: Calculate is_empty based on session content
+        let is_empty = if session.is_empty() { 1 } else { 0 };
         self.connection().execute(
-            "INSERT INTO sessions (id, project_id, source, cwd, created_at, updated_at, message_count, raw_data)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO sessions (id, project_id, source, cwd, created_at, updated_at, message_count, is_empty, raw_data)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 session.id,
                 project_id,
@@ -60,6 +62,7 @@ impl Database {
                 session.created_at.to_rfc3339(),
                 session.updated_at.to_rfc3339(),
                 session.messages.len() as i32,
+                is_empty,
                 raw_data
             ],
         )?;
@@ -188,7 +191,7 @@ impl Database {
     /// * `project_id` - The project ID to get sessions for
     pub fn get_project_sessions(&self, project_id: &str) -> Result<Vec<SessionSummary>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT id, source, created_at, updated_at, message_count,
+            "SELECT id, source, created_at, updated_at, message_count, is_empty,
                     json_extract(raw_data, '$.metadata.title') as title
              FROM sessions
              WHERE project_id = ?1
@@ -200,7 +203,8 @@ impl Database {
                 let source_str: String = row.get(1)?;
                 let created_at_str: String = row.get(2)?;
                 let updated_at_str: String = row.get(3)?;
-                let title: Option<String> = row.get(5)?;
+                let is_empty_int: i32 = row.get(5)?;
+                let title: Option<String> = row.get(6)?;
 
                 Ok(SessionSummary {
                     id: row.get(0)?,
@@ -212,6 +216,7 @@ impl Database {
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
                     message_count: row.get::<_, i32>(4)? as u32,
+                    is_empty: is_empty_int != 0,
                     title,
                 })
             })?
@@ -476,8 +481,8 @@ impl Database {
                     };
 
                     match tx.execute(
-                        "INSERT INTO sessions (id, project_id, source, cwd, created_at, updated_at, message_count, raw_data)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        "INSERT INTO sessions (id, project_id, source, cwd, created_at, updated_at, message_count, is_empty, raw_data)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                         params![
                             session.id,
                             project_id,
@@ -486,6 +491,7 @@ impl Database {
                             session.created_at.to_rfc3339(),
                             session.updated_at.to_rfc3339(),
                             session.messages.len() as i32,
+                            if session.is_empty() { 1 } else { 0 },
                             raw_data
                         ],
                     ) {

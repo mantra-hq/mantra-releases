@@ -106,6 +106,8 @@ export interface SessionSummary {
   updated_at: string;
   /** 消息数量 */
   message_count: number;
+  /** Story 2.29: 是否为空会话（无用户消息且无助手消息） */
+  is_empty: boolean;
   /** 会话标题（来自 metadata，可选） */
   title?: string;
 }

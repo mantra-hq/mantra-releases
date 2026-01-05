@@ -44,6 +44,9 @@ pub struct SessionSummary {
     pub updated_at: DateTime<Utc>,
     /// Message count
     pub message_count: u32,
+    /// Whether this session is empty (no user AND no assistant messages)
+    /// Story 2.29: Used for filtering empty projects in the UI
+    pub is_empty: bool,
     /// Session title (from metadata, if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -226,6 +229,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             message_count: 10,
+            is_empty: false,
             title: Some("Test Session".to_string()),
         };
         let json = serde_json::to_string(&summary).unwrap();

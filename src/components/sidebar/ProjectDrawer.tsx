@@ -22,6 +22,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DrawerSearch } from "./DrawerSearch";
 import { ProjectTreeItem } from "./ProjectTreeItem";
 import { ProjectContextMenu } from "./ProjectContextMenu";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/project-ipc";
 import { toast } from "sonner";
 import { appLog } from "@/lib/log-actions";
+import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 import type { Project } from "@/types/project";
 import type { SessionSummary } from "./types";
 
@@ -110,6 +112,8 @@ export function ProjectDrawer({
   const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
   // Story 2.27: 显示详情对话框的项目
   const [infoProject, setInfoProject] = React.useState<Project | null>(null);
+  // Story 2.29: 隐藏空项目偏好
+  const [hideEmptyProjects, setHideEmptyProjects] = useHideEmptyProjects();
 
   // 一键折叠所有项目
   const handleCollapseAll = React.useCallback(() => {
@@ -118,25 +122,45 @@ export function ProjectDrawer({
 
   // 过滤后的项目列表
   const filteredProjects = React.useMemo(() => {
-    if (!searchKeyword.trim()) return projects;
+    let result = projects;
 
-    const keyword = searchKeyword.toLowerCase();
-    return projects.filter((project) => {
-      // 匹配项目名
-      if (project.name.toLowerCase().includes(keyword)) return true;
+    // Story 2.29 AC4: 隐藏空项目（所有会话都是空会话的项目）
+    if (hideEmptyProjects) {
+      result = result.filter((project) => {
+        const sessions = projectSessions[project.id];
+        // 如果会话还没有加载，暂时显示项目
+        if (!sessions || sessions.length === 0) {
+          // 如果项目没有会话，也视为空项目
+          return project.session_count > 0 || !projectSessions[project.id];
+        }
+        // 检查是否所有会话都是空会话
+        const allEmpty = sessions.every((s) => s.is_empty);
+        return !allEmpty;
+      });
+    }
 
-      // 匹配项目路径
-      if (project.cwd.toLowerCase().includes(keyword)) return true;
+    // 搜索过滤
+    if (searchKeyword.trim()) {
+      const keyword = searchKeyword.toLowerCase();
+      result = result.filter((project) => {
+        // 匹配项目名
+        if (project.name.toLowerCase().includes(keyword)) return true;
 
-      // 匹配会话（如果已加载）
-      const sessions = projectSessions[project.id];
-      if (sessions?.some((s) => s.id.toLowerCase().includes(keyword))) {
-        return true;
-      }
+        // 匹配项目路径
+        if (project.cwd.toLowerCase().includes(keyword)) return true;
 
-      return false;
-    });
-  }, [projects, searchKeyword, projectSessions]);
+        // 匹配会话（如果已加载）
+        const sessions = projectSessions[project.id];
+        if (sessions?.some((s) => s.id.toLowerCase().includes(keyword))) {
+          return true;
+        }
+
+        return false;
+      });
+    }
+
+    return result;
+  }, [projects, searchKeyword, projectSessions, hideEmptyProjects]);
 
   // 切换项目展开状态
   const handleToggleProject = React.useCallback(
@@ -286,6 +310,17 @@ export function ProjectDrawer({
             onChange={setSearchKeyword}
             placeholder={t("import.searchProjectOrSession") + "..."}
           />
+          {/* Story 2.29 AC3: 隐藏空项目复选框（默认勾选） */}
+          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+            <Checkbox
+              checked={hideEmptyProjects}
+              onCheckedChange={(checked) => setHideEmptyProjects(checked === true)}
+              data-testid="hide-empty-projects-checkbox"
+            />
+            <span className="text-xs text-muted-foreground">
+              {t("project.hideEmptyProjects")}
+            </span>
+          </label>
         </div>
 
         {/* 项目树列表 */}

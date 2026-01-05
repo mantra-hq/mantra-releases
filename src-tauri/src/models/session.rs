@@ -194,6 +194,16 @@ impl MantraSession {
         self.messages.push(message);
         self.updated_at = Utc::now();
     }
+
+    /// Check if session is empty (no user AND no assistant messages)
+    /// 
+    /// Story 2.29: Empty session = user_message_count === 0 AND assistant_message_count === 0
+    /// A session with only system messages is still considered empty.
+    pub fn is_empty(&self) -> bool {
+        let user_count = self.messages.iter().filter(|m| m.role == Role::User).count();
+        let assistant_count = self.messages.iter().filter(|m| m.role == Role::Assistant).count();
+        user_count == 0 && assistant_count == 0
+    }
 }
 
 impl Message {

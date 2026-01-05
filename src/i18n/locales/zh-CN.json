@@ -145,7 +145,8 @@
     "openDrawer": "打开项目抽屉",
     "removeConfirm": "确定要移除「{{name}}」吗？",
     "removeDescription": "这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。",
-    "removeProject": "移除项目"
+    "removeProject": "移除项目",
+    "hideEmptyProjects": "隐藏空项目"
   },
   "projectInfo": {
     "description": "项目详细信息",

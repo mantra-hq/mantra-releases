@@ -71,6 +71,28 @@ impl Database {
             )?;
         }
 
+        // Migration: Add is_empty column (Story 2.29)
+        let has_is_empty: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'is_empty'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_is_empty {
+            // Add column with default value
+            conn.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN is_empty INTEGER NOT NULL DEFAULT 0;",
+            )?;
+
+            // Backfill: Mark sessions as empty if they have no messages
+            // Empty session = no user messages AND no assistant messages (message_count = 0)
+            conn.execute_batch(
+                "UPDATE sessions SET is_empty = 1 WHERE message_count = 0;",
+            )?;
+        }
+
         Ok(())
     }
 

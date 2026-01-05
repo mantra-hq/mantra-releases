@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0,
+    is_empty INTEGER NOT NULL DEFAULT 0,  -- Story 2.29: 空会话标记 (无用户消息且无助手消息)
     raw_data TEXT NOT NULL,       -- JSON 序列化的完整 MantraSession
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );

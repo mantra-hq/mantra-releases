@@ -558,6 +558,7 @@ pub async fn sync_project(
                     created_at: session.created_at,
                     updated_at: session.updated_at,
                     message_count: session.messages.len() as u32,
+                    is_empty: session.is_empty(),
                     title: session.metadata.title.clone(),
                 });
             }
