@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "@/types/project";
 import type { MantraSession } from "@/lib/session-utils";
 import type { SessionSummary } from "@/components/navigation";
+import { formatSessionName } from "@/lib/utils";
 
 /**
  * 后端 SessionSummary 类型 (来自 Rust)
@@ -48,10 +49,8 @@ export interface UseCurrentSessionResult {
 function convertToSessionSummary(
   session: MantraSession
 ): SessionSummary {
-  // 从 metadata 或 id 生成会话名称
-  const name =
-    session.metadata?.title ||
-    `Session ${session.id.slice(0, 8)}`;
+  // 使用统一的格式化函数
+  const name = formatSessionName(session.id, session.metadata?.title);
 
   return {
     id: session.id,
@@ -67,8 +66,8 @@ function convertToSessionSummary(
 function convertRustSessionSummary(
   rustSession: RustSessionSummary
 ): SessionSummary {
-  // 优先使用 title，否则使用 ID 前缀
-  const name = rustSession.title || `Session ${rustSession.id.slice(0, 8)}`;
+  // 使用统一的格式化函数
+  const name = formatSessionName(rustSession.id, rustSession.title);
 
   return {
     id: rustSession.id,
