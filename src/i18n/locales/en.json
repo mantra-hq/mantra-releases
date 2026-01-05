@@ -291,7 +291,8 @@
     "clearFilterCondition": "Clear Filter Conditions"
   },
   "topbar": {
-    "globalSearchShortcut": "Global Search (⌘K)"
+    "globalSearchShortcut": "Global Search (⌘K)",
+    "sanitizePreview": "Preview Sanitization"
   },
   "session": {
     "selectSession": "Select Session",

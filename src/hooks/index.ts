@@ -40,3 +40,9 @@ export {
     useCurrentSession,
     type UseCurrentSessionResult,
 } from "./useCurrentSession";
+
+// 脱敏预览 hook
+export {
+    useSanitizePreview,
+    type UseSanitizePreviewResult,
+} from "./useSanitizePreview";

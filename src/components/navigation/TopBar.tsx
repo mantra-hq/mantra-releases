@@ -130,7 +130,12 @@ export function TopBar({
         </div>
 
         {/* 右侧: 操作按钮 (AC10, AC11, AC12) */}
-        <TopBarActions onSync={onSync} onImport={onImport} isSyncing={isSyncing} />
+        <TopBarActions
+          sessionId={sessionId}
+          onSync={onSync}
+          onImport={onImport}
+          isSyncing={isSyncing}
+        />
       </div>
     </header>
   );

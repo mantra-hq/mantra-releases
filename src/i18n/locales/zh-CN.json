@@ -291,7 +291,8 @@
     "clearFilterCondition": "清除过滤条件"
   },
   "topbar": {
-    "globalSearchShortcut": "全局搜索 (⌘K)"
+    "globalSearchShortcut": "全局搜索 (⌘K)",
+    "sanitizePreview": "预览脱敏效果"
   },
   "session": {
     "selectSession": "选择会话",

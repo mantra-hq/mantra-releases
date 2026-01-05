@@ -4,15 +4,17 @@
  * Story 2.21: Task 4.2-4.4 (添加全局搜索按钮、设置按钮)
  * Story 2-26: i18n 国际化
  *
- * 按钮顺序：搜索 → 同步 → 导入 → 设置 → 主题切换
+ * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 设置 → 主题切换
  */
 
-import { RefreshCw, Plus, Search, Settings } from "lucide-react";
+import { RefreshCw, Plus, Search, Settings, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSearchStore } from "@/stores/useSearchStore";
+import { useSanitizePreview } from "@/hooks";
+import { SanitizePreviewModal } from "@/components/sanitizer";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +26,8 @@ import {
  * TopBarActions Props
  */
 export interface TopBarActionsProps {
+  /** 当前会话 ID (用于脱敏预览) */
+  sessionId?: string;
   /** 同步回调 (AC10) */
   onSync: () => void;
   /** 导入回调 (AC11) */
@@ -39,6 +43,7 @@ export interface TopBarActionsProps {
  * TopBar 右侧操作按钮组
  */
 export function TopBarActions({
+  sessionId,
   onSync,
   onImport,
   isSyncing = false,
@@ -47,6 +52,17 @@ export function TopBarActions({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const openSearch = useSearchStore((state) => state.open);
+
+  // 脱敏预览
+  const {
+    isOpen: isSanitizeOpen,
+    isLoading: isSanitizeLoading,
+    originalText,
+    sanitizedText,
+    stats,
+    openPreview,
+    closePreview,
+  } = useSanitizePreview(sessionId ?? null);
 
   return (
     <div
@@ -72,6 +88,28 @@ export function TopBarActions({
             <p>{t("topbar.globalSearchShortcut")}</p>
           </TooltipContent>
         </Tooltip>
+
+        {/* 脱敏预览按钮 - 有会话时显示 */}
+        {sessionId && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={openPreview}
+                disabled={isSanitizeLoading}
+                aria-label={t("topbar.sanitizePreview")}
+                data-testid="topbar-sanitize-button"
+                className="h-8 w-8"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>{t("topbar.sanitizePreview")}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {/* 同步按钮 (AC10) - 空状态时隐藏 */}
         {showSync && (
@@ -138,6 +176,17 @@ export function TopBarActions({
 
       {/* 主题切换 (AC12) */}
       <ThemeToggle />
+
+      {/* 脱敏预览 Modal */}
+      <SanitizePreviewModal
+        isOpen={isSanitizeOpen}
+        onClose={closePreview}
+        originalText={originalText}
+        sanitizedText={sanitizedText}
+        stats={stats}
+        onConfirm={closePreview}
+        isLoading={isSanitizeLoading}
+      />
     </div>
   );
 }
