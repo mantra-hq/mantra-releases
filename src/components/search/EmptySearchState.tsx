@@ -1,11 +1,13 @@
 /**
  * EmptySearchState - 搜索空状态组件
  * Story 2.10: Task 7.1
+ * Story 2.26: 国际化支持
  *
  * 无匹配结果时显示友好提示
  */
 
 import { SearchX } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,6 +24,8 @@ export interface EmptySearchStateProps {
  * EmptySearchState 组件
  */
 export function EmptySearchState({ query, className }: EmptySearchStateProps) {
+    const { t } = useTranslation();
+
     return (
         <div
             className={cn(
@@ -31,10 +35,10 @@ export function EmptySearchState({ query, className }: EmptySearchStateProps) {
         >
             <SearchX className="w-12 h-12 text-muted-foreground/50 mb-4" />
             <p className="text-sm text-muted-foreground mb-2">
-                未找到包含 "<span className="text-foreground font-medium">{query}</span>" 的结果
+                {t("search.noResultsFor", { query })}
             </p>
             <p className="text-xs text-muted-foreground/70">
-                尝试使用不同的关键词或检查拼写
+                {t("search.tryDifferentKeywords")}
             </p>
         </div>
     );
