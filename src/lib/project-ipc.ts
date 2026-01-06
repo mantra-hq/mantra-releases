@@ -34,6 +34,19 @@ export async function getProjectByCwd(cwd: string): Promise<Project | null> {
 }
 
 /**
+ * 根据会话 ID 获取所属项目信息 (Story 1.9)
+ *
+ * 这个方法通过会话的 project_id 查找项目，比使用 cwd 更可靠
+ * （因为项目的 cwd 可能已被更新，但会话仍然关联到正确的项目）
+ *
+ * @param sessionId - 会话 ID
+ * @returns 项目信息，如果不存在返回 null
+ */
+export async function getProjectBySession(sessionId: string): Promise<Project | null> {
+  return invoke<Project | null>("get_project_by_session", { sessionId });
+}
+
+/**
  * 获取项目的代表性文件
  *
  * 优先级: README.md → 入口文件 → 任意代码文件
@@ -198,4 +211,22 @@ export async function renameProject(projectId: string, newName: string): Promise
  */
 export async function getImportedSessionIds(): Promise<string[]> {
   return invoke<string[]>("get_imported_session_ids");
+}
+
+// =============================================================================
+// Story 1.9: Enhanced Project Identification - Manual CWD Update
+// =============================================================================
+
+/**
+ * 更新项目的工作目录
+ * Story 1.9: Task 8.1
+ *
+ * 用于手动修正项目的工作目录（如 Gemini 的占位符路径）
+ *
+ * @param projectId - 项目 ID
+ * @param newCwd - 新的工作目录路径
+ * @returns 更新后的项目信息
+ */
+export async function updateProjectCwd(projectId: string, newCwd: string): Promise<Project> {
+  return invoke<Project>("update_project_cwd", { projectId, newCwd });
 }

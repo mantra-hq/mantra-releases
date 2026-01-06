@@ -317,6 +317,33 @@ export default function Player() {
     };
   }, [sessionCwd, setCode]);
 
+  // Story 1.9: 当项目信息变化时更新 repoPath（修复 cwd 更新后 git 仓库信息不同步问题）
+  React.useEffect(() => {
+    if (!currentProject) return;
+
+    // 更新 repoPath 和 hasNoGit 状态
+    if (currentProject.has_git_repo && currentProject.git_repo_path) {
+      setRepoPath(currentProject.git_repo_path);
+      setHasNoGit(false);
+      console.log("[Player] Git 仓库信息已更新 (from currentProject):", currentProject.git_repo_path);
+
+      // 重新加载代表性文件
+      getRepresentativeFile(currentProject.git_repo_path)
+        .then((repFile) => {
+          if (repFile) {
+            setCode(repFile.content, repFile.path);
+            console.log("[Player] 代表性文件已重新加载:", repFile.path);
+          }
+        })
+        .catch((err) => {
+          console.warn("[Player] 代表性文件加载失败:", err);
+        });
+    } else {
+      setRepoPath(null);
+      setHasNoGit(true);
+    }
+  }, [currentProject?.id, currentProject?.git_repo_path, currentProject?.has_git_repo, setCode]);
+
   // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002, Story 2.12)
   // 统一标签管理：会话点击时打开历史版本标签
   const handleMessageSelect = React.useCallback(
@@ -573,7 +600,11 @@ export default function Player() {
           onSessionSelect={handleDrawerSessionSelect}
           onImportClick={handleDrawerImport}
           getProjectSessions={fetchProjectSessions}
-          onProjectsChange={refetchProjects}
+          onProjectsChange={() => {
+            // Story 1.9: 刷新项目列表和当前会话信息
+            refetchProjects();
+            refetchCurrentSession();
+          }}
         />
       </div>
     );
@@ -697,7 +728,11 @@ export default function Player() {
         onSessionSelect={handleDrawerSessionSelect}
         onImportClick={handleDrawerImport}
         getProjectSessions={fetchProjectSessions}
-        onProjectsChange={refetchProjects}
+        onProjectsChange={() => {
+          // Story 1.9: 刷新项目列表和当前会话信息（修复项目 cwd 更新后导航栏不同步问题）
+          refetchProjects();
+          refetchCurrentSession();
+        }}
         onCurrentProjectRemoved={() => navigate("/player")}
       />
     </div>

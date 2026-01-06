@@ -2,8 +2,12 @@
 //!
 //! Provides the core logic for scanning and importing MantraSession data,
 //! grouping sessions by their working directory (cwd) into projects.
+//!
+//! Story 1.9: Enhanced with Git remote URL support for cross-path project identification.
 
-use crate::git::detect_git_repo_sync;
+use std::path::Path;
+
+use crate::git::{detect_git_repo_sync, get_git_remote_url};
 use crate::models::{ImportResult, MantraSession};
 use crate::storage::{Database, StorageError};
 
@@ -20,26 +24,47 @@ impl<'a> ProjectScanner<'a> {
 
     /// Scan and import sessions, aggregating by project
     ///
+    /// Story 1.9: Now uses Git remote URL for enhanced project identification.
+    ///
     /// # Arguments
     /// * `sessions` - The sessions to import
     ///
     /// # Returns
     /// Import result with statistics
     pub fn scan_and_import(&mut self, sessions: Vec<MantraSession>) -> Result<ImportResult, StorageError> {
-        let result = self.db.import_sessions(&sessions)?;
+        let mut result = ImportResult::default();
 
-        // For new projects, detect Git repositories
-        if result.new_projects_count > 0 {
-            for session in &sessions {
-                // Check if this session's project was newly created
-                // by checking if the project exists and has no Git info yet
-                if let Ok(Some(project)) = self.db.get_project_by_cwd(&session.cwd) {
-                    if !project.has_git_repo && project.git_repo_path.is_none() {
-                        let git_repo_path = detect_git_repo_sync(&session.cwd);
-                        if git_repo_path.is_some() {
-                            let _ = self.db.update_project_git_info(&session.cwd, git_repo_path);
+        for session in &sessions {
+            // Story 1.9: Extract Git remote URL for enhanced project matching
+            let git_remote_url = Self::extract_git_remote_url(&session.cwd);
+
+            // Use enhanced import with Git URL support
+            match self.db.import_session_with_git_url(session, git_remote_url.as_deref()) {
+                Ok((imported, is_new_project, project_id)) => {
+                    if imported {
+                        result.imported_count += 1;
+                        if is_new_project {
+                            result.new_projects_count += 1;
+                            // Detect Git repository path for new projects
+                            let git_repo_path = detect_git_repo_sync(&session.cwd);
+                            if git_repo_path.is_some() {
+                                let _ = self.db.update_project_git_info(&session.cwd, git_repo_path);
+                            }
                         }
+                        // Update project's git_remote_url if not set but we have it
+                        if !project_id.is_empty() && git_remote_url.is_some() {
+                            if let Ok(Some(project)) = self.db.get_project(&project_id) {
+                                if project.git_remote_url.is_none() {
+                                    let _ = self.db.update_project_git_remote(&project_id, git_remote_url.as_deref());
+                                }
+                            }
+                        }
+                    } else {
+                        result.skipped_count += 1;
                     }
+                }
+                Err(e) => {
+                    result.errors.push(format!("Session {}: {}", session.id, e));
                 }
             }
         }
@@ -49,18 +74,33 @@ impl<'a> ProjectScanner<'a> {
 
     /// Import a single session
     ///
+    /// Story 1.9: Now uses Git remote URL for enhanced project identification.
+    ///
     /// # Arguments
     /// * `session` - The session to import
     ///
     /// # Returns
     /// A tuple of (was_imported, was_new_project)
     pub fn import_session(&self, session: &MantraSession) -> Result<(bool, bool), StorageError> {
-        let (imported, is_new_project) = self.db.import_session(session)?;
+        // Story 1.9: Extract Git remote URL
+        let git_remote_url = Self::extract_git_remote_url(&session.cwd);
+
+        let (imported, is_new_project, project_id) =
+            self.db.import_session_with_git_url(session, git_remote_url.as_deref())?;
 
         // Detect Git repository for new projects
         if is_new_project {
             let git_repo_path = detect_git_repo_sync(&session.cwd);
             self.db.update_project_git_info(&session.cwd, git_repo_path)?;
+        }
+
+        // Update project's git_remote_url if not set but we have it
+        if imported && !project_id.is_empty() && git_remote_url.is_some() {
+            if let Ok(Some(project)) = self.db.get_project(&project_id) {
+                if project.git_remote_url.is_none() {
+                    let _ = self.db.update_project_git_remote(&project_id, git_remote_url.as_deref());
+                }
+            }
         }
 
         Ok((imported, is_new_project))
@@ -72,6 +112,20 @@ impl<'a> ProjectScanner<'a> {
     /// * `session_id` - The session ID to check
     pub fn session_exists(&self, session_id: &str) -> Result<bool, StorageError> {
         self.db.session_exists(session_id)
+    }
+
+    /// Extract Git remote URL from a path (Story 1.9)
+    ///
+    /// # Arguments
+    /// * `cwd` - The working directory path
+    ///
+    /// # Returns
+    /// The normalized Git remote URL if the path is a Git repository
+    fn extract_git_remote_url(cwd: &str) -> Option<String> {
+        match get_git_remote_url(Path::new(cwd)) {
+            Ok(url) => url,
+            Err(_) => None,
+        }
     }
 }
 

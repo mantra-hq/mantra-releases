@@ -28,6 +28,10 @@ pub struct Project {
     pub git_repo_path: Option<String>,
     /// Whether this project has an associated Git repository
     pub has_git_repo: bool,
+    /// Git remote URL for project identification (Story 1.9)
+    /// Used for cross-path project aggregation (same repo, different paths)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_remote_url: Option<String>,
 }
 
 /// Lightweight session summary for listings
@@ -80,6 +84,7 @@ impl Project {
             last_activity: now,
             git_repo_path: None,
             has_git_repo: false,
+            git_remote_url: None,
         }
     }
 
@@ -87,6 +92,11 @@ impl Project {
     pub fn set_git_repo(&mut self, repo_path: Option<String>) {
         self.has_git_repo = repo_path.is_some();
         self.git_repo_path = repo_path;
+    }
+
+    /// Set Git remote URL (Story 1.9)
+    pub fn set_git_remote_url(&mut self, url: Option<String>) {
+        self.git_remote_url = url;
     }
 }
 

@@ -48,6 +48,8 @@ export interface Project {
   git_repo_path: string | null;
   /** 是否关联 Git 仓库 */
   has_git_repo: boolean;
+  /** Git 远程 URL (Story 1.9: 用于跨路径项目聚合) */
+  git_remote_url: string | null;
 }
 
 /**

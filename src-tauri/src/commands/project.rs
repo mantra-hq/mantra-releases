@@ -143,6 +143,19 @@ pub async fn get_project_by_cwd(
     db.get_project_by_cwd(&cwd).map_err(Into::into)
 }
 
+/// Get the project that a session belongs to (Story 1.9)
+///
+/// This is more reliable than get_project_by_cwd when the project's cwd
+/// might have been updated after the session was created.
+#[tauri::command]
+pub async fn get_project_by_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Option<Project>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_project_by_session_id(&session_id).map_err(Into::into)
+}
+
 /// Get all sessions for a specific project
 #[tauri::command]
 pub async fn get_project_sessions(
@@ -603,6 +616,66 @@ pub async fn rename_project(
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
     db.rename_project(&project_id, trimmed_name)?;
     Ok(())
+}
+
+/// Update a project's working directory (Story 1.9)
+///
+/// Allows users to manually set a project's cwd for cases where:
+/// - Path detection was incorrect
+/// - User wants to associate sessions with a different directory
+///
+/// # Arguments
+/// * `project_id` - The project ID to update
+/// * `new_cwd` - The new working directory path
+#[tauri::command]
+pub async fn update_project_cwd(
+    state: State<'_, AppState>,
+    project_id: String,
+    new_cwd: String,
+) -> Result<Project, AppError> {
+    use crate::git::get_git_remote_url;
+    use crate::models::normalize_cwd;
+
+    // Validate cwd is not empty
+    let trimmed_cwd = new_cwd.trim();
+    if trimmed_cwd.is_empty() {
+        return Err(AppError::Validation("工作目录不能为空".to_string()));
+    }
+
+    // Normalize the path
+    let normalized_cwd = normalize_cwd(trimmed_cwd);
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    // Check if a project with the new cwd already exists
+    if let Some(existing) = db.get_project_by_cwd(&normalized_cwd)? {
+        if existing.id != project_id {
+            return Err(AppError::Validation(format!(
+                "路径 {} 已被项目 {} 使用",
+                normalized_cwd, existing.name
+            )));
+        }
+    }
+
+    // Update the cwd
+    db.update_project_cwd(&project_id, &normalized_cwd)?;
+
+    // Detect Git repository and remote URL for the new path
+    let git_repo_path = crate::git::detect_git_repo_sync(&normalized_cwd);
+    if let Some(ref repo_path) = git_repo_path {
+        db.update_project_git_info(&normalized_cwd, Some(repo_path.clone()))?;
+
+        // Also update Git remote URL
+        if let Ok(Some(url)) = get_git_remote_url(std::path::Path::new(repo_path)) {
+            db.update_project_git_remote(&project_id, Some(&url))?;
+        }
+    } else {
+        db.update_project_git_info(&normalized_cwd, None)?;
+    }
+
+    // Return the updated project
+    db.get_project(&project_id)?
+        .ok_or_else(|| AppError::NotFound(format!("项目 {} 不存在", project_id)))
 }
 
 // ============================================================================

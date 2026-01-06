@@ -462,6 +462,7 @@ export function ProjectDrawer({
       />
 
       {/* Story 2.27: 项目元信息对话框 */}
+      {/* Story 1.9: Task 8.4 - 添加 onProjectUpdated 回调支持项目 cwd 更新 */}
       <ProjectInfoDialog
         isOpen={infoProject !== null}
         onOpenChange={(open) => {
@@ -469,6 +470,12 @@ export function ProjectDrawer({
         }}
         project={infoProject}
         getProjectSessions={getProjectSessions}
+        onProjectUpdated={(updatedProject) => {
+          // 更新 infoProject 状态以刷新对话框显示
+          setInfoProject(updatedProject);
+          // 触发项目列表刷新
+          onProjectsChange?.();
+        }}
       />
     </Sheet>
   );

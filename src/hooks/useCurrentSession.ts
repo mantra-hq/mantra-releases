@@ -1,6 +1,7 @@
 /**
  * useCurrentSession Hook - 获取当前会话及其项目信息
  * Story 2.17: Task 5
+ * Story 1.9: 使用 session_id 获取项目（修复 cwd 更新后项目信息不同步问题）
  *
  * 封装获取当前会话、项目信息和同项目会话列表的逻辑
  */
@@ -11,6 +12,7 @@ import type { Project } from "@/types/project";
 import type { MantraSession } from "@/lib/session-utils";
 import type { SessionSummary } from "@/components/navigation";
 import { formatSessionName } from "@/lib/utils";
+import { getProjectBySession } from "@/lib/project-ipc";
 
 /**
  * 后端 SessionSummary 类型 (来自 Rust)
@@ -124,10 +126,9 @@ export function useCurrentSession(
 
       setSession(sessionData);
 
-      // 2. 根据 cwd 获取项目信息
-      const projectData = await invoke<Project | null>("get_project_by_cwd", {
-        cwd: sessionData.cwd,
-      });
+      // 2. 根据 session_id 获取项目信息 (Story 1.9: 使用 session_id 而不是 cwd)
+      // 这样即使项目的 cwd 被更新，也能正确获取到项目
+      const projectData = await getProjectBySession(sessionId);
 
       setProject(projectData);
 

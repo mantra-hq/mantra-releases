@@ -155,7 +155,15 @@
     "sessionCount": "会话数量",
     "createdAt": "创建时间",
     "lastActivity": "最后活动",
-    "gitPath": "Git 仓库"
+    "gitPath": "Git 仓库",
+    "gitRemoteUrl": "Git 仓库 URL",
+    "selectDirectory": "选择项目工作目录",
+    "setCwd": "设置工作目录",
+    "cwdUpdated": "工作目录已更新",
+    "cwdUpdateFailed": "更新工作目录失败: {{error}}",
+    "invalidCwdWarning": "无法识别的路径格式，请手动设置正确的工作目录",
+    "invalidCwdTitle": "无法识别的路径",
+    "invalidCwdDescription": "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。"
   },
   "sync": {
     "reParseFailed": "重新解析失败",

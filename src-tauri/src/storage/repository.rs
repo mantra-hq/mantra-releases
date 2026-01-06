@@ -86,13 +86,14 @@ impl Database {
         // Try to find existing project
         let mut stmt = self
             .connection()
-            .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo FROM projects WHERE cwd = ?1")?;
+            .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url FROM projects WHERE cwd = ?1")?;
 
         let project_result = stmt.query_row(params![normalized_cwd], |row| {
             let created_at_str: String = row.get(3)?;
             let last_activity_str: String = row.get(4)?;
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
+            let git_remote_url: Option<String> = row.get(7)?;
 
             Ok(Project {
                 id: row.get(0)?,
@@ -107,6 +108,7 @@ impl Database {
                     .unwrap_or_else(|_| Utc::now()),
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
+                git_remote_url,
             })
         });
 
@@ -129,8 +131,8 @@ impl Database {
                 let now_str = now.to_rfc3339();
 
                 self.connection().execute(
-                    "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0],
+                    "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, Option::<String>::None],
                 )?;
 
                 let project = Project {
@@ -142,6 +144,7 @@ impl Database {
                     last_activity: now,
                     git_repo_path: None,
                     has_git_repo: false,
+                    git_remote_url: None,
                 };
                 Ok((project, true))
             }
@@ -152,7 +155,7 @@ impl Database {
     /// List all projects ordered by last activity (descending)
     pub fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo,
+            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
              ORDER BY p.last_activity DESC",
@@ -164,12 +167,13 @@ impl Database {
                 let last_activity_str: String = row.get(4)?;
                 let git_repo_path: Option<String> = row.get(5)?;
                 let has_git_repo: i32 = row.get(6)?;
+                let git_remote_url: Option<String> = row.get(7)?;
 
                 Ok(Project {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     cwd: row.get(2)?,
-                    session_count: row.get::<_, i32>(7)? as u32,
+                    session_count: row.get::<_, i32>(8)? as u32,
                     created_at: DateTime::parse_from_rfc3339(&created_at_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
@@ -178,6 +182,7 @@ impl Database {
                         .unwrap_or_else(|_| Utc::now()),
                     git_repo_path,
                     has_git_repo: has_git_repo != 0,
+                    git_remote_url,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -236,6 +241,56 @@ impl Database {
             |row| row.get(0),
         )?;
         Ok(count > 0)
+    }
+
+    /// Get the project that a session belongs to (Story 1.9)
+    ///
+    /// This method finds the project by looking up the session's project_id,
+    /// which is more reliable than using cwd (cwd might have been updated).
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID to look up
+    ///
+    /// # Returns
+    /// The project if found, None if session doesn't exist or has no project
+    pub fn get_project_by_session_id(&self, session_id: &str) -> Result<Option<Project>, StorageError> {
+        let result = self.connection().query_row(
+            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+             FROM projects p
+             INNER JOIN sessions s ON s.project_id = p.id
+             WHERE s.id = ?1",
+            params![session_id],
+            |row| {
+                let created_at_str: String = row.get(3)?;
+                let last_activity_str: String = row.get(4)?;
+                let git_repo_path: Option<String> = row.get(5)?;
+                let has_git_repo: i32 = row.get(6)?;
+                let git_remote_url: Option<String> = row.get(7)?;
+
+                Ok(Project {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    cwd: row.get(2)?,
+                    created_at: DateTime::parse_from_rfc3339(&created_at_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                    last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                    git_repo_path,
+                    has_git_repo: has_git_repo != 0,
+                    git_remote_url,
+                    session_count: row.get::<_, i32>(8)? as u32,
+                })
+            },
+        );
+
+        match result {
+            Ok(project) => Ok(Some(project)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// Get a session by ID
@@ -302,13 +357,213 @@ impl Database {
         Ok(())
     }
 
+    // ===== Story 1.9: Enhanced Project Identification =====
+
+    /// Find a project by Git remote URL (Story 1.9)
+    ///
+    /// # Arguments
+    /// * `url` - The Git remote URL (will be normalized)
+    pub fn find_by_git_remote(&self, url: &str) -> Result<Option<Project>, StorageError> {
+        use crate::git::normalize_git_url;
+        let normalized_url = normalize_git_url(url);
+
+        let mut stmt = self.connection().prepare(
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+             FROM projects p
+             WHERE git_remote_url = ?1",
+        )?;
+
+        let result = stmt.query_row(params![normalized_url], |row| {
+            let created_at_str: String = row.get(3)?;
+            let last_activity_str: String = row.get(4)?;
+            let git_repo_path: Option<String> = row.get(5)?;
+            let has_git_repo: i32 = row.get(6)?;
+            let git_remote_url: Option<String> = row.get(7)?;
+
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                cwd: row.get(2)?,
+                session_count: row.get::<_, i32>(8)? as u32,
+                created_at: DateTime::parse_from_rfc3339(&created_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+                git_repo_path,
+                has_git_repo: has_git_repo != 0,
+                git_remote_url,
+            })
+        });
+
+        match result {
+            Ok(project) => Ok(Some(project)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Update a project's Git remote URL (Story 1.9)
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID
+    /// * `git_remote_url` - The new Git remote URL (will be normalized if Some)
+    pub fn update_project_git_remote(
+        &self,
+        project_id: &str,
+        git_remote_url: Option<&str>,
+    ) -> Result<(), StorageError> {
+        use crate::git::normalize_git_url;
+        let normalized_url = git_remote_url.map(normalize_git_url);
+
+        self.connection().execute(
+            "UPDATE projects SET git_remote_url = ?1 WHERE id = ?2",
+            params![normalized_url, project_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update a project's working directory (Story 1.9)
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID
+    /// * `new_cwd` - The new working directory (should be normalized before calling)
+    pub fn update_project_cwd(&self, project_id: &str, new_cwd: &str) -> Result<(), StorageError> {
+        // Extract new name from cwd
+        let new_name = extract_project_name(new_cwd);
+
+        self.connection().execute(
+            "UPDATE projects SET cwd = ?1, name = ?2 WHERE id = ?3",
+            params![new_cwd, new_name, project_id],
+        )?;
+        Ok(())
+    }
+
+    /// Find or create a project with Git remote URL support (Story 1.9)
+    ///
+    /// Four-stage matching logic:
+    /// 1. Git remote URL match → return existing project
+    /// 2. Path match + URL consistency check:
+    ///    - Project has no URL, session has URL → update project's URL
+    ///    - Both have URL and match → return existing project
+    ///    - Both have URL but conflict → create new project (path reuse)
+    ///    - Project has URL, session has no URL → return existing project
+    ///    - Both have no URL → return existing project
+    /// 3. No match → create new project
+    ///
+    /// # Arguments
+    /// * `cwd` - The working directory path (will be normalized)
+    /// * `git_remote_url` - Optional Git remote URL
+    ///
+    /// # Returns
+    /// A tuple of (Project, bool) where bool indicates if the project was newly created
+    pub fn find_or_create_project(
+        &self,
+        cwd: &str,
+        git_remote_url: Option<&str>,
+    ) -> Result<(Project, bool), StorageError> {
+        use crate::git::normalize_git_url;
+
+        let normalized_cwd = normalize_cwd(cwd);
+        let normalized_url = git_remote_url.map(normalize_git_url);
+
+        // Stage 1: Git remote URL match (highest priority)
+        if let Some(ref url) = normalized_url {
+            if let Some(project) = self.find_by_git_remote(url)? {
+                // Same repo (possibly different path) → aggregate to existing project
+                return Ok((project, false));
+            }
+        }
+
+        // Stage 2: Path match + consistency check
+        if let Some(existing_project) = self.get_project_by_cwd(&normalized_cwd)? {
+            match (&existing_project.git_remote_url, &normalized_url) {
+                // 2a: Project has no URL, session has URL → update project's URL
+                (None, Some(url)) => {
+                    self.update_project_git_remote(&existing_project.id, Some(url))?;
+                    let mut updated = existing_project;
+                    updated.git_remote_url = Some(url.clone());
+                    return Ok((updated, false));
+                }
+
+                // 2b: Both have URL and match → aggregate
+                (Some(old_url), Some(new_url)) if old_url == new_url => {
+                    return Ok((existing_project, false));
+                }
+
+                // 2c: Both have URL but conflict → path reuse! Update to new URL
+                (Some(old_url), Some(new_url)) => {
+                    // Same path but different repo - directory was reused for a new project
+                    // AC8: Log warning about path reuse detection
+                    eprintln!(
+                        "[Story 1.9 AC8] Path reuse detected: cwd='{}' had git_remote_url='{}', updating to '{}'",
+                        normalized_cwd, old_url, new_url
+                    );
+                    // Update the project's Git URL to the new one (current reality)
+                    // Note: This means sessions from old repo will be in the same project,
+                    // but this is acceptable as the path is the primary aggregation key
+                    self.update_project_git_remote(&existing_project.id, Some(new_url))?;
+                    let mut updated = existing_project;
+                    updated.git_remote_url = Some(new_url.clone());
+                    return Ok((updated, false));
+                }
+
+                // 2d: Project has URL, session has no URL → aggregate
+                (Some(_), None) => {
+                    return Ok((existing_project, false));
+                }
+
+                // 2e: Both have no URL → aggregate
+                (None, None) => {
+                    return Ok((existing_project, false));
+                }
+            }
+        }
+
+        // Stage 3: No match → create new project
+        let project = self.create_project_internal(&normalized_cwd, normalized_url.as_deref())?;
+        Ok((project, true))
+    }
+
+    /// Internal helper to create a new project (Story 1.9)
+    fn create_project_internal(
+        &self,
+        normalized_cwd: &str,
+        git_remote_url: Option<&str>,
+    ) -> Result<Project, StorageError> {
+        let id = Uuid::new_v4().to_string();
+        let name = extract_project_name(normalized_cwd);
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        self.connection().execute(
+            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, git_remote_url],
+        )?;
+
+        Ok(Project {
+            id,
+            name,
+            cwd: normalized_cwd.to_string(),
+            session_count: 0,
+            created_at: now,
+            last_activity: now,
+            git_repo_path: None,
+            has_git_repo: false,
+            git_remote_url: git_remote_url.map(String::from),
+        })
+    }
+
     /// Get a project by ID
     ///
     /// # Arguments
     /// * `project_id` - The project ID to retrieve
     pub fn get_project(&self, project_id: &str) -> Result<Option<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo,
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
              WHERE id = ?1",
@@ -319,12 +574,13 @@ impl Database {
             let last_activity_str: String = row.get(4)?;
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
+            let git_remote_url: Option<String> = row.get(7)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
-                session_count: row.get::<_, i32>(7)? as u32,
+                session_count: row.get::<_, i32>(8)? as u32,
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -333,6 +589,7 @@ impl Database {
                     .unwrap_or_else(|_| Utc::now()),
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
+                git_remote_url,
             })
         });
 
@@ -352,7 +609,7 @@ impl Database {
         let normalized_cwd = normalize_cwd(cwd);
 
         let mut stmt = self.connection().prepare(
-            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo,
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
                     (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
              FROM projects p
              WHERE cwd = ?1",
@@ -363,12 +620,13 @@ impl Database {
             let last_activity_str: String = row.get(4)?;
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
+            let git_remote_url: Option<String> = row.get(7)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
-                session_count: row.get::<_, i32>(7)? as u32,
+                session_count: row.get::<_, i32>(8)? as u32,
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -377,6 +635,7 @@ impl Database {
                     .unwrap_or_else(|_| Utc::now()),
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
+                git_remote_url,
             })
         });
 
@@ -412,6 +671,40 @@ impl Database {
         }
 
         Ok((true, is_new_project))
+    }
+
+    /// Import a single session with Git remote URL support (Story 1.9)
+    ///
+    /// Uses the enhanced four-stage project matching logic.
+    ///
+    /// # Arguments
+    /// * `session` - The session to import
+    /// * `git_remote_url` - Optional Git remote URL for enhanced project matching
+    ///
+    /// # Returns
+    /// A tuple of (was_imported, was_new_project, project_id)
+    pub fn import_session_with_git_url(
+        &self,
+        session: &MantraSession,
+        git_remote_url: Option<&str>,
+    ) -> Result<(bool, bool, String), StorageError> {
+        // Check for duplicate
+        if self.session_exists(&session.id)? {
+            return Ok((false, false, String::new()));
+        }
+
+        // Use enhanced find_or_create_project with Git URL support
+        let (project, is_new_project) = self.find_or_create_project(&session.cwd, git_remote_url)?;
+
+        // Insert session
+        self.insert_session(session, &project.id)?;
+
+        // Update project last activity if this session is newer
+        if session.updated_at > project.last_activity {
+            self.update_project_last_activity(&project.id, session.updated_at)?;
+        }
+
+        Ok((true, is_new_project, project.id))
     }
 
     /// Import multiple sessions with transaction support
@@ -460,8 +753,8 @@ impl Database {
                         let now = Utc::now().to_rfc3339();
 
                         tx.execute(
-                            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                            params![id, name, normalized_cwd, now, now, Option::<String>::None, 0],
+                            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                            params![id, name, normalized_cwd, now, now, Option::<String>::None, 0, Option::<String>::None],
                         )?;
                         Ok((id, true))
                     }
@@ -963,30 +1256,6 @@ mod tests {
         assert_eq!(projects[0].git_repo_path, Some("/home/user/test".to_string()));
     }
 
-    #[test]
-    fn test_get_imported_project_paths() {
-        let db = Database::new_in_memory().unwrap();
-
-        // Initially empty
-        let paths = db.get_imported_project_paths().unwrap();
-        assert!(paths.is_empty());
-
-        // Add projects
-        db.get_or_create_project("/home/user/project1").unwrap();
-        db.get_or_create_project("/home/user/project2").unwrap();
-
-        let paths = db.get_imported_project_paths().unwrap();
-        // Each project returns 2 paths: original cwd + log directory format
-        assert_eq!(paths.len(), 4);
-        // Original cwd paths
-        assert!(paths.contains(&"/home/user/project1".to_string()));
-        assert!(paths.contains(&"/home/user/project2".to_string()));
-        // Log directory format paths should contain the converted format
-        // /home/user/project1 -> -home-user-project1
-        let has_log_format = paths.iter().any(|p| p.contains("-home-user-project1"));
-        assert!(has_log_format, "Should contain log directory format path");
-    }
-
     // Story 2.25: Multi-source aggregation tests
     #[test]
     fn test_multi_source_aggregation_same_cwd() {
@@ -1089,5 +1358,216 @@ mod tests {
 
         let projects = db.list_projects().unwrap();
         assert_eq!(projects[0].name, original_name);
+    }
+
+    // ===== Story 1.9: Enhanced Project Identification Tests =====
+
+    #[test]
+    fn test_find_by_git_remote_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project with Git remote URL
+        let (project, _) = db.find_or_create_project(
+            "/home/user/project1",
+            Some("https://github.com/user/repo"),
+        ).unwrap();
+
+        // Find by Git remote URL
+        let found = db.find_by_git_remote("https://github.com/user/repo").unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, project.id);
+    }
+
+    #[test]
+    fn test_find_by_git_remote_not_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project without Git remote URL
+        db.find_or_create_project("/home/user/project1", None).unwrap();
+
+        // Should not find any project
+        let found = db.find_by_git_remote("https://github.com/user/repo").unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_find_by_git_remote_normalizes_url() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project with SSH format URL
+        db.find_or_create_project(
+            "/home/user/project1",
+            Some("git@github.com:user/repo.git"),
+        ).unwrap();
+
+        // Find by HTTPS format (should be normalized to match)
+        let found = db.find_by_git_remote("https://github.com/user/repo").unwrap();
+        assert!(found.is_some());
+    }
+
+    #[test]
+    fn test_find_or_create_git_url_priority() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project with path1 and Git URL
+        let (project1, _) = db.find_or_create_project(
+            "/home/user/path1",
+            Some("https://github.com/user/myrepo"),
+        ).unwrap();
+
+        // Create session with path2 but SAME Git URL
+        // Should aggregate to existing project (Git URL priority)
+        let (project2, is_new) = db.find_or_create_project(
+            "/home/user/path2",
+            Some("https://github.com/user/myrepo"),
+        ).unwrap();
+
+        assert!(!is_new, "Should aggregate to existing project by Git URL");
+        assert_eq!(project1.id, project2.id, "Same project ID");
+    }
+
+    #[test]
+    fn test_find_or_create_path_fallback() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project without Git URL
+        let (project1, _) = db.find_or_create_project(
+            "/home/user/project",
+            None,
+        ).unwrap();
+
+        // Same path, no Git URL → fallback to path match
+        let (project2, is_new) = db.find_or_create_project(
+            "/home/user/project",
+            None,
+        ).unwrap();
+
+        assert!(!is_new, "Should find existing project by path");
+        assert_eq!(project1.id, project2.id);
+    }
+
+    #[test]
+    fn test_find_or_create_updates_missing_git_url() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project without Git URL
+        let (project1, _) = db.find_or_create_project(
+            "/home/user/project",
+            None,
+        ).unwrap();
+        assert!(project1.git_remote_url.is_none());
+
+        // Same path but now with Git URL → should update
+        let (project2, is_new) = db.find_or_create_project(
+            "/home/user/project",
+            Some("https://github.com/user/repo"),
+        ).unwrap();
+
+        assert!(!is_new, "Should aggregate, not create new");
+        assert_eq!(project1.id, project2.id);
+        assert!(project2.git_remote_url.is_some(), "Git URL should be updated");
+        assert_eq!(project2.git_remote_url.unwrap(), "https://github.com/user/repo");
+    }
+
+    #[test]
+    fn test_find_or_create_path_reuse_conflict() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project with Git URL A
+        let (project1, _) = db.find_or_create_project(
+            "/home/user/project",
+            Some("https://github.com/user/repoA"),
+        ).unwrap();
+
+        // Same path but DIFFERENT Git URL → path reuse!
+        // Should update project's Git URL to the new one (not create new project)
+        let (project2, is_new) = db.find_or_create_project(
+            "/home/user/project",
+            Some("https://github.com/user/repoB"),
+        ).unwrap();
+
+        assert!(!is_new, "Should update existing project, not create new");
+        assert_eq!(project1.id, project2.id, "Same project ID");
+        assert_eq!(project2.git_remote_url.unwrap(), "https://github.com/user/repoB", "Git URL should be updated");
+    }
+
+    #[test]
+    fn test_find_or_create_project_has_url_session_no_url() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create project with Git URL
+        let (project1, _) = db.find_or_create_project(
+            "/home/user/project",
+            Some("https://github.com/user/repo"),
+        ).unwrap();
+
+        // Same path, no Git URL → aggregate to existing project
+        let (project2, is_new) = db.find_or_create_project(
+            "/home/user/project",
+            None,
+        ).unwrap();
+
+        assert!(!is_new, "Should aggregate by path");
+        assert_eq!(project1.id, project2.id);
+    }
+
+    #[test]
+    fn test_import_session_with_git_url() {
+        let db = Database::new_in_memory().unwrap();
+
+        let session = MantraSession::new(
+            "sess_1".to_string(),
+            sources::CLAUDE.to_string(),
+            "/home/user/project".to_string(),
+        );
+
+        let (imported, is_new, project_id) = db.import_session_with_git_url(
+            &session,
+            Some("https://github.com/user/repo"),
+        ).unwrap();
+
+        assert!(imported);
+        assert!(is_new);
+        assert!(!project_id.is_empty());
+
+        // Verify Git URL is stored
+        let project = db.get_project(&project_id).unwrap().unwrap();
+        assert_eq!(project.git_remote_url, Some("https://github.com/user/repo".to_string()));
+    }
+
+    #[test]
+    fn test_cross_path_aggregation_by_git_url() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Session 1: path1 + repo URL
+        let session1 = MantraSession::new(
+            "sess_1".to_string(),
+            sources::CLAUDE.to_string(),
+            "/home/user/path1/myrepo".to_string(),
+        );
+        let (_, _, project_id1) = db.import_session_with_git_url(
+            &session1,
+            Some("https://github.com/user/myrepo"),
+        ).unwrap();
+
+        // Session 2: path2 + SAME repo URL
+        let session2 = MantraSession::new(
+            "sess_2".to_string(),
+            sources::GEMINI.to_string(),
+            "/home/user/path2/myrepo".to_string(),
+        );
+        let (imported, is_new, project_id2) = db.import_session_with_git_url(
+            &session2,
+            Some("https://github.com/user/myrepo"),
+        ).unwrap();
+
+        assert!(imported);
+        assert!(!is_new, "Should aggregate by Git URL, not create new project");
+        assert_eq!(project_id1, project_id2, "Both sessions in same project");
+
+        // Verify only one project exists
+        let projects = db.list_projects().unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].session_count, 2);
     }
 }

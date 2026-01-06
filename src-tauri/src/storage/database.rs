@@ -93,6 +93,25 @@ impl Database {
             )?;
         }
 
+        // Migration: Add git_remote_url column (Story 1.9)
+        let has_git_remote_url: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'git_remote_url'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_git_remote_url {
+            conn.execute_batch(
+                "ALTER TABLE projects ADD COLUMN git_remote_url TEXT;",
+            )?;
+            // Create index for git_remote_url
+            conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_projects_git_remote_url ON projects(git_remote_url);",
+            )?;
+        }
+
         Ok(())
     }
 

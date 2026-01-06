@@ -16,7 +16,7 @@ use tauri::Manager;
 
 use commands::{
     detect_git_repo, find_commit_at_time, get_commit_info, get_file_at_head, get_file_snapshot,
-    get_project, get_project_by_cwd, get_project_sessions, get_representative_file,
+    get_project, get_project_by_cwd, get_project_by_session, get_project_sessions, get_representative_file,
     get_session, get_snapshot_at_time, import_parsed_sessions,
     import_sessions, list_projects, parse_claude_log, parse_claude_log_string,
     parse_cursor_log, parse_cursor_all, parse_gemini_log, parse_gemini_log_string,
@@ -25,6 +25,8 @@ use commands::{
     list_tree_at_commit, list_files_at_commit,
     // Story 2.19: Project management commands
     sync_project, remove_project, rename_project,
+    // Story 1.9: Project cwd update
+    update_project_cwd,
     // Story 2.20: Import wizard enhancement
     get_imported_session_ids,
     // Story 2.23: Import with progress events
@@ -87,6 +89,7 @@ pub fn run() {
             list_projects,
             get_project,
             get_project_by_cwd,
+            get_project_by_session,
             get_project_sessions,
             get_session,
             import_sessions,
@@ -104,6 +107,8 @@ pub fn run() {
             sync_project,
             remove_project,
             rename_project,
+            // Story 1.9: Project cwd update
+            update_project_cwd,
             // Story 2.20: Import wizard enhancement
             get_imported_session_ids,
             // Story 2.23: Import with progress events
