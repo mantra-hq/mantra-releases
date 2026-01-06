@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2 } from 'lucide-react';
 import { RuleList } from '@/components/settings/RuleList';
+import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
@@ -132,6 +133,11 @@ export function Settings() {
                                 {t("common.copy")}
                             </Button>
                         </div>
+                    </section>
+
+                    {/* Story 3-5: 系统预设规则 (AC #1, #2, #3) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <SystemRuleList />
                     </section>
 
                     {/* 规则列表 */}

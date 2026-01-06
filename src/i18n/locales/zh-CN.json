@@ -360,7 +360,20 @@
     "helpSection": "帮助",
     "copyLogs": "复制运行日志",
     "logsDescription": "复制应用运行日志，用于反馈问题",
-    "logsCopied": "日志已复制到剪贴板"
+    "logsCopied": "日志已复制到剪贴板",
+    "builtinRules": "系统预设规则",
+    "builtinRulesCount": "{{count}} 条规则",
+    "sensitiveTypes": {
+      "api_key": "API 密钥",
+      "aws_key": "AWS 密钥",
+      "github_token": "GitHub Token",
+      "anthropic_key": "Anthropic 密钥",
+      "google_cloud_key": "Google Cloud 密钥",
+      "ip_address": "IP 地址",
+      "bearer_token": "Bearer Token",
+      "jwt_token": "JWT Token",
+      "secret": "密码/密钥"
+    }
   },
   "sanitizer": {
     "willShareSanitized": "将以清洗后的版本进行分享",

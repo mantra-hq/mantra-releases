@@ -104,6 +104,16 @@ pub async fn validate_regex(pattern: String) -> Result<ValidationResult, AppErro
     }
 }
 
+/// 获取所有内置脱敏规则
+///
+/// # Returns
+/// * `Result<Vec<SanitizationRule>, AppError>` - 内置规则列表
+#[tauri::command]
+pub async fn get_builtin_rules() -> Result<Vec<SanitizationRule>, AppError> {
+    use crate::sanitizer::BUILTIN_RULES;
+    Ok(BUILTIN_RULES.clone())
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -145,5 +155,26 @@ mod tests {
         let result = sanitize_text(text, None).await.unwrap();
         assert!(result.has_matches);
         assert!(result.stats.total >= 2);
+    }
+
+    // Story 3-5: Test get_builtin_rules command
+    #[tokio::test]
+    async fn test_get_builtin_rules() {
+        let rules = get_builtin_rules().await.unwrap();
+        
+        // Verify rules are returned
+        assert!(!rules.is_empty(), "Should return non-empty builtin rules");
+        
+        // Verify expected rule types exist
+        let rule_names: Vec<&str> = rules.iter().map(|r| r.name.as_str()).collect();
+        assert!(rule_names.contains(&"OpenAI API Key"), "Should contain OpenAI API Key rule");
+        assert!(rule_names.contains(&"GitHub Token"), "Should contain GitHub Token rule");
+        assert!(rule_names.contains(&"JWT Token"), "Should contain JWT Token rule");
+        
+        // Verify all rules have valid patterns (non-empty)
+        for rule in &rules {
+            assert!(!rule.pattern.is_empty(), "Rule {} should have non-empty pattern", rule.name);
+            assert!(!rule.name.is_empty(), "Rule should have non-empty name");
+        }
     }
 }

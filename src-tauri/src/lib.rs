@@ -21,7 +21,7 @@ use commands::{
     import_sessions, list_projects, parse_claude_log, parse_claude_log_string,
     parse_cursor_log, parse_cursor_all, parse_gemini_log, parse_gemini_log_string,
     parse_gemini_all, parse_gemini_project, parse_log_files,
-    sanitize_session, sanitize_text, validate_regex, scan_custom_directory, scan_log_directory, AppState,
+    sanitize_session, sanitize_text, validate_regex, get_builtin_rules, scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
     // Story 2.19: Project management commands
     sync_project, remove_project, rename_project,
@@ -103,6 +103,8 @@ pub fn run() {
             sanitize_text,
             sanitize_session,
             validate_regex,
+            // Story 3-5: Builtin rules
+            get_builtin_rules,
             // Story 2.19: Project management
             sync_project,
             remove_project,

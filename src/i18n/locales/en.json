@@ -360,7 +360,20 @@
     "helpSection": "Help",
     "copyLogs": "Copy Logs",
     "logsDescription": "Copy application logs for issue reporting",
-    "logsCopied": "Logs copied to clipboard"
+    "logsCopied": "Logs copied to clipboard",
+    "builtinRules": "Built-in Rules",
+    "builtinRulesCount": "{{count}} rules",
+    "sensitiveTypes": {
+      "api_key": "API Keys",
+      "aws_key": "AWS Keys",
+      "github_token": "GitHub Tokens",
+      "anthropic_key": "Anthropic Keys",
+      "google_cloud_key": "Google Cloud Keys",
+      "ip_address": "IP Addresses",
+      "bearer_token": "Bearer Tokens",
+      "jwt_token": "JWT Tokens",
+      "secret": "Secrets/Passwords"
+    }
   },
   "sanitizer": {
     "willShareSanitized": "Will share the sanitized version",

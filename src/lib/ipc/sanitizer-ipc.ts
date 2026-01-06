@@ -73,3 +73,11 @@ export async function validateRegex(pattern: string): Promise<ValidationResult> 
     return invoke<ValidationResult>('validate_regex', { pattern });
 }
 
+/**
+ * 获取系统内置脱敏规则
+ * Story 3-5: Task 2
+ * @returns 内置规则列表
+ */
+export async function getBuiltinRules(): Promise<SanitizationRule[]> {
+    return invoke<SanitizationRule[]>('get_builtin_rules');
+}

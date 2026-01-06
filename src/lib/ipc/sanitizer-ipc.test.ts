@@ -10,6 +10,7 @@ import {
     sanitizeSession,
     createEmptyStats,
     hasChanges,
+    getBuiltinRules,
 } from './sanitizer-ipc';
 import type { SanitizationResult } from '@/components/sanitizer/types';
 
@@ -146,6 +147,34 @@ describe('sanitizer-ipc', () => {
 
         it('无匹配时应该返回 false', () => {
             expect(hasChanges(mockEmptyResult)).toBe(false);
+        });
+    });
+
+    // Story 3-5: Task 2.2 - getBuiltinRules IPC 测试
+    describe('getBuiltinRules', () => {
+        it('应该调用正确的 IPC 命令', async () => {
+            const mockBuiltinRules = [
+                { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
+                { name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token' },
+            ];
+            vi.mocked(invoke).mockResolvedValue(mockBuiltinRules);
+
+            await getBuiltinRules();
+
+            expect(invoke).toHaveBeenCalledWith('get_builtin_rules');
+        });
+
+        it('应该返回内置规则列表', async () => {
+            const mockBuiltinRules = [
+                { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
+            ];
+            vi.mocked(invoke).mockResolvedValue(mockBuiltinRules);
+
+            const result = await getBuiltinRules();
+
+            expect(result).toEqual(mockBuiltinRules);
+            expect(result.length).toBe(1);
+            expect(result[0].name).toBe('OpenAI API Key');
         });
     });
 });

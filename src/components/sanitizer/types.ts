@@ -44,6 +44,8 @@ export interface SanitizationRule {
     name: string;
     pattern: string;
     replacement: string;
+    /** 敏感信息类型 (仅内置规则包含此字段) */
+    sensitive_type?: SensitiveType;
 }
 
 /** 脱敏结果 (来自 Rust IPC) */
