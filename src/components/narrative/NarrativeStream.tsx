@@ -6,6 +6,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,7 @@ function estimateMessageSize(message: NarrativeMessage): number {
  * 空状态组件
  */
 function EmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
       <div className="flex flex-col items-center gap-4 p-8 text-center">
@@ -66,9 +68,9 @@ function EmptyState() {
           <MessageSquare className="size-8" />
         </div>
         <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-foreground">暂无消息</h3>
+          <h3 className="text-lg font-semibold text-foreground">{t('narrative.noMessages')}</h3>
           <p className="text-sm max-w-xs">
-            对话消息将在这里显示
+            {t('narrative.messagesWillAppear')}
           </p>
         </div>
       </div>

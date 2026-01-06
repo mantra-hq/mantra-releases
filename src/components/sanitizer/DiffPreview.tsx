@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ArrowDown, Loader2 } from 'lucide-react';
@@ -21,6 +22,7 @@ export function DiffPreview({
     isLoading = false,
     hideActions = false,
 }: DiffPreviewProps) {
+    const { t } = useTranslation();
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -71,10 +73,10 @@ export function DiffPreview({
                     <div className="font-mono text-sm">
                         {/* 表头 */}
                         <div className="flex px-4 py-2 border-b bg-muted/30 text-xs text-muted-foreground sticky top-0">
-                            <span className="w-12 text-right pr-4">原始</span>
-                            <span className="w-12 text-right pr-4">新</span>
+                            <span className="w-12 text-right pr-4">{t('diff.original')}</span>
+                            <span className="w-12 text-right pr-4">{t('diff.new')}</span>
                             <span className="w-4 text-center"></span>
-                            <span className="flex-1">内容</span>
+                            <span className="flex-1">{t('diff.content')}</span>
                         </div>
 
                         {/* Diff 行 */}
@@ -98,7 +100,7 @@ export function DiffPreview({
                             className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
                         >
                             <ArrowDown className="h-4 w-4 animate-bounce" />
-                            请滚动到底部查看所有变更
+                            {t('diff.scrollToBottom')}
                         </button>
                     )}
 
@@ -107,7 +109,7 @@ export function DiffPreview({
                         className="text-sm text-center text-muted-foreground"
                         data-testid="confirm-message"
                     >
-                        将以清洗后的版本进行分享
+                        {t('sanitizer.willShareSanitized')}
                     </p>
 
                     {/* 按钮区域 */}
@@ -118,7 +120,7 @@ export function DiffPreview({
                             disabled={isLoading}
                             data-testid="cancel-button"
                         >
-                            取消
+                            {t('common.cancel')}
                         </Button>
                         <Button
                             onClick={onConfirm}
@@ -128,10 +130,10 @@ export function DiffPreview({
                             {isLoading ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    处理中...
+                                    {t('common.processing')}
                                 </>
                             ) : (
-                                '确认分享'
+                                t('sanitizer.confirmShare')
                             )}
                         </Button>
                     </div>

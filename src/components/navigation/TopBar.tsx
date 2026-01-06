@@ -8,6 +8,7 @@
  * 支持响应式截断
  */
 
+import { useTranslation } from "react-i18next";
 import { ChevronRight, Menu, FolderOpen, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BreadcrumbItem } from "./BreadcrumbItem";
@@ -95,6 +96,8 @@ export function TopBar({
   isSyncing = false,
   hideEmptySessions = false,
 }: TopBarProps) {
+  const { t } = useTranslation();
+
   // 渲染 Logo 区域
   const renderLogo = () => (
     <div className="flex items-center gap-1.5 mr-2">
@@ -138,7 +141,7 @@ export function TopBar({
               variant="ghost"
               size="icon"
               onClick={onDrawerOpen}
-              aria-label="打开项目抽屉"
+              aria-label={t("project.openDrawer")}
               className="h-8 w-8"
               data-testid="topbar-menu-button"
             >
@@ -157,7 +160,7 @@ export function TopBar({
             <BreadcrumbItem
               icon={<Menu className="h-4 w-4" />}
               onClick={onDrawerOpen}
-              aria-label="打开项目抽屉"
+              aria-label={t("project.openDrawer")}
               testId="topbar-menu-button"
             />
 
@@ -201,7 +204,7 @@ export function TopBar({
         return (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">加载中...</span>
+            <span className="text-sm">{t("common.loading")}</span>
           </div>
         );
 
@@ -210,7 +213,7 @@ export function TopBar({
         return (
           <div className="flex items-center gap-2 text-destructive">
             <AlertCircle className="h-4 w-4" />
-            <span className="text-sm">加载失败</span>
+            <span className="text-sm">{t("common.loadFailed")}</span>
           </div>
         );
 

@@ -111,7 +111,7 @@ export function SanitizeStatusBanner({
                     <span className="font-medium truncate">
                         {hasSensitiveInfo
                             ? t('sanitizer.detectedCount', '检测到 {{count}} 处敏感信息', { count: stats.total })
-                            : t('sanitizer.safeToShareWithHint', '未检测到敏感信息，此内容可以安全分享 · 分享后可随时撤回')
+                            : t('sanitizer.safeToShareFull')
                         }
                     </span>
                 </div>

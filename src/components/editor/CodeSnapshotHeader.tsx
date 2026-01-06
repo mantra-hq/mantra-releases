@@ -112,7 +112,7 @@ export function CodeSnapshotHeader({
               "text-muted-foreground hover:bg-muted hover:text-foreground",
               "transition-colors duration-150"
             )}
-            title="复制路径"
+            title={t("editor.copyPath")}
           >
             {copied ? (
               <Check className="size-3 text-emerald-500" />
@@ -133,7 +133,7 @@ export function CodeSnapshotHeader({
           )}
         >
           <History className="size-3" />
-          <span className="font-medium">历史快照</span>
+          <span className="font-medium">{t("editor.historySnapshot")}</span>
           {formattedTime && (
             <span className="text-blue-400/80">· {formattedTime}</span>
           )}

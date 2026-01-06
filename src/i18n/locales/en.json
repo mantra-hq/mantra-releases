@@ -23,6 +23,7 @@
     "processing": "Processing",
     "waiting": "Waiting",
     "failed": "Failed",
+    "loadFailed": "Load Failed",
     "collapse": "Collapse",
     "collapseAll": "Collapse All",
     "expand": "Expand",
@@ -409,6 +410,16 @@
     "shareSuccessWithSanitize": "Sanitized {{count}} sensitive items and shared successfully",
     "shareFailed": "Share failed",
     "noSessionSelected": "No session selected"
+  },
+  "diff": {
+    "original": "Original",
+    "new": "New",
+    "content": "Content",
+    "scrollToBottom": "Please scroll to the bottom to view all changes"
+  },
+  "narrative": {
+    "noMessages": "No messages",
+    "messagesWillAppear": "Messages will appear here"
   },
   "player": {
     "selectSessionToPlay": "Select a session to start playback",

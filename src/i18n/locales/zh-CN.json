@@ -23,6 +23,7 @@
     "processing": "处理中",
     "waiting": "等待中",
     "failed": "失败",
+    "loadFailed": "加载失败",
     "collapse": "收起",
     "collapseAll": "全部折叠",
     "expand": "展开",
@@ -409,6 +410,16 @@
     "shareSuccessWithSanitize": "已脱敏 {{count}} 处敏感信息并分享成功",
     "shareFailed": "分享失败",
     "noSessionSelected": "没有选中的会话"
+  },
+  "diff": {
+    "original": "原始",
+    "new": "新",
+    "content": "内容",
+    "scrollToBottom": "请滚动到底部查看所有变更"
+  },
+  "narrative": {
+    "noMessages": "暂无消息",
+    "messagesWillAppear": "对话消息将在这里显示"
   },
   "player": {
     "selectSessionToPlay": "选择一个会话开始回放",
