@@ -125,7 +125,9 @@
     "importPrompt": "Import AI coding sessions to start playback",
     "skipEmptySessions": "Skip empty sessions",
     "skippedEmpty": "Skipped empty sessions",
-    "noFiles": "No files found"
+    "noFiles": "No files found",
+    "emptyProjectsWarning": "The following projects have all empty sessions",
+    "emptyProjectsWillBeHidden": "These projects will be hidden when \"Hide empty sessions\" is enabled"
   },
   "project": {
     "myProjects": "My Projects",
@@ -146,7 +148,7 @@
     "removeConfirm": "Are you sure you want to remove \"{{name}}\"?",
     "removeDescription": "This will only remove the imported session logs from Mantra, and will not affect your original code project.",
     "removeProject": "Remove Project",
-    "hideEmptyProjects": "Hide empty projects"
+    "hideEmptyProjects": "Hide empty sessions"
   },
   "projectInfo": {
     "description": "Project Details",

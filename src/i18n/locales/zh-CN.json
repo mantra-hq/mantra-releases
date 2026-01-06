@@ -125,7 +125,9 @@
     "importPrompt": "导入 AI 编程会话，开始回放心法",
     "skipEmptySessions": "跳过空会话",
     "skippedEmpty": "跳过空会话",
-    "noFiles": "暂无文件"
+    "noFiles": "暂无文件",
+    "emptyProjectsWarning": "以下项目的所有会话都是空的",
+    "emptyProjectsWillBeHidden": "这些项目在\"隐藏空会话\"开启时将不会显示"
   },
   "project": {
     "myProjects": "我的项目",
@@ -146,7 +148,7 @@
     "removeConfirm": "确定要移除「{{name}}」吗？",
     "removeDescription": "这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。",
     "removeProject": "移除项目",
-    "hideEmptyProjects": "隐藏空项目"
+    "hideEmptyProjects": "隐藏空会话"
   },
   "projectInfo": {
     "description": "项目详细信息",

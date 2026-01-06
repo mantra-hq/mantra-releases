@@ -3,17 +3,19 @@
  * Story 2.9: Task 5
  * Story 2.23: Quick Navigation to Imported Projects
  * Story 2.26: 国际化支持
+ * Story 2.29 V2: Empty Project Warning
  *
  * 显示导入完成信息：
  * - 导入统计
  * - 刚导入的项目列表（可快速跳转）
+ * - 空项目提示（Story 2.29 V2）
  * - 查看项目按钮
  * - 继续导入按钮
  */
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2, Info } from "lucide-react";
 import { Button, ScrollArea } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { ImportedProject } from "@/stores/useImportStore";
@@ -115,6 +117,10 @@ export function ImportComplete({
     results.filter((r) => r.success && r.projectId && !r.skipped).map((r) => r.projectId)
   );
   const projectCount = projectIds.size;
+
+  // Story 2.29 V2: 计算空项目
+  const emptyProjects = importedProjects.filter((p) => p.isEmpty);
+  const hasEmptyProjects = emptyProjects.length > 0;
 
   // 获取失败的文件
   const failedResults = results.filter((r) => !r.success);
@@ -230,6 +236,37 @@ export function ImportComplete({
                 ))}
               </div>
             </ScrollArea>
+          </div>
+        )}
+
+        {/* Story 2.29 V2: 空项目警告 */}
+        {hasEmptyProjects && (
+          <div
+            className="text-left p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30"
+            data-testid="empty-projects-warning"
+          >
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-yellow-500">
+                  {t("import.emptyProjectsWarning")}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("import.emptyProjectsWillBeHidden")}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {emptyProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                    >
+                      <FolderKanban className="w-3 h-3 text-yellow-500/70" />
+                      <span className="truncate">{project.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

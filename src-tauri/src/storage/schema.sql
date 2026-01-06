@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS projects (
     last_activity TEXT NOT NULL,
     git_repo_path TEXT,           -- Git 仓库根路径 (Story 2.11)
     has_git_repo INTEGER NOT NULL DEFAULT 0,  -- 是否关联 Git 仓库 (Story 2.11)
-    git_remote_url TEXT           -- Git remote URL (Story 1.9: 用于跨路径项目识别)
+    git_remote_url TEXT,          -- Git remote URL (Story 1.9: 用于跨路径项目识别)
+    is_empty INTEGER NOT NULL DEFAULT 0  -- 项目是否为空 (所有会话都是空会话)
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_cwd ON projects(cwd);

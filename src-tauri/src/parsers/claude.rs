@@ -884,28 +884,32 @@ mod tests {
         let parser = ClaudeParser::new();
 
         // Test file with only file-history-snapshot records
+        // Story 2.29 V2: Returns empty session (not error) for system-events-only files
         let file1 = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-input-poc/1239d15e-5b17-4607-961f-ba103d232021.jsonl";
         if std::path::Path::new(file1).exists() {
             let result = parser.parse_file(file1);
             println!("\nFile 1 (file-history-snapshot only):");
             println!("  Result: {:?}", result);
-            assert!(result.is_err(), "Should return error for file-history-snapshot only file");
-            if let Err(e) = result {
-                println!("  Error type: {:?}", e);
-                assert!(e.is_skippable(), "Error should be skippable");
+            // Story 2.29 V2: Returns empty session instead of error
+            assert!(result.is_ok(), "Should return empty session for file-history-snapshot only file");
+            if let Ok(session) = result {
+                assert!(session.messages.is_empty(), "Session should have no messages");
+                assert!(session.is_empty(), "Session should be marked as empty");
             }
         }
 
         // Test file with only summary record
+        // Story 2.29 V2: Returns empty session (not error) for summary-only files
         let file2 = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-input-poc/b7485bbe-3a7d-460c-8452-54ec4ce4a3a5.jsonl";
         if std::path::Path::new(file2).exists() {
             let result = parser.parse_file(file2);
             println!("\nFile 2 (summary only):");
             println!("  Result: {:?}", result);
-            assert!(result.is_err(), "Should return error for summary only file");
-            if let Err(e) = result {
-                println!("  Error type: {:?}", e);
-                assert!(e.is_skippable(), "Error should be skippable");
+            // Story 2.29 V2: Returns empty session instead of error
+            assert!(result.is_ok(), "Should return empty session for summary only file");
+            if let Ok(session) = result {
+                assert!(session.messages.is_empty(), "Session should have no messages");
+                assert!(session.is_empty(), "Session should be marked as empty");
             }
         }
 

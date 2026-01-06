@@ -24,6 +24,8 @@ export interface SessionSummary {
   name: string;
   messageCount: number;
   lastActiveAt: number; // Unix timestamp (ms)
+  /** Story 2.29 V2: 是否为空会话 */
+  is_empty?: boolean;
 }
 
 /**
@@ -69,6 +71,8 @@ export interface TopBarProps {
   onBack?: () => void;
   /** 是否正在同步 */
   isSyncing?: boolean;
+  /** Story 2.29 V2: 是否隐藏空会话 */
+  hideEmptySessions?: boolean;
 }
 
 /**
@@ -89,6 +93,7 @@ export function TopBar({
   onImport,
   onBack,
   isSyncing = false,
+  hideEmptySessions = false,
 }: TopBarProps) {
   // 渲染 Logo 区域
   const renderLogo = () => (
@@ -181,6 +186,7 @@ export function TopBar({
               messageCount={messageCount}
               sessions={sessions}
               onSessionSelect={onSessionSelect || (() => { })}
+              hideEmptySessions={hideEmptySessions}
             />
           </>
         );

@@ -42,6 +42,8 @@ export interface SessionDropdownProps {
   sessions: SessionSummary[];
   /** 会话选择回调 */
   onSessionSelect: (sessionId: string) => void;
+  /** Story 2.29 V2: 是否隐藏空会话 */
+  hideEmptySessions?: boolean;
 }
 
 /**
@@ -54,9 +56,16 @@ export function SessionDropdown({
   messageCount,
   sessions,
   onSessionSelect,
+  hideEmptySessions = false,
 }: SessionDropdownProps) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = React.useState(false);
+
+  // Story 2.29 V2: Filter out empty sessions if hideEmptySessions is enabled
+  const filteredSessions = React.useMemo(() => {
+    if (!hideEmptySessions) return sessions;
+    return sessions.filter((session) => !session.is_empty);
+  }, [sessions, hideEmptySessions]);
 
   // 处理会话选择
   const handleSelect = React.useCallback(
@@ -117,7 +126,7 @@ export function SessionDropdown({
           <CommandList>
             <CommandEmpty>{t("session.noMatchingSessions")}</CommandEmpty>
             <CommandGroup>
-              {sessions.map((session) => (
+              {filteredSessions.map((session) => (
                 <CommandItem
                   key={session.id}
                   value={session.name}

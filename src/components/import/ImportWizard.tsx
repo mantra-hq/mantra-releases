@@ -28,7 +28,7 @@ import { feedback } from "@/lib/feedback";
 import { appLog } from "@/lib/log-actions";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
-import { getImportedSessionIds } from "@/lib/project-ipc";
+import { getImportedSessionIds, getProject } from "@/lib/project-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
 import { FileSelector } from "./FileSelector";
 import { ImportProgress, type ImportProgressData, type RecentFile } from "./ImportProgress";
@@ -177,6 +177,7 @@ export function ImportWizard({
     lastScannedSource,
     setLastScannedSource,
     clearDiscoveredFiles,
+    updateImportedProjectsIsEmpty,
   } = useImportStore();
 
   // Story 2.23: 重试状态
@@ -403,6 +404,25 @@ export function ImportWizard({
       // Story 2.28: 记录导入完成日志
       appLog.importComplete(finalProgress.successCount, finalProgress.failureCount);
 
+      // Story 2.29 V2: 获取导入项目的 is_empty 状态
+      // 在后台更新，不阻塞 UI
+      const projectIds = Array.from(
+        new Set(parseResults.filter(r => r.success && r.projectId).map(r => r.projectId!))
+      );
+      Promise.all(projectIds.map(id => getProject(id)))
+        .then(projects => {
+          const projectIsEmptyMap: Record<string, boolean> = {};
+          for (const project of projects) {
+            if (project) {
+              projectIsEmptyMap[project.id] = project.is_empty ?? false;
+            }
+          }
+          updateImportedProjectsIsEmpty(projectIsEmptyMap);
+        })
+        .catch(err => {
+          console.error("Failed to fetch project is_empty status:", err);
+        });
+
       // 跳转到完成步骤
       setStep("complete");
     } catch (err) {
@@ -411,7 +431,7 @@ export function ImportWizard({
       setLoading(false);
       setIsCancelling(false);
     }
-  }, [selectedFiles, setStep, setLoading, setProgress, addResult, addError]);
+  }, [selectedFiles, setStep, setLoading, setProgress, addResult, addError, updateImportedProjectsIsEmpty]);
 
   /**
    * 处理下一步

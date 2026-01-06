@@ -40,6 +40,8 @@ export interface Project {
   cwd: string;
   /** 会话数量 */
   session_count: number;
+  /** 非空会话数量 - Story 2.29 V2 */
+  non_empty_session_count?: number;
   /** 创建时间 (ISO 8601 字符串) */
   created_at: string;
   /** 最后活动时间 (ISO 8601 字符串) */
@@ -50,6 +52,8 @@ export interface Project {
   has_git_repo: boolean;
   /** Git 远程 URL (Story 1.9: 用于跨路径项目聚合) */
   git_remote_url: string | null;
+  /** 项目是否为空 (所有会话都是空会话) - Story 2.29 V2 */
+  is_empty?: boolean;
 }
 
 /**

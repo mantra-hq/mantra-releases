@@ -124,19 +124,9 @@ export function ProjectDrawer({
   const filteredProjects = React.useMemo(() => {
     let result = projects;
 
-    // Story 2.29 AC4: 隐藏空项目（所有会话都是空会话的项目）
+    // Story 2.29 V2: 使用项目的 is_empty 字段进行过滤（加载时已确定）
     if (hideEmptyProjects) {
-      result = result.filter((project) => {
-        const sessions = projectSessions[project.id];
-        // 如果会话还没有加载，暂时显示项目
-        if (!sessions || sessions.length === 0) {
-          // 如果项目没有会话，也视为空项目
-          return project.session_count > 0 || !projectSessions[project.id];
-        }
-        // 检查是否所有会话都是空会话
-        const allEmpty = sessions.every((s) => s.is_empty);
-        return !allEmpty;
-      });
+      result = result.filter((project) => !project.is_empty);
     }
 
     // 搜索过滤
@@ -310,7 +300,7 @@ export function ProjectDrawer({
             onChange={setSearchKeyword}
             placeholder={t("import.searchProjectOrSession") + "..."}
           />
-          {/* Story 2.29 AC3: 隐藏空项目复选框（默认勾选） */}
+          {/* Story 2.29 V2: 隐藏空会话复选框（默认勾选）*/}
           <label className="flex items-center gap-2 mt-2 cursor-pointer">
             <Checkbox
               checked={hideEmptyProjects}
@@ -382,6 +372,8 @@ export function ProjectDrawer({
                   onRenameCancel={handleRenameCancel}
                   // Story 2.18 fix: 菜单打开状态
                   isSettingsMenuOpen={menuOpenProjectId === project.id}
+                  // Story 2.29 V2: 隐藏空会话
+                  hideEmptySessions={hideEmptyProjects}
                   // Story 2.19: 设置菜单
                   settingsMenu={
                     <ProjectContextMenu

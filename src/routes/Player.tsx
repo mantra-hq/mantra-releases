@@ -51,6 +51,8 @@ import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 import { PlayerEmptyState } from "@/components/player";
+// Story 2.29 V2: 隐藏空会话设置
+import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 
 
 /**
@@ -135,6 +137,9 @@ export default function Player() {
     getProjectSessions: fetchProjectSessions,
     refetchProjects,
   } = useProjectDrawer({ defaultOpen: !sessionId });
+
+  // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
+  const [hideEmptySessions] = useHideEmptyProjects();
 
   // 加载会话数据
   React.useEffect(() => {
@@ -674,6 +679,7 @@ export default function Player() {
         onSync={handleSync}
         onImport={() => setImportOpen(true)}
         isSyncing={isSyncing}
+        hideEmptySessions={hideEmptySessions}
       />
 
       {/* Main Content - DualStreamLayout */}

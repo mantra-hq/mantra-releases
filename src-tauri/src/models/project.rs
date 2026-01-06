@@ -20,6 +20,10 @@ pub struct Project {
     pub cwd: String,
     /// Number of sessions in this project
     pub session_count: u32,
+    /// Number of non-empty sessions in this project (Story 2.29 V2)
+    /// Used for displaying filtered count when "hide empty sessions" is enabled
+    #[serde(default)]
+    pub non_empty_session_count: u32,
     /// First import time
     pub created_at: DateTime<Utc>,
     /// Last activity time (latest session's updated_at)
@@ -32,6 +36,10 @@ pub struct Project {
     /// Used for cross-path project aggregation (same repo, different paths)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub git_remote_url: Option<String>,
+    /// Whether this project is empty (all sessions are empty)
+    /// Story 2.29 V2: Used for filtering empty projects in the UI
+    #[serde(default)]
+    pub is_empty: bool,
 }
 
 /// Lightweight session summary for listings
@@ -80,11 +88,13 @@ impl Project {
             name,
             cwd,
             session_count: 0,
+            non_empty_session_count: 0,
             created_at: now,
             last_activity: now,
             git_repo_path: None,
             has_git_repo: false,
             git_remote_url: None,
+            is_empty: true, // New project starts as empty until sessions are added
         }
     }
 
@@ -185,6 +195,7 @@ mod tests {
         assert_eq!(project.session_count, 0);
         assert!(project.git_repo_path.is_none());
         assert!(!project.has_git_repo);
+        assert!(project.is_empty); // New projects start as empty
     }
 
     #[test]

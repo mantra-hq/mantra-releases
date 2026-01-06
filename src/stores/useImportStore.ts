@@ -33,6 +33,8 @@ export interface ImportedProject {
   sessionCount: number;
   /** 第一个会话 ID (用于快速跳转) */
   firstSessionId: string;
+  /** 项目是否为空（所有会话都是空会话）Story 2.29 V2 */
+  isEmpty?: boolean;
 }
 
 /**
@@ -124,6 +126,8 @@ export interface ImportState {
   clearDiscoveredFiles: () => void;
   /** 设置跳过空会话 (Story 2.29) */
   setSkipEmptySessions: (skip: boolean) => void;
+  /** 更新导入项目的 isEmpty 状态 (Story 2.29 V2) */
+  updateImportedProjectsIsEmpty: (projectIsEmptyMap: Record<string, boolean>) => void;
 }
 
 /**
@@ -450,6 +454,15 @@ export const useImportStore = create<ImportState>((set) => ({
     set({
       skipEmptySessions: skip,
     }),
+
+  // Story 2.29 V2: 更新导入项目的 isEmpty 状态
+  updateImportedProjectsIsEmpty: (projectIsEmptyMap) =>
+    set((state) => ({
+      importedProjects: state.importedProjects.map((p) => ({
+        ...p,
+        isEmpty: projectIsEmptyMap[p.id] ?? false,
+      })),
+    })),
 }));
 
 export default useImportStore;

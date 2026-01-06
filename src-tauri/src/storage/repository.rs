@@ -86,7 +86,7 @@ impl Database {
         // Try to find existing project
         let mut stmt = self
             .connection()
-            .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url FROM projects WHERE cwd = ?1")?;
+            .prepare("SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty FROM projects WHERE cwd = ?1")?;
 
         let project_result = stmt.query_row(params![normalized_cwd], |row| {
             let created_at_str: String = row.get(3)?;
@@ -94,12 +94,14 @@ impl Database {
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
             let git_remote_url: Option<String> = row.get(7)?;
+            let is_empty: i32 = row.get(8)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
                 session_count: 0, // Will be filled later
+                non_empty_session_count: 0, // Will be filled later
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -109,18 +111,20 @@ impl Database {
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
                 git_remote_url,
+                is_empty: is_empty != 0,
             })
         });
 
         match project_result {
             Ok(mut project) => {
-                // Get session count
-                let count: i32 = self.connection().query_row(
-                    "SELECT COUNT(*) FROM sessions WHERE project_id = ?1",
+                // Get session count and non-empty session count (Story 2.29 V2)
+                let (count, non_empty_count): (i32, i32) = self.connection().query_row(
+                    "SELECT COUNT(*), SUM(CASE WHEN is_empty = 0 THEN 1 ELSE 0 END) FROM sessions WHERE project_id = ?1",
                     params![project.id],
-                    |row| row.get(0),
+                    |row| Ok((row.get(0)?, row.get::<_, Option<i32>>(1)?.unwrap_or(0))),
                 )?;
                 project.session_count = count as u32;
+                project.non_empty_session_count = non_empty_count as u32;
                 Ok((project, false))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
@@ -131,8 +135,8 @@ impl Database {
                 let now_str = now.to_rfc3339();
 
                 self.connection().execute(
-                    "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, Option::<String>::None],
+                    "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, Option::<String>::None, 1],
                 )?;
 
                 let project = Project {
@@ -140,11 +144,13 @@ impl Database {
                     name,
                     cwd: normalized_cwd,
                     session_count: 0,
+                    non_empty_session_count: 0,
                     created_at: now,
                     last_activity: now,
                     git_repo_path: None,
                     has_git_repo: false,
                     git_remote_url: None,
+                    is_empty: true,
                 };
                 Ok((project, true))
             }
@@ -155,8 +161,9 @@ impl Database {
     /// List all projects ordered by last activity (descending)
     pub fn list_projects(&self) -> Result<Vec<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url,
-                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url, p.is_empty,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id AND is_empty = 0) as non_empty_session_count
              FROM projects p
              ORDER BY p.last_activity DESC",
         )?;
@@ -168,12 +175,14 @@ impl Database {
                 let git_repo_path: Option<String> = row.get(5)?;
                 let has_git_repo: i32 = row.get(6)?;
                 let git_remote_url: Option<String> = row.get(7)?;
+                let is_empty: i32 = row.get(8)?;
 
                 Ok(Project {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     cwd: row.get(2)?,
-                    session_count: row.get::<_, i32>(8)? as u32,
+                    session_count: row.get::<_, i32>(9)? as u32,
+                    non_empty_session_count: row.get::<_, i32>(10)? as u32,
                     created_at: DateTime::parse_from_rfc3339(&created_at_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
@@ -183,6 +192,7 @@ impl Database {
                     git_repo_path,
                     has_git_repo: has_git_repo != 0,
                     git_remote_url,
+                    is_empty: is_empty != 0,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -255,8 +265,9 @@ impl Database {
     /// The project if found, None if session doesn't exist or has no project
     pub fn get_project_by_session_id(&self, session_id: &str) -> Result<Option<Project>, StorageError> {
         let result = self.connection().query_row(
-            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url,
-                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+            "SELECT p.id, p.name, p.cwd, p.created_at, p.last_activity, p.git_repo_path, p.has_git_repo, p.git_remote_url, p.is_empty,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id AND is_empty = 0) as non_empty_session_count
              FROM projects p
              INNER JOIN sessions s ON s.project_id = p.id
              WHERE s.id = ?1",
@@ -267,6 +278,7 @@ impl Database {
                 let git_repo_path: Option<String> = row.get(5)?;
                 let has_git_repo: i32 = row.get(6)?;
                 let git_remote_url: Option<String> = row.get(7)?;
+                let is_empty: i32 = row.get(8)?;
 
                 Ok(Project {
                     id: row.get(0)?,
@@ -281,7 +293,9 @@ impl Database {
                     git_repo_path,
                     has_git_repo: has_git_repo != 0,
                     git_remote_url,
-                    session_count: row.get::<_, i32>(8)? as u32,
+                    session_count: row.get::<_, i32>(9)? as u32,
+                    non_empty_session_count: row.get::<_, i32>(10)? as u32,
+                    is_empty: is_empty != 0,
                 })
             },
         );
@@ -368,8 +382,9 @@ impl Database {
         let normalized_url = normalize_git_url(url);
 
         let mut stmt = self.connection().prepare(
-            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
-                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id AND is_empty = 0) as non_empty_session_count
              FROM projects p
              WHERE git_remote_url = ?1",
         )?;
@@ -380,12 +395,14 @@ impl Database {
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
             let git_remote_url: Option<String> = row.get(7)?;
+            let is_empty: i32 = row.get(8)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
-                session_count: row.get::<_, i32>(8)? as u32,
+                session_count: row.get::<_, i32>(9)? as u32,
+                non_empty_session_count: row.get::<_, i32>(10)? as u32,
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -395,6 +412,7 @@ impl Database {
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
                 git_remote_url,
+                is_empty: is_empty != 0,
             })
         });
 
@@ -539,9 +557,9 @@ impl Database {
         let now_str = now.to_rfc3339();
 
         self.connection().execute(
-            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, git_remote_url],
+            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![id, name, normalized_cwd, now_str, now_str, Option::<String>::None, 0, git_remote_url, 1],
         )?;
 
         Ok(Project {
@@ -549,11 +567,13 @@ impl Database {
             name,
             cwd: normalized_cwd.to_string(),
             session_count: 0,
+            non_empty_session_count: 0,
             created_at: now,
             last_activity: now,
             git_repo_path: None,
             has_git_repo: false,
             git_remote_url: git_remote_url.map(String::from),
+            is_empty: true,
         })
     }
 
@@ -563,8 +583,9 @@ impl Database {
     /// * `project_id` - The project ID to retrieve
     pub fn get_project(&self, project_id: &str) -> Result<Option<Project>, StorageError> {
         let mut stmt = self.connection().prepare(
-            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
-                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id AND is_empty = 0) as non_empty_session_count
              FROM projects p
              WHERE id = ?1",
         )?;
@@ -575,12 +596,14 @@ impl Database {
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
             let git_remote_url: Option<String> = row.get(7)?;
+            let is_empty: i32 = row.get(8)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
-                session_count: row.get::<_, i32>(8)? as u32,
+                session_count: row.get::<_, i32>(9)? as u32,
+                non_empty_session_count: row.get::<_, i32>(10)? as u32,
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -590,6 +613,7 @@ impl Database {
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
                 git_remote_url,
+                is_empty: is_empty != 0,
             })
         });
 
@@ -609,8 +633,9 @@ impl Database {
         let normalized_cwd = normalize_cwd(cwd);
 
         let mut stmt = self.connection().prepare(
-            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url,
-                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count
+            "SELECT id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id) as session_count,
+                    (SELECT COUNT(*) FROM sessions WHERE project_id = p.id AND is_empty = 0) as non_empty_session_count
              FROM projects p
              WHERE cwd = ?1",
         )?;
@@ -621,12 +646,14 @@ impl Database {
             let git_repo_path: Option<String> = row.get(5)?;
             let has_git_repo: i32 = row.get(6)?;
             let git_remote_url: Option<String> = row.get(7)?;
+            let is_empty: i32 = row.get(8)?;
 
             Ok(Project {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 cwd: row.get(2)?,
-                session_count: row.get::<_, i32>(8)? as u32,
+                session_count: row.get::<_, i32>(9)? as u32,
+                non_empty_session_count: row.get::<_, i32>(10)? as u32,
                 created_at: DateTime::parse_from_rfc3339(&created_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -636,6 +663,7 @@ impl Database {
                 git_repo_path,
                 has_git_repo: has_git_repo != 0,
                 git_remote_url,
+                is_empty: is_empty != 0,
             })
         });
 
@@ -753,8 +781,8 @@ impl Database {
                         let now = Utc::now().to_rfc3339();
 
                         tx.execute(
-                            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                            params![id, name, normalized_cwd, now, now, Option::<String>::None, 0, Option::<String>::None],
+                            "INSERT INTO projects (id, name, cwd, created_at, last_activity, git_repo_path, has_git_repo, git_remote_url, is_empty) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                            params![id, name, normalized_cwd, now, now, Option::<String>::None, 0, Option::<String>::None, 1],
                         )?;
                         Ok((id, true))
                     }
@@ -910,6 +938,37 @@ impl Database {
             ],
         )?;
         Ok(())
+    }
+
+    /// Update a project's is_empty status (Story 2.29 V2)
+    ///
+    /// A project is considered empty if all its sessions are empty.
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to update
+    pub fn update_project_is_empty(&self, project_id: &str) -> Result<bool, StorageError> {
+        // Check if all sessions in this project are empty
+        let is_empty: bool = self.connection().query_row(
+            "SELECT CASE
+                WHEN COUNT(s.id) = 0 THEN 1
+                WHEN COUNT(s.id) = SUM(CASE WHEN s.is_empty = 1 THEN 1 ELSE 0 END) THEN 1
+                ELSE 0
+             END
+             FROM projects p
+             LEFT JOIN sessions s ON s.project_id = p.id
+             WHERE p.id = ?1
+             GROUP BY p.id",
+            params![project_id],
+            |row| row.get::<_, i32>(0).map(|v| v != 0),
+        ).unwrap_or(true); // Default to empty if no sessions
+
+        // Update the project
+        self.connection().execute(
+            "UPDATE projects SET is_empty = ?1 WHERE id = ?2",
+            params![if is_empty { 1 } else { 0 }, project_id],
+        )?;
+
+        Ok(is_empty)
     }
 
     /// Search sessions by content

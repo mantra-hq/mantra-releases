@@ -112,6 +112,32 @@ impl Database {
             )?;
         }
 
+        // Migration: Add is_empty column to projects table (Story 2.29 V2)
+        let has_projects_is_empty: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'is_empty'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_projects_is_empty {
+            conn.execute_batch(
+                "ALTER TABLE projects ADD COLUMN is_empty INTEGER NOT NULL DEFAULT 0;",
+            )?;
+
+            // Backfill: Mark projects as empty if all their sessions are empty
+            // A project is empty if it has no sessions OR all sessions have is_empty = 1
+            conn.execute_batch(
+                "UPDATE projects SET is_empty = 1 WHERE id IN (
+                    SELECT p.id FROM projects p
+                    LEFT JOIN sessions s ON s.project_id = p.id
+                    GROUP BY p.id
+                    HAVING COUNT(s.id) = 0 OR COUNT(s.id) = SUM(CASE WHEN s.is_empty = 1 THEN 1 ELSE 0 END)
+                );",
+            )?;
+        }
+
         Ok(())
     }
 

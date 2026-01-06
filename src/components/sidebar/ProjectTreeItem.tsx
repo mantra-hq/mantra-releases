@@ -47,6 +47,8 @@ export interface ProjectTreeItemProps {
   settingsMenu?: React.ReactNode;
   /** Story 2.18 fix: 菜单是否打开（用于保持按钮可见） */
   isSettingsMenuOpen?: boolean;
+  /** Story 2.29 V2: 是否隐藏空会话 */
+  hideEmptySessions?: boolean;
 }
 
 /**
@@ -68,7 +70,34 @@ export function ProjectTreeItem({
   onRenameCancel,
   settingsMenu,
   isSettingsMenuOpen = false,
+  hideEmptySessions = false,
 }: ProjectTreeItemProps) {
+  // Story 2.29 V2: Filter out empty sessions if hideEmptySessions is enabled
+  const filteredSessions = React.useMemo(() => {
+    if (!hideEmptySessions) return sessions;
+    return sessions.filter((session) => !session.is_empty);
+  }, [sessions, hideEmptySessions]);
+
+  // Story 2.29 V2: Calculate display count for session badge
+  // Priority:
+  // 1. If filtering enabled and non_empty_session_count available → use it
+  // 2. If filtering enabled and sessions loaded → use filtered count
+  // 3. Otherwise → use total session_count
+  const displaySessionCount = React.useMemo(() => {
+    if (hideEmptySessions) {
+      // If non_empty_session_count is available from backend, use it
+      if (project.non_empty_session_count !== undefined) {
+        return project.non_empty_session_count;
+      }
+      // Fallback: if sessions are loaded, show filtered count
+      if (sessions.length > 0) {
+        return filteredSessions.length;
+      }
+    }
+    // Filtering disabled or no data available, show total
+    return project.session_count;
+  }, [hideEmptySessions, project.non_empty_session_count, project.session_count, sessions.length, filteredSessions.length]);
+
   return (
     <div data-testid={`project-tree-item-${project.id}`}>
       {/* 项目节点 - 使用 div 包裹避免嵌套 button */}
@@ -111,9 +140,9 @@ export function ProjectTreeItem({
                 <HighlightText text={project.name} keyword={searchKeyword} />
               </span>
 
-              {/* 会话数量 */}
+              {/* 会话数量 - Story 2.29 V2: 显示过滤后的数量 */}
               <span className="text-xs text-muted-foreground shrink-0">
-                {project.session_count}
+                {displaySessionCount}
               </span>
             </>
           )}
@@ -163,12 +192,12 @@ export function ProjectTreeItem({
               <Loader2 className="h-3 w-3 animate-spin" />
               加载中...
             </div>
-          ) : sessions.length === 0 ? (
+          ) : filteredSessions.length === 0 ? (
             <div className="pl-10 pr-4 py-2 text-sm text-muted-foreground">
               暂无会话
             </div>
           ) : (
-            sessions.map((session) => (
+            filteredSessions.map((session) => (
               <SessionTreeItem
                 key={session.id}
                 session={session}

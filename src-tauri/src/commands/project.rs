@@ -578,6 +578,9 @@ pub async fn sync_project(
         }
     }
 
+    // Story 2.29 V2: Update project is_empty status after sync
+    let _ = db.update_project_is_empty(&project_id);
+
     Ok(SyncResult {
         new_sessions,
         updated_sessions,
@@ -711,6 +714,9 @@ pub async fn import_sessions_with_progress(
     paths: Vec<String>,
     skip_empty: bool,
 ) -> Result<ImportResult, AppError> {
+    use std::collections::HashMap;
+    use std::collections::HashSet;
+
     // Reset cancellation flag at start
     IMPORT_CANCELLED.store(false, Ordering::SeqCst);
 
@@ -721,10 +727,46 @@ pub async fn import_sessions_with_progress(
     let mut total_skipped = 0u32;
     let mut total_new_projects = 0u32;
     let mut all_errors: Vec<String> = Vec::new();
+    let mut affected_project_ids: HashSet<String> = HashSet::new(); // Track affected projects for is_empty update
 
     let claude_parser = ClaudeParser::new();
     let cursor_parser = CursorParser::new();
     let gemini_parser = GeminiParser::new();
+
+    // Pre-scan: Build directory -> (cwd, project_id) mapping
+    // This ensures all files from the same directory belong to the same project
+    let mut dir_project_map: HashMap<String, (String, String, String)> = HashMap::new(); // dir -> (cwd, project_id, project_name)
+
+    // First pass: collect cwd from files that have it
+    let mut dir_cwd_map: HashMap<String, String> = HashMap::new();
+    for path in &paths {
+        let path_buf = PathBuf::from(path);
+        if path_buf.is_file() {
+            if let Some(parent) = path_buf.parent() {
+                let dir_key = parent.to_string_lossy().to_string();
+                if !dir_cwd_map.contains_key(&dir_key) {
+                    // Try to extract cwd from this file
+                    if let Ok(session) = claude_parser.parse_file(path) {
+                        if !session.cwd.is_empty() {
+                            dir_cwd_map.insert(dir_key, session.cwd);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Second pass: create/get projects for each directory
+    {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        for (dir_key, cwd) in &dir_cwd_map {
+            let (project, is_new) = db.get_or_create_project(cwd)?;
+            if is_new {
+                total_new_projects += 1;
+            }
+            dir_project_map.insert(dir_key.clone(), (cwd.clone(), project.id.clone(), project.name.clone()));
+        }
+    }
 
     for (index, path) in paths.iter().enumerate() {
         // Check for cancellation
@@ -763,50 +805,75 @@ pub async fn import_sessions_with_progress(
                         file_error = Some("工作区中未找到对话".to_string());
                         all_errors.push(format!("{}: 工作区中未找到对话", path));
                     } else {
-                        // Check if we should skip empty sessions (only if ALL sessions in workspace are empty?)
-                        // For workspaces, we might want to filter individual sessions.
-                        // But db.import_sessions takes a list.
-                        // Let's filter here first.
+                        // Filter empty sessions if needed
                         let mut sessions_to_import = sessions;
                         if skip_empty {
                             sessions_to_import.retain(|s| !s.messages.is_empty());
                         }
 
                         if sessions_to_import.is_empty() && skip_empty {
-                            // All sessions were empty and skipped
-                            file_success = true; // Treated as success but skipped
+                            file_success = true;
                             file_skipped = true;
                             total_skipped += 1;
                         } else if !sessions_to_import.is_empty() {
-                             // Import sessions immediately to get real project_id
-                            let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
-                            let result = db.import_sessions(&sessions_to_import)?;
-                            
-                            total_imported += result.imported_count;
-                            total_skipped += result.skipped_count;
-                            total_new_projects += result.new_projects_count;
-                            all_errors.extend(result.errors);
-                            
-                            file_success = true;
-                            // Get project info from database
-                            if let Some(first_session) = sessions_to_import.first() {
-                                if let Ok(Some(project)) = db.get_project_by_cwd(&first_session.cwd) {
-                                    file_project_id = Some(project.id);
-                                    file_project_name = Some(project.name);
+                            // Get cwd from first session with non-empty cwd
+                            let workspace_cwd = sessions_to_import.iter()
+                                .find(|s| !s.cwd.is_empty())
+                                .map(|s| s.cwd.clone());
+
+                            if let Some(cwd) = workspace_cwd {
+                                // Use unified logic: get/create project first, then import all sessions
+                                let db = state.db.lock().map_err(|_| AppError::LockError)?;
+                                let (project, is_new) = db.get_or_create_project(&cwd)?;
+                                if is_new {
+                                    total_new_projects += 1;
                                 }
-                                file_session_id = Some(first_session.id.clone());
+
+                                // Import all sessions with the same project_id
+                                for session in &sessions_to_import {
+                                    match db.get_session(&session.id) {
+                                        Ok(Some(_)) => {
+                                            total_skipped += 1;
+                                        }
+                                        Ok(None) => {
+                                            if let Ok(_) = db.insert_session(session, &project.id) {
+                                                total_imported += 1;
+                                                let _ = db.update_project_last_activity(&project.id, session.updated_at);
+                                            }
+                                        }
+                                        Err(_) => {}
+                                    }
+                                }
+
+                                file_success = true;
+                                file_project_id = Some(project.id.clone());
+                                file_project_name = Some(project.name.clone());
+                                if let Some(first_session) = sessions_to_import.first() {
+                                    file_session_id = Some(first_session.id.clone());
+                                }
+                            } else {
+                                // Fallback: no valid cwd found, use old logic
+                                let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                                let result = db.import_sessions(&sessions_to_import)?;
+
+                                total_imported += result.imported_count;
+                                total_skipped += result.skipped_count;
+                                total_new_projects += result.new_projects_count;
+                                all_errors.extend(result.errors);
+
+                                file_success = true;
+                                if let Some(first_session) = sessions_to_import.first() {
+                                    if let Ok(Some(project)) = db.get_project_by_cwd(&first_session.cwd) {
+                                        file_project_id = Some(project.id);
+                                        file_project_name = Some(project.name);
+                                    }
+                                    file_session_id = Some(first_session.id.clone());
+                                }
                             }
-                        } else {
-                             // Original sessions were empty? handled by outer if
-                             // Should not reach here if outer if checks sessions.is_empty()
-                             // But wait, outer if checked !sessions.is_empty().
-                             // So if sessions_to_import is empty here, it means they were all filtered out.
-                             // Logic handled above.
                         }
                     }
                 }
                 Err(e) => {
-                    // Check if this is a skippable error
                     if skip_empty && e.is_skippable() {
                         file_success = true;
                         file_skipped = true;
@@ -842,33 +909,100 @@ pub async fn import_sessions_with_progress(
                         file_skipped = true;
                         total_skipped += 1;
                     } else {
-                        // Import session immediately to get real project_id
-                        let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
-                        let result = db.import_sessions(&[session.clone()])?;
+                        // Get pre-determined project for this directory
+                        let dir_key = PathBuf::from(path)
+                            .parent()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default();
 
-                        total_imported += result.imported_count;
-                        total_skipped += result.skipped_count;
-                        total_new_projects += result.new_projects_count;
-                        all_errors.extend(result.errors);
+                        if let Some((_, project_id, project_name)) = dir_project_map.get(&dir_key) {
+                            // Use pre-determined project_id - session data saved as-is
+                            let db = state.db.lock().map_err(|_| AppError::LockError)?;
 
-                        file_success = true;
-                        file_session_id = Some(session.id.clone());
+                            // Check for duplicate
+                            match db.get_session(&session.id) {
+                                Ok(Some(_)) => {
+                                    // Session already exists, skip
+                                    total_skipped += 1;
+                                    file_skipped = true;
+                                }
+                                Ok(None) => {
+                                    // Insert session with the directory's project_id
+                                    match db.insert_session(&session, project_id) {
+                                        Ok(_) => {
+                                            total_imported += 1;
+                                            // Update project last_activity
+                                            let _ = db.update_project_last_activity(project_id, session.updated_at);
+                                        }
+                                        Err(e) => {
+                                            all_errors.push(format!("{}: {}", path, e));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    all_errors.push(format!("{}: {}", path, e));
+                                }
+                            }
 
-                        // Get project info from database
-                        if let Ok(Some(project)) = db.get_project_by_cwd(&session.cwd) {
-                            file_project_id = Some(project.id);
-                            file_project_name = Some(project.name);
+                            file_success = true;
+                            file_session_id = Some(session.id.clone());
+                            file_project_id = Some(project_id.clone());
+                            file_project_name = Some(project_name.clone());
+                        } else {
+                            // Fallback: use import_sessions for files without pre-determined project
+                            let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
+                            let result = db.import_sessions(&[session.clone()])?;
+
+                            total_imported += result.imported_count;
+                            total_skipped += result.skipped_count;
+                            total_new_projects += result.new_projects_count;
+                            all_errors.extend(result.errors);
+
+                            file_success = true;
+                            file_session_id = Some(session.id.clone());
+
+                            if let Ok(Some(project)) = db.get_project_by_cwd(&session.cwd) {
+                                file_project_id = Some(project.id);
+                                file_project_name = Some(project.name);
+                            }
                         }
                     }
                 }
                 Err(e) => {
                     // Check if this is a skippable error (empty session, system events only, etc.)
-                    if skip_empty && e.is_skippable() {
-                        // Treat skippable errors as success with skipped flag
-                        file_success = true;
-                        file_skipped = true;
-                        file_error = Some(e.to_string()); // Keep the message for UI display
-                        total_skipped += 1;
+                    if e.is_skippable() {
+                        // Story 2.29 V2: Import empty session with directory's project
+                        let dir_key = PathBuf::from(path)
+                            .parent()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default();
+
+                        if let Some((_, project_id, project_name)) = dir_project_map.get(&dir_key) {
+                            // Create empty session from parser and import it
+                            if let Ok(empty_session) = claude_parser.parse_file(path) {
+                                let db = state.db.lock().map_err(|_| AppError::LockError)?;
+                                match db.get_session(&empty_session.id) {
+                                    Ok(Some(_)) => {
+                                        total_skipped += 1;
+                                    }
+                                    Ok(None) => {
+                                        if let Ok(_) = db.insert_session(&empty_session, project_id) {
+                                            total_imported += 1;
+                                        }
+                                    }
+                                    Err(_) => {}
+                                }
+                                file_project_id = Some(project_id.clone());
+                                file_project_name = Some(project_name.clone());
+                                file_session_id = Some(empty_session.id.clone());
+                            }
+                            file_success = true;
+                        } else {
+                            file_success = true;
+                            file_skipped = true;
+                            total_skipped += 1;
+                        }
+                        file_error = Some(e.to_string());
                     } else {
                         file_error = Some(e.to_string());
                         all_errors.push(format!("{}: {}", path, e));
@@ -889,11 +1023,24 @@ pub async fn import_sessions_with_progress(
             file_path: path.clone(),
             success: file_success,
             error: file_error,
-            project_id: file_project_id,
+            project_id: file_project_id.clone(),
             session_id: file_session_id,
             project_name: file_project_name,
             skipped: file_skipped,
         });
+
+        // Track affected project for is_empty update
+        if let Some(pid) = file_project_id {
+            affected_project_ids.insert(pid);
+        }
+    }
+
+    // Story 2.29 V2: Update is_empty status for all affected projects
+    {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        for project_id in &affected_project_ids {
+            let _ = db.update_project_is_empty(project_id);
+        }
     }
 
     // Return aggregated result

@@ -23,6 +23,8 @@ interface RustSessionSummary {
   created_at: string;
   updated_at: string;
   message_count: number;
+  /** Story 2.29: 是否为空会话 */
+  is_empty: boolean;
   /** 会话标题（来自 metadata，可选） */
   title?: string;
 }
@@ -76,6 +78,8 @@ function convertRustSessionSummary(
     name,
     messageCount: rustSession.message_count,
     lastActiveAt: new Date(rustSession.updated_at).getTime(),
+    // Story 2.29 V2: 传递 is_empty 字段
+    is_empty: rustSession.is_empty,
   };
 }
 
