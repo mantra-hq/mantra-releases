@@ -2,7 +2,8 @@
  * SanitizeStatusBanner 组件单元测试 - Story 3-4 Task 7
  */
 
-import { describe, it, expect, vi, type ReactNode } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SanitizeStatusBanner } from './SanitizeStatusBanner';

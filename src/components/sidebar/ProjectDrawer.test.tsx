@@ -18,6 +18,7 @@ const mockProjects: Project[] = [
     created_at: "2024-01-01T00:00:00Z",
     last_activity: "2024-01-02T00:00:00Z",
     git_repo_path: "/home/user/projects/mantra",
+    git_remote_url: "https://github.com/user/mantra.git",
     has_git_repo: true,
   },
   {
@@ -28,6 +29,7 @@ const mockProjects: Project[] = [
     created_at: "2024-01-01T00:00:00Z",
     last_activity: "2024-01-01T12:00:00Z",
     git_repo_path: null,
+    git_remote_url: null,
     has_git_repo: false,
   },
 ];

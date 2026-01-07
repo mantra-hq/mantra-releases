@@ -10,7 +10,14 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "tauri:build:debug": "tauri build --debug",
+    "tauri:build:msi": "tauri build --bundles msi",
+    "tauri:build:nsis": "tauri build --bundles nsis",
+    "tauri:build:dmg": "tauri build --bundles dmg",
+    "tauri:build:deb": "tauri build --bundles deb",
+    "tauri:build:appimage": "tauri build --bundles appimage"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mantra",
   "version": "0.1.0",
-  "identifier": "com.mantra.app",
+  "identifier": "com.gonewx.mantra",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -30,6 +30,39 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "AI 编程过程资产管理工具",
+    "longDescription": "Mantra (心法) - 全球首个 AI 编程过程资产与方法论分享社区客户端",
+    "copyright": "© 2026 Mantra Team",
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "frameworks": [],
+      "exceptionDomain": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "wix": {
+        "language": [
+          "zh-CN",
+          "en-US"
+        ]
+      },
+      "nsis": {
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": true
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   }
 }

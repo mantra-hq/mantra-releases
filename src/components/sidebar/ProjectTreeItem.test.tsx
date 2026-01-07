@@ -16,6 +16,7 @@ const mockProject: Project = {
   created_at: "2024-01-01T00:00:00Z",
   last_activity: "2024-01-02T00:00:00Z",
   git_repo_path: "/home/user/test-project",
+  git_remote_url: "https://github.com/user/test-project.git",
   has_git_repo: true,
 };
 

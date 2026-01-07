@@ -25,6 +25,7 @@ const mockProjects: Project[] = [
     created_at: new Date(Date.now() - 86400000).toISOString(),
     last_activity: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago (most recent)
     git_repo_path: "/home/user/projects/project-gamma",
+    git_remote_url: "https://github.com/user/project-gamma.git",
     has_git_repo: true,
   },
   {
@@ -35,6 +36,7 @@ const mockProjects: Project[] = [
     created_at: new Date(Date.now() - 172800000).toISOString(),
     last_activity: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
     git_repo_path: null,
+    git_remote_url: null,
     has_git_repo: false,
   },
   {
@@ -45,6 +47,7 @@ const mockProjects: Project[] = [
     created_at: new Date(Date.now() - 259200000).toISOString(),
     last_activity: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
     git_repo_path: "/home/user/projects/project-beta",
+    git_remote_url: "https://github.com/user/project-beta.git",
     has_git_repo: true,
   },
 ];
@@ -60,7 +63,7 @@ describe("useProjects", () => {
 
   describe("初始状态", () => {
     it("初始应该处于加载状态", () => {
-      mockInvoke.mockImplementation(() => new Promise(() => {})); // Never resolves
+      mockInvoke.mockImplementation(() => new Promise(() => { })); // Never resolves
       const { result } = renderHook(() => useProjects());
 
       expect(result.current.isLoading).toBe(true);
@@ -153,6 +156,7 @@ describe("useProjects", () => {
           created_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
           git_repo_path: null,
+          git_remote_url: null,
           has_git_repo: false,
         },
       ];
