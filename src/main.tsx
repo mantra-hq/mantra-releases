@@ -23,6 +23,8 @@ import { useGlobalShortcut } from "./hooks";
 // import { useNotificationInit } from "./hooks";
 // Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
 import "./i18n";
+// Monaco Editor 本地资源配置 (修复 AppImage 打包后编辑器无法加载问题)
+import "./lib/monaco-setup";
 import "./index.css";
 
 // Prevent flash of incorrect theme on initial load
