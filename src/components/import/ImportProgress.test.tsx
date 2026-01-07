@@ -242,7 +242,8 @@ describe("ImportProgress", () => {
         />
       );
 
-      expect(screen.getByText("正在取消...")).toBeInTheDocument();
+      // i18n key: import.cancelling -> "正在取消"
+      expect(screen.getByText("正在取消")).toBeInTheDocument();
     });
   });
 });

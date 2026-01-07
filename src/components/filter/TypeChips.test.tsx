@@ -8,6 +8,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { TypeChips } from "./TypeChips";
 import { useMessageFilterStore, MESSAGE_TYPES } from "@/stores/useMessageFilterStore";
 import { act } from "@testing-library/react";
+import i18n from "i18next";
+
+// 辅助函数：获取翻译后的标签
+const getTranslatedLabel = (key: string) => i18n.t(key);
 
 describe("TypeChips", () => {
     beforeEach(() => {
@@ -25,7 +29,9 @@ describe("TypeChips", () => {
         render(<TypeChips />);
 
         MESSAGE_TYPES.forEach((type) => {
-            expect(screen.getByText(type.label)).toBeInTheDocument();
+            // 使用 i18n 翻译后的标签检查
+            const translatedLabel = getTranslatedLabel(type.label);
+            expect(screen.getByText(translatedLabel)).toBeInTheDocument();
         });
     });
 
@@ -41,7 +47,8 @@ describe("TypeChips", () => {
     it("should toggle chip selection on click", () => {
         render(<TypeChips />);
 
-        const toolChip = screen.getByText("工具").closest("button");
+        // 使用翻译后的文本 "工具"
+        const toolChip = screen.getByText(getTranslatedLabel("message.tool")).closest("button");
         expect(toolChip).toHaveAttribute("aria-pressed", "false");
 
         fireEvent.click(toolChip!);
@@ -53,9 +60,9 @@ describe("TypeChips", () => {
     it("should support multiple selections", () => {
         render(<TypeChips />);
 
-        const toolChip = screen.getByText("工具").closest("button");
-        const fileChip = screen.getByText("文件").closest("button");
-        const terminalChip = screen.getByText("命令").closest("button");
+        const toolChip = screen.getByText(getTranslatedLabel("message.tool")).closest("button");
+        const fileChip = screen.getByText(getTranslatedLabel("message.file")).closest("button");
+        const terminalChip = screen.getByText(getTranslatedLabel("message.command")).closest("button");
 
         fireEvent.click(toolChip!);
         fireEvent.click(fileChip!);
@@ -70,7 +77,7 @@ describe("TypeChips", () => {
     it("should deselect chip on second click", () => {
         render(<TypeChips />);
 
-        const toolChip = screen.getByText("工具").closest("button");
+        const toolChip = screen.getByText(getTranslatedLabel("message.tool")).closest("button");
 
         fireEvent.click(toolChip!);
         expect(toolChip).toHaveAttribute("aria-pressed", "true");
@@ -92,7 +99,8 @@ describe("TypeChips", () => {
         render(<TypeChips />);
 
         const group = screen.getByRole("group");
-        expect(group).toHaveAttribute("aria-label", "消息类型过滤");
+        // 使用翻译后的 aria-label
+        expect(group).toHaveAttribute("aria-label", getTranslatedLabel("filter.messageTypeFilter"));
     });
 
     it("should apply custom className", () => {
@@ -110,7 +118,7 @@ describe("TypeChips", () => {
             useMessageFilterStore.getState().toggleType("thinking");
         });
 
-        const thinkingChip = screen.getByText("思考").closest("button");
+        const thinkingChip = screen.getByText(getTranslatedLabel("message.thinking")).closest("button");
         expect(thinkingChip).toHaveAttribute("aria-pressed", "true");
     });
 });

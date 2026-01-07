@@ -194,7 +194,8 @@ describe('DiffPreview', () => {
                 />
             );
 
-            expect(screen.getByText('处理中...')).toBeInTheDocument();
+            // i18n key: common.processing -> "处理中"
+            expect(screen.getByText('处理中')).toBeInTheDocument();
         });
     });
 

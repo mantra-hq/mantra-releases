@@ -17,7 +17,8 @@ describe("StatusBar", () => {
     it("AC #12: 应该显示光标位置", () => {
         render(<StatusBar cursorPosition={{ line: 42, column: 8 }} />);
 
-        expect(screen.getByTestId("cursor-position")).toHaveTextContent("Ln 42, Col 8");
+        // i18n key: editor.cursorPosition -> "行 {{line}}, 列 {{col}}"
+        expect(screen.getByTestId("cursor-position")).toHaveTextContent("行 42, 列 8");
     });
 
     it("没有光标位置时不显示", () => {

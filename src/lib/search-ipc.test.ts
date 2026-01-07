@@ -50,6 +50,7 @@ describe("search-ipc", () => {
         it("should transform results correctly", async () => {
             const mockBackendResults = [
                 {
+                    id: "search-result-1",
                     session_id: "s1",
                     project_id: "p1",
                     project_name: "Project One",
@@ -66,7 +67,7 @@ describe("search-ipc", () => {
 
             expect(results).toEqual([
                 {
-                    id: "s1-m1",
+                    id: "search-result-1",
                     projectId: "p1",
                     projectName: "Project One",
                     sessionId: "s1",

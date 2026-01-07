@@ -154,7 +154,8 @@ describe("useEditorKeyboard", () => {
 
     describe("Cmd/Ctrl+B → 切换侧边栏", () => {
         it("按下 Cmd+B 应切换侧边栏", () => {
-            expect(useEditorStore.getState().sidebarOpen).toBe(false);
+            // 默认 sidebarOpen 为 true
+            expect(useEditorStore.getState().sidebarOpen).toBe(true);
 
             renderHook(() => useEditorKeyboard());
 
@@ -165,7 +166,8 @@ describe("useEditorKeyboard", () => {
             });
             window.dispatchEvent(event);
 
-            expect(useEditorStore.getState().sidebarOpen).toBe(true);
+            // 切换后应该变为 false
+            expect(useEditorStore.getState().sidebarOpen).toBe(false);
         });
     });
 });

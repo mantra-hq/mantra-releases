@@ -146,11 +146,8 @@ describe("CodeSnapshotView", () => {
   });
 
   describe("AC3 - 文件路径显示", () => {
-    it("should display file path in header", () => {
-      render(<CodeSnapshotView {...defaultProps} />);
-
-      expect(screen.getByText("src/index.ts")).toBeInTheDocument();
-    });
+    // UX 优化: CodeSnapshotHeader 已移除，filePath 显示功能上移到 EditorTabs/Breadcrumbs
+    it.todo("should display file path in header - moved to EditorTabs");
   });
 
   describe("AC4 - 代码变化动画", () => {
@@ -200,26 +197,10 @@ describe("CodeSnapshotView", () => {
   });
 
   describe("AC7 - 历史状态指示", () => {
-    it("should show historical badge when timestamp is provided", () => {
-      render(
-        <CodeSnapshotView
-          {...defaultProps}
-          timestamp="2025-12-30T10:30:00Z"
-        />
-      );
+    // UX 优化: HistoryBanner 和历史快照徽章功能已上移到 EditorTabs/Breadcrumbs
+    it.todo("should show historical badge when timestamp is provided - moved to EditorTabs");
 
-      expect(screen.getByText("历史快照")).toBeInTheDocument();
-    });
-
-    it("should show historical badge with commit hash", () => {
-      render(
-        <CodeSnapshotView {...defaultProps} commitHash="abc123def456" />
-      );
-
-      expect(screen.getByText("历史快照")).toBeInTheDocument();
-      // 只显示前 7 位
-      expect(screen.getByText(/abc123d/)).toBeInTheDocument();
-    });
+    it.todo("should show historical badge with commit hash - moved to EditorTabs");
 
     it("should not show historical badge when no timestamp or commit", () => {
       render(<CodeSnapshotView {...defaultProps} />);

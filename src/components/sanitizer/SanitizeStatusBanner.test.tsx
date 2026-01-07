@@ -2,39 +2,23 @@
  * SanitizeStatusBanner 组件单元测试 - Story 3-4 Task 7
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type ReactNode } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SanitizeStatusBanner } from './SanitizeStatusBanner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { SanitizationStats, SensitiveMatch } from './types';
 
-// Mock react-i18next
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({
-        t: (key: string, fallbackOrParams?: string | Record<string, unknown>, params?: Record<string, unknown>) => {
-            // t(key, fallback, params) 格式
-            if (typeof fallbackOrParams === 'string' && params) {
-                let result = fallbackOrParams;
-                Object.entries(params).forEach(([k, v]) => {
-                    result = result.replace(`{{${k}}}`, String(v));
-                });
-                return result;
-            }
-            // t(key, params) 格式
-            if (typeof fallbackOrParams === 'object') {
-                if (key === 'sanitizer.detectedCount') {
-                    return `检测到 ${fallbackOrParams.count} 处敏感信息`;
-                }
-                if (key === 'sanitizer.jumpToLine') {
-                    return `跳转到第 ${fallbackOrParams.line} 行`;
-                }
-            }
-            // t(key, fallback) 格式
-            if (typeof fallbackOrParams === 'string') return fallbackOrParams;
-            return key;
-        },
-    }),
-}));
+// 使用全局 i18n 配置（来自 test/setup.ts）
+
+// 封装 TooltipProvider
+const renderWithProviders = (ui: ReactNode) => {
+    return render(
+        <TooltipProvider>
+            {ui}
+        </TooltipProvider>
+    );
+};
 
 const mockStatsWithSensitive: SanitizationStats = {
     counts: {
@@ -79,7 +63,7 @@ const mockMatches: SensitiveMatch[] = [
 describe('SanitizeStatusBanner', () => {
     describe('有敏感信息状态 (AC2)', () => {
         it('应该显示检测到敏感信息的提示', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -92,7 +76,7 @@ describe('SanitizeStatusBanner', () => {
         });
 
         it('应该显示分类标签', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -106,7 +90,7 @@ describe('SanitizeStatusBanner', () => {
         });
 
         it('应该显示操作按钮', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -120,7 +104,7 @@ describe('SanitizeStatusBanner', () => {
         });
 
         it('应该使用警告色背景 (amber)', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -136,7 +120,7 @@ describe('SanitizeStatusBanner', () => {
 
     describe('无敏感信息状态 (AC2)', () => {
         it('应该显示安全提示', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsEmpty}
                     sensitiveMatches={[]}
@@ -145,11 +129,12 @@ describe('SanitizeStatusBanner', () => {
                 />
             );
 
-            expect(screen.getByText(/未检测到敏感信息/)).toBeInTheDocument();
+            // 使用 i18n key sanitizer.safeToShareFull 对应的中文
+            expect(screen.getByText(/此内容可以安全分享/)).toBeInTheDocument();
         });
 
         it('应该使用安全色背景 (green)', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsEmpty}
                     sensitiveMatches={[]}
@@ -163,7 +148,7 @@ describe('SanitizeStatusBanner', () => {
         });
 
         it('不应该显示分类标签', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsEmpty}
                     sensitiveMatches={[]}
@@ -181,7 +166,7 @@ describe('SanitizeStatusBanner', () => {
             const user = userEvent.setup();
             const onJumpToLine = vi.fn();
 
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -200,7 +185,7 @@ describe('SanitizeStatusBanner', () => {
         });
 
         it('没有 onJumpToLine 时标签应该禁用', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -219,7 +204,7 @@ describe('SanitizeStatusBanner', () => {
             const user = userEvent.setup();
             const onCancel = vi.fn();
 
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
@@ -232,27 +217,25 @@ describe('SanitizeStatusBanner', () => {
             expect(onCancel).toHaveBeenCalled();
         });
 
-        it('点击确认分享应该触发 onConfirm', async () => {
-            const user = userEvent.setup();
-            const onConfirm = vi.fn();
-
-            render(
+        it('点击确认分享按钮应该禁用（即将上线功能）', async () => {
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
                     onCancel={vi.fn()}
-                    onConfirm={onConfirm}
+                    onConfirm={vi.fn()}
                 />
             );
 
-            await user.click(screen.getByTestId('confirm-button'));
-            expect(onConfirm).toHaveBeenCalled();
+            // 确认按钮应该禁用
+            const confirmButton = screen.getByTestId('confirm-button');
+            expect(confirmButton).toBeDisabled();
         });
     });
 
     describe('加载状态', () => {
         it('加载中应该显示 loading 指示器', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsEmpty}
                     sensitiveMatches={[]}
@@ -268,7 +251,7 @@ describe('SanitizeStatusBanner', () => {
 
     describe('错误状态', () => {
         it('错误时应该显示错误信息', () => {
-            render(
+            renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsEmpty}
                     sensitiveMatches={[]}

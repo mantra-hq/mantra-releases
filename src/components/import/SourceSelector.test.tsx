@@ -24,9 +24,9 @@ describe("SourceSelector", () => {
     it("displays default paths for each source", () => {
       render(<SourceSelector value={null} onChange={vi.fn()} />);
 
-      expect(screen.getByText("~/.claude/projects")).toBeInTheDocument();
-      expect(screen.getByText("~/.gemini/tmp")).toBeInTheDocument();
-      expect(screen.getByText("~/.config/Cursor (按工作区)")).toBeInTheDocument();
+      expect(screen.getByText("~/.claude")).toBeInTheDocument();
+      expect(screen.getByText("~/.gemini")).toBeInTheDocument();
+      expect(screen.getByText("~/.config/Cursor")).toBeInTheDocument();
     });
 
     it("renders source icons", () => {

@@ -86,7 +86,8 @@ describe("import-ipc", () => {
       const onProgress = vi.fn();
       const result = await parseLogFiles(paths, onProgress);
 
-      expect(invoke).toHaveBeenCalledWith("import_sessions", { paths });
+      // 默认 skipEmpty = true
+      expect(invoke).toHaveBeenCalledWith("import_sessions", { paths, skipEmpty: true });
       // 验证返回的结果格式正确
       expect(result).toHaveLength(2);
       expect(result[0].success).toBe(true);

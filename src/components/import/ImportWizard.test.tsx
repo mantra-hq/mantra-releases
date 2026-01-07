@@ -25,6 +25,8 @@ vi.mock("@/lib/import-ipc", () => ({
 // Mock project-ipc
 vi.mock("@/lib/project-ipc", () => ({
   getImportedProjectPaths: vi.fn().mockResolvedValue([]),
+  getImportedSessionIds: vi.fn().mockResolvedValue([]),
+  getProject: vi.fn().mockResolvedValue(null),
 }));
 
 /**
