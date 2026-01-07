@@ -32,8 +32,8 @@
       "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "AI 编程过程资产管理工具",
-    "longDescription": "Mantra (心法) - 全球首个 AI 编程过程资产与方法论分享社区客户端",
+    "shortDescription": "AI Coding Sessions Time Machine | AI 编程会话时光机",
+    "longDescription": "Replay context. Filter noise. Master the craft.  Manage your AI Coding Sessions and extract your personal coding mantras. 回放上下文，滤除噪点，掌握心法。管理你的 AI Coding 会话，提炼属于你的编程心法",
     "copyright": "© 2026 Mantra Team",
     "macOS": {
       "minimumSystemVersion": "10.15",
