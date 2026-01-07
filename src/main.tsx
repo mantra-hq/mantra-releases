@@ -28,18 +28,16 @@ import "./lib/monaco-setup";
 import "./index.css";
 
 // Prevent flash of incorrect theme on initial load
+// Default is dark theme when no stored preference
 const initTheme = () => {
   const stored = localStorage.getItem("mantra-theme");
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-  if (
-    stored === "dark" ||
-    (stored === "system" && prefersDark) ||
-    (!stored && prefersDark)
-  ) {
-    document.documentElement.classList.add("dark");
-  } else if (stored === "light" || (stored === "system" && !prefersDark)) {
+  if (stored === "light" || (stored === "system" && !prefersDark)) {
     document.documentElement.classList.remove("dark");
+  } else {
+    // Default to dark: no stored value, stored === "dark", or system prefers dark
+    document.documentElement.classList.add("dark");
   }
 };
 
@@ -59,7 +57,7 @@ function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider defaultTheme="system">
+    <ThemeProvider defaultTheme="dark">
       <TooltipProvider delayDuration={300}>
         <BrowserRouter>
           <GlobalShortcutProvider>
