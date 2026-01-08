@@ -56,7 +56,7 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
         icon: "$",
         match: (b) =>
             b.type === "tool_use" &&
-            ["run_command", "bash", "command"].some((name) =>
+            ["run_command", "bash", "shell", "command"].some((name) =>
                 b.toolName?.toLowerCase().includes(name)
             ),
     },

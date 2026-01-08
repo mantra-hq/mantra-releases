@@ -65,8 +65,7 @@ const SOURCES: SourceConfig[] = [
     name: "Codex CLI",
     defaultPath: "~/.codex",
     iconSrc: codexIcon,
-    disabled: true,
-    badgeKey: "common.comingSoon",
+    disabled: false,
   },
   {
     id: "antigravity",

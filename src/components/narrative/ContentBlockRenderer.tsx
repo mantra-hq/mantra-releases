@@ -35,6 +35,8 @@ export interface ContentBlockRendererProps {
 const TERMINAL_TOOLS = [
   "bash",
   "Bash",
+  "shell",  // Codex CLI
+  "Shell",
   "run_command",
   "execute_command",
   "send_command_input",
@@ -86,6 +88,21 @@ function extractFilePath(toolInput?: Record<string, unknown>): string | null {
     }
   }
   return null;
+}
+
+/** 从 toolInput 提取命令 (支持字符串或数组格式) */
+function extractCommand(toolInput?: Record<string, unknown>): string | undefined {
+  if (!toolInput) return undefined;
+
+  const cmd = toolInput.command;
+  if (typeof cmd === "string") {
+    return cmd;
+  }
+  if (Array.isArray(cmd)) {
+    // Codex CLI: command is an array of strings
+    return cmd.join(" ");
+  }
+  return undefined;
 }
 
 /**
@@ -225,7 +242,7 @@ export function ContentBlockRenderer({
               isTerminalTool(toolName) ? () => {
                 // 终端类工具 - 点击卡片打开终端 Tab
                 openTerminalDetail({
-                  command: block.toolInput?.command as string | undefined,
+                  command: extractCommand(block.toolInput),
                   output: pairInfo?.outputContent ?? "",
                   isError: isError,
                 });

@@ -62,6 +62,14 @@ const runCommandBlock: ContentBlock = {
     toolUseId: "tool-456",
 };
 
+const shellBlock: ContentBlock = {
+    type: "tool_use",
+    content: "",
+    toolName: "shell",  // Codex CLI
+    toolInput: { command: ["ls", "-la"] },
+    toolUseId: "tool-457",
+};
+
 const searchBlock: ContentBlock = {
     type: "tool_use",
     content: "",
@@ -200,6 +208,7 @@ describe("MESSAGE_TYPES configuration", () => {
     it("terminal type should match command blocks", () => {
         const config = MESSAGE_TYPES.find((t) => t.id === "terminal");
         expect(config?.match(runCommandBlock)).toBe(true);
+        expect(config?.match(shellBlock)).toBe(true);  // Codex CLI shell
         expect(config?.match(toolUseBlock)).toBe(false);
     });
 

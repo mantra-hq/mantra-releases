@@ -1,14 +1,16 @@
 //! Log parsers for various AI tools
 //!
 //! Provides parsers for converting conversation logs from different
-//! AI coding assistants (Claude, Gemini, Cursor) into MantraSession format.
+//! AI coding assistants (Claude, Gemini, Cursor, Codex) into MantraSession format.
 
 mod claude;
+pub mod codex;
 pub mod cursor;
 mod error;
 pub mod gemini;
 
 pub use claude::ClaudeParser;
+pub use codex::CodexParser;
 pub use cursor::CursorParser;
 pub use error::ParseError;
 pub use gemini::GeminiParser;

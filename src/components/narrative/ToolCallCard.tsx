@@ -147,6 +147,25 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
             return truncated ? `$ ${truncated}` : "";
         },
     },
+    shell: {
+        icon: Terminal,
+        format: (input) => {
+            // Codex CLI: command is an array of strings
+            const cmdArray = Array.isArray(input.command) ? input.command : [];
+            const cmd = cmdArray.join(" ");
+            const truncated = cmd.length > 40 ? cmd.slice(0, 40) + "..." : cmd;
+            return truncated ? `$ ${truncated}` : "";
+        },
+    },
+    Shell: {
+        icon: Terminal,
+        format: (input) => {
+            const cmdArray = Array.isArray(input.command) ? input.command : [];
+            const cmd = cmdArray.join(" ");
+            const truncated = cmd.length > 40 ? cmd.slice(0, 40) + "..." : cmd;
+            return truncated ? `$ ${truncated}` : "";
+        },
+    },
     grep_search: {
         icon: Search,
         format: (input) => {
@@ -203,6 +222,15 @@ const SUMMARY_TEMPLATES: Record<string, SummaryTemplate> = {
         format: (input) => {
             const todos = Array.isArray(input.todos) ? input.todos : [];
             const count = todos.length;
+            return count > 0 ? i18n.t("message.tasks", { count }) : "";
+        },
+    },
+    update_plan: {
+        icon: ListTodo,
+        format: (input) => {
+            // Codex CLI: plan is an array of { status, step }
+            const plan = Array.isArray(input.plan) ? input.plan : [];
+            const count = plan.length;
             return count > 0 ? i18n.t("message.tasks", { count }) : "";
         },
     },

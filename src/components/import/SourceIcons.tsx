@@ -2,12 +2,13 @@
  * Source Icons - 导入源官方品牌图标
  * Story 2.24: AC5, Story 2.25: AC3
  *
- * 提供 Claude、Gemini、Cursor 的 SVG 图标组件
+ * 提供 Claude、Gemini、Cursor、Codex 的 SVG 图标组件
  * Claude: 来自 VSCode Claude Code 插件 (clawd.svg)
  */
 
 import cursorIcon from "@/assets/source-icons/cursor.png";
 import geminiIcon from "@/assets/source-icons/gemini.png";
+import codexIcon from "@/assets/source-icons/codex.svg";
 
 interface IconProps {
     className?: string;
@@ -59,6 +60,19 @@ export function CursorIcon({ className }: IconProps) {
 }
 
 /**
+ * Codex CLI 品牌图标
+ */
+export function CodexIcon({ className }: IconProps) {
+    return (
+        <img
+            src={codexIcon}
+            alt="Codex"
+            className={className}
+        />
+    );
+}
+
+/**
  * 根据来源返回对应的图标组件
  * Story 2.25: AC3 - 复用官方图标
  */
@@ -70,6 +84,8 @@ export function SourceIcon({ source, className }: { source: string; className?: 
             return <GeminiIcon className={className} />;
         case "cursor":
             return <CursorIcon className={className} />;
+        case "codex":
+            return <CodexIcon className={className} />;
         default:
             return <ClaudeIcon className={className} />;
     }

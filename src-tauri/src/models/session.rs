@@ -18,6 +18,8 @@ pub mod sources {
     pub const GEMINI: &str = "gemini";
     /// Cursor IDE sessions
     pub const CURSOR: &str = "cursor";
+    /// OpenAI Codex CLI sessions
+    pub const CODEX: &str = "codex";
     /// GitHub Copilot sessions
     pub const COPILOT: &str = "copilot";
     /// Aider sessions

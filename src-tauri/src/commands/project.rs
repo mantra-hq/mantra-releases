@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
+use crate::parsers::{ClaudeParser, CodexParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
 use crate::storage::{Database, SearchResult};
 
@@ -732,6 +732,7 @@ pub async fn import_sessions_with_progress(
     let claude_parser = ClaudeParser::new();
     let cursor_parser = CursorParser::new();
     let gemini_parser = GeminiParser::new();
+    let codex_parser = CodexParser::new();
 
     // Pre-scan: Build directory -> (cwd, project_id) mapping
     // This ensures all files from the same directory belong to the same project
@@ -745,8 +746,24 @@ pub async fn import_sessions_with_progress(
             if let Some(parent) = path_buf.parent() {
                 let dir_key = parent.to_string_lossy().to_string();
                 if !dir_cwd_map.contains_key(&dir_key) {
-                    // Try to extract cwd from this file
-                    if let Ok(session) = claude_parser.parse_file(path) {
+                    // Try to extract cwd from this file using appropriate parser
+                    let is_codex = path.contains("/.codex/") || path.contains("\\.codex\\");
+                    let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
+                    let is_jsonl = path.ends_with(".jsonl");
+                    let is_json = path.ends_with(".json");
+
+                    let parse_result = if is_codex && is_jsonl {
+                        codex_parser.parse_file(path)
+                    } else if is_gemini && is_json {
+                        gemini_parser.parse_file(path)
+                    } else if is_jsonl {
+                        claude_parser.parse_file(path)
+                            .or_else(|_| codex_parser.parse_file(path))
+                    } else {
+                        claude_parser.parse_file(path)
+                    };
+
+                    if let Ok(session) = parse_result {
                         if !session.cwd.is_empty() {
                             dir_cwd_map.insert(dir_key, session.cwd);
                         }
@@ -887,14 +904,18 @@ pub async fn import_sessions_with_progress(
             }
         } else {
             // Detect file type by path pattern
+            let is_codex = path.contains("/.codex/") || path.contains("\\.codex\\");
             let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
             let is_json = path.ends_with(".json");
             let is_jsonl = path.ends_with(".jsonl");
 
-            let parse_result = if is_gemini && is_json {
+            let parse_result = if is_codex && is_jsonl {
+                codex_parser.parse_file(path)
+            } else if is_gemini && is_json {
                 gemini_parser.parse_file(path)
             } else if is_jsonl {
                 claude_parser.parse_file(path)
+                    .or_else(|_| codex_parser.parse_file(path))
             } else if is_json {
                 gemini_parser.parse_file(path)
                     .or_else(|_| claude_parser.parse_file(path))

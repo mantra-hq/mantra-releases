@@ -206,7 +206,7 @@ export function ImportComplete({
             <h4 className="text-sm font-medium text-muted-foreground mb-2">
               {t("import.justImported")}
             </h4>
-            <ScrollArea className="max-h-[150px]">
+            <ScrollArea className="max-h-[150px] overflow-hidden">
               <div className="space-y-1">
                 {importedProjects.map((project) => (
                   <button

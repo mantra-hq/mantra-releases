@@ -9,7 +9,8 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::parsers::{ClaudeParser, CursorParser, GeminiParser, LogParser};
+use crate::parsers::{ClaudeParser, CodexParser, CursorParser, GeminiParser, LogParser};
+use crate::parsers::codex::CodexPaths;
 use crate::parsers::cursor::CursorPaths;
 use crate::parsers::gemini::GeminiPaths;
 
@@ -20,6 +21,7 @@ pub enum ImportSource {
     Claude,
     Gemini,
     Cursor,
+    Codex,
 }
 
 /// Discovered file information
@@ -73,6 +75,7 @@ fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
     let path = match source {
         ImportSource::Claude => home.join(".claude").join("projects"),
         ImportSource::Gemini => home.join(".gemini").join("tmp"),
+        ImportSource::Codex => home.join(".codex").join("sessions"),
         // Cursor 使用不同的存储结构，这里返回 workspaceStorage 目录
         // 实际扫描逻辑在 scan_cursor_workspaces 中处理
         ImportSource::Cursor => {
@@ -218,6 +221,11 @@ pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFi
         return scan_gemini_projects().await;
     }
 
+    // Codex 使用特殊的扫描逻辑（日期目录结构）
+    if matches!(source, ImportSource::Codex) {
+        return scan_codex_sessions().await;
+    }
+
     let dir = get_default_log_dir(&source)?;
 
     // Use spawn_blocking for filesystem operations
@@ -349,6 +357,135 @@ async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
     .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
 
     Ok(result)
+}
+
+/// Scan Codex CLI sessions and return session files as discoverable items
+///
+/// Each session file is represented as a DiscoveredFile with:
+/// - path: The session JSONL file path (used for import)
+/// - name: The session filename with date
+/// - project_path: The cwd from session, or codex-project:{cwd_hash} format
+async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
+    let result = tokio::task::spawn_blocking(|| {
+        // Try to detect Codex paths
+        let paths = match CodexPaths::detect() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        // Scan all sessions
+        let sessions = match paths.scan_all_sessions() {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        // Convert sessions to DiscoveredFile format
+        sessions
+            .into_iter()
+            .filter_map(|session_file| {
+                let metadata = fs::metadata(&session_file.path).ok()?;
+                let modified_at = metadata
+                    .modified()
+                    .ok()?
+                    .duration_since(UNIX_EPOCH)
+                    .ok()?
+                    .as_millis() as u64;
+
+                // Extract session_id from Codex JSONL file
+                let session_id = extract_session_id_from_codex_file(&session_file.path);
+
+                // Extract cwd from Codex file for project_path
+                let project_path = extract_cwd_from_codex_file(&session_file.path)
+                    .map(|cwd| {
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::{Hash, Hasher};
+                        let mut hasher = DefaultHasher::new();
+                        cwd.hash(&mut hasher);
+                        format!("codex-project:{:x}", hasher.finish())
+                    })
+                    .unwrap_or_else(|| format!("codex-session:{}", session_file.session_id));
+
+                Some(DiscoveredFile {
+                    path: session_file.path.to_string_lossy().to_string(),
+                    name: format!("{} (Codex CLI)", session_file.date),
+                    size: metadata.len(),
+                    modified_at,
+                    project_path,
+                    session_id,
+                })
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
+
+    Ok(result)
+}
+
+/// Extract sessionId from a Codex JSONL session file
+fn extract_session_id_from_codex_file(path: &Path) -> Option<String> {
+    use std::io::{BufRead, BufReader};
+
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    // Read the first line which should be session_meta
+    for line in reader.lines().take(5) {
+        if let Ok(line) = line {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Parse as JSON and check for session_meta type
+            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
+                if record.get("type").and_then(|v| v.as_str()) == Some("session_meta") {
+                    if let Some(payload) = record.get("payload") {
+                        if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
+                            if !id.is_empty() {
+                                return Some(id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract cwd from a Codex JSONL session file
+fn extract_cwd_from_codex_file(path: &Path) -> Option<String> {
+    use std::io::{BufRead, BufReader};
+
+    let file = fs::File::open(path).ok()?;
+    let reader = BufReader::new(file);
+
+    // Read the first line which should be session_meta
+    for line in reader.lines().take(5) {
+        if let Ok(line) = line {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Parse as JSON and check for session_meta type
+            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
+                if record.get("type").and_then(|v| v.as_str()) == Some("session_meta") {
+                    if let Some(payload) = record.get("payload") {
+                        if let Some(cwd) = payload.get("cwd").and_then(|v| v.as_str()) {
+                            if !cwd.is_empty() {
+                                return Some(cwd.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Scan a custom directory for session files
@@ -484,6 +621,7 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
         let claude_parser = ClaudeParser::new();
         let cursor_parser = CursorParser::new();
         let gemini_parser = GeminiParser::new();
+        let codex_parser = CodexParser::new();
         let mut results = Vec::with_capacity(paths.len());
 
         for path in paths {
@@ -532,15 +670,20 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
             } else {
                 // 根据文件扩展名和路径选择解析器
                 let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
+                let is_codex = path.contains("/.codex/") || path.contains("\\.codex\\");
                 let is_json = path.ends_with(".json");
                 let is_jsonl = path.ends_with(".jsonl");
 
-                let parse_result = if is_gemini && is_json {
+                let parse_result = if is_codex && is_jsonl {
+                    // Codex CLI 会话文件
+                    codex_parser.parse_file(&path)
+                } else if is_gemini && is_json {
                     // Gemini CLI 会话文件
                     gemini_parser.parse_file(&path)
                 } else if is_jsonl {
-                    // Claude Code JSONL 文件
+                    // Claude Code JSONL 文件 (or try Codex as fallback)
                     claude_parser.parse_file(&path)
+                        .or_else(|_| codex_parser.parse_file(&path))
                 } else if is_json {
                     // 尝试先作为 Gemini 解析，失败则尝试 Claude
                     gemini_parser.parse_file(&path)
