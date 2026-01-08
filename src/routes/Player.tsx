@@ -110,8 +110,8 @@ export default function Player() {
 
   // Story 2.12 AC4: 记录最近有效的文件路径，用于无文件路径时保持视图
   const lastValidFileRef = React.useRef<string | null>(null);
-  // 记录上一个文件的内容（用于 Diff）
-  const previousContentRef = React.useRef<string | null>(null);
+  // 记录每个文件的上一个内容（用于 Diff）- 按文件路径区分，避免不同文件之间错误 diff
+  const previousContentMapRef = React.useRef<Map<string, string>>(new Map());
 
   // Story 2.17: 获取当前会话和项目信息
   const {
@@ -377,20 +377,23 @@ export default function Player() {
           const snapshot = await fetchSnapshot(relativePath, msgTime);
 
           if (snapshot) {
+            // 获取该文件的上一个版本内容（仅同文件才进行 diff）
+            const previousContent = previousContentMapRef.current.get(relativePath);
+            
             // 统一标签管理：打开历史版本标签
             openTab(relativePath, {
               preview: true,
               commitHash: snapshot.commit_hash,
               timestamp: snapshot.commit_timestamp * 1000,
               content: snapshot.content,
-              previousContent: previousContentRef.current ?? undefined,
+              previousContent: previousContent,
             });
 
             // 切换右侧面板到代码 Tab (修复 Bash 详情后其他消息点击无响应问题)
             setActiveRightTab("code");
 
-            // 更新 previousContent 用于下次 Diff
-            previousContentRef.current = snapshot.content;
+            // 更新该文件的 previousContent 用于下次 Diff
+            previousContentMapRef.current.set(relativePath, snapshot.content);
           }
 
           console.log(
@@ -444,16 +447,20 @@ export default function Player() {
               // 获取快照并打开历史标签
               const snapshot = await fetchSnapshot(relativePath, timestamp);
               if (snapshot) {
+                // 获取该文件的上一个版本内容（仅同文件才进行 diff）
+                const previousContent = previousContentMapRef.current.get(relativePath);
+                
                 openTab(relativePath, {
                   preview: true,
                   commitHash: snapshot.commit_hash,
                   timestamp: snapshot.commit_timestamp * 1000,
                   content: snapshot.content,
-                  previousContent: previousContentRef.current ?? undefined,
+                  previousContent: previousContent,
                 });
                 // 切换右侧面板到代码 Tab
                 setActiveRightTab("code");
-                previousContentRef.current = snapshot.content;
+                // 更新该文件的 previousContent 用于下次 Diff
+                previousContentMapRef.current.set(relativePath, snapshot.content);
               }
             } else if (lastValidFileRef.current) {
               // AC #4: 无文件路径时保持当前视图

@@ -17,7 +17,7 @@ use tauri::Manager;
 use commands::{
     detect_git_repo, find_commit_at_time, get_commit_info, get_file_at_head, get_file_snapshot,
     get_project, get_project_by_cwd, get_project_by_session, get_project_sessions, get_representative_file,
-    get_session, get_snapshot_at_time, import_parsed_sessions,
+    get_session, get_snapshot_at_time, get_snapshot_with_fallback, import_parsed_sessions,
     import_sessions, list_projects, parse_claude_log, parse_claude_log_string,
     parse_cursor_log, parse_cursor_all, parse_gemini_log, parse_gemini_log_string,
     parse_gemini_all, parse_gemini_project, parse_codex_log, parse_codex_log_string,
@@ -90,6 +90,7 @@ pub fn run() {
             get_file_snapshot,
             get_file_at_head,
             get_snapshot_at_time,
+            get_snapshot_with_fallback,
             detect_git_repo,
             find_commit_at_time,
             get_commit_info,

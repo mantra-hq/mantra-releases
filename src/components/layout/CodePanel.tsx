@@ -41,6 +41,7 @@ import type { editor } from "monaco-editor";
 import { StatusBar, type CursorPosition } from "./StatusBar";
 import { BranchSelector } from "@/components/git/BranchSelector";
 import { SyncStatus } from "@/components/git/SyncStatus";
+import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 
 export interface CodePanelProps {
     /** 自定义 className */
@@ -137,6 +138,9 @@ export function CodePanel({
 
     // 是否处于脱敏预览模式
     const isInSanitizePreview = sanitizeMode === 'preview';
+
+    // Story 2.30: 快照来源
+    const snapshotSource = useTimeTravelStore((state) => state.snapshotSource);
 
     // Monaco Editor ref (用于行跳转)
     const editorRef = React.useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -252,10 +256,16 @@ export function CodePanel({
     const [tabContents, setTabContents] = React.useState<Record<string, string>>({});
 
     // 统一从标签读取内容，标签内容优先于 tabContents 缓存
-    const displayCode = activeTab?.content ?? (activeTabId ? tabContents[activeTabId] : null) ?? code;
+    // 只有当显示的文件与 props 文件相同时才回退到 props.code，避免跨文件内容混合
+    const displayCode = activeTab?.content
+        ?? (activeTabId ? tabContents[activeTabId] : null)
+        ?? (displayFilePath === filePath ? code : "");
 
     // Diff 用的前一版本内容
-    const displayPreviousCode = activeTab?.previousContent ?? previousCode;
+    // 只有当：(1) 标签自己有 previousContent，或 (2) 显示的文件与 props 传入的文件相同时
+    // 才使用 previousCode，避免跨文件 diff
+    const displayPreviousCode = activeTab?.previousContent ??
+        (displayFilePath === filePath ? previousCode : null);
 
     // 是否有可用的 Diff 数据 (用于 EditorTabs 显示 Diff 模式切换)
     const hasDiffData = !!(displayPreviousCode && displayPreviousCode !== displayCode);
@@ -277,6 +287,13 @@ export function CodePanel({
         enabled: true,
     });
 
+    // 只有当 isHistoricalMode 且 commitHash 有效时才使用历史 commitHash
+    // 避免传递空的 commitHash 导致 "unable to parse OID - too short" 错误
+    const effectiveCommitHash = React.useMemo(
+        () => (isHistoricalMode && displayCommitHash) ? displayCommitHash : undefined,
+        [isHistoricalMode, displayCommitHash]
+    );
+
     // 加载文件树 (AC #9, #19)
     // 注意: Tauri 2.x 前端使用 camelCase，会自动转换为 Rust 的 snake_case
     React.useEffect(() => {
@@ -287,7 +304,7 @@ export function CodePanel({
             try {
                 const tree = await invoke<TreeNode[]>("list_tree_at_commit", {
                     repoPath: repoPath,
-                    commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                    commitHash: effectiveCommitHash,
                     subpath: undefined,
                 });
                 setFileTree(tree);
@@ -300,7 +317,7 @@ export function CodePanel({
         };
 
         loadTree();
-    }, [repoPath, isHistoricalMode, displayCommitHash]);
+    }, [repoPath, effectiveCommitHash]);
 
     // 加载文件列表 (用于 QuickOpen)
     React.useEffect(() => {
@@ -310,7 +327,7 @@ export function CodePanel({
             try {
                 const files = await invoke<string[]>("list_files_at_commit", {
                     repoPath: repoPath,
-                    commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                    commitHash: effectiveCommitHash,
                 });
                 setFileList(files);
             } catch (err) {
@@ -320,7 +337,7 @@ export function CodePanel({
         };
 
         loadFiles();
-    }, [repoPath, isHistoricalMode, displayCommitHash]);
+    }, [repoPath, effectiveCommitHash]);
 
     // 计算同级文件 (用于 Breadcrumbs 导航)
     React.useEffect(() => {
@@ -363,6 +380,8 @@ export function CodePanel({
                     setTabContents((prev) => ({ ...prev, [tabId]: content }));
                 } catch (err) {
                     console.error("加载文件内容失败:", err);
+                    // 设置错误占位内容，避免重复加载
+                    setTabContents((prev) => ({ ...prev, [tabId]: `// 无法加载文件: ${path}` }));
                 }
             } else if (repoPath) {
                 // 直接调用 Tauri 命令加载文件内容
@@ -393,10 +412,10 @@ export function CodePanel({
         (path: string) => {
             openTab(path, {
                 preview: true,
-                commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                commitHash: effectiveCommitHash,
             });
         },
-        [openTab, isHistoricalMode, displayCommitHash]
+        [openTab, effectiveCommitHash]
     );
 
     // 文件树双击 (打开, AC #11)
@@ -404,10 +423,10 @@ export function CodePanel({
         (path: string) => {
             openTab(path, {
                 preview: false,
-                commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                commitHash: effectiveCommitHash,
             });
         },
-        [openTab, isHistoricalMode, displayCommitHash]
+        [openTab, effectiveCommitHash]
     );
 
     // QuickOpen 选择 (AC #15)
@@ -415,10 +434,10 @@ export function CodePanel({
         (path: string) => {
             openTab(path, {
                 preview: false,
-                commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                commitHash: effectiveCommitHash,
             });
         },
-        [openTab, isHistoricalMode, displayCommitHash]
+        [openTab, effectiveCommitHash]
     );
 
     // Breadcrumbs 导航
@@ -433,11 +452,11 @@ export function CodePanel({
                 // 文件：打开
                 openTab(path, {
                     preview: false,
-                    commitHash: isHistoricalMode ? displayCommitHash : undefined,
+                    commitHash: effectiveCommitHash,
                 });
             }
         },
-        [siblings, openTab, isHistoricalMode, displayCommitHash]
+        [siblings, openTab, effectiveCommitHash]
     );
 
     // ViewState 变更回调 (AC #5)
@@ -564,6 +583,7 @@ export function CodePanel({
                         isMarkdown={isMarkdown}
                         markdownMode={markdownMode}
                         onToggleMarkdownMode={handleToggleMarkdownMode}
+                        snapshotSource={snapshotSource}
                     />
                 )}
 

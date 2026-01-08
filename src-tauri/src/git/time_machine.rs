@@ -13,23 +13,43 @@ use serde::{Deserialize, Serialize};
 
 use super::error::GitError;
 
+/// 快照来源类型 (Story 2.30)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SnapshotSource {
+    /// 来自 Git 历史 Commit
+    Git,
+    /// 来自工作目录 (未提交)
+    Workdir,
+    /// 来自会话日志 (tool_use Write 操作)
+    Session,
+}
+
 /// 历史快照数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Snapshot {
     /// 文件内容
     pub content: String,
-    /// Commit SHA
+    /// Commit SHA (工作目录或会话来源时为空)
     pub commit_hash: String,
-    /// Commit 消息
+    /// Commit 消息 (工作目录或会话来源时为空)
     pub message: String,
-    /// 作者名
+    /// 作者名 (工作目录或会话来源时为空)
     pub author: String,
-    /// 作者邮箱
+    /// 作者邮箱 (工作目录或会话来源时为空)
     pub author_email: String,
-    /// Commit 时间
+    /// Commit 时间 (工作目录或会话来源时为请求时间)
     pub committed_at: DateTime<Utc>,
     /// 文件路径
     pub file_path: String,
+    /// 快照来源 (Story 2.30)
+    #[serde(default = "default_source")]
+    pub source: SnapshotSource,
+}
+
+/// 默认来源为 Git (保持向后兼容)
+fn default_source() -> SnapshotSource {
+    SnapshotSource::Git
 }
 
 /// Commit 信息（不含文件内容）
@@ -197,6 +217,68 @@ impl GitTimeMachine {
             author_email: author.email().unwrap_or("").to_string(),
             committed_at,
             file_path: file_path.to_string(),
+            source: SnapshotSource::Git,
+        })
+    }
+
+    /// 获取文件快照，支持分层回退 (Story 2.30)
+    ///
+    /// 回退策略:
+    /// 1. 先尝试 Git Commit 历史
+    /// 2. 失败时 → 检查工作目录是否存在该文件
+    /// 3. 全部失败 → 返回 FileNotFound 错误
+    ///
+    /// # Arguments
+    /// * `timestamp` - 目标时间戳
+    /// * `file_path` - 文件路径 (可以是相对路径或绝对路径)
+    ///
+    /// # Returns
+    /// 返回包含内容、元数据和来源的 Snapshot
+    pub fn get_file_with_fallback(
+        &self,
+        timestamp: DateTime<Utc>,
+        file_path: &str,
+    ) -> Result<Snapshot, GitError> {
+        // 策略 1: 尝试 Git 历史
+        match self.get_snapshot_at_time(timestamp, file_path) {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(GitError::FileNotFound { .. }) => {
+                // 文件在 Git 历史中不存在，继续回退
+            }
+            Err(e) => return Err(e), // 其他错误直接返回
+        }
+
+        // 策略 2: 尝试工作目录
+        let file_path_buf = std::path::PathBuf::from(file_path);
+        let full_path = if file_path_buf.is_absolute() {
+            // 绝对路径，直接使用
+            file_path_buf
+        } else {
+            // 相对路径，与工作目录拼接
+            let repo_workdir = self.repo.workdir().ok_or_else(|| {
+                GitError::NotARepository("Bare repository has no workdir".to_string())
+            })?;
+            repo_workdir.join(file_path)
+        };
+
+        if full_path.exists() && full_path.is_file() {
+            let content = std::fs::read_to_string(&full_path).map_err(|_| GitError::InvalidUtf8)?;
+            return Ok(Snapshot {
+                content,
+                commit_hash: String::new(),
+                message: String::new(),
+                author: String::new(),
+                author_email: String::new(),
+                committed_at: Utc::now(),
+                file_path: file_path.to_string(),
+                source: SnapshotSource::Workdir,
+            });
+        }
+
+        // 策略 3: 全部失败，返回错误
+        Err(GitError::FileNotFound {
+            commit: "workdir".to_string(),
+            path: file_path.to_string(),
         })
     }
 }

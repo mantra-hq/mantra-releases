@@ -106,6 +106,7 @@ export interface CodeSnapshotViewProps {
   forceSideBySide?: boolean;
   /** Markdown 预览模式 (由外部控制) */
   markdownMode?: 'source' | 'preview';
+  // Story 2.30: snapshotSource 已移至 Breadcrumbs 组件
 }
 
 /**
@@ -261,7 +262,7 @@ export function CodeSnapshotView({
   // 是否使用并排 Diff 模式
   // Story 3.4: forceSideBySide 用于脱敏预览，即使内容相同也显示并排视图
   const useSideBySideDiff = (hasDiffData && diffMode === "side-by-side") ||
-                            (forceSideBySide && previousCode !== undefined);
+    (forceSideBySide && previousCode !== undefined);
 
   // 事件监听器清理引用
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([]);
@@ -460,6 +461,7 @@ export function CodeSnapshotView({
       )}
     >
       {/* UX 优化: 移除 HistoryBanner/CodeSnapshotHeader/DiffModeToggle，功能已上移至 EditorTabs */}
+      {/* Story 2.30: 来源 badge 已移至 Breadcrumbs 组件 */}
 
       {/* 编辑器容器 (AC1) */}
       <div

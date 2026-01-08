@@ -236,7 +236,9 @@
     "noMatchingFiles": "No matching files found",
     "quickOpenSelect": "Select",
     "quickOpenOpen": "Open",
-    "quickOpenClose": "Close"
+    "quickOpenClose": "Close",
+    "snapshotSourceWorkdir": "Current Version",
+    "snapshotSourceSession": "Session Record"
   },
   "git": {
     "loading": "Loading...",

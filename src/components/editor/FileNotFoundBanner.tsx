@@ -60,25 +60,25 @@ export function FileNotFoundBanner({
     <div
       role="alert"
       className={cn(
-        "relative z-10 bg-amber-500/10 border-b border-amber-500/30 backdrop-blur-sm",
+        "relative z-10 bg-amber-100 border-b border-amber-300 dark:bg-amber-950 dark:border-amber-800 backdrop-blur-sm",
         className
       )}
     >
       <div className="flex items-center gap-3 px-4 py-3">
         {/* 图标 */}
         <div className="flex-shrink-0">
-          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-            <FileQuestion className="w-5 h-5 text-amber-500" />
+          <div className="w-10 h-10 rounded-full bg-amber-200 dark:bg-amber-500/20 flex items-center justify-center">
+            <FileQuestion className="w-5 h-5 text-amber-600 dark:text-amber-500" />
           </div>
         </div>
 
         {/* 文本内容 */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-amber-200">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
             {t("editor.fileNotExist")}
           </p>
-          <p className="text-xs text-amber-200/70 truncate mt-0.5">
-            <code className="bg-amber-500/20 px-1 rounded">{filePath}</code>
+          <p className="text-xs text-amber-700 dark:text-amber-200/70 truncate mt-0.5">
+            <code className="bg-amber-200 dark:bg-amber-500/20 px-1 rounded">{filePath}</code>
             {timeAgo && (
               <>
                 <span className="mx-2">•</span>
@@ -98,7 +98,7 @@ export function FileNotFoundBanner({
               variant="ghost"
               size="sm"
               onClick={onKeepCurrent}
-              className="text-amber-200 hover:text-amber-100 hover:bg-amber-500/20"
+              className="text-amber-700 hover:text-amber-900 hover:bg-amber-200 dark:text-amber-200 dark:hover:text-amber-100 dark:hover:bg-amber-500/20"
             >
               {t("editor.keepCurrentView")}
             </Button>
@@ -108,7 +108,7 @@ export function FileNotFoundBanner({
               variant="ghost"
               size="icon"
               onClick={onDismiss}
-              className="text-amber-200/50 hover:text-amber-200 h-8 w-8"
+              className="text-amber-600/50 hover:text-amber-700 dark:text-amber-200/50 dark:hover:text-amber-200 h-8 w-8"
               aria-label={t("editor.closeTip")}
             >
               <X className="w-4 h-4" />

@@ -13,7 +13,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, ArrowLeft, Eye, Code2 } from "lucide-react";
+import { ChevronRight, ArrowLeft, Eye, Code2, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,7 @@ import { formatDistanceToNow } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import { DiffModeToggle } from "./DiffModeToggle";
 import { SnapshotBadge, type SnapshotType } from "./SnapshotBadge";
+import type { SnapshotSource } from "@/hooks/useTimeMachine";
 
 /** 同级文件/目录信息 */
 export interface SiblingItem {
@@ -72,6 +73,8 @@ export interface BreadcrumbsProps {
     markdownMode?: 'source' | 'preview';
     /** 切换 Markdown 预览模式 */
     onToggleMarkdownMode?: () => void;
+    /** Story 2.30: 快照来源 */
+    snapshotSource?: SnapshotSource | null;
     /** 自定义类名 */
     className?: string;
 }
@@ -91,6 +94,7 @@ export function Breadcrumbs({
     isMarkdown,
     markdownMode,
     onToggleMarkdownMode,
+    snapshotSource,
     className,
 }: BreadcrumbsProps) {
     const { t, i18n } = useTranslation();
@@ -246,6 +250,30 @@ export function Breadcrumbs({
                             <ArrowLeft className="h-3 w-3 mr-1" />
                             <span className="text-xs">{t("editor.exitSnapshot")}</span>
                         </Button>
+                    )}
+
+                    {/* Story 2.30: 快照来源 badge */}
+                    {snapshotSource && snapshotSource !== "git" && (
+                        <>
+                            {snapshotSource === "workdir" && (
+                                <span
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30"
+                                    title="文件在 Git 历史中不存在，显示的是工作目录中的当前版本"
+                                >
+                                    当前版本
+                                    <HelpCircle className="h-3 w-3 opacity-60" />
+                                </span>
+                            )}
+                            {snapshotSource === "session" && (
+                                <span
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30"
+                                    title="文件内容来自会话日志中的工具调用记录"
+                                >
+                                    会话记录
+                                    <HelpCircle className="h-3 w-3 opacity-60" />
+                                </span>
+                            )}
+                        </>
                     )}
                 </div>
             )}

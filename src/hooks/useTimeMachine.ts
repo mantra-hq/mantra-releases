@@ -16,17 +16,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 
 /**
+ * 快照来源类型 (Story 2.30)
+ */
+export type SnapshotSource = "git" | "workdir" | "session";
+
+/**
  * 快照结果接口 (与 Rust 后端对齐)
  */
 export interface SnapshotResult {
     /** 文件内容 */
     content: string;
-    /** Commit Hash */
+    /** Commit Hash (工作目录/会话来源时为空) */
     commit_hash: string;
-    /** Commit 消息 */
+    /** Commit 消息 (工作目录/会话来源时为空) */
     commit_message: string;
     /** Commit 时间戳 (Unix seconds) */
     commit_timestamp: number;
+    /** 快照来源 (Story 2.30): "git" | "workdir" | "session" */
+    source: SnapshotSource;
 }
 
 /**
@@ -217,6 +224,7 @@ export function useTimeMachine(repoPath: string | null) {
     const setError = useTimeTravelStore((state) => state.setError);
     const setFileNotFound = useTimeTravelStore((state) => state.setFileNotFound);
     const clearFileNotFound = useTimeTravelStore((state) => state.clearFileNotFound);
+    const setSnapshotSource = useTimeTravelStore((state) => state.setSnapshotSource);
 
     // 用于追踪最新请求，避免竞态条件
     const requestIdRef = useRef(0);
@@ -263,6 +271,8 @@ export function useTimeMachine(repoPath: string | null) {
                     message: cached.commit_message,
                     timestamp: cached.commit_timestamp * 1000, // 转回毫秒
                 });
+                // Story 2.30: 设置快照来源
+                setSnapshotSource(cached.source);
                 return cached;
             }
 
@@ -275,7 +285,7 @@ export function useTimeMachine(repoPath: string | null) {
             try {
                 const startTime = performance.now();
 
-                const result = await invoke<SnapshotResult>("get_snapshot_at_time", {
+                const result = await invoke<SnapshotResult>("get_snapshot_with_fallback", {
                     repoPath: repoPath,
                     filePath: filePath,
                     timestamp: timestampSeconds,
@@ -303,6 +313,8 @@ export function useTimeMachine(repoPath: string | null) {
                     message: result.commit_message,
                     timestamp: result.commit_timestamp * 1000,
                 });
+                // Story 2.30: 设置快照来源
+                setSnapshotSource(result.source);
 
                 return result;
             } catch (err) {
@@ -336,7 +348,7 @@ export function useTimeMachine(repoPath: string | null) {
                 }
             }
         },
-        [repoPath, setCode, setCommitInfo, setLoading, setError, setFileNotFound, clearFileNotFound]
+        [repoPath, setCode, setCommitInfo, setLoading, setError, setFileNotFound, clearFileNotFound, setSnapshotSource]
     );
 
     /**

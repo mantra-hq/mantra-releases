@@ -8,19 +8,21 @@ use std::path::PathBuf;
 use tauri::async_runtime::spawn_blocking;
 
 use crate::error::AppError;
-use crate::git::{GitTimeMachine, Snapshot};
+use crate::git::{GitTimeMachine, Snapshot, SnapshotSource};
 
 /// 前端友好的快照结果（与 useTimeMachine.ts 对齐）
 #[derive(Debug, Clone, Serialize)]
 pub struct SnapshotResult {
     /// 文件内容
     pub content: String,
-    /// Commit Hash
+    /// Commit Hash (工作目录/会话来源时为空)
     pub commit_hash: String,
-    /// Commit 消息
+    /// Commit 消息 (工作目录/会话来源时为空)
     pub commit_message: String,
     /// Commit 时间戳 (Unix seconds)
     pub commit_timestamp: i64,
+    /// 快照来源 (Story 2.30): "git" | "workdir" | "session"
+    pub source: String,
 }
 
 impl From<Snapshot> for SnapshotResult {
@@ -30,6 +32,11 @@ impl From<Snapshot> for SnapshotResult {
             commit_hash: snapshot.commit_hash,
             commit_message: snapshot.message,
             commit_timestamp: snapshot.committed_at.timestamp(),
+            source: match snapshot.source {
+                SnapshotSource::Git => "git".to_string(),
+                SnapshotSource::Workdir => "workdir".to_string(),
+                SnapshotSource::Session => "session".to_string(),
+            },
         }
     }
 }
@@ -61,6 +68,42 @@ pub async fn get_snapshot_at_time(
             .single()
             .ok_or_else(|| AppError::Internal(format!("Invalid timestamp: {}", timestamp)))?;
         let snapshot = tm.get_snapshot_at_time(datetime, &file_path_clone)?;
+        Ok::<_, AppError>(SnapshotResult::from(snapshot))
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))?
+}
+
+/// 获取文件快照（带回退策略） (Story 2.30)
+///
+/// 分层回退策略:
+/// 1. 先尝试 Git Commit 历史
+/// 2. 失败时 → 从工作目录读取
+/// 3. 全部失败 → 返回 FileNotFound 错误
+///
+/// # Arguments
+/// * `repo_path` - Git 仓库路径
+/// * `file_path` - 相对于仓库根目录的文件路径
+/// * `timestamp` - Unix 秒级时间戳
+///
+/// # Returns
+/// 返回包含内容、元数据和来源的 SnapshotResult
+#[tauri::command]
+pub async fn get_snapshot_with_fallback(
+    repo_path: String,
+    file_path: String,
+    timestamp: i64,
+) -> Result<SnapshotResult, AppError> {
+    let repo_path = PathBuf::from(repo_path);
+    let file_path_clone = file_path.clone();
+
+    spawn_blocking(move || {
+        let tm = GitTimeMachine::new(&repo_path)?;
+        let datetime = Utc
+            .timestamp_opt(timestamp, 0)
+            .single()
+            .ok_or_else(|| AppError::Internal(format!("Invalid timestamp: {}", timestamp)))?;
+        let snapshot = tm.get_file_with_fallback(datetime, &file_path_clone)?;
         Ok::<_, AppError>(SnapshotResult::from(snapshot))
     })
     .await
@@ -224,6 +267,7 @@ pub async fn get_file_at_head(
             commit_hash: commit.id().to_string(),
             commit_message: commit.message().unwrap_or("").to_string(),
             commit_timestamp: commit_time.seconds(),
+            source: "git".to_string(),
         })
     })
     .await

@@ -20,6 +20,8 @@ const mockSetError = vi.fn();
 // Story 2.12: 文件不存在状态 mock
 const mockSetFileNotFound = vi.fn();
 const mockClearFileNotFound = vi.fn();
+// Story 2.30: 快照来源 mock
+const mockSetSnapshotSource = vi.fn();
 
 // Store mock state (used by selectors)
 const mockStoreState = {
@@ -29,6 +31,7 @@ const mockStoreState = {
     setError: mockSetError,
     setFileNotFound: mockSetFileNotFound,
     clearFileNotFound: mockClearFileNotFound,
+    setSnapshotSource: mockSetSnapshotSource,
 };
 
 // Mock useTimeTravelStore with selector support
@@ -89,6 +92,7 @@ describe("useTimeMachine", () => {
                 commit_hash: "abc1234",
                 commit_message: "feat: add feature",
                 commit_timestamp: 1735500000,
+                source: "git" as const,
             };
 
             vi.mocked(invoke).mockResolvedValueOnce(mockResult);
@@ -237,6 +241,7 @@ describe("useTimeMachine", () => {
                 commit_hash: "abc",
                 commit_message: "msg",
                 commit_timestamp: 1735500000,
+                source: "git" as const,
             };
 
             vi.mocked(invoke).mockResolvedValueOnce(mockResult);
@@ -248,7 +253,7 @@ describe("useTimeMachine", () => {
                 await result.current.fetchSnapshot(uniqueFile, 1735500000000);
             });
 
-            expect(invoke).toHaveBeenCalledWith("get_snapshot_at_time", {
+            expect(invoke).toHaveBeenCalledWith("get_snapshot_with_fallback", {
                 repoPath: "/repo/path",
                 filePath: uniqueFile,
                 timestamp: 1735500000, // 毫秒转秒
@@ -263,6 +268,7 @@ describe("useTimeMachine", () => {
                 commit_hash: "abc1234",
                 commit_message: "cached",
                 commit_timestamp: 1735500000,
+                source: "git" as const,
             };
 
             vi.mocked(invoke).mockResolvedValueOnce(mockResult);
@@ -301,6 +307,7 @@ describe("useTimeMachine", () => {
                 commit_hash: "abc",
                 commit_message: "msg",
                 commit_timestamp: 1735500000,
+                source: "git" as const,
             };
 
             vi.mocked(invoke).mockResolvedValue(mockResult);
@@ -348,6 +355,7 @@ describe("useTimeMachine", () => {
                 commit_hash: "abc",
                 commit_message: "msg",
                 commit_timestamp: 1735500000,
+                source: "git" as const,
             };
 
             vi.mocked(invoke).mockResolvedValueOnce(mockResult);

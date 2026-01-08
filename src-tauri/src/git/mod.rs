@@ -8,7 +8,7 @@ pub mod time_machine;
 pub mod utils;
 
 pub use error::GitError;
-pub use time_machine::{CommitInfo, GitTimeMachine, Snapshot};
+pub use time_machine::{CommitInfo, GitTimeMachine, Snapshot, SnapshotSource};
 pub use utils::{get_git_remote_url, normalize_git_url};
 
 /// Synchronously detect Git repository from a directory path

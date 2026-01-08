@@ -13,6 +13,7 @@
  */
 
 import { create } from "zustand";
+import type { SnapshotSource } from "@/hooks/useTimeMachine";
 
 /**
  * Commit 信息
@@ -50,6 +51,10 @@ export interface TimeTravelState {
     isHistoricalMode: boolean;
     /** 错误信息 */
     error: string | null;
+
+    // Story 2.30: 快照来源
+    /** 当前快照来源 */
+    snapshotSource: SnapshotSource | null;
 
     // Story 2.12 AC #5: 文件不存在状态
     /** 文件是否不存在 */
@@ -95,6 +100,9 @@ export interface TimeTravelState {
     /** Story 2.12: 清除文件不存在状态 */
     clearFileNotFound: () => void;
 
+    /** Story 2.30: 设置快照来源 */
+    setSnapshotSource: (source: SnapshotSource | null) => void;
+
     /** 重置所有状态 */
     reset: () => void;
 }
@@ -117,6 +125,8 @@ const initialState = {
     fileNotFound: false,
     notFoundPath: null,
     notFoundTimestamp: null,
+    // Story 2.30: 快照来源
+    snapshotSource: null,
 };
 
 /**
@@ -141,7 +151,9 @@ export const useTimeTravelStore = create<TimeTravelState>((set) => ({
 
     setCode: (code, filePath) =>
         set((state) => ({
-            previousCode: state.currentCode,
+            // 只有当文件路径相同时才保留 previousCode 用于 diff
+            // 切换到不同文件时清除 previousCode，避免跨文件 diff
+            previousCode: state.currentFilePath === filePath ? state.currentCode : null,
             currentCode: code,
             currentFilePath: filePath,
         })),
@@ -196,6 +208,12 @@ export const useTimeTravelStore = create<TimeTravelState>((set) => ({
             fileNotFound: false,
             notFoundPath: null,
             notFoundTimestamp: null,
+        }),
+
+    // Story 2.30: 设置快照来源
+    setSnapshotSource: (source) =>
+        set({
+            snapshotSource: source,
         }),
 
     reset: () => set(initialState),
