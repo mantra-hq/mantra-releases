@@ -151,7 +151,7 @@ jobs:
           done
           ls -la release-files/
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (Private Repo)
         uses: softprops/action-gh-release@v2
         with:
           files: release-files/*
@@ -160,3 +160,59 @@ jobs:
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 发布到公开仓库（可选，需要配置 PUBLIC_REPO_TOKEN 和 PUBLIC_RELEASE_REPO）
+  publish-to-public-repo:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLIC_RELEASE_REPO != ''
+
+    steps:
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \) | while read file; do
+            dir_name=$(dirname "$file" | xargs basename)
+            base_name=$(basename "$file")
+            ext="${base_name##*.}"
+            platform_arch=$(echo "$dir_name" | sed 's/Mantra-[^-]*-//')
+            cp "$file" "release-files/Mantra_${{ steps.version.outputs.version }}_${platform_arch}.${ext}"
+          done
+          ls -la release-files/
+
+      - name: Create Release in Public Repository
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.PUBLIC_RELEASE_REPO }}
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Mantra ${{ steps.version.outputs.version }}
+          files: release-files/*
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          body: |
+            ## Mantra ${{ steps.version.outputs.version }}
+            
+            ### 下载
+            请根据你的操作系统选择对应的安装包：
+            
+            | 平台 | 文件 |
+            |------|------|
+            | **macOS (Apple Silicon)** | `Mantra_*_macos-arm64.dmg` |
+            | **macOS (Intel)** | `Mantra_*_macos-x64.dmg` |
+            | **Windows** | `.msi` 或 `.exe` |
+            | **Linux** | `.AppImage` 或 `.deb` |
+            
+            ---
+            
+            > 📦 自动构建自私有仓库

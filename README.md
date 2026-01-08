@@ -1,5 +1,7 @@
 # Mantra Client
 
+**English** | [中文](./README.zh-CN.md)
+
 A local-first time-travel viewer for AI-assisted programming sessions.
 
 ## Overview
