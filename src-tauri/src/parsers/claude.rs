@@ -201,6 +201,10 @@ impl ClaudeParser {
                     content_blocks,
                     timestamp,
                     mentioned_files: Vec::new(),
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
         }
@@ -244,6 +248,7 @@ impl ClaudeParser {
             title: summary, // Use summary from summary record as title
             total_tokens: None,
             original_path: None,
+            ..Default::default()
         };
 
         Ok(session)
@@ -469,6 +474,7 @@ impl LogParser for ClaudeParser {
             title: conversation.title,
             total_tokens: None,
             original_path: None,
+            ..Default::default()
         };
 
         // Parse messages
@@ -486,6 +492,10 @@ impl LogParser for ClaudeParser {
                 content_blocks,
                 timestamp: claude_msg.timestamp,
                 mentioned_files: Vec::new(),
+                message_id: None,
+                parent_id: None,
+                is_sidechain: false,
+                source_metadata: None,
             };
 
             session.messages.push(message);
@@ -598,6 +608,10 @@ fn reorganize_messages(raw_messages: Vec<Message>) -> Vec<Message> {
                 content_blocks: text_blocks,
                 timestamp: msg.timestamp,
                 mentioned_files: Vec::new(),
+                message_id: None,
+                parent_id: None,
+                is_sidechain: false,
+                source_metadata: None,
             });
         }
 
@@ -619,6 +633,10 @@ fn reorganize_messages(raw_messages: Vec<Message>) -> Vec<Message> {
                     content_blocks: tool_blocks,
                     timestamp: result_timestamp.or(msg.timestamp),
                     mentioned_files,
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
         }

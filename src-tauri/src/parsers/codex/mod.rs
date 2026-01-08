@@ -120,6 +120,7 @@ impl CodexParser {
                 title: None,
                 original_path: file_path.map(String::from),
                 total_tokens: None,
+                ..Default::default()
             },
         })
     }
@@ -162,6 +163,10 @@ impl CodexParser {
                     content_blocks,
                     timestamp: ts,
                     mentioned_files: Vec::new(),
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
 
@@ -197,6 +202,10 @@ impl CodexParser {
                     content_blocks,
                     timestamp: ts,
                     mentioned_files,
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
 
@@ -230,6 +239,10 @@ impl CodexParser {
                     content_blocks,
                     timestamp: msg_ts,
                     mentioned_files: pending.map(|p| p.mentioned_files).unwrap_or_default(),
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
         }

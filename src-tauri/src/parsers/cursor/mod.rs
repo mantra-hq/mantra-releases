@@ -161,6 +161,7 @@ impl CursorParser {
                 .and_then(|m| m.model_name.clone().or(m.model_id.clone())),
             total_tokens: None,
             original_path: None,
+            ..Default::default()
         };
 
         // Parse messages from bubble headers
@@ -301,6 +302,10 @@ impl CursorParser {
             content_blocks,
             timestamp,
             mentioned_files,
+            message_id: None,
+            parent_id: None,
+            is_sidechain: false,
+            source_metadata: None,
         }))
     }
 }

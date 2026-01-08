@@ -114,6 +114,7 @@ impl GeminiParser {
                 title: conversation.summary,
                 original_path: file_path.map(String::from),
                 total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+                ..Default::default()
             },
         };
 
@@ -171,6 +172,10 @@ impl GeminiParser {
                 content_blocks: text_blocks,
                 timestamp,
                 mentioned_files: Vec::new(),
+                message_id: None,
+                parent_id: None,
+                is_sidechain: false,
+                source_metadata: None,
             });
         }
 
@@ -221,6 +226,10 @@ impl GeminiParser {
                     content_blocks: tool_blocks,
                     timestamp: tool_timestamp,
                     mentioned_files,
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
                 });
             }
         }
