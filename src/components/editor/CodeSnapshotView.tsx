@@ -26,6 +26,10 @@ import {
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/stores/useEditorStore";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
+import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
 
 /**
  * 语言映射表 - 根据文件扩展名识别语言
@@ -100,6 +104,8 @@ export interface CodeSnapshotViewProps {
   onEditorRef?: (editor: editor.IStandaloneCodeEditor | null) => void;
   /** Story 3.4: 强制使用并排 Diff 模式 (用于脱敏预览) */
   forceSideBySide?: boolean;
+  /** Markdown 预览模式 (由外部控制) */
+  markdownMode?: 'source' | 'preview';
 }
 
 /**
@@ -195,6 +201,7 @@ export function CodeSnapshotView({
   onViewStateChange,
   onEditorRef,
   forceSideBySide = false,
+  markdownMode = 'source',
 }: CodeSnapshotViewProps) {
   const { resolvedTheme } = useTheme();
   const diffMode = useEditorStore((state) => state.diffMode);
@@ -203,6 +210,31 @@ export function CodeSnapshotView({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
+
+  // 检测是否为 Markdown 文件
+  const isMarkdown = useMemo(() => {
+    if (!filePath) return false;
+    const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase();
+    return ext === '.md' || ext === '.markdown' || ext === '.mdx';
+  }, [filePath]);
+
+  // Markdown 渲染组件配置
+  const markdownComponents: Components = useMemo(() => ({
+    code({ className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || "");
+      const language = match ? match[1] : undefined;
+      const codeString = String(children).replace(/\n$/, "");
+      const isCodeBlock = className?.includes("language-") || codeString.includes("\n");
+
+      if (isCodeBlock) {
+        return <CodeBlockWithCopy code={codeString} language={language} />;
+      }
+      return <code className={className} {...props}>{children}</code>;
+    },
+    pre({ children }) {
+      return <>{children}</>;
+    },
+  }), []);
 
   // Diff 淡出控制 (Story 2.7 AC #5)
   const { shouldShow: shouldShowDiff, triggerFadeOut, cancelFadeOut } = useDiffFadeOut(3000);
@@ -451,8 +483,33 @@ export function CodeSnapshotView({
           </div>
         )}
 
-        {/* 并排 Diff 模式 */}
-        {useSideBySideDiff ? (
+        {/* Markdown 预览模式 */}
+        {isMarkdown && markdownMode === 'preview' ? (
+          <div className="h-full overflow-auto p-6 bg-background">
+            <div
+              className={cn(
+                "prose prose-sm dark:prose-invert max-w-none",
+                "prose-p:my-2 prose-p:leading-relaxed",
+                "prose-pre:bg-transparent prose-pre:p-0",
+                "prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
+                "prose-code:text-foreground prose-code:font-normal",
+                "prose-code:before:content-none prose-code:after:content-none",
+                "prose-blockquote:border-l-primary prose-blockquote:text-foreground/80",
+                "prose-ul:my-2 prose-ol:my-2",
+                "prose-li:my-0.5",
+                "prose-headings:mt-4 prose-headings:mb-2",
+                "prose-th:text-foreground prose-td:text-foreground/90",
+                "prose-strong:text-foreground prose-em:text-foreground/90",
+                "prose-img:rounded-lg prose-img:shadow-md"
+              )}
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {code}
+              </ReactMarkdown>
+            </div>
+          </div>
+        ) : useSideBySideDiff ? (
+          /* 并排 Diff 模式 */
           <DiffEditor
             key="diff-editor"
             height="100%"

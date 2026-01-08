@@ -186,6 +186,9 @@ export function CodePanel({
     // Story 2.14: 光标位置状态
     const [cursorPosition, setCursorPosition] = React.useState<CursorPosition | undefined>();
 
+    // Markdown 预览模式状态
+    const [markdownMode, setMarkdownMode] = React.useState<'source' | 'preview'>('source');
+
     // 当前活动标签的 ViewState
     const activeTab = React.useMemo(
         () => tabs.find((t) => t.id === activeTabId),
@@ -227,6 +230,23 @@ export function CodePanel({
     const displayFilePath = activeTab?.path ?? filePath;
     const displayCommitHash = activeTab?.commitHash ?? commitHash;
     const displayTimestamp = activeTab?.timestamp ?? (typeof timestamp === "number" ? timestamp : undefined);
+
+    // 检测当前文件是否为 Markdown
+    const isMarkdown = React.useMemo(() => {
+        if (!displayFilePath) return false;
+        const ext = displayFilePath.slice(displayFilePath.lastIndexOf('.')).toLowerCase();
+        return ext === '.md' || ext === '.markdown' || ext === '.mdx';
+    }, [displayFilePath]);
+
+    // 切换 Markdown 预览模式
+    const handleToggleMarkdownMode = React.useCallback(() => {
+        setMarkdownMode(prev => prev === 'source' ? 'preview' : 'source');
+    }, []);
+
+    // 文件切换时重置 markdown 模式为源码
+    React.useEffect(() => {
+        setMarkdownMode('source');
+    }, [displayFilePath]);
 
     // 文件内容状态 (支持多标签)
     const [tabContents, setTabContents] = React.useState<Record<string, string>>({});
@@ -541,6 +561,9 @@ export function CodePanel({
                         hasDiffData={hasDiffData}
                         onReturnToCurrent={isHistoricalMode || activeTab?.commitHash || activeTab?.isSnapshot ? handleReturnToCurrent : undefined}
                         onNavigate={handleBreadcrumbNavigate}
+                        isMarkdown={isMarkdown}
+                        markdownMode={markdownMode}
+                        onToggleMarkdownMode={handleToggleMarkdownMode}
                     />
                 )}
 
@@ -587,6 +610,7 @@ export function CodePanel({
                         onViewStateChange={isInSanitizePreview ? undefined : handleViewStateChange}
                         onEditorRef={(editor) => { editorRef.current = editor; }}
                         forceSideBySide={isInSanitizePreview}
+                        markdownMode={markdownMode}
                     />
                 </div>
 

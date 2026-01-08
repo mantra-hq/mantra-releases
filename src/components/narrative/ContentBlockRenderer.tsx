@@ -21,6 +21,12 @@ import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useToolPairingContext } from "@/contexts/ToolPairingContext";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
+import { ChevronRight, FileText } from "lucide-react";
+
+/** 长 markdown 折叠阈值 (行数) */
+const LONG_MARKDOWN_THRESHOLD = 15;
+/** 折叠时显示的预览行数 */
+const PREVIEW_LINES = 5;
 
 export interface ContentBlockRendererProps {
   /** 内容块数据 */
@@ -136,6 +142,59 @@ export function ContentBlockRenderer({
 
   switch (block.type) {
     case "text":
+      // 检测是否为长 markdown
+      const lines = block.content.split('\n');
+      const isLongMarkdown = lines.length > LONG_MARKDOWN_THRESHOLD;
+
+      // 长 markdown 显示折叠卡片
+      if (isLongMarkdown) {
+        const previewContent = lines.slice(0, PREVIEW_LINES).join('\n');
+        const lineCount = lines.length;
+
+        // 点击打开右侧预览
+        const handleOpenPreview = () => {
+          // 生成临时文件名（使用时间戳避免冲突）
+          const tempPath = `markdown-preview-${Date.now()}.md`;
+          openTab(tempPath, {
+            preview: true,
+            content: block.content,
+          });
+          setActiveRightTab('code');
+        };
+
+        return (
+          <div
+            className={cn(
+              "group rounded-lg border border-border bg-muted/30 p-3",
+              "hover:bg-muted/50 hover:border-primary/30 transition-colors cursor-pointer",
+              className
+            )}
+            onClick={handleOpenPreview}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && handleOpenPreview()}
+          >
+            {/* 预览内容 */}
+            <div className="prose prose-sm dark:prose-invert max-w-none line-clamp-3 text-muted-foreground">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {previewContent}
+              </ReactMarkdown>
+            </div>
+
+            {/* 展开提示 */}
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" />
+              <span>{lineCount} 行</span>
+              <span className="flex-1" />
+              <span className="group-hover:text-primary transition-colors flex items-center gap-1">
+                点击展开查看
+                <ChevronRight className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          </div>
+        );
+      }
+
       // Story 2.22: 自定义代码块组件，添加复制功能 (AC2)
       const markdownComponents: Components = {
         code({ className, children, ...props }) {
@@ -176,11 +235,21 @@ export function ContentBlockRenderer({
             // 自定义 prose 样式覆盖
             "prose-p:my-1 prose-p:leading-relaxed",
             "prose-pre:bg-transparent prose-pre:p-0",
+            // 内联代码样式 - 确保浅色/深色模式下文字可读
             "prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
+            "prose-code:text-foreground prose-code:font-normal",
             "prose-code:before:content-none prose-code:after:content-none",
+            // 引用块样式 - 确保文字颜色足够深
+            "prose-blockquote:border-l-primary prose-blockquote:text-foreground/80",
+            // 列表样式
             "prose-ul:my-1 prose-ol:my-1",
             "prose-li:my-0",
+            // 标题样式
             "prose-headings:mt-2 prose-headings:mb-1",
+            // 表格样式 - 确保文字可读
+            "prose-th:text-foreground prose-td:text-foreground/90",
+            // 强调样式
+            "prose-strong:text-foreground prose-em:text-foreground/90",
             className
           )}
         >

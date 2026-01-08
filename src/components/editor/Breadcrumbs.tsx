@@ -8,11 +8,12 @@
  * - 点击路径段弹出下拉菜单导航
  * - 历史模式时间戳指示器
  * - UX 优化 (方案 B): 整合 Diff 切换和返回当前按钮
+ * - Markdown 预览/源码切换
  */
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, ArrowLeft } from "lucide-react";
+import { ChevronRight, ArrowLeft, Eye, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +66,12 @@ export interface BreadcrumbsProps {
     hasDiffData?: boolean;
     /** 返回当前回调 (UX 优化方案 B: 历史模式时显示) */
     onReturnToCurrent?: () => void;
+    /** 是否为 Markdown 文件 */
+    isMarkdown?: boolean;
+    /** Markdown 预览模式 */
+    markdownMode?: 'source' | 'preview';
+    /** 切换 Markdown 预览模式 */
+    onToggleMarkdownMode?: () => void;
     /** 自定义类名 */
     className?: string;
 }
@@ -81,6 +88,9 @@ export function Breadcrumbs({
     onNavigate,
     hasDiffData,
     onReturnToCurrent,
+    isMarkdown,
+    markdownMode,
+    onToggleMarkdownMode,
     className,
 }: BreadcrumbsProps) {
     const { t, i18n } = useTranslation();
@@ -179,9 +189,31 @@ export function Breadcrumbs({
                 );
             })}
 
-            {/* 右侧工具区 (UX 优化方案 B: 历史信息 + Diff 切换 + 返回当前) */}
-            {(effectiveHistoryInfo || hasDiffData) && (
+            {/* 右侧工具区 (UX 优化方案 B: 历史信息 + Diff 切换 + 返回当前 + Markdown 预览) */}
+            {(effectiveHistoryInfo || hasDiffData || isMarkdown) && (
                 <div className="ml-auto flex items-center gap-2">
+                    {/* Markdown 预览/源码切换 */}
+                    {isMarkdown && onToggleMarkdownMode && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={onToggleMarkdownMode}
+                            className="h-6 px-2 gap-1 text-xs"
+                        >
+                            {markdownMode === 'source' ? (
+                                <>
+                                    <Eye className="h-3 w-3" />
+                                    预览
+                                </>
+                            ) : (
+                                <>
+                                    <Code2 className="h-3 w-3" />
+                                    源码
+                                </>
+                            )}
+                        </Button>
+                    )}
+
                     {/* Story 2.14: 历史状态徽章 Pill 模式 */}
                     {effectiveHistoryInfo && (
                         <SnapshotBadge

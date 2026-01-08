@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Mantra - AI 编程过程资产与方法论分享社区客户端"
 authors = ["Mantra Team <team@mantra.dev>"]
 edition = "2021"
+homepage = "https://mantra.gonewx.com"
+documentation = "https://mantra.gonewx.com/docs"
+repository = "https://github.com/mantra-dev/mantra"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

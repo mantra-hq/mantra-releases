@@ -62,7 +62,9 @@ export function CodeBlockWithCopy({
       <pre
         className={cn(
           "overflow-x-auto rounded-lg bg-muted p-4",
-          "text-sm leading-relaxed"
+          "text-sm leading-relaxed",
+          // 确保浅色/深色模式下文字对比度足够
+          "text-foreground"
         )}
       >
         <code className={language ? `language-${language}` : undefined}>
