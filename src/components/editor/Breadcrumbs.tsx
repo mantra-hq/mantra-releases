@@ -252,24 +252,24 @@ export function Breadcrumbs({
                         </Button>
                     )}
 
-                    {/* Story 2.30: 快照来源 badge */}
+                    {/* Story 2.30: 快照来源 badge (国际化) */}
                     {snapshotSource && snapshotSource !== "git" && (
                         <>
                             {snapshotSource === "workdir" && (
                                 <span
                                     className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30"
-                                    title="文件在 Git 历史中不存在，显示的是工作目录中的当前版本"
+                                    title={t("editor.snapshotSourceWorkdirTooltip", "文件在 Git 历史中不存在，显示的是工作目录中的当前版本")}
                                 >
-                                    当前版本
+                                    {t("editor.snapshotSourceWorkdir")}
                                     <HelpCircle className="h-3 w-3 opacity-60" />
                                 </span>
                             )}
                             {snapshotSource === "session" && (
                                 <span
                                     className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30"
-                                    title="文件内容来自会话日志中的工具调用记录"
+                                    title={t("editor.snapshotSourceSessionTooltip", "文件内容来自会话日志中的工具调用记录")}
                                 >
-                                    会话记录
+                                    {t("editor.snapshotSourceSession")}
                                     <HelpCircle className="h-3 w-3 opacity-60" />
                                 </span>
                             )}

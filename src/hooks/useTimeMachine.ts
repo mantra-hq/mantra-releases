@@ -2,6 +2,7 @@
  * useTimeMachine - Git Time Machine 集成 Hook
  * Story 2.7: Task 2 - AC #3, #4
  * Story 2.12: Task 4 - AC #5 (File Not Found Handling)
+ * Story 2.30: AC2 - Session Log Fallback
  *
  * 功能:
  * - 封装 Tauri IPC 调用获取历史快照
@@ -9,6 +10,7 @@
  * - 加载状态和错误处理
  * - 响应时间目标 <200ms
  * - 文件不存在时保持上一个有效状态 (Story 2.12)
+ * - 支持会话日志回退 (Story 2.30)
  */
 
 import { useCallback, useRef } from "react";
@@ -35,6 +37,15 @@ export interface SnapshotResult {
     /** 快照来源 (Story 2.30): "git" | "workdir" | "session" */
     source: SnapshotSource;
 }
+
+/**
+ * 会话回退函数类型 (Story 2.30)
+ * 当 Git + Workdir 都失败时调用，尝试从会话日志中提取内容
+ */
+export type SessionFallbackFn = (
+    filePath: string,
+    timestamp: number
+) => SnapshotResult | null;
 
 /**
  * LRU 缓存实现
@@ -213,9 +224,10 @@ function getCacheKey(repoPath: string, filePath: string, timestamp: number): str
  * useTimeMachine Hook
  *
  * @param repoPath - Git 仓库路径 (可选，无仓库时返回错误提示)
+ * @param sessionFallback - 会话回退函数 (Story 2.30: 可选，用于从会话日志提取内容)
  * @returns Hook 方法
  */
-export function useTimeMachine(repoPath: string | null) {
+export function useTimeMachine(repoPath: string | null, sessionFallback?: SessionFallbackFn) {
     // 使用独立的选择器获取 action 函数，确保引用稳定
     // 避免整个 store 状态变化时导致函数引用变化
     const setCode = useTimeTravelStore((state) => state.setCode);
@@ -329,7 +341,35 @@ export function useTimeMachine(repoPath: string | null) {
                 const isFileNotFound = isFileNotFoundError(err);
 
                 if (isFileNotFound) {
-                    // 设置文件不存在状态，但不设置通用错误
+                    // Story 2.30 AC2: 尝试会话日志回退
+                    if (sessionFallback) {
+                        const sessionResult = sessionFallback(filePath, timestamp);
+                        if (sessionResult) {
+                            // 检查是否仍是最新请求
+                            if (currentRequestId !== requestIdRef.current) {
+                                return undefined;
+                            }
+
+                            // 缓存结果
+                            snapshotCache.set(cacheKey, sessionResult);
+
+                            // 更新状态
+                            setCode(sessionResult.content, filePath);
+                            setCommitInfo({
+                                hash: sessionResult.commit_hash,
+                                message: sessionResult.commit_message,
+                                timestamp: sessionResult.commit_timestamp * 1000,
+                            });
+                            setSnapshotSource(sessionResult.source);
+
+                            console.log(
+                                `[useTimeMachine] 会话日志回退成功: ${filePath}`
+                            );
+                            return sessionResult;
+                        }
+                    }
+
+                    // 会话回退也失败，设置文件不存在状态
                     setFileNotFound(filePath, timestampSeconds);
                     console.log(
                         `[useTimeMachine] 文件不存在: ${filePath} @ ${new Date(timestamp).toISOString()}`
@@ -348,7 +388,7 @@ export function useTimeMachine(repoPath: string | null) {
                 }
             }
         },
-        [repoPath, setCode, setCommitInfo, setLoading, setError, setFileNotFound, clearFileNotFound, setSnapshotSource]
+        [repoPath, sessionFallback, setCode, setCommitInfo, setLoading, setError, setFileNotFound, clearFileNotFound, setSnapshotSource]
     );
 
     /**

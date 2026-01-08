@@ -113,6 +113,11 @@ export function TodoWriteCard({
         return null;
     }
 
+    // 阻止事件冒泡，避免触发父组件的消息选中逻辑
+    const handleClick = React.useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+    }, []);
+
     return (
         <div
             data-testid="todo-write-card"
@@ -123,6 +128,7 @@ export function TodoWriteCard({
                 isHighlighted && "ring-2 ring-primary/50",
                 className
             )}
+            onClick={handleClick}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

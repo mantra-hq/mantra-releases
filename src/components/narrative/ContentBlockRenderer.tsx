@@ -152,7 +152,9 @@ export function ContentBlockRenderer({
         const lineCount = lines.length;
 
         // 点击打开右侧预览
-        const handleOpenPreview = () => {
+        const handleOpenPreview = (e: React.MouseEvent | React.KeyboardEvent) => {
+          // 阻止事件冒泡，避免触发父组件的消息选中逻辑
+          e.stopPropagation();
           // 生成临时文件名（使用时间戳避免冲突）
           const tempPath = `markdown-preview-${Date.now()}.md`;
           openTab(tempPath, {
@@ -172,7 +174,7 @@ export function ContentBlockRenderer({
             onClick={handleOpenPreview}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && handleOpenPreview()}
+            onKeyDown={(e) => e.key === 'Enter' && handleOpenPreview(e)}
           >
             {/* 预览内容 */}
             <div className="prose prose-sm dark:prose-invert max-w-none line-clamp-3 text-muted-foreground">

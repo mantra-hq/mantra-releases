@@ -5,9 +5,19 @@
  * 测试来源选择组件
  */
 
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { SourceSelector } from "./SourceSelector";
+
+// Mock Tauri IPC
+vi.mock("@/lib/import-ipc", () => ({
+  getDefaultPaths: vi.fn().mockResolvedValue({
+    claude: "~/.claude",
+    gemini: "~/.gemini",
+    cursor: "~/.config/Cursor",
+    codex: "~/.codex",
+  }),
+}));
 
 describe("SourceSelector", () => {
   // Task 2.2: 显示三种来源卡片
@@ -21,10 +31,13 @@ describe("SourceSelector", () => {
     });
 
     // Task 2.3: 每个卡片显示图标、名称、默认路径说明
-    it("displays default paths for each source", () => {
+    it("displays default paths for each source", async () => {
       render(<SourceSelector value={null} onChange={vi.fn()} />);
 
-      expect(screen.getByText("~/.claude")).toBeInTheDocument();
+      // 等待异步路径加载完成
+      await waitFor(() => {
+        expect(screen.getByText("~/.claude")).toBeInTheDocument();
+      });
       expect(screen.getByText("~/.gemini")).toBeInTheDocument();
       expect(screen.getByText("~/.config/Cursor")).toBeInTheDocument();
     });

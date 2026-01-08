@@ -20,6 +20,12 @@ vi.mock("@/lib/import-ipc", () => ({
   parseLogFiles: vi.fn(),
   importSessionsWithProgress: vi.fn(),
   cancelImport: vi.fn(),
+  getDefaultPaths: vi.fn().mockResolvedValue({
+    claude: "~/.claude",
+    gemini: "~/.gemini",
+    cursor: "~/.config/Cursor",
+    codex: "~/.codex",
+  }),
 }));
 
 // Mock project-ipc

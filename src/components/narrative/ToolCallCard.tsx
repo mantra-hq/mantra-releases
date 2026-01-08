@@ -325,7 +325,9 @@ export function ToolCallCard({
         onHover?.(null);
     }, [onHover]);
 
-    const handleClick = React.useCallback(() => {
+    const handleClick = React.useCallback((e: React.MouseEvent) => {
+        // 始终阻止冒泡，避免触发父组件的消息选中逻辑
+        e.stopPropagation();
         onClick?.(toolUseId);
     }, [onClick, toolUseId]);
 
@@ -368,7 +370,7 @@ export function ToolCallCard({
             )}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            onClick={hasClickHandler ? handleClick : undefined}
+            onClick={handleClick}
         >
             {/* 单行紧凑布局 */}
             <div className="flex items-center gap-2 px-3 py-2">

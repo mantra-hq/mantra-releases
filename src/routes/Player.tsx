@@ -35,12 +35,14 @@ import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
-import { useTimeMachine } from "@/hooks/useTimeMachine";
+import { useTimeMachine, type SnapshotResult } from "@/hooks/useTimeMachine";
 // Story 2.12: 使用增强的文件路径提取模块
 import {
   findRecentFilePathEnhanced,
   toRelativePath,
 } from "@/lib/file-path-extractor";
+// Story 2.30: 会话日志文件提取
+import { extractFileFromSession } from "@/lib/session-file-extractor";
 // Story 2.17: TopBar 面包屑导航
 import { TopBar } from "@/components/navigation";
 import { ImportWizard } from "@/components/import";
@@ -105,8 +107,43 @@ export default function Player() {
   // 右侧面板 Tab 管理 (修复 Bash 详情后其他消息点击无响应问题)
   const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
 
-  // Git Time Machine Hook (FR-GIT-002, FR-GIT-003)
-  const { fetchSnapshot } = useTimeMachine(repoPath);
+  // Story 2.30: 会话日志回退函数
+  const sessionFallback = React.useCallback(
+    (filePath: string, timestamp: number): SnapshotResult | null => {
+      if (messages.length === 0) return null;
+
+      // 找到最接近 timestamp 的消息索引
+      const targetTime = timestamp;
+      let nearestIndex = 0;
+      let nearestDiff = Math.abs(new Date(messages[0].timestamp).getTime() - targetTime);
+
+      for (let i = 1; i < messages.length; i++) {
+        const diff = Math.abs(new Date(messages[i].timestamp).getTime() - targetTime);
+        if (diff < nearestDiff) {
+          nearestDiff = diff;
+          nearestIndex = i;
+        }
+      }
+
+      // 尝试从会话消息中提取文件内容
+      const result = extractFileFromSession(messages, filePath, nearestIndex);
+      if (result) {
+        return {
+          content: result.content,
+          commit_hash: "",
+          commit_message: "",
+          commit_timestamp: Math.floor(result.timestamp / 1000),
+          source: "session",
+        };
+      }
+
+      return null;
+    },
+    [messages]
+  );
+
+  // Git Time Machine Hook (FR-GIT-002, FR-GIT-003, Story 2.30: 会话回退)
+  const { fetchSnapshot } = useTimeMachine(repoPath, sessionFallback);
 
   // Story 2.12 AC4: 记录最近有效的文件路径，用于无文件路径时保持视图
   const lastValidFileRef = React.useRef<string | null>(null);
@@ -366,7 +403,11 @@ export default function Player() {
       if (repoPath) {
         const fileResult = findRecentFilePathEnhanced(messages, messageIndex);
 
-        if (fileResult) {
+        // 只有当文件直接来自当前消息时才切换（非 history 来源）
+        // 从历史中找到的文件不应该影响当前视图
+        const shouldSwitchFile = fileResult && fileResult.source !== "history";
+
+        if (shouldSwitchFile && fileResult) {
           // AC #6: 使用增强的绝对路径转相对路径逻辑
           const relativePath = toRelativePath(fileResult.path, repoPath);
 
@@ -398,6 +439,11 @@ export default function Player() {
 
           console.log(
             `[Player] 文件选择: ${relativePath} (来源: ${fileResult.source}, 置信度: ${fileResult.confidence})`
+          );
+        } else if (fileResult && !shouldSwitchFile) {
+          // 历史来源的文件，不切换，保持当前视图
+          console.log(
+            `[Player] 跳过历史文件: ${fileResult.path} (来源: ${fileResult.source})`
           );
         } else if (lastValidFileRef.current) {
           // AC #4: 无文件路径时保持当前视图，仅更新时间点
@@ -440,7 +486,10 @@ export default function Player() {
               nearestEvent.messageIndex
             );
 
-            if (fileResult) {
+            // 只有当文件直接来自当前消息时才切换（非 history 来源）
+            const shouldSwitchFile = fileResult && fileResult.source !== "history";
+
+            if (shouldSwitchFile && fileResult) {
               const relativePath = toRelativePath(fileResult.path, repoPath);
               lastValidFileRef.current = relativePath;
 

@@ -39,6 +39,11 @@ export function ChainOfThought({
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
+  // 阻止事件冒泡，避免触发父组件的消息选中逻辑
+  const handleClick = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <Collapsible.Root
       open={isOpen}
@@ -49,6 +54,7 @@ export function ChainOfThought({
         "pl-3 my-2",
         className
       )}
+      onClick={handleClick}
     >
       <Collapsible.Trigger
         className={cn(

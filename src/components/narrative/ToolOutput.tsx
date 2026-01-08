@@ -152,6 +152,11 @@ export function ToolOutput({
   // 是否显示查看代码按钮
   const showViewCodeButton = !isError && (filePath || looksLikeCode);
 
+  // 阻止事件冒泡，避免触发父组件的消息选中逻辑
+  const handleRootClick = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <Collapsible.Root
       open={isOpen}
@@ -169,6 +174,7 @@ export function ToolOutput({
         className
       )}
       aria-label={isError ? t("message.toolExecuteFailed") : t("message.toolExecuteSuccess")}
+      onClick={handleRootClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

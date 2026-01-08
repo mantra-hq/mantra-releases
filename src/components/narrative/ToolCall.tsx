@@ -118,6 +118,11 @@ export function ToolCall({
   // Read 工具的代码在 tool_result 中，用户需要点击结果的查看按钮
   const showViewCodeButton = isFileOperation && filePath && codeContent;
 
+  // 阻止事件冒泡，避免触发父组件的消息选中逻辑
+  const handleRootClick = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <Collapsible.Root
       open={isOpen}
@@ -127,6 +132,7 @@ export function ToolCall({
         "bg-muted/50 rounded-lg my-2 overflow-hidden",
         className
       )}
+      onClick={handleRootClick}
     >
       {/* 头部区域：使用 flex 容器包裹 Trigger 和独立按钮，避免 button 嵌套 */}
       <div className="flex items-center">

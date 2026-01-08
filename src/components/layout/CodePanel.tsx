@@ -401,8 +401,9 @@ export function CodePanel({
     );
 
     // 当活动标签变化时加载内容
+    // 注意：如果标签已有 content（如 markdown 预览），跳过加载
     React.useEffect(() => {
-        if (activeTab && (onLoadFileContent || repoPath)) {
+        if (activeTab && !activeTab.content && (onLoadFileContent || repoPath)) {
             loadTabContent(activeTab.id, activeTab.path, activeTab.commitHash);
         }
     }, [activeTab, loadTabContent, onLoadFileContent, repoPath]);
