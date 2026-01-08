@@ -36,6 +36,168 @@ pub enum Role {
     Assistant,
 }
 
+/// Standardized tool type enumeration
+///
+/// Unifies tool semantics across different import sources (Claude, Gemini, Cursor, Codex),
+/// eliminating the need for frontend compatibility code.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StandardTool {
+    /// Read file content
+    FileRead {
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        start_line: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        end_line: Option<u32>,
+    },
+
+    /// Write/create file
+    FileWrite {
+        path: String,
+        content: String,
+    },
+
+    /// Edit file content
+    FileEdit {
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        old_string: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        new_string: Option<String>,
+    },
+
+    /// Execute shell command
+    ShellExec {
+        command: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+    },
+
+    /// File search (Glob pattern matching)
+    FileSearch {
+        pattern: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
+
+    /// Content search (Grep text search)
+    ContentSearch {
+        pattern: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
+
+    /// Other/unknown tool (preserves original data)
+    Other {
+        name: String,
+        input: serde_json::Value,
+    },
+}
+
+/// Normalizes a tool call to a StandardTool variant.
+///
+/// Maps tool names from various sources (Claude, Gemini, Cursor, Codex) to
+/// semantic StandardTool types, extracting standardized parameters from input.
+///
+/// # Arguments
+/// * `name` - Original tool name (e.g., "Read", "read_file", "Bash")
+/// * `input` - Tool input parameters as JSON Value
+///
+/// # Returns
+/// Standardized tool type. Unknown tools return `StandardTool::Other`.
+///
+/// # Tool Name Mapping
+/// | StandardTool    | Claude                  | Gemini            | Cursor           | Codex         |
+/// |-----------------|-------------------------|-------------------|------------------|---------------|
+/// | FileRead        | Read, read_file         | read_file         | read_file        | read_file     |
+/// | FileWrite       | Write, write_file       | write_file        | write_file       | write_file    |
+/// | FileEdit        | Edit, edit_file         | edit_file         | edit_file        | apply_diff    |
+/// | ShellExec       | Bash, bash              | run_shell_command | run_terminal_cmd | shell         |
+/// | FileSearch      | Glob, glob              | glob              | -                | search_files  |
+/// | ContentSearch   | Grep, grep              | grep              | -                | -             |
+pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
+    // Helper: extract path from input (supports file_path and path)
+    let get_path = || -> String {
+        input
+            .get("file_path")
+            .or_else(|| input.get("path"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_default()
+    };
+
+    // Helper: extract optional string field
+    let get_str = |key: &str| -> Option<String> {
+        input.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    // Helper: extract optional u32 field (supports both u32 and u64 JSON numbers)
+    let get_u32 = |key: &str| -> Option<u32> {
+        input.get(key).and_then(|v| v.as_u64()).map(|n| n as u32)
+    };
+
+    // Case-insensitive name matching
+    match name.to_lowercase().as_str() {
+        // FileRead: Read, read_file
+        "read" | "read_file" => {
+            let start = get_u32("start_line").or_else(|| get_u32("offset"));
+            // end_line takes priority; if not present, calculate from offset + limit
+            // Note: Claude uses offset (start line) + limit (line count), so end = offset + limit
+            let end = get_u32("end_line").or_else(|| {
+                let offset = get_u32("offset");
+                let limit = get_u32("limit");
+                match (offset, limit) {
+                    (Some(o), Some(l)) => Some(o.saturating_add(l)),
+                    _ => None,
+                }
+            });
+            StandardTool::FileRead {
+                path: get_path(),
+                start_line: start,
+                end_line: end,
+            }
+        }
+
+        // FileWrite: Write, write_file
+        "write" | "write_file" => StandardTool::FileWrite {
+            path: get_path(),
+            content: get_str("content").unwrap_or_default(),
+        },
+
+        // FileEdit: Edit, edit_file, apply_diff
+        "edit" | "edit_file" | "apply_diff" => StandardTool::FileEdit {
+            path: get_path(),
+            old_string: get_str("old_string"),
+            new_string: get_str("new_string").or_else(|| get_str("diff")),
+        },
+
+        // ShellExec: Bash, bash, run_shell_command, run_terminal_cmd, shell
+        "bash" | "run_shell_command" | "run_terminal_cmd" | "shell" => StandardTool::ShellExec {
+            command: get_str("command").unwrap_or_default(),
+            cwd: get_str("cwd").or_else(|| get_str("working_dir")),
+        },
+
+        // FileSearch: Glob, glob, search_files
+        "glob" | "search_files" => StandardTool::FileSearch {
+            pattern: get_str("pattern").unwrap_or_default(),
+            path: get_str("path"),
+        },
+
+        // ContentSearch: Grep, grep
+        "grep" => StandardTool::ContentSearch {
+            pattern: get_str("pattern").unwrap_or_default(),
+            path: get_str("path"),
+        },
+
+        // Unknown tool: preserve original
+        _ => StandardTool::Other {
+            name: name.to_string(),
+            input: input.clone(),
+        },
+    }
+}
+
 /// Content block types in a message
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -54,6 +216,19 @@ pub enum ContentBlock {
         /// Unified correlation ID for pairing with ToolResult
         #[serde(skip_serializing_if = "Option::is_none")]
         correlation_id: Option<String>,
+
+        // === New: Standardized fields ===
+        /// Semantic tool type for unified frontend handling
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        standard_tool: Option<StandardTool>,
+
+        /// UI display name (used by Gemini)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display_name: Option<String>,
+
+        /// Tool description (used by Gemini)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
     },
 
     /// Result from tool execution
@@ -383,6 +558,9 @@ mod tests {
             name: "read_file".to_string(),
             input: serde_json::json!({"path": "/tmp/test.txt"}),
             correlation_id: Some("corr_123".to_string()),
+            standard_tool: None,
+            display_name: None,
+            description: None,
         };
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains(r#""type":"tool_use""#));
@@ -484,6 +662,9 @@ mod tests {
                     name: "write_file".to_string(),
                     input: serde_json::json!({"path": "main.rs", "content": "fn main() {}"}),
                     correlation_id: Some("tool_1".to_string()),
+                    standard_tool: None,
+                    display_name: None,
+                    description: None,
                 },
             ],
         ));
@@ -932,5 +1113,758 @@ mod tests {
         let deserialized: SessionMetadata = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.model, metadata.model);
         assert!(deserialized.git.is_none());
+    }
+
+    // ===== StandardTool 序列化/反序列化测试 =====
+
+    #[test]
+    fn test_standard_tool_file_read_serialization() {
+        let tool = StandardTool::FileRead {
+            path: "/tmp/test.rs".to_string(),
+            start_line: Some(10),
+            end_line: Some(20),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_read""#));
+        assert!(json.contains(r#""path":"/tmp/test.rs""#));
+        assert!(json.contains(r#""start_line":10"#));
+        assert!(json.contains(r#""end_line":20"#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_file_read_skip_none_lines() {
+        let tool = StandardTool::FileRead {
+            path: "/tmp/test.rs".to_string(),
+            start_line: None,
+            end_line: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_read""#));
+        assert!(json.contains(r#""path":"/tmp/test.rs""#));
+        assert!(!json.contains("start_line"));
+        assert!(!json.contains("end_line"));
+    }
+
+    #[test]
+    fn test_standard_tool_file_write_serialization() {
+        let tool = StandardTool::FileWrite {
+            path: "/tmp/output.txt".to_string(),
+            content: "Hello World".to_string(),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_write""#));
+        assert!(json.contains(r#""path":"/tmp/output.txt""#));
+        assert!(json.contains(r#""content":"Hello World""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_file_edit_serialization() {
+        let tool = StandardTool::FileEdit {
+            path: "/tmp/edit.rs".to_string(),
+            old_string: Some("old".to_string()),
+            new_string: Some("new".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_edit""#));
+        assert!(json.contains(r#""path":"/tmp/edit.rs""#));
+        assert!(json.contains(r#""old_string":"old""#));
+        assert!(json.contains(r#""new_string":"new""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_file_edit_skip_none_strings() {
+        let tool = StandardTool::FileEdit {
+            path: "/tmp/edit.rs".to_string(),
+            old_string: None,
+            new_string: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_edit""#));
+        assert!(!json.contains("old_string"));
+        assert!(!json.contains("new_string"));
+    }
+
+    #[test]
+    fn test_standard_tool_shell_exec_serialization() {
+        let tool = StandardTool::ShellExec {
+            command: "ls -la".to_string(),
+            cwd: Some("/home/user".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"shell_exec""#));
+        assert!(json.contains(r#""command":"ls -la""#));
+        assert!(json.contains(r#""cwd":"/home/user""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_shell_exec_skip_none_cwd() {
+        let tool = StandardTool::ShellExec {
+            command: "pwd".to_string(),
+            cwd: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"shell_exec""#));
+        assert!(json.contains(r#""command":"pwd""#));
+        assert!(!json.contains("cwd"));
+    }
+
+    #[test]
+    fn test_standard_tool_file_search_serialization() {
+        let tool = StandardTool::FileSearch {
+            pattern: "*.rs".to_string(),
+            path: Some("/src".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_search""#));
+        assert!(json.contains(r#""pattern":"*.rs""#));
+        assert!(json.contains(r#""path":"/src""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_file_search_skip_none_path() {
+        let tool = StandardTool::FileSearch {
+            pattern: "*.txt".to_string(),
+            path: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_search""#));
+        assert!(json.contains(r#""pattern":"*.txt""#));
+        assert!(!json.contains(r#""path""#));
+    }
+
+    #[test]
+    fn test_standard_tool_content_search_serialization() {
+        let tool = StandardTool::ContentSearch {
+            pattern: "TODO".to_string(),
+            path: Some("/project".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"content_search""#));
+        assert!(json.contains(r#""pattern":"TODO""#));
+        assert!(json.contains(r#""path":"/project""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_content_search_skip_none_path() {
+        let tool = StandardTool::ContentSearch {
+            pattern: "FIXME".to_string(),
+            path: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"content_search""#));
+        assert!(json.contains(r#""pattern":"FIXME""#));
+        assert!(!json.contains(r#""path""#));
+    }
+
+    #[test]
+    fn test_standard_tool_other_serialization() {
+        let tool = StandardTool::Other {
+            name: "custom_tool".to_string(),
+            input: serde_json::json!({"key": "value", "number": 42}),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"other""#));
+        assert!(json.contains(r#""name":"custom_tool""#));
+        assert!(json.contains(r#""input""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_deserialize_file_read_partial() {
+        // Deserialize without optional fields
+        let json = r#"{"type":"file_read","path":"/tmp/test.rs"}"#;
+        let tool: StandardTool = serde_json::from_str(json).unwrap();
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, "/tmp/test.rs");
+                assert!(start_line.is_none());
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead variant"),
+        }
+    }
+
+    #[test]
+    fn test_standard_tool_roundtrip_all_variants() {
+        let tools = vec![
+            StandardTool::FileRead {
+                path: "/test".to_string(),
+                start_line: Some(1),
+                end_line: Some(10),
+            },
+            StandardTool::FileWrite {
+                path: "/test".to_string(),
+                content: "content".to_string(),
+            },
+            StandardTool::FileEdit {
+                path: "/test".to_string(),
+                old_string: Some("old".to_string()),
+                new_string: Some("new".to_string()),
+            },
+            StandardTool::ShellExec {
+                command: "cmd".to_string(),
+                cwd: Some("/dir".to_string()),
+            },
+            StandardTool::FileSearch {
+                pattern: "*.rs".to_string(),
+                path: Some("/src".to_string()),
+            },
+            StandardTool::ContentSearch {
+                pattern: "TODO".to_string(),
+                path: Some("/".to_string()),
+            },
+            StandardTool::Other {
+                name: "custom".to_string(),
+                input: serde_json::json!({}),
+            },
+        ];
+
+        for tool in tools {
+            let json = serde_json::to_string(&tool).unwrap();
+            let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, tool);
+        }
+    }
+
+    // ===== Task 2: ToolUse 向后兼容性测试 =====
+
+    #[test]
+    fn test_tool_use_backward_compat_old_format() {
+        // Old format without new fields (standard_tool, display_name, description)
+        let old_json = r#"{
+            "type": "tool_use",
+            "id": "tool_123",
+            "name": "Read",
+            "input": {"path": "/tmp/test.txt"},
+            "correlation_id": "corr_123"
+        }"#;
+        let block: ContentBlock = serde_json::from_str(old_json).unwrap();
+        match block {
+            ContentBlock::ToolUse {
+                id,
+                name,
+                input,
+                correlation_id,
+                standard_tool,
+                display_name,
+                description,
+            } => {
+                assert_eq!(id, "tool_123");
+                assert_eq!(name, "Read");
+                assert_eq!(input["path"], "/tmp/test.txt");
+                assert_eq!(correlation_id, Some("corr_123".to_string()));
+                // New fields should be None (backward compat)
+                assert!(standard_tool.is_none());
+                assert!(display_name.is_none());
+                assert!(description.is_none());
+            }
+            _ => panic!("Expected ToolUse variant"),
+        }
+    }
+
+    #[test]
+    fn test_tool_use_backward_compat_minimal() {
+        // Minimal old format without correlation_id
+        let old_json = r#"{
+            "type": "tool_use",
+            "id": "tool_456",
+            "name": "Write",
+            "input": {}
+        }"#;
+        let block: ContentBlock = serde_json::from_str(old_json).unwrap();
+        match block {
+            ContentBlock::ToolUse {
+                id,
+                name,
+                correlation_id,
+                standard_tool,
+                display_name,
+                description,
+                ..
+            } => {
+                assert_eq!(id, "tool_456");
+                assert_eq!(name, "Write");
+                assert!(correlation_id.is_none());
+                assert!(standard_tool.is_none());
+                assert!(display_name.is_none());
+                assert!(description.is_none());
+            }
+            _ => panic!("Expected ToolUse variant"),
+        }
+    }
+
+    #[test]
+    fn test_tool_use_with_new_fields() {
+        let block = ContentBlock::ToolUse {
+            id: "tool_789".to_string(),
+            name: "read_file".to_string(),
+            input: serde_json::json!({"path": "/test"}),
+            correlation_id: Some("corr_789".to_string()),
+            standard_tool: Some(StandardTool::FileRead {
+                path: "/test".to_string(),
+                start_line: None,
+                end_line: None,
+            }),
+            display_name: Some("Read File".to_string()),
+            description: Some("Reads file content".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""standard_tool""#));
+        assert!(json.contains(r#""display_name":"Read File""#));
+        assert!(json.contains(r#""description":"Reads file content""#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_tool_use_skip_none_new_fields() {
+        let block = ContentBlock::ToolUse {
+            id: "tool_abc".to_string(),
+            name: "Bash".to_string(),
+            input: serde_json::json!({"command": "ls"}),
+            correlation_id: None,
+            standard_tool: None,
+            display_name: None,
+            description: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        // None fields should be skipped
+        assert!(!json.contains("standard_tool"));
+        assert!(!json.contains("display_name"));
+        assert!(!json.contains("description"));
+        assert!(!json.contains("correlation_id"));
+    }
+
+    // ===== Task 3: normalize_tool 函数测试 =====
+
+    // --- Claude Tool Names ---
+
+    #[test]
+    fn test_normalize_tool_claude_read() {
+        let input = serde_json::json!({"file_path": "/tmp/test.rs"});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, "/tmp/test.rs");
+                assert!(start_line.is_none());
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_read_with_lines() {
+        // offset=10, limit=100 means: start at line 10, read 100 lines
+        // end_line should be offset + limit = 110
+        let input = serde_json::json!({"file_path": "/tmp/test.rs", "offset": 10, "limit": 100});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, "/tmp/test.rs");
+                assert_eq!(start_line, Some(10));
+                assert_eq!(end_line, Some(110)); // 10 + 100 = 110
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_write() {
+        let input = serde_json::json!({"file_path": "/tmp/output.txt", "content": "Hello World"});
+        let tool = normalize_tool("Write", &input);
+        match tool {
+            StandardTool::FileWrite { path, content } => {
+                assert_eq!(path, "/tmp/output.txt");
+                assert_eq!(content, "Hello World");
+            }
+            _ => panic!("Expected FileWrite"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_edit() {
+        let input = serde_json::json!({"file_path": "/tmp/edit.rs", "old_string": "old", "new_string": "new"});
+        let tool = normalize_tool("Edit", &input);
+        match tool {
+            StandardTool::FileEdit { path, old_string, new_string } => {
+                assert_eq!(path, "/tmp/edit.rs");
+                assert_eq!(old_string, Some("old".to_string()));
+                assert_eq!(new_string, Some("new".to_string()));
+            }
+            _ => panic!("Expected FileEdit"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_bash() {
+        let input = serde_json::json!({"command": "ls -la"});
+        let tool = normalize_tool("Bash", &input);
+        match tool {
+            StandardTool::ShellExec { command, cwd } => {
+                assert_eq!(command, "ls -la");
+                assert!(cwd.is_none());
+            }
+            _ => panic!("Expected ShellExec"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_glob() {
+        let input = serde_json::json!({"pattern": "*.rs", "path": "/src"});
+        let tool = normalize_tool("Glob", &input);
+        match tool {
+            StandardTool::FileSearch { pattern, path } => {
+                assert_eq!(pattern, "*.rs");
+                assert_eq!(path, Some("/src".to_string()));
+            }
+            _ => panic!("Expected FileSearch"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_claude_grep() {
+        let input = serde_json::json!({"pattern": "TODO", "path": "/project"});
+        let tool = normalize_tool("Grep", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, path } => {
+                assert_eq!(pattern, "TODO");
+                assert_eq!(path, Some("/project".to_string()));
+            }
+            _ => panic!("Expected ContentSearch"),
+        }
+    }
+
+    // --- Gemini Tool Names ---
+
+    #[test]
+    fn test_normalize_tool_gemini_read_file() {
+        let input = serde_json::json!({"path": "/tmp/test.rs"});
+        let tool = normalize_tool("read_file", &input);
+        match tool {
+            StandardTool::FileRead { path, .. } => {
+                assert_eq!(path, "/tmp/test.rs");
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_gemini_write_file() {
+        let input = serde_json::json!({"path": "/tmp/output.txt", "content": "Hello"});
+        let tool = normalize_tool("write_file", &input);
+        match tool {
+            StandardTool::FileWrite { path, content } => {
+                assert_eq!(path, "/tmp/output.txt");
+                assert_eq!(content, "Hello");
+            }
+            _ => panic!("Expected FileWrite"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_gemini_edit_file() {
+        let input = serde_json::json!({"path": "/tmp/edit.rs", "old_string": "a", "new_string": "b"});
+        let tool = normalize_tool("edit_file", &input);
+        match tool {
+            StandardTool::FileEdit { path, old_string, new_string } => {
+                assert_eq!(path, "/tmp/edit.rs");
+                assert_eq!(old_string, Some("a".to_string()));
+                assert_eq!(new_string, Some("b".to_string()));
+            }
+            _ => panic!("Expected FileEdit"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_gemini_run_shell_command() {
+        let input = serde_json::json!({"command": "pwd"});
+        let tool = normalize_tool("run_shell_command", &input);
+        match tool {
+            StandardTool::ShellExec { command, cwd } => {
+                assert_eq!(command, "pwd");
+                assert!(cwd.is_none());
+            }
+            _ => panic!("Expected ShellExec"),
+        }
+    }
+
+    // --- Cursor Tool Names ---
+
+    #[test]
+    fn test_normalize_tool_cursor_run_terminal_cmd() {
+        let input = serde_json::json!({"command": "npm install", "cwd": "/project"});
+        let tool = normalize_tool("run_terminal_cmd", &input);
+        match tool {
+            StandardTool::ShellExec { command, cwd } => {
+                assert_eq!(command, "npm install");
+                assert_eq!(cwd, Some("/project".to_string()));
+            }
+            _ => panic!("Expected ShellExec"),
+        }
+    }
+
+    // --- Codex Tool Names ---
+
+    #[test]
+    fn test_normalize_tool_codex_shell() {
+        let input = serde_json::json!({"command": "cargo build", "cwd": "/workspace"});
+        let tool = normalize_tool("shell", &input);
+        match tool {
+            StandardTool::ShellExec { command, cwd } => {
+                assert_eq!(command, "cargo build");
+                assert_eq!(cwd, Some("/workspace".to_string()));
+            }
+            _ => panic!("Expected ShellExec"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_codex_apply_diff() {
+        let input = serde_json::json!({"path": "/tmp/file.rs", "diff": "@@ -1,3 +1,4 @@"});
+        let tool = normalize_tool("apply_diff", &input);
+        match tool {
+            StandardTool::FileEdit { path, old_string, new_string } => {
+                assert_eq!(path, "/tmp/file.rs");
+                assert!(old_string.is_none());
+                assert_eq!(new_string, Some("@@ -1,3 +1,4 @@".to_string()));
+            }
+            _ => panic!("Expected FileEdit"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_codex_search_files() {
+        let input = serde_json::json!({"pattern": "*.md", "path": "/docs"});
+        let tool = normalize_tool("search_files", &input);
+        match tool {
+            StandardTool::FileSearch { pattern, path } => {
+                assert_eq!(pattern, "*.md");
+                assert_eq!(path, Some("/docs".to_string()));
+            }
+            _ => panic!("Expected FileSearch"),
+        }
+    }
+
+    // --- Case Insensitive ---
+
+    #[test]
+    fn test_normalize_tool_case_insensitive() {
+        // Test various case combinations
+        let input = serde_json::json!({"file_path": "/tmp/test"});
+
+        let tool1 = normalize_tool("READ", &input);
+        let tool2 = normalize_tool("Read", &input);
+        let tool3 = normalize_tool("read", &input);
+
+        match (&tool1, &tool2, &tool3) {
+            (
+                StandardTool::FileRead { path: p1, .. },
+                StandardTool::FileRead { path: p2, .. },
+                StandardTool::FileRead { path: p3, .. },
+            ) => {
+                assert_eq!(p1, p2);
+                assert_eq!(p2, p3);
+            }
+            _ => panic!("Expected all FileRead"),
+        }
+    }
+
+    // --- Unknown Tool ---
+
+    #[test]
+    fn test_normalize_tool_unknown() {
+        let input = serde_json::json!({"custom_param": "value"});
+        let tool = normalize_tool("CustomTool", &input);
+        match tool {
+            StandardTool::Other { name, input: tool_input } => {
+                assert_eq!(name, "CustomTool");
+                assert_eq!(tool_input["custom_param"], "value");
+            }
+            _ => panic!("Expected Other"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_mcp_tool() {
+        let input = serde_json::json!({"query": "test"});
+        let tool = normalize_tool("mcp__deepwiki__ask_question", &input);
+        match tool {
+            StandardTool::Other { name, input: tool_input } => {
+                assert_eq!(name, "mcp__deepwiki__ask_question");
+                assert_eq!(tool_input["query"], "test");
+            }
+            _ => panic!("Expected Other"),
+        }
+    }
+
+    // --- Edge Cases ---
+
+    #[test]
+    fn test_normalize_tool_empty_input() {
+        let input = serde_json::json!({});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, ""); // Default empty string
+                assert!(start_line.is_none());
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_path_priority() {
+        // file_path should take priority over path
+        let input = serde_json::json!({"file_path": "/from/file_path", "path": "/from/path"});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { path, .. } => {
+                assert_eq!(path, "/from/file_path");
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_start_end_line_priority() {
+        // start_line/end_line should take priority over offset/limit
+        let input = serde_json::json!({
+            "path": "/test",
+            "start_line": 5,
+            "end_line": 10,
+            "offset": 1,
+            "limit": 100
+        });
+        let tool = normalize_tool("read_file", &input);
+        match tool {
+            StandardTool::FileRead { start_line, end_line, .. } => {
+                assert_eq!(start_line, Some(5));
+                assert_eq!(end_line, Some(10));
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    // ===== Edge Case Tests (MEDIUM-4 coverage) =====
+
+    #[test]
+    fn test_normalize_tool_limit_only_without_offset() {
+        // When only limit is present (no offset), end_line should be None
+        // because we can't calculate end without knowing the start
+        let input = serde_json::json!({"path": "/test", "limit": 100});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { start_line, end_line, .. } => {
+                assert!(start_line.is_none());
+                assert!(end_line.is_none()); // Cannot calculate without offset
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_offset_only_without_limit() {
+        // When only offset is present (no limit), end_line should be None
+        let input = serde_json::json!({"path": "/test", "offset": 10});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { start_line, end_line, .. } => {
+                assert_eq!(start_line, Some(10));
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_string_number_ignored() {
+        // String numbers should be ignored (not parsed)
+        let input = serde_json::json!({"path": "/test", "start_line": "10", "end_line": "20"});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { start_line, end_line, .. } => {
+                assert!(start_line.is_none()); // String "10" is not parsed as number
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_null_content() {
+        // Explicit null content should result in empty string
+        let input = serde_json::json!({"path": "/test", "content": null});
+        let tool = normalize_tool("Write", &input);
+        match tool {
+            StandardTool::FileWrite { content, .. } => {
+                assert_eq!(content, ""); // null becomes empty string
+            }
+            _ => panic!("Expected FileWrite"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_non_object_input() {
+        // Non-object input (string) should still work, fields will be empty/None
+        let input = serde_json::json!("not an object");
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, ""); // No path field
+                assert!(start_line.is_none());
+                assert!(end_line.is_none());
+            }
+            _ => panic!("Expected FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_null_input() {
+        // Null input should still work
+        let input = serde_json::Value::Null;
+        let tool = normalize_tool("Bash", &input);
+        match tool {
+            StandardTool::ShellExec { command, cwd } => {
+                assert_eq!(command, "");
+                assert!(cwd.is_none());
+            }
+            _ => panic!("Expected ShellExec"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_overflow_protection() {
+        // Test saturating_add prevents overflow
+        let input = serde_json::json!({"path": "/test", "offset": u32::MAX, "limit": 100});
+        let tool = normalize_tool("Read", &input);
+        match tool {
+            StandardTool::FileRead { end_line, .. } => {
+                assert_eq!(end_line, Some(u32::MAX)); // saturating_add caps at MAX
+            }
+            _ => panic!("Expected FileRead"),
+        }
     }
 }

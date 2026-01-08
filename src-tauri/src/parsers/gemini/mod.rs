@@ -197,6 +197,9 @@ impl GeminiParser {
                     name: tool_call.name.clone(),
                     input: tool_call.args.clone(),
                     correlation_id: correlation_id.clone(),
+                    standard_tool: None,
+                    display_name: None,
+                    description: None,
                 });
 
                 // Add ToolResult if available

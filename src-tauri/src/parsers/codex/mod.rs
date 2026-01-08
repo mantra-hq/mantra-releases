@@ -195,6 +195,9 @@ impl CodexParser {
                     name,
                     input,
                     correlation_id: Some(call_id),
+                    standard_tool: None,
+                    display_name: None,
+                    description: None,
                 }];
 
                 messages.push(Message {

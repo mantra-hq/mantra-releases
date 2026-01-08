@@ -237,6 +237,9 @@ impl CursorParser {
                     name: name.clone(),
                     input,
                     correlation_id: correlation_id.clone(),
+                    standard_tool: None,
+                    display_name: None,
+                    description: None,
                 });
 
                 // Add ToolResult if result exists
@@ -262,6 +265,9 @@ impl CursorParser {
                         name: name.clone(),
                         input: serde_json::json!({}),
                         correlation_id: correlation_id.clone(),
+                        standard_tool: None,
+                        display_name: None,
+                        description: None,
                     });
 
                     if let Some(result) = &tool_result.result {

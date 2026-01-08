@@ -286,7 +286,7 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             let name = block.get("name")?.as_str()?.to_string();
             let input = block.get("input")?.clone();
             // Use id as correlation_id (Claude's tool_use_id is the correlation key)
-            Some(ContentBlock::ToolUse { id: id.clone(), name, input, correlation_id: Some(id) })
+            Some(ContentBlock::ToolUse { id: id.clone(), name, input, correlation_id: Some(id), standard_tool: None, display_name: None, description: None })
         }
         "tool_result" => {
             let tool_use_id = block.get("tool_use_id")?.as_str()?.to_string();
@@ -527,6 +527,9 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
             name: name.clone(),
             input: input.clone(),
             correlation_id: Some(id.clone()),
+            standard_tool: None,
+            display_name: None,
+            description: None,
         },
         ClaudeContentBlock::ToolResult {
             tool_use_id,
