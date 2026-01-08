@@ -388,4 +388,185 @@ describe("useTimeMachine", () => {
             expect(mockSetError).not.toHaveBeenCalled();
         });
     });
+
+    describe("sessionFallback (Story 2.30)", () => {
+        it("文件不存在时应该调用 sessionFallback", async () => {
+            // 模拟 IPC 返回文件不存在错误
+            vi.mocked(invoke).mockRejectedValueOnce({
+                code: "FILE_NOT_FOUND",
+                message: "File not found in Git history",
+            });
+
+            // 模拟 sessionFallback 返回会话内容
+            const sessionFallbackResult = {
+                content: "session content",
+                commit_hash: "",
+                commit_message: "",
+                commit_timestamp: 1735500000,
+                source: "session" as const,
+            };
+            const mockSessionFallback = vi.fn().mockReturnValue(sessionFallbackResult);
+
+            const { result } = renderHook(() =>
+                useTimeMachine("/repo/path", mockSessionFallback)
+            );
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                const snapshot = await result.current.fetchSnapshot(
+                    uniqueFile,
+                    1735500000000
+                );
+                expect(snapshot).toEqual(sessionFallbackResult);
+            });
+
+            // sessionFallback 应该被调用
+            expect(mockSessionFallback).toHaveBeenCalledWith(uniqueFile, 1735500000000);
+
+            // 状态应该更新为会话内容
+            expect(mockSetCode).toHaveBeenCalledWith("session content", uniqueFile);
+            expect(mockSetSnapshotSource).toHaveBeenCalledWith("session");
+        });
+
+        it("sessionFallback 返回 null 时应该设置 fileNotFound", async () => {
+            vi.mocked(invoke).mockRejectedValueOnce({
+                code: "FILE_NOT_FOUND",
+                message: "File not found",
+            });
+
+            // sessionFallback 返回 null (会话中也没有)
+            const mockSessionFallback = vi.fn().mockReturnValue(null);
+
+            const { result } = renderHook(() =>
+                useTimeMachine("/repo/path", mockSessionFallback)
+            );
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            // sessionFallback 应该被调用
+            expect(mockSessionFallback).toHaveBeenCalled();
+
+            // 应该设置文件不存在状态
+            expect(mockSetFileNotFound).toHaveBeenCalledWith(uniqueFile, 1735500000);
+        });
+
+        it("非文件不存在错误不应该调用 sessionFallback", async () => {
+            vi.mocked(invoke).mockRejectedValueOnce({
+                code: "GIT_ERROR",
+                message: "Git operation failed",
+            });
+
+            const mockSessionFallback = vi.fn();
+
+            const { result } = renderHook(() =>
+                useTimeMachine("/repo/path", mockSessionFallback)
+            );
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            // sessionFallback 不应该被调用 (因为错误不是文件不存在)
+            expect(mockSessionFallback).not.toHaveBeenCalled();
+
+            // 应该设置普通错误
+            expect(mockSetError).toHaveBeenCalledWith("Git 操作失败");
+        });
+
+        it("sessionFallback 成功时应该缓存结果", async () => {
+            vi.mocked(invoke).mockRejectedValueOnce({
+                code: "FILE_NOT_FOUND",
+                message: "File not found",
+            });
+
+            const sessionFallbackResult = {
+                content: "cached session content",
+                commit_hash: "",
+                commit_message: "",
+                commit_timestamp: 1735500000,
+                source: "session" as const,
+            };
+            const mockSessionFallback = vi.fn().mockReturnValue(sessionFallbackResult);
+
+            const { result } = renderHook(() =>
+                useTimeMachine("/repo/path", mockSessionFallback)
+            );
+            const uniqueFile = getUniqueFilePath();
+            const uniqueTimestamp = Date.now();
+
+            // 第一次请求
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, uniqueTimestamp);
+            });
+
+            // 清除 mock
+            vi.mocked(invoke).mockClear();
+            mockSessionFallback.mockClear();
+            mockSetCode.mockClear();
+
+            // 第二次请求 (应该命中缓存)
+            await act(async () => {
+                const snapshot = await result.current.fetchSnapshot(
+                    uniqueFile,
+                    uniqueTimestamp
+                );
+                expect(snapshot).toEqual(sessionFallbackResult);
+            });
+
+            // 不应该再次调用 invoke 或 sessionFallback
+            expect(invoke).not.toHaveBeenCalled();
+            expect(mockSessionFallback).not.toHaveBeenCalled();
+
+            // 应该从缓存更新状态
+            expect(mockSetCode).toHaveBeenCalledWith("cached session content", uniqueFile);
+        });
+    });
+
+    describe("snapshotSource (Story 2.30)", () => {
+        it("Git 来源应该设置 source 为 git", async () => {
+            const mockResult = {
+                content: "git content",
+                commit_hash: "abc123",
+                commit_message: "commit",
+                commit_timestamp: 1735500000,
+                source: "git" as const,
+            };
+
+            vi.mocked(invoke).mockResolvedValueOnce(mockResult);
+
+            const { result } = renderHook(() => useTimeMachine("/repo/path"));
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            expect(mockSetSnapshotSource).toHaveBeenCalledWith("git");
+        });
+
+        it("Workdir 来源应该设置 source 为 workdir", async () => {
+            const mockResult = {
+                content: "workdir content",
+                commit_hash: "",
+                commit_message: "",
+                commit_timestamp: 1735500000,
+                source: "workdir" as const,
+            };
+
+            vi.mocked(invoke).mockResolvedValueOnce(mockResult);
+
+            const { result } = renderHook(() => useTimeMachine("/repo/path"));
+            const uniqueFile = getUniqueFilePath();
+
+            await act(async () => {
+                await result.current.fetchSnapshot(uniqueFile, 1735500000000);
+            });
+
+            expect(mockSetSnapshotSource).toHaveBeenCalledWith("workdir");
+        });
+    });
 });

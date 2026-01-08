@@ -152,6 +152,99 @@ describe("Breadcrumbs", () => {
             expect(screen.getByText("src")).toBeInTheDocument();
         });
     });
+
+    describe("快照来源 badge (Story 2.30 AC #4)", () => {
+        // 注意: snapshotSource badge 在右侧工具区显示，需要提供触发条件 (timestamp/hasDiffData/isMarkdown)
+
+        it("snapshotSource 为 git 时不显示 badge", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource="git"
+                />
+            );
+
+            // Git 来源是默认，不显示 badge
+            expect(screen.queryByText("当前版本")).not.toBeInTheDocument();
+            expect(screen.queryByText("Current Version")).not.toBeInTheDocument();
+            expect(screen.queryByText("会话记录")).not.toBeInTheDocument();
+            expect(screen.queryByText("Session Record")).not.toBeInTheDocument();
+        });
+
+        it("snapshotSource 为 workdir 时显示蓝色 badge", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource="workdir"
+                />
+            );
+
+            // 应该显示 "当前版本" badge
+            const badge = screen.getByText("当前版本");
+            expect(badge).toBeInTheDocument();
+            // 验证是蓝色样式
+            expect(badge).toHaveClass("bg-blue-100");
+        });
+
+        it("snapshotSource 为 session 时显示琥珀色 badge", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource="session"
+                />
+            );
+
+            // 应该显示 "会话记录" badge
+            const badge = screen.getByText("会话记录");
+            expect(badge).toBeInTheDocument();
+            // 验证是琥珀色样式
+            expect(badge).toHaveClass("bg-amber-100");
+        });
+
+        it("snapshotSource 为 null 时不显示 badge", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource={null}
+                />
+            );
+
+            expect(screen.queryByText("当前版本")).not.toBeInTheDocument();
+            expect(screen.queryByText("会话记录")).not.toBeInTheDocument();
+        });
+
+        it("workdir badge 应该有 tooltip", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource="workdir"
+                />
+            );
+
+            const badge = screen.getByText("当前版本");
+            // 验证 title 属性存在 (用于 tooltip)
+            expect(badge.closest("span")).toHaveAttribute("title");
+        });
+
+        it("session badge 应该有 tooltip", () => {
+            render(
+                <Breadcrumbs
+                    filePath="src/App.tsx"
+                    timestamp={Date.now()}
+                    snapshotSource="session"
+                />
+            );
+
+            const badge = screen.getByText("会话记录");
+            // 验证 title 属性存在 (用于 tooltip)
+            expect(badge.closest("span")).toHaveAttribute("title");
+        });
+    });
 });
 
 

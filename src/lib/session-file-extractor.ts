@@ -43,8 +43,9 @@ function extractWriteToolContent(
                 toolName === "create_file" ||
                 toolName === "createfile"
             ) {
-                // 尝试从 input 中获取文件路径和内容
-                const input = block.input as Record<string, unknown> | undefined;
+                // 尝试从 toolInput 中获取文件路径和内容
+                // 注意: ContentBlock 使用 toolInput 而不是 input
+                const input = block.toolInput as Record<string, unknown> | undefined;
                 if (input) {
                     const filePath =
                         (input.file_path as string) ||
@@ -68,12 +69,16 @@ function extractWriteToolContent(
         }
 
         // 检查 ToolResult 块（某些格式可能在 result 中包含内容）
+        // 注意: ContentBlock 使用 content 字段存储工具结果内容
+        // Read 工具的输出可能带有行号前缀，需要去除
         if (block.type === "tool_result" && block.associatedFilePath) {
             const normalizedTarget = normalizePath(targetPath);
             const normalizedPath = normalizePath(block.associatedFilePath);
 
-            if (normalizedPath === normalizedTarget && block.rawContent) {
-                return { content: block.rawContent, path: block.associatedFilePath };
+            if (normalizedPath === normalizedTarget && block.content) {
+                // 去除可能存在的行号前缀 (如 "1→", "42|" 等)
+                const cleanContent = stripLineNumberPrefix(block.content);
+                return { content: cleanContent, path: block.associatedFilePath };
             }
         }
     }
@@ -89,6 +94,35 @@ function normalizePath(path: string): string {
         .replace(/^\.\//, "")
         .replace(/^\//, "")
         .toLowerCase();
+}
+
+/**
+ * 去除行号前缀 (如 "1→", "42|", "  123→" 等格式)
+ * 
+ * tool_result 中的内容可能带有 Claude 的行号格式:
+ * - "1→import ..." 或 "1|import ..."
+ * - 行号可能有前导空格用于对齐
+ */
+function stripLineNumberPrefix(content: string): string {
+    const lines = content.split('\n');
+    
+    // 检测是否大部分行都有行号前缀（避免误处理）
+    const lineNumberPattern = /^\s*\d+[→|]/;
+    const linesWithPrefix = lines.filter(line => lineNumberPattern.test(line)).length;
+    
+    // 如果超过 50% 的非空行有行号前缀，才进行处理
+    const nonEmptyLines = lines.filter(line => line.trim().length > 0).length;
+    if (nonEmptyLines === 0 || linesWithPrefix / nonEmptyLines < 0.5) {
+        return content;
+    }
+    
+    return lines
+        .map(line => {
+            // 匹配 "空格+数字+→或|" 格式，提取后面的内容
+            const match = line.match(/^\s*\d+[→|](.*)$/);
+            return match ? match[1] : line;
+        })
+        .join('\n');
 }
 
 /**

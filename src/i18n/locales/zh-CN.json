@@ -238,7 +238,9 @@
     "quickOpenOpen": "打开",
     "quickOpenClose": "关闭",
     "snapshotSourceWorkdir": "当前版本",
-    "snapshotSourceSession": "会话记录"
+    "snapshotSourceWorkdirTooltip": "文件在 Git 历史中不存在，显示的是工作目录中的当前版本",
+    "snapshotSourceSession": "会话记录",
+    "snapshotSourceSessionTooltip": "文件内容来自会话日志中的工具调用记录"
   },
   "git": {
     "loading": "加载中...",

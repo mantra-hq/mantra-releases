@@ -238,7 +238,9 @@
     "quickOpenOpen": "Open",
     "quickOpenClose": "Close",
     "snapshotSourceWorkdir": "Current Version",
-    "snapshotSourceSession": "Session Record"
+    "snapshotSourceWorkdirTooltip": "File does not exist in Git history, showing current version from working directory",
+    "snapshotSourceSession": "Session Record",
+    "snapshotSourceSessionTooltip": "File content extracted from tool calls in session log"
   },
   "git": {
     "loading": "Loading...",
