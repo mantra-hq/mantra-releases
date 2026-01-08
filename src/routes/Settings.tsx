@@ -7,8 +7,9 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2, Globe, BookOpen } from 'lucide-react';
 import { RuleList } from '@/components/settings/RuleList';
 import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
@@ -108,30 +109,75 @@ export function Settings() {
                         <h2 className="text-lg font-semibold mb-3">
                             {t("settings.helpSection")}
                         </h2>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium">
-                                    {t("settings.copyLogs")}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    {t("settings.logsDescription")}
-                                </p>
+                        <div className="space-y-3">
+                            {/* 官方网站链接 */}
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        {t("settings.officialWebsite")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("settings.officialWebsiteDesc")}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openUrl("https://mantra.gonewx.com")}
+                                    className="gap-2"
+                                    data-testid="official-website-button"
+                                >
+                                    <Globe className="h-4 w-4" />
+                                    {t("common.open")}
+                                </Button>
                             </div>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleCopyLogs}
-                                disabled={isCopyingLogs}
-                                className="gap-2"
-                                data-testid="copy-logs-button"
-                            >
-                                {isCopyingLogs ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <ClipboardCopy className="h-4 w-4" />
-                                )}
-                                {t("common.copy")}
-                            </Button>
+                            {/* 帮助文档链接 */}
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        {t("settings.documentation")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("settings.documentationDesc")}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openUrl("https://mantra.gonewx.com/docs")}
+                                    className="gap-2"
+                                    data-testid="documentation-button"
+                                >
+                                    <BookOpen className="h-4 w-4" />
+                                    {t("common.open")}
+                                </Button>
+                            </div>
+                            {/* 复制运行日志 */}
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        {t("settings.copyLogs")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("settings.logsDescription")}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleCopyLogs}
+                                    disabled={isCopyingLogs}
+                                    className="gap-2"
+                                    data-testid="copy-logs-button"
+                                >
+                                    {isCopyingLogs ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <ClipboardCopy className="h-4 w-4" />
+                                    )}
+                                    {t("common.copy")}
+                                </Button>
+                            </div>
                         </div>
                     </section>
 
