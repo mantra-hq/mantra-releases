@@ -33,16 +33,22 @@
 
 ### 2. 创建 Personal Access Token (PAT)
 
-1. 前往 GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. 点击 "Generate new token"
-3. 配置：
+> ⚠️ **注意**: PAT 在**个人账户设置**中创建，不是仓库设置！
+
+1. 点击 GitHub 右上角你的**头像** → **Settings**（账户设置）
+2. 左侧菜单滚动到底部，点击 **Developer settings**
+3. 选择 **Personal access tokens** → **Fine-grained tokens**
+4. 点击 **Generate new token**
+5. 配置：
    - **Token name**: `mantra-release-publisher`
    - **Expiration**: 根据需要设置（建议 90 天，并设置提醒更新）
-   - **Repository access**: 选择 "Only select repositories"，然后选择公开发布仓库
-   - **Permissions**:
+   - **Repository access**: 选择 "Only select repositories"，然后选择公开发布仓库 `gonewx/mantra-releases`
+   - **Permissions**（在 Repository permissions 下）:
      - **Contents**: Read and write（用于创建 Release）
      - **Metadata**: Read-only（必需）
-4. 生成并复制 Token
+6. 点击 **Generate token** 并复制 Token
+
+💡 **快捷链接**: https://github.com/settings/tokens?type=beta
 
 ### 3. 配置私有仓库的 Secrets 和 Variables
 

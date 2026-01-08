@@ -1,0 +1,73 @@
+name: Publish to Public Repository
+
+# 此工作流用于将已发布的版本同步到公开仓库，无需重新构建
+# 使用场景：
+# 1. 私有仓库已有 Release，但公开仓库发布失败
+# 2. 手动选择同步某个版本到公开仓库
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., v0.1.0-alpha.1)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: vars.PUBLIC_RELEASE_REPO != ''
+
+    steps:
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Error: Version must start with 'v' followed by semver (e.g., v0.1.0)"
+            exit 1
+          fi
+
+      - name: Download release assets from private repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release-files
+          
+          # 获取 Release 信息
+          RELEASE_INFO=$(gh release view ${{ inputs.version }} --repo ${{ github.repository }} --json assets)
+          
+          if [ -z "$RELEASE_INFO" ]; then
+            echo "Error: Release ${{ inputs.version }} not found in private repo"
+            exit 1
+          fi
+          
+          # 下载所有资产
+          gh release download ${{ inputs.version }} --repo ${{ github.repository }} --dir release-files --pattern '*'
+          
+          echo "Downloaded files:"
+          ls -la release-files/
+
+      - name: Create Release in Public Repository
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.PUBLIC_RELEASE_REPO }}
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          tag_name: ${{ inputs.version }}
+          name: Mantra ${{ inputs.version }}
+          files: release-files/*
+          draft: false
+          prerelease: ${{ contains(inputs.version, '-') }}
+          body: |
+            ## Mantra ${{ inputs.version }}
+            
+            ### 下载 / Download
+            
+            | 平台 / Platform | 文件 / File |
+            |-----------------|-------------|
+            | **macOS (Apple Silicon)** | `Mantra_*_macos-arm64.dmg` |
+            | **macOS (Intel)** | `Mantra_*_macos-x64.dmg` |
+            | **Windows** | `.msi` 或 `.exe` |
+            | **Linux** | `.AppImage` 或 `.deb` |
+            
+            ---
+            
+            > 📦 同步自私有仓库 / Synced from private repository

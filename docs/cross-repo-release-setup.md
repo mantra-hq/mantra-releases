@@ -33,16 +33,22 @@ This guide explains how to configure GitHub Actions in a private repository to p
 
 ### 2. Create Personal Access Token (PAT)
 
-1. Go to GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Click "Generate new token"
-3. Configure:
+> ⚠️ **Note**: PAT is created in **personal account settings**, not repository settings!
+
+1. Click your **avatar** in the top-right corner of GitHub → **Settings** (account settings)
+2. Scroll to the bottom of the left menu, click **Developer settings**
+3. Select **Personal access tokens** → **Fine-grained tokens**
+4. Click **Generate new token**
+5. Configure:
    - **Token name**: `mantra-release-publisher`
    - **Expiration**: Set as needed (recommend 90 days with reminder)
-   - **Repository access**: Select "Only select repositories", then choose the public release repo
-   - **Permissions**:
+   - **Repository access**: Select "Only select repositories", then choose the public release repo `gonewx/mantra-releases`
+   - **Permissions** (under Repository permissions):
      - **Contents**: Read and write (for creating releases)
      - **Metadata**: Read-only (required)
-4. Generate and copy the token
+6. Click **Generate token** and copy the token
+
+💡 **Quick link**: https://github.com/settings/tokens?type=beta
 
 ### 3. Configure Private Repository Secrets and Variables
 
