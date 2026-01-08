@@ -210,13 +210,32 @@ flowchart TB
 
 ## 平台说明
 
-### macOS 图标生成
+### macOS 安装指南
 
-`.icns` 文件必须在 macOS 上使用 `iconutil` 生成。如果要发布 macOS 版本，请运行：
+由于 Mantra 目前未进行 Apple 代码签名，首次打开时 macOS 会显示"无法验证开发者"警告。请使用以下方法之一运行：
+
+#### 方法一：右键菜单打开（推荐）
+
+1. 在 **访达 (Finder)** 中找到 Mantra.app
+2. 按住 **Control** 键点击应用图标（或右键点击）
+3. 在弹出菜单中选择 **"打开"**
+4. 在确认对话框中再次点击 **"打开"**
+
+> 系统会记住此偏好，之后可直接双击运行。
+
+#### 方法二：系统设置授权
+
+如果已双击过应用并看到警告：
+
+1. 打开 **系统设置** → **隐私与安全性**
+2. 向下滚动到"安全性"部分
+3. 找到关于 Mantra 被阻止的提示
+4. 点击 **"仍要打开"** 并输入密码确认
+
+#### 方法三：命令行移除隔离属性
 
 ```bash
-cd apps/client/src-tauri/icons
-iconutil -c icns icon.iconset
+xattr -cr /Applications/Mantra.app
 ```
 
 ## 相关文档

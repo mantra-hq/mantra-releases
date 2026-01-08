@@ -130,6 +130,14 @@ Use **"Publish to Public Repository"** workflow to re-sync.
 2. Delete the Release from private repo
 3. Delete Git Tag: `git push origin :refs/tags/v0.1.0`
 
+### macOS Shows "Unverified Developer" Warning?
+
+Since Mantra is not currently Apple code-signed, first launch requires manual authorization:
+
+1. **Right-click open**: Control-click the app in Finder → Select "Open" → Click "Open" again
+2. **System Settings**: System Settings → Privacy & Security → Find the blocked message → Click "Open Anyway"
+3. **Terminal**: `xattr -cr /Applications/Mantra.app`
+
 ---
 
 ## Related Files

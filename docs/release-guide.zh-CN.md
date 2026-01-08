@@ -130,6 +130,14 @@ git push origin v0.1.0
 2. 删除私有仓库的 Release
 3. 删除 Git Tag：`git push origin :refs/tags/v0.1.0`
 
+### macOS 显示"无法验证开发者"？
+
+由于 Mantra 目前未进行 Apple 代码签名，首次打开需要手动授权：
+
+1. **右键打开**：在访达中按住 Control 键点击应用 → 选择"打开" → 再次点击"打开"
+2. **系统设置**：系统设置 → 隐私与安全性 → 找到 Mantra 被阻止的提示 → 点击"仍要打开"
+3. **命令行**：`xattr -cr /Applications/Mantra.app`
+
 ---
 
 ## 相关文件

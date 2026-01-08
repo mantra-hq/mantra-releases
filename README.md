@@ -210,13 +210,32 @@ Recommended VS Code extensions:
 
 ## Platform Notes
 
-### macOS Icon Generation
+### macOS Installation Guide
 
-The `.icns` file must be generated on macOS using `iconutil`. If releasing for macOS, run:
+Since Mantra is not currently Apple code-signed, macOS will display an "unverified developer" warning on first launch. Use one of the following methods to run:
+
+#### Method 1: Open via Right-Click Menu (Recommended)
+
+1. Locate Mantra.app in **Finder**
+2. **Control-click** the app icon (or right-click)
+3. Select **"Open"** from the context menu
+4. Click **"Open"** again in the confirmation dialog
+
+> The system will remember this preference for future launches.
+
+#### Method 2: Authorize in System Settings
+
+If you've already double-clicked the app and seen the warning:
+
+1. Open **System Settings** → **Privacy & Security**
+2. Scroll down to the "Security" section
+3. Find the message about Mantra being blocked
+4. Click **"Open Anyway"** and enter your password
+
+#### Method 3: Remove Quarantine via Terminal
 
 ```bash
-cd apps/client/src-tauri/icons
-iconutil -c icns icon.iconset
+xattr -cr /Applications/Mantra.app
 ```
 
 ## Related Documentation
