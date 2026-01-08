@@ -17,6 +17,25 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { DiscoveredFile, ImportSource, ImportResult, ImportProgressData } from "@/components/import";
 
 /**
+ * 各导入源的默认路径（平台特定）
+ */
+export interface DefaultPaths {
+  claude: string;
+  gemini: string;
+  cursor: string;
+  codex: string;
+}
+
+/**
+ * 获取各导入源的平台特定默认路径
+ *
+ * @returns 各来源的默认路径
+ */
+export async function getDefaultPaths(): Promise<DefaultPaths> {
+  return invoke<DefaultPaths>("get_default_paths");
+}
+
+/**
  * 扫描指定来源的默认日志目录
  *
  * @param source - 导入来源 (claude/gemini/cursor)

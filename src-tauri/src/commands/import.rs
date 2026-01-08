@@ -15,13 +15,23 @@ use crate::parsers::cursor::CursorPaths;
 use crate::parsers::gemini::GeminiPaths;
 
 /// Import source type
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportSource {
     Claude,
     Gemini,
     Cursor,
     Codex,
+}
+
+/// Default paths for all import sources
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultPaths {
+    pub claude: String,
+    pub gemini: String,
+    pub cursor: String,
+    pub codex: String,
 }
 
 /// Discovered file information
@@ -101,6 +111,65 @@ fn get_default_log_dir(source: &ImportSource) -> Result<PathBuf, AppError> {
     };
 
     Ok(path)
+}
+
+/// Format path for display (convert to user-friendly format with ~)
+fn format_display_path(path: &PathBuf) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(relative) = path.strip_prefix(&home) {
+            return format!("~/{}", relative.display());
+        }
+    }
+
+    // For Windows, try to show a cleaner path
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(data_dir) = dirs::data_dir() {
+            if let Ok(relative) = path.strip_prefix(&data_dir) {
+                return format!("%APPDATA%/{}", relative.display());
+            }
+        }
+    }
+
+    path.display().to_string()
+}
+
+/// Get default paths for all import sources
+/// Returns platform-specific paths for display in the UI (app-level only)
+#[tauri::command]
+pub async fn get_default_paths() -> Result<DefaultPaths, AppError> {
+    let home = dirs::home_dir().ok_or_else(|| AppError::internal("无法获取 home 目录"))?;
+
+    // Claude: ~/.claude
+    let claude_path = home.join(".claude");
+
+    // Gemini: ~/.gemini
+    let gemini_path = home.join(".gemini");
+
+    // Codex: ~/.codex
+    let codex_path = home.join(".codex");
+
+    // Cursor: platform-specific app directory
+    #[cfg(target_os = "linux")]
+    let cursor_path = home.join(".config").join("Cursor");
+
+    #[cfg(target_os = "macos")]
+    let cursor_path = home.join("Library").join("Application Support").join("Cursor");
+
+    #[cfg(target_os = "windows")]
+    let cursor_path = dirs::data_dir()
+        .unwrap_or(home.clone())
+        .join("Cursor");
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let cursor_path = home.join(".config").join("Cursor");
+
+    Ok(DefaultPaths {
+        claude: format_display_path(&claude_path),
+        gemini: format_display_path(&gemini_path),
+        cursor: format_display_path(&cursor_path),
+        codex: format_display_path(&codex_path),
+    })
 }
 
 /// Recursively find all JSONL session files in a directory

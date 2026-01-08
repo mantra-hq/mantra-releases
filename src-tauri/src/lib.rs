@@ -34,6 +34,8 @@ use commands::{
     import_sessions_with_progress, cancel_import,
     // Story 2.10: Global search
     search_sessions,
+    // Platform-specific default paths
+    get_default_paths,
 };
 
 use storage::Database;
@@ -122,7 +124,9 @@ pub fn run() {
             import_sessions_with_progress,
             cancel_import,
             // Story 2.10: Global search
-            search_sessions
+            search_sessions,
+            // Platform-specific default paths
+            get_default_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

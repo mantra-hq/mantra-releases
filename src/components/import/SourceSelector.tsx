@@ -13,6 +13,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { getDefaultPaths, type DefaultPaths } from "@/lib/import-ipc";
 
 // Story 2.24: AC5 官方品牌图标
 import { ClaudeIcon } from "./SourceIcons";  // SVG 组件
@@ -28,7 +29,6 @@ export type ImportSource = "claude" | "gemini" | "cursor" | "codex" | "antigravi
 interface SourceConfig {
   id: ImportSource;
   name: string;
-  defaultPath: string;
   /** 图标图片路径 (PNG) 或 React 组件 */
   iconSrc?: string;
   iconComponent?: React.ComponentType<{ className?: string }>;
@@ -42,35 +42,30 @@ const SOURCES: SourceConfig[] = [
   {
     id: "claude",
     name: "Claude Code",
-    defaultPath: "~/.claude",
     iconComponent: ClaudeIcon,
     disabled: false,
   },
   {
     id: "gemini",
     name: "Gemini CLI",
-    defaultPath: "~/.gemini",
     iconSrc: geminiIcon,
     disabled: false,
   },
   {
     id: "cursor",
     name: "Cursor",
-    defaultPath: "~/.config/Cursor",
     iconSrc: cursorIcon,
     disabled: false,
   },
   {
     id: "codex",
     name: "Codex CLI",
-    defaultPath: "~/.codex",
     iconSrc: codexIcon,
     disabled: false,
   },
   {
     id: "antigravity",
     name: "Antigravity",
-    defaultPath: "~/.gemini/antigravity",
     iconSrc: antigravityIcon,
     disabled: true,
     badgeKey: "common.comingSoon",
@@ -92,11 +87,13 @@ function SourceCard({
   source,
   selected,
   onClick,
+  defaultPath,
   t,
 }: {
   source: SourceConfig;
   selected: boolean;
   onClick: () => void;
+  defaultPath: string;
   t: (key: string) => string;
 }) {
   const IconComponent = source.iconComponent;
@@ -113,9 +110,6 @@ function SourceCard({
       onClick();
     }
   };
-
-  // 直接使用默认路径
-  const displayPath = source.defaultPath;
 
   return (
     <div
@@ -169,7 +163,7 @@ function SourceCard({
 
       {/* 默认路径 */}
       <span className="text-xs text-muted-foreground font-mono">
-        {displayPath}
+        {defaultPath}
       </span>
 
       {/* 徽章 */}
@@ -188,6 +182,26 @@ function SourceCard({
  */
 export function SourceSelector({ value, onChange }: SourceSelectorProps) {
   const { t } = useTranslation();
+  const [defaultPaths, setDefaultPaths] = React.useState<DefaultPaths | null>(null);
+
+  // 从后端获取平台特定的默认路径
+  React.useEffect(() => {
+    getDefaultPaths()
+      .then(setDefaultPaths)
+      .catch(console.error);
+  }, []);
+
+  // 获取源对应的默认路径
+  const getPathForSource = (sourceId: ImportSource): string => {
+    if (!defaultPaths) return "...";
+    switch (sourceId) {
+      case "claude": return defaultPaths.claude;
+      case "gemini": return defaultPaths.gemini;
+      case "cursor": return defaultPaths.cursor;
+      case "codex": return defaultPaths.codex;
+      case "antigravity": return defaultPaths.gemini + "/antigravity";
+    }
+  };
 
   return (
     <div
@@ -202,6 +216,7 @@ export function SourceSelector({ value, onChange }: SourceSelectorProps) {
           source={source}
           selected={value === source.id}
           onClick={() => onChange(source.id)}
+          defaultPath={getPathForSource(source.id)}
           t={t}
         />
       ))}
