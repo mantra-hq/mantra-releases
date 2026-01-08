@@ -100,12 +100,15 @@ export default function Player() {
   // 时间旅行 Store (Story 2.7 AC #6)
   const jumpToMessage = useTimeTravelStore((state) => state.jumpToMessage);
   const setStoreCurrentTime = useTimeTravelStore((state) => state.setCurrentTime);
+  const resetTimeTravel = useTimeTravelStore((state) => state.reset);
 
   // 编辑器标签管理
   const openTab = useEditorStore((state) => state.openTab);
+  const closeAllTabs = useEditorStore((state) => state.closeAllTabs);
 
   // 右侧面板 Tab 管理 (修复 Bash 详情后其他消息点击无响应问题)
   const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
+  const resetDetailPanel = useDetailPanelStore((state) => state.reset);
 
   // Story 2.30: 会话日志回退函数
   const sessionFallback = React.useCallback(
@@ -177,6 +180,22 @@ export default function Player() {
 
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
+
+  // Bug Fix: 切换项目时重置右侧内容区域状态
+  // 当 sessionId 变化时，清空所有关联的 store 状态，避免显示旧项目内容
+  React.useEffect(() => {
+    // 重置时间旅行状态（代码内容、文件路径等）
+    resetTimeTravel();
+    // 重置右侧面板状态（终端、工具详情等）
+    resetDetailPanel();
+    // 关闭所有编辑器标签页
+    closeAllTabs();
+    // 重置 ref 状态
+    lastValidFileRef.current = null;
+    previousContentMapRef.current.clear();
+    // 重置滚动目标标记
+    hasScrolledToTargetRef.current = false;
+  }, [sessionId, resetTimeTravel, resetDetailPanel, closeAllTabs]);
 
   // 加载会话数据
   React.useEffect(() => {
