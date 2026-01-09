@@ -251,7 +251,18 @@ pub enum ContentBlock {
     Text { text: String },
 
     /// AI thinking/reasoning content (extended thinking)
-    Thinking { thinking: String },
+    Thinking {
+        thinking: String,
+
+        // === New: Standardized fields ===
+        /// Thinking subject/title (Gemini: thought.subject)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subject: Option<String>,
+
+        /// Thinking timestamp (Gemini: thought.timestamp)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timestamp: Option<String>,
+    },
 
     /// Tool usage request from AI
     ToolUse {
@@ -605,6 +616,8 @@ mod tests {
     fn test_content_block_thinking_serialization() {
         let block = ContentBlock::Thinking {
             thinking: "Let me think...".to_string(),
+            subject: None,
+            timestamp: None,
         };
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains(r#""type":"thinking""#));
@@ -719,6 +732,8 @@ mod tests {
             vec![
                 ContentBlock::Thinking {
                     thinking: "The user wants code help...".to_string(),
+                    subject: None,
+                    timestamp: None,
                 },
                 ContentBlock::Text {
                     text: "I'll help you write the code.".to_string(),
@@ -2278,6 +2293,132 @@ mod tests {
             user_decision: Some("approved".to_string()),
         };
         let json = serde_json::to_string_pretty(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    // ===== Story 8.4: Thinking 块扩展字段测试 =====
+
+    #[test]
+    fn test_thinking_with_subject_timestamp() {
+        let block = ContentBlock::Thinking {
+            thinking: "**Problem Analysis**\nAnalyzing the code...".to_string(),
+            subject: Some("Problem Analysis".to_string()),
+            timestamp: Some("2025-12-30T20:00:55.000Z".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""type":"thinking""#));
+        assert!(json.contains(r#""subject":"Problem Analysis""#));
+        assert!(json.contains(r#""timestamp":"2025-12-30T20:00:55.000Z""#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_thinking_skip_none_fields() {
+        let block = ContentBlock::Thinking {
+            thinking: "Just thinking...".to_string(),
+            subject: None,
+            timestamp: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""type":"thinking""#));
+        assert!(json.contains(r#""thinking":"Just thinking...""#));
+        // None fields should be skipped
+        assert!(!json.contains("subject"));
+        assert!(!json.contains("timestamp"));
+    }
+
+    #[test]
+    fn test_thinking_backward_compat() {
+        // Old format JSON without new fields (subject, timestamp)
+        let old_json = r#"{
+            "type": "thinking",
+            "thinking": "Let me think about this..."
+        }"#;
+        let block: ContentBlock = serde_json::from_str(old_json).unwrap();
+        match block {
+            ContentBlock::Thinking { thinking, subject, timestamp } => {
+                assert_eq!(thinking, "Let me think about this...");
+                assert!(subject.is_none());
+                assert!(timestamp.is_none());
+            }
+            _ => panic!("Expected Thinking"),
+        }
+    }
+
+    #[test]
+    fn test_thinking_partial_fields() {
+        // JSON with only subject, no timestamp
+        let json_subject_only = r#"{
+            "type": "thinking",
+            "thinking": "Analyzing...",
+            "subject": "Code Analysis"
+        }"#;
+        let block: ContentBlock = serde_json::from_str(json_subject_only).unwrap();
+        match block {
+            ContentBlock::Thinking { thinking, subject, timestamp } => {
+                assert_eq!(thinking, "Analyzing...");
+                assert_eq!(subject, Some("Code Analysis".to_string()));
+                assert!(timestamp.is_none());
+            }
+            _ => panic!("Expected Thinking"),
+        }
+
+        // JSON with only timestamp, no subject
+        let json_timestamp_only = r#"{
+            "type": "thinking",
+            "thinking": "Processing...",
+            "timestamp": "2025-12-30T20:00:00.000Z"
+        }"#;
+        let block: ContentBlock = serde_json::from_str(json_timestamp_only).unwrap();
+        match block {
+            ContentBlock::Thinking { thinking, subject, timestamp } => {
+                assert_eq!(thinking, "Processing...");
+                assert!(subject.is_none());
+                assert_eq!(timestamp, Some("2025-12-30T20:00:00.000Z".to_string()));
+            }
+            _ => panic!("Expected Thinking"),
+        }
+    }
+
+    #[test]
+    fn test_thinking_roundtrip_all_fields() {
+        let block = ContentBlock::Thinking {
+            thinking: "**Deep Analysis**\nLet me carefully analyze this complex problem step by step.".to_string(),
+            subject: Some("Deep Analysis".to_string()),
+            timestamp: Some("2025-12-30T20:05:30.123Z".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_thinking_empty_strings() {
+        // Edge case: empty strings for optional fields
+        let block = ContentBlock::Thinking {
+            thinking: "".to_string(),
+            subject: Some("".to_string()),
+            timestamp: Some("".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_thinking_unicode_content() {
+        // Edge case: Unicode content in all fields
+        let block = ContentBlock::Thinking {
+            thinking: "**问题分析**\n让我仔细分析这个问题...".to_string(),
+            subject: Some("问题分析".to_string()),
+            timestamp: Some("2025-12-30T20:00:55.000Z".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains("问题分析"));
+
         let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, block);
     }

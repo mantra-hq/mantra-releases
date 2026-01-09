@@ -153,6 +153,8 @@ impl GeminiParser {
             for thought in thoughts {
                 text_blocks.push(ContentBlock::Thinking {
                     thinking: thought.as_formatted_string(),
+                    subject: Some(thought.subject.clone()),
+                    timestamp: thought.timestamp.clone(),
                 });
             }
         }
@@ -532,9 +534,12 @@ mod tests {
 
         // First block should be thinking
         match &gemini_msg.content_blocks[0] {
-            ContentBlock::Thinking { thinking } => {
+            ContentBlock::Thinking { thinking, subject, timestamp } => {
                 assert!(thinking.contains("Problem Analysis"));
                 assert!(thinking.contains("understanding a problem"));
+                // Verify new fields are populated from Gemini thoughts
+                assert_eq!(subject, &Some("Problem Analysis".to_string()));
+                assert!(timestamp.is_some());
             }
             _ => panic!("Expected Thinking block"),
         }

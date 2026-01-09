@@ -279,7 +279,7 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
         }
         "thinking" => {
             let thinking = block.get("thinking")?.as_str()?.to_string();
-            Some(ContentBlock::Thinking { thinking })
+            Some(ContentBlock::Thinking { thinking, subject: None, timestamp: None })
         }
         "tool_use" => {
             let id = block.get("id")?.as_str()?.to_string();
@@ -530,6 +530,8 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
         ClaudeContentBlock::Text { text } => ContentBlock::Text { text: text.clone() },
         ClaudeContentBlock::Thinking { thinking } => ContentBlock::Thinking {
             thinking: thinking.clone(),
+            subject: None,
+            timestamp: None,
         },
         ClaudeContentBlock::ToolUse { id, name, input } => ContentBlock::ToolUse {
             id: id.clone(),

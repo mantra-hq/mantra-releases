@@ -1058,7 +1058,7 @@ impl Database {
                 for block in &message.content_blocks {
                     let text = match block {
                         ContentBlock::Text { text } => text.clone(),
-                        ContentBlock::Thinking { thinking } => thinking.clone(),
+                        ContentBlock::Thinking { thinking, .. } => thinking.clone(),
                         ContentBlock::ToolResult { content, .. } => content.clone(),
                         _ => continue,
                     };
