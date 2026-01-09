@@ -240,10 +240,11 @@ impl CursorParser {
         // Build content blocks
         let mut content_blocks = Vec::new();
 
-        // Add main text content
+        // Add main text content (strip system reminder tags)
         if let Some(text) = &bubble.text {
-            if !text.is_empty() {
-                content_blocks.push(ContentBlock::Text { text: text.clone() });
+            let cleaned = crate::parsers::strip_system_reminders(text);
+            if !cleaned.is_empty() {
+                content_blocks.push(ContentBlock::Text { text: cleaned });
             }
         }
 
@@ -276,9 +277,11 @@ impl CursorParser {
 
                 // Add ToolResult if result exists
                 if let Some(result_str) = &tfd.result {
+                    // Strip system reminder tags from tool result content
+                    let cleaned_result = crate::parsers::strip_system_reminders(result_str);
                     content_blocks.push(ContentBlock::ToolResult {
                         tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
-                        content: result_str.clone(),
+                        content: cleaned_result,
                         is_error: tfd.status.as_deref() == Some("failed"),
                         correlation_id,
                         structured_result: None,
@@ -311,9 +314,11 @@ impl CursorParser {
                     });
 
                     if let Some(result) = &tool_result.result {
+                        // Strip system reminder tags from tool result content
+                        let cleaned_result = crate::parsers::strip_system_reminders(&result.to_string());
                         content_blocks.push(ContentBlock::ToolResult {
                             tool_use_id: id.clone(),
-                            content: result.to_string(),
+                            content: cleaned_result,
                             is_error: tool_result.is_error,
                             correlation_id,
                             structured_result: None,
@@ -969,10 +974,11 @@ mod tests {
     fn simulate_parse_bubble_content_blocks(bubble: &CursorBubble) -> Vec<ContentBlock> {
         let mut content_blocks = Vec::new();
 
-        // Add main text content
+        // Add main text content (strip system reminder tags)
         if let Some(text) = &bubble.text {
-            if !text.is_empty() {
-                content_blocks.push(ContentBlock::Text { text: text.clone() });
+            let cleaned = crate::parsers::strip_system_reminders(text);
+            if !cleaned.is_empty() {
+                content_blocks.push(ContentBlock::Text { text: cleaned });
             }
         }
 
@@ -1003,9 +1009,11 @@ mod tests {
 
                 // Add ToolResult if result exists
                 if let Some(result_str) = &tfd.result {
+                    // Strip system reminder tags from tool result content (same as production code)
+                    let cleaned_result = crate::parsers::strip_system_reminders(result_str);
                     content_blocks.push(ContentBlock::ToolResult {
                         tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
-                        content: result_str.clone(),
+                        content: cleaned_result,
                         is_error: tfd.status.as_deref() == Some("failed"),
                         correlation_id,
                         structured_result: None,

@@ -44,6 +44,7 @@ export interface ToolOutputProps {
 
 /**
  * Story 8.12: 从 structuredResult 获取文件路径用于代码显示
+ * 添加防御性检查：filePath 可能为 undefined（数据不完整）
  */
 function getFilePathFromResult(result?: ToolResultData, fallbackPath?: string): string {
   if (result) {
@@ -51,7 +52,11 @@ function getFilePathFromResult(result?: ToolResultData, fallbackPath?: string): 
       case "file_read":
       case "file_write":
       case "file_edit":
-        return result.filePath;
+        // 防御性检查：filePath 可能为 undefined
+        if (result.filePath) {
+          return result.filePath;
+        }
+        break;
     }
   }
   return fallbackPath || "tool-output.txt";
@@ -75,6 +80,8 @@ function renderStructuredResultSummary(
 ): React.ReactNode {
   switch (result.type) {
     case "file_read": {
+      // 防御性检查：filePath 可能为 undefined（数据不完整）
+      if (!result.filePath) return null;
       const fileName = result.filePath.split("/").pop() || result.filePath;
       // Fix: endLine = startLine + numLines - 1 (e.g., L10 + 5 lines = L10-L14)
       const lineRange = result.startLine !== undefined && result.numLines !== undefined
@@ -91,6 +98,8 @@ function renderStructuredResultSummary(
       );
     }
     case "file_write": {
+      // 防御性检查：filePath 可能为 undefined（数据不完整）
+      if (!result.filePath) return null;
       const fileName = result.filePath.split("/").pop() || result.filePath;
       return (
         <>
@@ -100,6 +109,8 @@ function renderStructuredResultSummary(
       );
     }
     case "file_edit": {
+      // 防御性检查：filePath 可能为 undefined（数据不完整）
+      if (!result.filePath) return null;
       const fileName = result.filePath.split("/").pop() || result.filePath;
       return (
         <>

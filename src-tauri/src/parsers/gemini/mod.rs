@@ -213,11 +213,12 @@ impl GeminiParser {
             }
         }
 
-        // Add text content
+        // Add text content (strip system reminder tags)
         if !gemini_msg.content.is_empty() {
             let text = gemini_msg.content.as_text();
-            if !text.is_empty() {
-                text_blocks.push(ContentBlock::Text { text });
+            let cleaned = crate::parsers::strip_system_reminders(&text);
+            if !cleaned.is_empty() {
+                text_blocks.push(ContentBlock::Text { text: cleaned });
             }
         }
 
@@ -264,7 +265,9 @@ impl GeminiParser {
                     for result_wrapper in results {
                         let response = &result_wrapper.function_response;
                         let is_error = tool_call.status == "error";
-                        let content = response.response.as_content();
+                        let raw_content = response.response.as_content();
+                        // Strip system reminder tags from tool result content
+                        let content = crate::parsers::strip_system_reminders(&raw_content);
 
                         // Add ToolResult with display metadata (AC2)
                         tool_blocks.push(ContentBlock::ToolResult {

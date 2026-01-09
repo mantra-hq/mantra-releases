@@ -91,4 +91,20 @@ describe("ToolOutput", () => {
     );
     expect(container.firstChild).toHaveClass("custom-class");
   });
+
+  // Story 8.12: 防御性检查测试
+  it("handles structuredResult with undefined filePath gracefully", () => {
+    // 模拟不完整的数据：type 为 file_read 但 filePath 为 undefined
+    const incompleteResult = { type: "file_read" as const } as { type: "file_read"; filePath: string };
+    
+    // 不应崩溃
+    expect(() => {
+      render(
+        <ToolOutput 
+          content={successContent} 
+          structuredResult={incompleteResult}
+        />
+      );
+    }).not.toThrow();
+  });
 });

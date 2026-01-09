@@ -189,10 +189,23 @@ impl CodexParser {
                     return Ok(());
                 }
 
+                // Strip system reminder tags and filter empty blocks
                 let content_blocks: Vec<ContentBlock> = content
                     .into_iter()
-                    .map(|c| ContentBlock::Text { text: c.text().to_string() })
+                    .filter_map(|c| {
+                        let cleaned = crate::parsers::strip_system_reminders(c.text());
+                        if cleaned.is_empty() {
+                            None
+                        } else {
+                            Some(ContentBlock::Text { text: cleaned })
+                        }
+                    })
                     .collect();
+
+                // Skip messages with no content after cleaning
+                if content_blocks.is_empty() {
+                    return Ok(());
+                }
 
                 messages.push(Message {
                     role: role.to_mantra_role(),
@@ -274,9 +287,11 @@ impl CodexParser {
                     || output.contains("thread '") && output.contains("' panicked")  // Any thread panic
                     || (output.starts_with("Command failed") && output.contains("error"));
 
+                // Strip system reminder tags from tool result content
+                let cleaned_output = crate::parsers::strip_system_reminders(&output);
                 let content_blocks = vec![ContentBlock::ToolResult {
                     tool_use_id: call_id.clone(),
-                    content: output,
+                    content: cleaned_output,
                     is_error,
                     correlation_id: Some(call_id),
                     structured_result: None,

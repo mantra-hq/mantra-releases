@@ -325,7 +325,13 @@ impl ClaudeParser {
 fn parse_jsonl_content(content: &serde_json::Value) -> Vec<ContentBlock> {
     match content {
         serde_json::Value::String(s) => {
-            vec![ContentBlock::Text { text: s.clone() }]
+            // Strip system reminder tags from text content
+            let cleaned = super::strip_system_reminders(s);
+            if cleaned.is_empty() {
+                Vec::new()
+            } else {
+                vec![ContentBlock::Text { text: cleaned }]
+            }
         }
         serde_json::Value::Array(arr) => {
             arr.iter().filter_map(parse_jsonl_content_block).collect()
@@ -340,8 +346,14 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
 
     match block_type {
         "text" => {
-            let text = block.get("text")?.as_str()?.to_string();
-            Some(ContentBlock::Text { text })
+            let raw_text = block.get("text")?.as_str()?;
+            // Strip system reminder tags from text content
+            let text = super::strip_system_reminders(raw_text);
+            if text.is_empty() {
+                None
+            } else {
+                Some(ContentBlock::Text { text })
+            }
         }
         "thinking" => {
             let thinking = block.get("thinking")?.as_str()?.to_string();
@@ -370,7 +382,9 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             // Story 8.12: Strip line number prefixes from tool result content (AC5)
             // This is applied to all tool results as it's a safe operation
             // (only affects lines matching the line number pattern)
-            let content = strip_line_number_prefix(&raw_content);
+            let stripped = strip_line_number_prefix(&raw_content);
+            // Also strip system reminder tags from tool result content
+            let content = super::strip_system_reminders(&stripped);
             let is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
             // Use tool_use_id as correlation_id
             Some(ContentBlock::ToolResult {
@@ -623,22 +637,36 @@ impl LogParser for ClaudeParser {
 fn convert_content(content: &ClaudeContent) -> Vec<ContentBlock> {
     match content {
         ClaudeContent::Text(text) => {
-            vec![ContentBlock::Text { text: text.clone() }]
+            // Strip system reminder tags from text content
+            let cleaned = super::strip_system_reminders(text);
+            if cleaned.is_empty() {
+                vec![]
+            } else {
+                vec![ContentBlock::Text { text: cleaned }]
+            }
         }
-        ClaudeContent::Blocks(blocks) => blocks.iter().map(convert_block).collect(),
+        ClaudeContent::Blocks(blocks) => blocks.iter().filter_map(convert_block).collect(),
     }
 }
 
 /// Convert a single Claude content block to MantraSession ContentBlock
-fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
+fn convert_block(block: &ClaudeContentBlock) -> Option<ContentBlock> {
     match block {
-        ClaudeContentBlock::Text { text } => ContentBlock::Text { text: text.clone() },
-        ClaudeContentBlock::Thinking { thinking } => ContentBlock::Thinking {
+        ClaudeContentBlock::Text { text } => {
+            // Strip system reminder tags from text content
+            let cleaned = super::strip_system_reminders(text);
+            if cleaned.is_empty() {
+                None
+            } else {
+                Some(ContentBlock::Text { text: cleaned })
+            }
+        }
+        ClaudeContentBlock::Thinking { thinking } => Some(ContentBlock::Thinking {
             thinking: thinking.clone(),
             subject: None,
             timestamp: None,
-        },
-        ClaudeContentBlock::ToolUse { id, name, input } => ContentBlock::ToolUse {
+        }),
+        ClaudeContentBlock::ToolUse { id, name, input } => Some(ContentBlock::ToolUse {
             id: id.clone(),
             name: name.clone(),
             input: input.clone(),
@@ -646,24 +674,26 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
             standard_tool: Some(normalize_tool(name, input)),
             display_name: None,
             description: None,
-        },
+        }),
         ClaudeContentBlock::ToolResult {
             tool_use_id,
             content,
             is_error,
         } => {
             // Story 8.12: Strip line number prefixes from tool result content (AC5)
-            let stripped_content = strip_line_number_prefix(&content.as_string());
-            ContentBlock::ToolResult {
+            let stripped = strip_line_number_prefix(&content.as_string());
+            // Also strip system reminder tags from tool result content
+            let cleaned_content = super::strip_system_reminders(&stripped);
+            Some(ContentBlock::ToolResult {
                 tool_use_id: tool_use_id.clone(),
-                content: stripped_content,
+                content: cleaned_content,
                 is_error: *is_error,
                 correlation_id: Some(tool_use_id.clone()),
                 structured_result: None,
                 display_content: None,
                 render_as_markdown: None,
                 user_decision: None,
-            }
+            })
         },
     }
 }
@@ -1296,7 +1326,7 @@ mod tests {
         };
 
         let result = convert_block(&block);
-        if let ContentBlock::ToolUse { standard_tool, .. } = result {
+        if let Some(ContentBlock::ToolUse { standard_tool, .. }) = result {
             assert!(standard_tool.is_some());
             if let Some(crate::models::StandardTool::FileWrite { path, content }) = standard_tool {
                 assert_eq!(path, "/out.txt");
