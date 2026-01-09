@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use super::{LogParser, ParseError};
-use crate::models::{sources, ContentBlock, MantraSession, Message, Role, SessionMetadata};
+use crate::models::{sources, ContentBlock, GitInfo, MantraSession, Message, Role, SessionMetadata, ToolResultData, normalize_tool};
 
 /// Parser for Claude Code conversation logs
 #[derive(Debug, Default)]
@@ -115,6 +115,7 @@ impl ClaudeParser {
         let mut last_timestamp: Option<DateTime<Utc>> = None;
         let mut version: Option<String> = None;
         let mut summary: Option<String> = None;
+        let mut git_branch: Option<String> = None;
 
         // Track what types of records we've seen for better error messages
         let mut has_system_events = false;
@@ -161,6 +162,16 @@ impl ClaudeParser {
                 version = record.get("version").and_then(|s| s.as_str()).map(|s| s.to_string());
             }
 
+            // Extract git branch from record (AC2)
+            // We take the first non-empty gitBranch we encounter
+            if git_branch.is_none() {
+                if let Some(branch) = record.get("gitBranch").and_then(|v| v.as_str()) {
+                    if !branch.is_empty() {
+                        git_branch = Some(branch.to_string());
+                    }
+                }
+            }
+
             // Parse timestamp
             let timestamp = record
                 .get("timestamp")
@@ -174,6 +185,11 @@ impl ClaudeParser {
                 last_timestamp = timestamp;
             }
 
+            // Extract message tree structure fields (AC1)
+            let message_uuid = record.get("uuid").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let parent_uuid = record.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let is_sidechain = record.get("isSidechain").and_then(|v| v.as_bool()).unwrap_or(false);
+
             // Parse message
             if let Some(msg_obj) = record.get("message") {
                 let role_str = msg_obj.get("role").and_then(|r| r.as_str()).unwrap_or("");
@@ -184,11 +200,25 @@ impl ClaudeParser {
                 };
 
                 // Parse content
-                let content_blocks = if let Some(content) = msg_obj.get("content") {
+                let mut content_blocks = if let Some(content) = msg_obj.get("content") {
                     parse_jsonl_content(content)
                 } else {
                     Vec::new()
                 };
+
+                // Extract and apply toolUseResult if present (AC4)
+                // toolUseResult provides structured information about tool execution results
+                if let Some(tool_use_result) = record.get("toolUseResult") {
+                    if let Some(structured_result) = parse_tool_use_result(tool_use_result) {
+                        // Apply to the first ToolResult block (Claude typically has one per record)
+                        for block in content_blocks.iter_mut() {
+                            if let ContentBlock::ToolResult { structured_result: ref mut sr, .. } = block {
+                                *sr = Some(structured_result.clone());
+                                break; // Apply to first ToolResult only
+                            }
+                        }
+                    }
+                }
 
                 // Skip messages with no content or only meta content
                 let is_meta = record.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false);
@@ -201,9 +231,9 @@ impl ClaudeParser {
                     content_blocks,
                     timestamp,
                     mentioned_files: Vec::new(),
-                    message_id: None,
-                    parent_id: None,
-                    is_sidechain: false,
+                    message_id: message_uuid,
+                    parent_id: parent_uuid,
+                    is_sidechain,
                     source_metadata: None,
                 });
             }
@@ -248,6 +278,11 @@ impl ClaudeParser {
             title: summary, // Use summary from summary record as title
             total_tokens: None,
             original_path: None,
+            git: git_branch.map(|branch| GitInfo {
+                branch: Some(branch),
+                commit: None,
+                repository_url: None,
+            }),
             ..Default::default()
         };
 
@@ -285,8 +320,10 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             let id = block.get("id")?.as_str()?.to_string();
             let name = block.get("name")?.as_str()?.to_string();
             let input = block.get("input")?.clone();
+            // Call normalize_tool() to get standardized tool type (AC3)
+            let standard_tool = Some(normalize_tool(&name, &input));
             // Use id as correlation_id (Claude's tool_use_id is the correlation key)
-            Some(ContentBlock::ToolUse { id: id.clone(), name, input, correlation_id: Some(id), standard_tool: None, display_name: None, description: None })
+            Some(ContentBlock::ToolUse { id: id.clone(), name, input, correlation_id: Some(id), standard_tool, display_name: None, description: None })
         }
         "tool_result" => {
             let tool_use_id = block.get("tool_use_id")?.as_str()?.to_string();
@@ -314,6 +351,39 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
         }
         _ => None,
     }
+}
+
+/// Parse toolUseResult from Claude JSONL record into ToolResultData (AC4)
+///
+/// Claude provides structured tool result information in the toolUseResult field.
+/// This function converts it to our standardized ToolResultData format.
+fn parse_tool_use_result(tool_use_result: &serde_json::Value) -> Option<ToolResultData> {
+    // Check for file result (AC4: ToolResultData::FileRead)
+    if let Some(file) = tool_use_result.get("file") {
+        let file_path = file.get("filePath")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let start_line = file.get("startLine").and_then(|v| v.as_u64()).map(|n| n as u32);
+        let num_lines = file.get("numLines").and_then(|v| v.as_u64()).map(|n| n as u32);
+        let total_lines = file.get("totalLines").and_then(|v| v.as_u64()).map(|n| n as u32);
+        
+        return Some(ToolResultData::FileRead {
+            file_path,
+            start_line,
+            num_lines,
+            total_lines,
+        });
+    }
+    
+    // Other results: passthrough as Other (AC4)
+    if !tool_use_result.is_null() && !tool_use_result.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+        return Some(ToolResultData::Other {
+            data: tool_use_result.clone(),
+        });
+    }
+    
+    None
 }
 
 // Internal structures for deserializing Claude's legacy JSON format
@@ -538,7 +608,7 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
             name: name.clone(),
             input: input.clone(),
             correlation_id: Some(id.clone()),
-            standard_tool: None,
+            standard_tool: Some(normalize_tool(name, input)),
             display_name: None,
             description: None,
         },
@@ -613,7 +683,7 @@ fn reorganize_messages(raw_messages: Vec<Message>) -> Vec<Message> {
                     // Already collected, skip
                 }
                 // Handle new content block types - treat as text-like content
-                ContentBlock::CodeDiff { .. } | ContentBlock::Image { .. } | ContentBlock::Reference { .. } => {
+                ContentBlock::CodeDiff { .. } | ContentBlock::Image { .. } | ContentBlock::Reference { .. } | ContentBlock::CodeSuggestion { .. } => {
                     text_blocks.push(block);
                 }
             }
@@ -960,6 +1030,243 @@ mod tests {
                 assert!(!session.messages.is_empty(), "Should have messages");
                 println!("  Messages: {}", session.messages.len());
             }
+        }
+    }
+
+    // ========== Story 8-6: Claude Parser Adaptation Tests ==========
+
+    #[test]
+    fn test_parse_jsonl_message_tree_structure() {
+        // Test AC1: Message tree structure (uuid, parentUuid, isSidechain)
+        let jsonl = r#"{"type":"user","sessionId":"s1","uuid":"msg-001","parentUuid":"msg-000","isSidechain":true,"cwd":"/test","message":{"role":"user","content":"Hello"},"timestamp":"2024-01-01T00:00:00Z"}
+{"type":"assistant","sessionId":"s1","uuid":"msg-002","parentUuid":"msg-001","isSidechain":false,"cwd":"/test","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"}]},"timestamp":"2024-01-01T00:00:01Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 2);
+
+        // Check first message (user)
+        assert_eq!(session.messages[0].message_id, Some("msg-001".to_string()));
+        assert_eq!(session.messages[0].parent_id, Some("msg-000".to_string()));
+        assert!(session.messages[0].is_sidechain);
+
+        // Check second message (assistant)
+        assert_eq!(session.messages[1].message_id, Some("msg-002".to_string()));
+        assert_eq!(session.messages[1].parent_id, Some("msg-001".to_string()));
+        assert!(!session.messages[1].is_sidechain);
+    }
+
+    #[test]
+    fn test_parse_jsonl_message_tree_backward_compatible() {
+        // Test AC5: Backward compatibility - missing tree fields default to None/false
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","message":{"role":"user","content":"Hello"},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].message_id, None);
+        assert_eq!(session.messages[0].parent_id, None);
+        assert!(!session.messages[0].is_sidechain);
+    }
+
+    #[test]
+    fn test_parse_jsonl_git_branch() {
+        // Test AC2: Git information extraction
+        let jsonl = r#"{"type":"user","sessionId":"s1","gitBranch":"feature/test-branch","cwd":"/test","message":{"role":"user","content":"Hi"},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert!(session.metadata.git.is_some());
+        let git = session.metadata.git.unwrap();
+        assert_eq!(git.branch, Some("feature/test-branch".to_string()));
+        assert_eq!(git.commit, None);
+        assert_eq!(git.repository_url, None);
+    }
+
+    #[test]
+    fn test_parse_jsonl_git_branch_empty_ignored() {
+        // Test AC5: Empty gitBranch should not create GitInfo
+        let jsonl = r#"{"type":"user","sessionId":"s1","gitBranch":"","cwd":"/test","message":{"role":"user","content":"Hi"},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert!(session.metadata.git.is_none());
+    }
+
+    #[test]
+    fn test_parse_jsonl_standard_tool_read() {
+        // Test AC3: StandardTool mapping - Read
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/src/main.rs","offset":10,"limit":50}}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[0].content_blocks[0] {
+            assert!(standard_tool.is_some());
+            if let Some(crate::models::StandardTool::FileRead { path, start_line, end_line }) = standard_tool {
+                assert_eq!(path, "/src/main.rs");
+                assert_eq!(*start_line, Some(10));
+                assert_eq!(*end_line, Some(60)); // offset 10 + limit 50
+            } else {
+                panic!("Expected StandardTool::FileRead");
+            }
+        } else {
+            panic!("Expected ToolUse content block");
+        }
+    }
+
+    #[test]
+    fn test_parse_jsonl_standard_tool_bash() {
+        // Test AC3: StandardTool mapping - Bash
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls -la","cwd":"/tmp"}}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[0].content_blocks[0] {
+            if let Some(crate::models::StandardTool::ShellExec { command, cwd }) = standard_tool {
+                assert_eq!(command, "ls -la");
+                assert_eq!(*cwd, Some("/tmp".to_string()));
+            } else {
+                panic!("Expected StandardTool::ShellExec");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_jsonl_standard_tool_glob_grep() {
+        // Test AC3: StandardTool mapping - Glob and Grep
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Glob","input":{"pattern":"*.rs","path":"/src"}},{"type":"tool_use","id":"t2","name":"Grep","input":{"pattern":"TODO","path":"/project"}}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        // Check Glob
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[0].content_blocks[0] {
+            if let Some(crate::models::StandardTool::FileSearch { pattern, path }) = standard_tool {
+                assert_eq!(pattern, "*.rs");
+                assert_eq!(*path, Some("/src".to_string()));
+            } else {
+                panic!("Expected StandardTool::FileSearch");
+            }
+        }
+
+        // Check Grep
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[0].content_blocks[1] {
+            if let Some(crate::models::StandardTool::ContentSearch { pattern, path }) = standard_tool {
+                assert_eq!(pattern, "TODO");
+                assert_eq!(*path, Some("/project".to_string()));
+            } else {
+                panic!("Expected StandardTool::ContentSearch");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_tool_use_result_file_read() {
+        // Test AC4: toolUseResult parsing - FileRead
+        let tool_use_result = serde_json::json!({
+            "file": {
+                "filePath": "/src/main.rs",
+                "startLine": 1,
+                "numLines": 50,
+                "totalLines": 100
+            }
+        });
+
+        let result = parse_tool_use_result(&tool_use_result);
+        assert!(result.is_some());
+
+        if let Some(ToolResultData::FileRead { file_path, start_line, num_lines, total_lines }) = result {
+            assert_eq!(file_path, "/src/main.rs");
+            assert_eq!(start_line, Some(1));
+            assert_eq!(num_lines, Some(50));
+            assert_eq!(total_lines, Some(100));
+        } else {
+            panic!("Expected ToolResultData::FileRead");
+        }
+    }
+
+    #[test]
+    fn test_parse_tool_use_result_other() {
+        // Test AC4: toolUseResult parsing - Other (passthrough)
+        let tool_use_result = serde_json::json!({
+            "custom": {
+                "some_field": "some_value"
+            }
+        });
+
+        let result = parse_tool_use_result(&tool_use_result);
+        assert!(result.is_some());
+
+        if let Some(ToolResultData::Other { data }) = result {
+            assert_eq!(data.get("custom").unwrap().get("some_field").unwrap(), "some_value");
+        } else {
+            panic!("Expected ToolResultData::Other");
+        }
+    }
+
+    #[test]
+    fn test_parse_tool_use_result_empty() {
+        // Test AC4: Empty toolUseResult returns None
+        let tool_use_result = serde_json::json!({});
+        let result = parse_tool_use_result(&tool_use_result);
+        assert!(result.is_none());
+
+        let tool_use_result_null = serde_json::Value::Null;
+        let result_null = parse_tool_use_result(&tool_use_result_null);
+        assert!(result_null.is_none());
+    }
+
+    #[test]
+    fn test_parse_jsonl_with_tool_use_result() {
+        // Test AC4: toolUseResult integration in JSONL parsing
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","toolUseResult":{"file":{"filePath":"/src/lib.rs","startLine":10,"numLines":20,"totalLines":200}},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"file content here","is_error":false}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        if let ContentBlock::ToolResult { structured_result, .. } = &session.messages[0].content_blocks[0] {
+            assert!(structured_result.is_some());
+            if let Some(ToolResultData::FileRead { file_path, start_line, num_lines, total_lines }) = structured_result {
+                assert_eq!(file_path, "/src/lib.rs");
+                assert_eq!(*start_line, Some(10));
+                assert_eq!(*num_lines, Some(20));
+                assert_eq!(*total_lines, Some(200));
+            } else {
+                panic!("Expected ToolResultData::FileRead in structured_result");
+            }
+        } else {
+            panic!("Expected ToolResult content block");
+        }
+    }
+
+    #[test]
+    fn test_convert_block_standard_tool() {
+        // Test AC3: StandardTool mapping in legacy JSON format (convert_block)
+        let block = ClaudeContentBlock::ToolUse {
+            id: "t1".to_string(),
+            name: "Write".to_string(),
+            input: serde_json::json!({"file_path": "/out.txt", "content": "hello"}),
+        };
+
+        let result = convert_block(&block);
+        if let ContentBlock::ToolUse { standard_tool, .. } = result {
+            assert!(standard_tool.is_some());
+            if let Some(crate::models::StandardTool::FileWrite { path, content }) = standard_tool {
+                assert_eq!(path, "/out.txt");
+                assert_eq!(content, "hello");
+            } else {
+                panic!("Expected StandardTool::FileWrite");
+            }
+        } else {
+            panic!("Expected ToolUse content block");
         }
     }
 }

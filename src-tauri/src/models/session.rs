@@ -355,6 +355,17 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         symbol: Option<String>,
     },
+
+    /// Code suggestion from AI (Cursor suggestedCodeBlocks)
+    CodeSuggestion {
+        /// Target file path for the suggestion
+        file_path: String,
+        /// Suggested code content
+        code: String,
+        /// Programming language
+        #[serde(skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+    },
 }
 
 /// Git repository information for a session
@@ -2419,6 +2430,105 @@ mod tests {
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains("问题分析"));
 
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    // ===== Story 8.5: CodeSuggestion 块测试 =====
+
+    #[test]
+    fn test_code_suggestion_serialization() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/src/main.rs".to_string(),
+            code: "fn main() {}\n".to_string(),
+            language: Some("rust".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""type":"code_suggestion""#));
+        assert!(json.contains(r#""file_path":"/src/main.rs""#));
+        assert!(json.contains(r#""code":"fn main() {}\n""#));
+        assert!(json.contains(r#""language":"rust""#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_code_suggestion_skip_none_language() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/src/main.rs".to_string(),
+            code: "fn main() {}".to_string(),
+            language: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""type":"code_suggestion""#));
+        assert!(json.contains(r#""file_path":"/src/main.rs""#));
+        assert!(!json.contains("language"));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_code_suggestion_roundtrip() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/path/to/file.ts".to_string(),
+            code: "export const foo = 42;".to_string(),
+            language: Some("typescript".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_code_suggestion_deserialize_without_language() {
+        let json = r#"{"type":"code_suggestion","file_path":"/test.py","code":"print('hello')"}"#;
+        let block: ContentBlock = serde_json::from_str(json).unwrap();
+        match block {
+            ContentBlock::CodeSuggestion { file_path, code, language } => {
+                assert_eq!(file_path, "/test.py");
+                assert_eq!(code, "print('hello')");
+                assert!(language.is_none());
+            }
+            _ => panic!("Expected CodeSuggestion variant"),
+        }
+    }
+
+    #[test]
+    fn test_code_suggestion_multiline_code() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/src/lib.rs".to_string(),
+            code: "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n".to_string(),
+            language: Some("rust".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_code_suggestion_unicode_content() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/src/i18n.ts".to_string(),
+            code: "const greeting = '你好世界';".to_string(),
+            language: Some("typescript".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains("你好世界"));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_code_suggestion_empty_code() {
+        let block = ContentBlock::CodeSuggestion {
+            file_path: "/empty.txt".to_string(),
+            code: "".to_string(),
+            language: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
         let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, block);
     }
