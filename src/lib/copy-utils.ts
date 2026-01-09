@@ -1,102 +1,91 @@
 /**
  * Copy Utils - 复制相关工具函数
  * Story 2.22: Task 2
+ * Story 8.12: Task 4 - 使用 standardTool 替代 toolName 字符串匹配
  *
  * 根据消息类型智能提取主体内容用于复制
  */
 
 import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import {
+  isTerminalTool,
+  isFileReadTool,
+  isFileWriteTool,
+  isFileEditTool,
+  isSearchTool,
+  isOtherTool,
+  getToolPath,
+  getToolCommand,
+  getToolPattern,
+  getOtherToolName,
+} from "@/lib/tool-utils";
 
 /**
  * 从 ToolCall 块提取主体内容（可直接使用的内容）
+ * Story 8.12: 使用 standardTool 进行类型判断和内容提取
  */
 function getToolCallContent(block: ContentBlock): string {
-  const toolName = block.toolName || "";
-  const input = block.toolInput;
+  const { standardTool, toolInput: input } = block;
 
-  if (!input) return "";
+  // Shell 命令工具 - 复制命令
+  if (isTerminalTool(standardTool)) {
+    const command = getToolCommand(standardTool);
+    if (command) return command;
+  }
 
-  // Bash/命令类工具 - 复制命令
-  if (
-    toolName.toLowerCase().includes("bash") ||
-    toolName.toLowerCase().includes("command")
-  ) {
-    const command = input.command || input.cmd;
-    if (typeof command === "string") {
-      return command;
+  // 文件读取工具 - 复制文件路径
+  if (isFileReadTool(standardTool)) {
+    const path = getToolPath(standardTool);
+    if (path) return path;
+  }
+
+  // 文件写入/编辑工具 - 复制文件路径
+  if (isFileWriteTool(standardTool) || isFileEditTool(standardTool)) {
+    const path = getToolPath(standardTool);
+    if (path) return path;
+  }
+
+  // 搜索工具 - 复制搜索模式
+  if (isSearchTool(standardTool)) {
+    const pattern = getToolPattern(standardTool);
+    if (pattern) return pattern;
+  }
+
+  // Other 类型工具 - 特殊处理
+  if (isOtherTool(standardTool)) {
+    const toolName = getOtherToolName(standardTool);
+
+    // TodoWrite - 不复制（通常是结构化数据）
+    if (toolName === "TodoWrite") {
+      return "";
+    }
+
+    // 从 toolInput 尝试提取内容
+    if (input) {
+      // WebFetch/WebSearch - 复制 URL 或查询
+      if (toolName?.toLowerCase().includes("web")) {
+        const url = input.url;
+        const query = input.query;
+        if (typeof url === "string") return url;
+        if (typeof query === "string") return query;
+      }
+
+      // Task 工具 - 复制 prompt
+      if (toolName?.toLowerCase() === "task") {
+        const prompt = input.prompt;
+        if (typeof prompt === "string") return prompt;
+      }
     }
   }
 
-  // 文件读取类工具 - 复制文件路径
-  if (
-    toolName.toLowerCase().includes("read") ||
-    toolName.toLowerCase().includes("view")
-  ) {
-    const filePath =
-      input.file_path || input.filePath || input.path || input.AbsolutePath;
-    if (typeof filePath === "string") {
-      return filePath;
-    }
-  }
-
-  // 文件写入/编辑类工具 - 复制文件路径
-  if (
-    toolName.toLowerCase().includes("write") ||
-    toolName.toLowerCase().includes("edit")
-  ) {
-    const filePath =
-      input.file_path || input.filePath || input.path || input.TargetFile;
-    if (typeof filePath === "string") {
-      return filePath;
-    }
-  }
-
-  // Grep/搜索类工具 - 复制搜索模式
-  if (
-    toolName.toLowerCase().includes("grep") ||
-    toolName.toLowerCase().includes("search")
-  ) {
-    const pattern = input.pattern || input.query || input.search;
-    if (typeof pattern === "string") {
-      return pattern;
-    }
-  }
-
-  // Glob 工具 - 复制 glob 模式
-  if (toolName.toLowerCase().includes("glob")) {
-    const pattern = input.pattern || input.glob;
-    if (typeof pattern === "string") {
-      return pattern;
-    }
-  }
-
-  // WebFetch/WebSearch - 复制 URL 或查询
-  if (toolName.toLowerCase().includes("web")) {
-    const url = input.url;
-    const query = input.query;
-    if (typeof url === "string") return url;
-    if (typeof query === "string") return query;
-  }
-
-  // Task 工具 - 复制 prompt
-  if (toolName.toLowerCase() === "task") {
-    const prompt = input.prompt;
-    if (typeof prompt === "string") {
-      return prompt;
-    }
-  }
-
-  // TodoWrite - 不复制（通常是结构化数据）
-  if (toolName === "TodoWrite") {
-    return "";
-  }
-
-  // 通用回退：尝试提取有意义的字段
-  const descKeys = ["description", "content", "message", "text"];
-  for (const key of descKeys) {
-    const value = input[key];
-    if (typeof value === "string" && value.length > 0) {
-      return value;
+  // 通用回退：尝试从 toolInput 提取有意义的字段
+  if (input) {
+    const descKeys = ["description", "content", "message", "text"];
+    for (const key of descKeys) {
+      const value = input[key];
+      if (typeof value === "string" && value.length > 0) {
+        return value;
+      }
     }
   }
 

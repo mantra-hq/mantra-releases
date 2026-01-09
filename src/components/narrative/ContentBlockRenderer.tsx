@@ -8,6 +8,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { isTerminalTool, isFileTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
 import type { ContentBlock } from "@/types/message";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -38,79 +39,6 @@ export interface ContentBlockRendererProps {
   className?: string;
 }
 
-/** 终端类工具列表 */
-const TERMINAL_TOOLS = [
-  "bash",
-  "Bash",
-  "shell",  // Codex CLI
-  "Shell",
-  "run_command",
-  "execute_command",
-  "send_command_input",
-];
-
-/** 检查是否为终端类工具 */
-function isTerminalTool(toolName: string): boolean {
-  return TERMINAL_TOOLS.some(t =>
-    toolName.toLowerCase().includes(t.toLowerCase())
-  );
-}
-
-/** 文件类工具列表 */
-const FILE_TOOLS = [
-  "Read",
-  "read_file",
-  "view_file",
-  "Write",
-  "write_to_file",
-  "Edit",
-  "replace_file_content",
-  "multi_replace_file_content",
-];
-
-/** 检查是否为文件类工具 */
-function isFileTool(toolName: string): boolean {
-  return FILE_TOOLS.some(t =>
-    toolName.toLowerCase().includes(t.toLowerCase())
-  );
-}
-
-/** 从 toolInput 提取文件路径 */
-function extractFilePath(toolInput?: Record<string, unknown>): string | null {
-  if (!toolInput) return null;
-
-  const pathKeys = [
-    "file_path",
-    "filePath",
-    "path",
-    "AbsolutePath",
-    "TargetFile",
-    "filename",
-  ];
-
-  for (const key of pathKeys) {
-    const value = toolInput[key];
-    if (typeof value === "string" && value.length > 0) {
-      return value;
-    }
-  }
-  return null;
-}
-
-/** 从 toolInput 提取命令 (支持字符串或数组格式) */
-function extractCommand(toolInput?: Record<string, unknown>): string | undefined {
-  if (!toolInput) return undefined;
-
-  const cmd = toolInput.command;
-  if (typeof cmd === "string") {
-    return cmd;
-  }
-  if (Array.isArray(cmd)) {
-    // Codex CLI: command is an array of strings
-    return cmd.join(" ");
-  }
-  return undefined;
-}
 
 /**
  * ContentBlockRenderer 组件
@@ -314,16 +242,16 @@ export function ContentBlockRenderer({
               pairingContext.scrollTo(block.toolUseId!, "output");
             } : undefined}
             onClick={
-              isTerminalTool(toolName) ? () => {
+              isTerminalTool(block.standardTool) ? () => {
                 // 终端类工具 - 点击卡片打开终端 Tab
                 openTerminalDetail({
-                  command: extractCommand(block.toolInput),
+                  command: getToolCommand(block.standardTool),
                   output: pairInfo?.outputContent ?? "",
                   isError: isError,
                 });
-              } : isFileTool(toolName) ? () => {
+              } : isFileTool(block.standardTool) ? () => {
                 // 文件类工具 - 点击卡片打开文件到右侧代码面板
-                const filePath = extractFilePath(block.toolInput);
+                const filePath = getToolPath(block.standardTool);
                 if (filePath) {
                   // 使用 tool_result 的内容作为文件内容（如果有配对输出）
                   const fileContent = pairInfo?.outputContent;
@@ -343,6 +271,8 @@ export function ContentBlockRenderer({
                 toolInput: block.toolInput,
                 toolOutput: pairInfo?.outputContent,
                 isError: isError,
+                // Story 8.12: 传递 standardTool 用于渲染器选择
+                standardTool: block.standardTool,
               });
             }}
             // Story 8.11: 传递新字段
@@ -358,6 +288,7 @@ export function ContentBlockRenderer({
         <ToolCall
           toolName={block.toolName || "Unknown Tool"}
           toolInput={block.toolInput}
+          standardTool={block.standardTool}
           className={className}
         />
       );

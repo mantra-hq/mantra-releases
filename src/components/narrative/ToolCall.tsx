@@ -12,51 +12,17 @@ import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight, Wrench, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isFileTool, isFileEditTool, getToolPath, getToolContent } from "@/lib/tool-utils";
+import type { StandardTool } from "@/types/message";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
-
-/** 文件操作相关的工具名称 */
-const FILE_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"];
-
-/** 检查是否是文件操作工具 */
-function isFileTool(toolName: string): boolean {
-  return FILE_TOOLS.some(t => toolName.toLowerCase().includes(t.toLowerCase()));
-}
-
-/** 从工具输入中提取文件路径 */
-function extractFilePath(input?: Record<string, unknown>): string | null {
-  if (!input) return null;
-  // 常见的文件路径字段名
-  const pathKeys = ["file_path", "filePath", "path", "file"];
-  for (const key of pathKeys) {
-    if (typeof input[key] === "string") {
-      return input[key] as string;
-    }
-  }
-  return null;
-}
-
-/** 从工具输入中提取代码内容 */
-function extractCodeContent(toolName: string, input?: Record<string, unknown>): string | null {
-  if (!input) return null;
-
-  // Write 工具：content 字段包含代码
-  if (toolName.toLowerCase().includes("write") && typeof input.content === "string") {
-    return input.content as string;
-  }
-
-  // Edit 工具：显示 new_string 作为代码内容
-  if (toolName.toLowerCase().includes("edit") && typeof input.new_string === "string") {
-    return input.new_string as string;
-  }
-
-  return null;
-}
 
 export interface ToolCallProps {
   /** 工具名称 */
   toolName: string;
   /** 工具输入参数 */
   toolInput?: Record<string, unknown>;
+  /** 标准化工具 (Story 8.12) */
+  standardTool?: StandardTool;
   /** 默认是否展开 */
   defaultOpen?: boolean;
   /** 自定义 className */
@@ -85,6 +51,7 @@ function formatJson(obj: Record<string, unknown> | undefined): string {
 export function ToolCall({
   toolName,
   toolInput,
+  standardTool,
   defaultOpen = false,
   className,
 }: ToolCallProps) {
@@ -96,10 +63,12 @@ export function ToolCall({
   // 从 store 获取 setCode 方法
   const setCode = useTimeTravelStore((state) => state.setCode);
 
-  // 检查是否是文件操作工具
-  const isFileOperation = isFileTool(toolName);
-  const filePath = extractFilePath(toolInput);
-  const codeContent = extractCodeContent(toolName, toolInput);
+  // Story 8.12: 使用 standardTool 判断工具类型和提取内容
+  const isFileOperation = isFileTool(standardTool);
+  const filePath = getToolPath(standardTool);
+  // file_write: 使用 content; file_edit: 使用 newString (从 standardTool 获取)
+  const codeContent = getToolContent(standardTool)
+    ?? (isFileEditTool(standardTool) && standardTool?.type === "file_edit" ? standardTool.newString : null);
 
   // 处理"查看代码"按钮点击
   const handleViewCode = React.useCallback(

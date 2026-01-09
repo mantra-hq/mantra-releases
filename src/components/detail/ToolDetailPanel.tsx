@@ -2,6 +2,7 @@
  * ToolDetailPanel - 工具详情面板组件
  * Story 2.15: Task 4
  * Story 2.26: 国际化支持
+ * Story 8.12: Task 8 - 使用 standardTool 选择渲染器
  *
  * 在右侧面板显示完整的 Call + Output 详情
  * AC: #7, #10
@@ -12,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { X, Wrench, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolOutputRenderer } from "./renderers";
+import type { StandardTool } from "@/types/message";
 
 /** 工具详情面板属性 */
 export interface ToolDetailPanelProps {
@@ -31,6 +33,8 @@ export interface ToolDetailPanelProps {
     renderOutput?: (output: string, toolName: string) => React.ReactNode;
     /** 自定义 className */
     className?: string;
+    /** Story 8.12: 标准化工具类型，用于选择渲染器 */
+    standardTool?: StandardTool;
 }
 
 /** 格式化耗时 */
@@ -59,6 +63,7 @@ export function ToolDetailPanel({
     onClose,
     renderOutput,
     className,
+    standardTool,
 }: ToolDetailPanelProps) {
     const { t } = useTranslation();
     const hasInput = toolInput && Object.keys(toolInput).length > 0;
@@ -152,6 +157,7 @@ export function ToolDetailPanel({
                                     toolName={toolName}
                                     toolInput={toolInput}
                                     isError={isError}
+                                    standardTool={standardTool}
                                 />
                             )}
                         </div>

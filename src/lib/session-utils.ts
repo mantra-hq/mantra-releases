@@ -1,17 +1,19 @@
 /**
  * Session Utilities - 会话数据转换工具
+ * Story 8.12: Task 5 - 使用 standardTool 替代手动路径提取
  *
  * 将后端 MantraSession 格式转换为前端 NarrativeMessage 格式
  */
 
-import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import type { NarrativeMessage, ContentBlock, StandardTool, ToolResultData } from "@/types/message";
+import { isFileTool, getToolPath } from "@/lib/tool-utils";
 
 /**
  * 后端 MantraSession 类型 (来自 Rust)
  */
 export interface MantraSession {
     id: string;
-    source: "claude" | "gemini" | "cursor" | "unknown";
+    source: "claude" | "gemini" | "cursor" | "codex" | "unknown";
     cwd: string;
     created_at: string;
     updated_at: string;
@@ -34,13 +36,31 @@ export interface MantraMessage {
 }
 
 /**
- * 后端内容块类型
+ * 后端内容块类型 (Story 8.12: 包含 standardTool)
  */
 export type MantraContentBlock =
     | { type: "text"; text: string }
-    | { type: "thinking"; thinking: string }
-    | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-    | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+    | { type: "thinking"; thinking: string; subject?: string; timestamp?: string }
+    | {
+        type: "tool_use";
+        id: string;
+        name: string;
+        input: Record<string, unknown>;
+        standard_tool?: StandardTool;
+        display_name?: string;
+        description?: string;
+    }
+    | {
+        type: "tool_result";
+        tool_use_id: string;
+        content: string;
+        is_error?: boolean;
+        structured_result?: ToolResultData;
+        display_content?: string;
+        render_as_markdown?: boolean;
+        user_decision?: string;
+    }
+    | { type: "code_suggestion"; file_path?: string; code?: string; language?: string };
 
 /**
  * tool_use 信息缓存，用于关联 tool_result
@@ -48,30 +68,13 @@ export type MantraContentBlock =
 interface ToolUseInfo {
     toolName: string;
     filePath?: string;
-}
-
-/** 文件操作相关的工具名称 */
-const FILE_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"];
-
-/** 检查是否是文件操作工具 */
-function isFileTool(toolName: string): boolean {
-    return FILE_TOOLS.some(t => toolName.toLowerCase().includes(t.toLowerCase()));
-}
-
-/** 从工具输入中提取文件路径 */
-function extractFilePath(input?: Record<string, unknown>): string | undefined {
-    if (!input) return undefined;
-    const pathKeys = ["file_path", "filePath", "path", "file"];
-    for (const key of pathKeys) {
-        if (typeof input[key] === "string") {
-            return input[key] as string;
-        }
-    }
-    return undefined;
+    standardTool?: StandardTool;
 }
 
 /**
  * 将后端内容块转换为前端格式
+ * Story 8.12: 使用 standardTool 替代手动路径提取
+ *
  * @param block - 后端内容块
  * @param toolUseMap - tool_use ID 到信息的映射
  */
@@ -89,15 +92,20 @@ function convertContentBlock(
             return {
                 type: "thinking",
                 content: block.thinking,
+                // Story 8.12: 传递新字段
+                subject: block.subject,
+                thinkingTimestamp: block.timestamp,
             };
         case "tool_use": {
-            // 提取文件路径（如果是文件操作工具）
-            const filePath = isFileTool(block.name) ? extractFilePath(block.input) : undefined;
+            // Story 8.12: 使用 standardTool 获取文件路径
+            const standardTool = block.standard_tool;
+            const filePath = isFileTool(standardTool) ? getToolPath(standardTool) : undefined;
 
             // 缓存到映射中，供后续 tool_result 使用
             toolUseMap.set(block.id, {
                 toolName: block.name,
                 filePath,
+                standardTool,
             });
 
             return {
@@ -106,6 +114,10 @@ function convertContentBlock(
                 toolName: block.name,
                 toolInput: block.input,
                 toolUseId: block.id,
+                // Story 8.12: 传递 standardTool
+                standardTool,
+                displayName: block.display_name,
+                description: block.description,
             };
         }
         case "tool_result": {
@@ -116,12 +128,24 @@ function convertContentBlock(
                 type: "tool_result",
                 content: block.content,
                 isError: block.is_error ?? false,
-                // Story 2.15 修复: 保留 toolUseId 用于配对功能
                 toolUseId: block.tool_use_id,
                 associatedFilePath: toolUseInfo?.filePath,
                 associatedToolName: toolUseInfo?.toolName,
+                // Story 8.12: 传递 structuredResult 和其他新字段
+                structuredResult: block.structured_result,
+                displayContent: block.display_content,
+                renderAsMarkdown: block.render_as_markdown,
+                userDecision: block.user_decision,
             };
         }
+        case "code_suggestion":
+            return {
+                type: "code_suggestion",
+                content: block.code || "",
+                filePath: block.file_path,
+                code: block.code,
+                language: block.language,
+            };
         default:
             // Fallback for unknown types
             return {

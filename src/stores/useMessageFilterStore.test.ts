@@ -40,12 +40,18 @@ const thinkingBlock: ContentBlock = {
     content: "Let me think about this...",
 };
 
+// Story 8.12: 更新测试数据使用 standardTool
 const toolUseBlock: ContentBlock = {
     type: "tool_use",
     content: "",
     toolName: "view_file",
     toolInput: { path: "/test/file.ts" },
     toolUseId: "tool-123",
+    // Story 8.12: 文件读取工具
+    standardTool: {
+        type: "file_read",
+        path: "/test/file.ts",
+    },
 };
 
 const toolResultBlock: ContentBlock = {
@@ -60,6 +66,11 @@ const runCommandBlock: ContentBlock = {
     toolName: "run_command",
     toolInput: { command: "npm test" },
     toolUseId: "tool-456",
+    // Story 8.12: Shell 执行工具
+    standardTool: {
+        type: "shell_exec",
+        command: "npm test",
+    },
 };
 
 const shellBlock: ContentBlock = {
@@ -68,6 +79,11 @@ const shellBlock: ContentBlock = {
     toolName: "shell",  // Codex CLI
     toolInput: { command: ["ls", "-la"] },
     toolUseId: "tool-457",
+    // Story 8.12: Shell 执行工具
+    standardTool: {
+        type: "shell_exec",
+        command: "ls -la",
+    },
 };
 
 const searchBlock: ContentBlock = {
@@ -76,6 +92,11 @@ const searchBlock: ContentBlock = {
     toolName: "grep_search",
     toolInput: { pattern: "test" },
     toolUseId: "tool-789",
+    // Story 8.12: 内容搜索工具
+    standardTool: {
+        type: "content_search",
+        pattern: "test",
+    },
 };
 
 describe("useMessageFilterStore", () => {

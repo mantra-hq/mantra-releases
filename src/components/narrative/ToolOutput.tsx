@@ -2,6 +2,7 @@
  * ToolOutput - 工具输出组件
  * Story 2.4: Task 3
  * Story 2.26: 国际化支持
+ * Story 8.12: Task 7 - 删除 stripLineNumbers (移到 Parser 层)
  *
  * 显示工具执行结果，支持成功/错误两种状态
  * AC: #4, #5, #6, #7
@@ -14,28 +15,6 @@ import { ChevronRight, Check, X, Code2, FileText, Edit3, Terminal, CheckCircle2,
 import { cn } from "@/lib/utils";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 import type { ToolResultData } from "@/types/message";
-
-/**
- * 去除 Read 工具输出中的行号前缀
- * 格式: "     1→import ..." 或 "    10→export ..."
- */
-function stripLineNumbers(content: string): string {
-  // 检测是否包含行号前缀模式
-  const lineNumberPattern = /^\s*\d+→/m;
-  if (!lineNumberPattern.test(content)) {
-    return content;
-  }
-
-  // 逐行处理，去除行号前缀
-  return content
-    .split("\n")
-    .map(line => {
-      // 匹配: 空格* + 数字+ + → + 实际内容
-      const match = line.match(/^\s*\d+→(.*)$/);
-      return match ? match[1] : line;
-    })
-    .join("\n");
-}
 
 export interface ToolOutputProps {
   /** 输出内容 */
@@ -64,15 +43,18 @@ export interface ToolOutputProps {
 }
 
 /**
- * 根据工具名称推断默认文件扩展名
+ * Story 8.12: 从 structuredResult 获取文件路径用于代码显示
  */
-function getDefaultExtensionForTool(toolName?: string): string {
-  if (!toolName) return ".txt";
-  const name = toolName.toLowerCase();
-  if (name.includes("bash")) return ".sh";
-  if (name.includes("grep")) return ".txt";
-  if (name.includes("glob")) return ".txt";
-  return ".txt";
+function getFilePathFromResult(result?: ToolResultData, fallbackPath?: string): string {
+  if (result) {
+    switch (result.type) {
+      case "file_read":
+      case "file_write":
+      case "file_edit":
+        return result.filePath;
+    }
+  }
+  return fallbackPath || "tool-output.txt";
 }
 
 /**
@@ -161,7 +143,7 @@ export function ToolOutput({
   isError = false,
   defaultOpen = false,
   filePath,
-  toolName,
+  toolName: _toolName, // Story 8.12: 保留接口兼容性，但不再使用此字段
   toolUseId,
   isHighlighted = false,
   onHover,
@@ -217,16 +199,16 @@ export function ToolOutput({
   );
 
   // 处理"查看代码"按钮点击
+  // Story 8.12: 使用 structuredResult 获取文件路径，Parser 已处理行号前缀
   const handleViewCode = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // 确定文件路径：优先使用传入的 filePath，否则根据工具类型生成默认路径
-      const path = filePath || `tool-output${getDefaultExtensionForTool(toolName)}`;
-      // 去除行号前缀后再显示
-      const cleanContent = stripLineNumbers(content);
-      setCode(cleanContent, path);
+      // 优先使用 structuredResult 中的路径，然后是传入的 filePath
+      const path = getFilePathFromResult(structuredResult, filePath);
+      // Story 8.12: Parser 已处理行号前缀，直接使用 content
+      setCode(content, path);
     },
-    [content, filePath, toolName, setCode]
+    [content, filePath, structuredResult, setCode]
   );
 
   // 是否显示查看代码按钮

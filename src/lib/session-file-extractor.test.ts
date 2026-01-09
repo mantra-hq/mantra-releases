@@ -1,10 +1,11 @@
 /**
  * session-file-extractor.test.ts - 会话文件提取工具测试
  * Story 2.30: AC2 - 会话日志内容回退
+ * Story 8.12: Task 6.5 - 更新测试使用 standardTool
  */
 
 import { describe, it, expect } from "vitest";
-import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import type { NarrativeMessage, ContentBlock, StandardTool } from "@/types/message";
 import { extractFileFromSession } from "./session-file-extractor";
 
 // 辅助函数：创建测试消息
@@ -34,9 +35,28 @@ function createUserMessage(
     };
 }
 
+// 辅助函数：创建 file_write standardTool
+function createFileWriteTool(path: string, content: string): StandardTool {
+    return { type: "file_write", path, content };
+}
+
+// 辅助函数：创建 file_edit standardTool
+function createFileEditTool(path: string, oldString?: string, newString?: string): StandardTool {
+    return { type: "file_edit", path, oldString, newString };
+}
+
+// 辅助函数：创建 file_read standardTool
+function createFileReadTool(path: string): StandardTool {
+    return { type: "file_read", path };
+}
+
 describe("extractFileFromSession", () => {
-    describe("基本功能", () => {
-        it("从 Write tool_use 提取文件内容", () => {
+    describe("基本功能 (使用 standardTool)", () => {
+        it("从 file_write standardTool 提取文件内容", () => {
+            const standardTool = createFileWriteTool(
+                "src/components/Button.tsx",
+                'export function Button() { return <button>Click</button>; }'
+            );
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -44,10 +64,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "src/components/Button.tsx",
-                            content: 'export function Button() { return <button>Click</button>; }',
-                        },
+                        toolInput: {},
+                        standardTool,
                     },
                 ]),
             ];
@@ -60,53 +78,35 @@ describe("extractFileFromSession", () => {
             expect(result?.messageIndex).toBe(0);
         });
 
-        it("从 write_file tool_use 提取文件内容 (小写工具名)", () => {
+        it("从 file_edit standardTool 提取文件内容 (使用 newString)", () => {
+            const standardTool = createFileEditTool(
+                "src/app.ts",
+                "old content",
+                "new content"
+            );
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
                         type: "tool_use",
                         content: "",
-                        toolName: "write_file",
+                        toolName: "Edit",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "lib/utils.ts",
-                            content: "export const util = () => {};",
-                        },
+                        toolInput: {},
+                        standardTool,
                     },
                 ]),
             ];
 
-            const result = extractFileFromSession(messages, "lib/utils.ts", 0);
+            const result = extractFileFromSession(messages, "src/app.ts", 0);
 
             expect(result).not.toBeNull();
-            expect(result?.content).toBe("export const util = () => {};");
-        });
-
-        it("从 create_file tool_use 提取文件内容", () => {
-            const messages: NarrativeMessage[] = [
-                createAssistantMessage("1", "2026-01-08T10:00:00Z", [
-                    {
-                        type: "tool_use",
-                        content: "",
-                        toolName: "create_file",
-                        toolUseId: "tu-1",
-                        toolInput: {
-                            path: "config.json",
-                            content: '{"key": "value"}',
-                        },
-                    },
-                ]),
-            ];
-
-            const result = extractFileFromSession(messages, "config.json", 0);
-
-            expect(result).not.toBeNull();
-            expect(result?.content).toBe('{"key": "value"}');
+            expect(result?.content).toBe("new content");
         });
     });
 
     describe("路径规范化", () => {
         it("忽略前导 ./ 进行匹配", () => {
+            const standardTool = createFileWriteTool("./src/app.ts", "const app = {};");
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -114,10 +114,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "./src/app.ts",
-                            content: "const app = {};",
-                        },
+                        toolInput: {},
+                        standardTool,
                     },
                 ]),
             ];
@@ -130,6 +128,7 @@ describe("extractFileFromSession", () => {
         });
 
         it("忽略前导 / 进行匹配", () => {
+            const standardTool = createFileWriteTool("/src/main.ts", "const main = {};");
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -137,10 +136,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "/src/main.ts",
-                            content: "const main = {};",
-                        },
+                        toolInput: {},
+                        standardTool,
                     },
                 ]),
             ];
@@ -152,6 +149,7 @@ describe("extractFileFromSession", () => {
         });
 
         it("大小写不敏感匹配", () => {
+            const standardTool = createFileWriteTool("SRC/Components/App.tsx", "export default App;");
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -159,10 +157,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "SRC/Components/App.tsx",
-                            content: "export default App;",
-                        },
+                        toolInput: {},
+                        standardTool,
                     },
                 ]),
             ];
@@ -183,10 +179,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "version 1",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "version 1"),
                     },
                 ]),
                 createUserMessage("2", "2026-01-08T10:01:00Z", "Update the file"),
@@ -196,10 +190,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-2",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "version 2",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "version 2"),
                     },
                 ]),
             ];
@@ -221,10 +213,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "new-file.ts",
-                            content: "new content",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("new-file.ts", "new content"),
                     },
                 ]),
             ];
@@ -245,10 +235,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "earlier version",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "earlier version"),
                     },
                 ]),
                 createUserMessage("2", "2026-01-08T10:01:00Z", "Check"),
@@ -258,10 +246,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-2",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "later version",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "later version"),
                     },
                 ]),
             ];
@@ -289,10 +275,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "content",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "content"),
                     },
                 ]),
             ];
@@ -309,10 +293,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "other-file.ts",
-                            content: "content",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("other-file.ts", "content"),
                     },
                 ]),
             ];
@@ -330,7 +312,7 @@ describe("extractFileFromSession", () => {
             expect(result).toBeNull();
         });
 
-        it("忽略非 Write 工具", () => {
+        it("忽略非 Write/Edit 工具 (file_read)", () => {
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -338,9 +320,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Read",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                        },
+                        toolInput: {},
+                        standardTool: createFileReadTool("file.ts"),
                     },
                 ]),
             ];
@@ -349,7 +330,26 @@ describe("extractFileFromSession", () => {
             expect(result).toBeNull();
         });
 
-        it("Write 工具无内容返回 null", () => {
+        it("file_write 无内容返回 null", () => {
+            const standardTool: StandardTool = { type: "file_write", path: "file.ts", content: "" };
+            const messages: NarrativeMessage[] = [
+                createAssistantMessage("1", "2026-01-08T10:00:00Z", [
+                    {
+                        type: "tool_use",
+                        content: "",
+                        toolName: "Write",
+                        toolUseId: "tu-1",
+                        toolInput: {},
+                        standardTool,
+                    },
+                ]),
+            ];
+
+            const result = extractFileFromSession(messages, "file.ts", 0);
+            expect(result).toBeNull();
+        });
+
+        it("无 standardTool 返回 null", () => {
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -359,8 +359,9 @@ describe("extractFileFromSession", () => {
                         toolUseId: "tu-1",
                         toolInput: {
                             file_path: "file.ts",
-                            // content 缺失
+                            content: "content without standardTool",
                         },
+                        // 无 standardTool
                     },
                 ]),
             ];
@@ -371,7 +372,7 @@ describe("extractFileFromSession", () => {
     });
 
     describe("ToolResult 回退", () => {
-        it("从 tool_result 的 content 提取", () => {
+        it("从 tool_result 的 content 提取 (通过 associatedFilePath)", () => {
             const messages: NarrativeMessage[] = [
                 createAssistantMessage("1", "2026-01-08T10:00:00Z", [
                     {
@@ -398,10 +399,8 @@ describe("extractFileFromSession", () => {
                         content: "",
                         toolName: "Write",
                         toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                            content: "content",
-                        },
+                        toolInput: {},
+                        standardTool: createFileWriteTool("file.ts", "content"),
                     },
                 ]),
             ];
@@ -412,51 +411,4 @@ describe("extractFileFromSession", () => {
             expect(result?.timestamp).toBe(new Date("2026-01-08T10:30:00.000Z").getTime());
         });
     });
-
-    describe("输入变体", () => {
-        it("支持 filePath (驼峰) 输入字段", () => {
-            const messages: NarrativeMessage[] = [
-                createAssistantMessage("1", "2026-01-08T10:00:00Z", [
-                    {
-                        type: "tool_use",
-                        content: "",
-                        toolName: "Write",
-                        toolUseId: "tu-1",
-                        toolInput: {
-                            filePath: "camel-case.ts",
-                            content: "camel case content",
-                        },
-                    },
-                ]),
-            ];
-
-            const result = extractFileFromSession(messages, "camel-case.ts", 0);
-
-            expect(result).not.toBeNull();
-            expect(result?.content).toBe("camel case content");
-        });
-
-        it("支持 file_content 输入字段", () => {
-            const messages: NarrativeMessage[] = [
-                createAssistantMessage("1", "2026-01-08T10:00:00Z", [
-                    {
-                        type: "tool_use",
-                        content: "",
-                        toolName: "Write",
-                        toolUseId: "tu-1",
-                        toolInput: {
-                            file_path: "file.ts",
-                            file_content: "alternative content field",
-                        },
-                    },
-                ]),
-            ];
-
-            const result = extractFileFromSession(messages, "file.ts", 0);
-
-            expect(result).not.toBeNull();
-            expect(result?.content).toBe("alternative content field");
-        });
-    });
 });
-

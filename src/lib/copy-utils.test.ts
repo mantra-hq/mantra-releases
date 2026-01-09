@@ -1,11 +1,12 @@
 /**
  * Copy Utils 单元测试
  * Story 2.22: Task 2.8
+ * Story 8.12: Task 4.4 - 更新测试使用 standardTool
  */
 
 import { describe, it, expect } from "vitest";
 import { getMessageCopyContent, hasCopiableContent } from "./copy-utils";
-import type { NarrativeMessage } from "@/types/message";
+import type { NarrativeMessage, StandardTool } from "@/types/message";
 
 describe("getMessageCopyContent", () => {
   describe("text 类型", () => {
@@ -63,8 +64,9 @@ describe("getMessageCopyContent", () => {
     });
   });
 
-  describe("tool_use 类型 - 智能提取主体内容", () => {
-    it("Bash 工具应该复制命令", () => {
+  describe("tool_use 类型 - 智能提取主体内容 (使用 standardTool)", () => {
+    it("Shell 工具应该复制命令", () => {
+      const standardTool: StandardTool = { type: "shell_exec", command: "npm install" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -75,6 +77,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Bash",
             toolInput: { command: "npm install", description: "Install deps" },
+            standardTool,
           },
         ],
       };
@@ -83,6 +86,7 @@ describe("getMessageCopyContent", () => {
     });
 
     it("Read 工具应该复制文件路径", () => {
+      const standardTool: StandardTool = { type: "file_read", path: "/src/app.ts" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -93,6 +97,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Read",
             toolInput: { file_path: "/src/app.ts" },
+            standardTool,
           },
         ],
       };
@@ -101,6 +106,7 @@ describe("getMessageCopyContent", () => {
     });
 
     it("Write 工具应该复制文件路径", () => {
+      const standardTool: StandardTool = { type: "file_write", path: "/src/new-file.ts", content: "..." };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -111,6 +117,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Write",
             toolInput: { file_path: "/src/new-file.ts", content: "..." },
+            standardTool,
           },
         ],
       };
@@ -119,6 +126,7 @@ describe("getMessageCopyContent", () => {
     });
 
     it("Edit 工具应该复制文件路径", () => {
+      const standardTool: StandardTool = { type: "file_edit", path: "/src/edit.ts", oldString: "a", newString: "b" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -129,6 +137,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Edit",
             toolInput: { file_path: "/src/edit.ts", old_string: "a", new_string: "b" },
+            standardTool,
           },
         ],
       };
@@ -136,7 +145,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("/src/edit.ts");
     });
 
-    it("Grep 工具应该复制搜索模式", () => {
+    it("Content Search (Grep) 工具应该复制搜索模式", () => {
+      const standardTool: StandardTool = { type: "content_search", pattern: "function\\s+\\w+" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -147,6 +157,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Grep",
             toolInput: { pattern: "function\\s+\\w+" },
+            standardTool,
           },
         ],
       };
@@ -154,7 +165,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("function\\s+\\w+");
     });
 
-    it("Glob 工具应该复制 glob 模式", () => {
+    it("File Search (Glob) 工具应该复制 glob 模式", () => {
+      const standardTool: StandardTool = { type: "file_search", pattern: "**/*.tsx" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -165,6 +177,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Glob",
             toolInput: { pattern: "**/*.tsx" },
+            standardTool,
           },
         ],
       };
@@ -172,7 +185,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("**/*.tsx");
     });
 
-    it("WebFetch 工具应该复制 URL", () => {
+    it("WebFetch 工具应该复制 URL (Other 类型)", () => {
+      const standardTool: StandardTool = { type: "other", name: "WebFetch", input: { url: "https://example.com" } };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -183,6 +197,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "WebFetch",
             toolInput: { url: "https://example.com" },
+            standardTool,
           },
         ],
       };
@@ -190,7 +205,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("https://example.com");
     });
 
-    it("WebSearch 工具应该复制查询", () => {
+    it("WebSearch 工具应该复制查询 (Other 类型)", () => {
+      const standardTool: StandardTool = { type: "other", name: "WebSearch", input: { query: "React hooks tutorial" } };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -201,6 +217,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "WebSearch",
             toolInput: { query: "React hooks tutorial" },
+            standardTool,
           },
         ],
       };
@@ -208,7 +225,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("React hooks tutorial");
     });
 
-    it("TodoWrite 工具不应该复制内容", () => {
+    it("TodoWrite 工具不应该复制内容 (Other 类型)", () => {
+      const standardTool: StandardTool = { type: "other", name: "TodoWrite", input: { todos: [] } };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -219,6 +237,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "TodoWrite",
             toolInput: { todos: [] },
+            standardTool,
           },
         ],
       };
@@ -226,7 +245,8 @@ describe("getMessageCopyContent", () => {
       expect(getMessageCopyContent(message)).toBe("");
     });
 
-    it("未知工具应该尝试提取 description 字段", () => {
+    it("未知工具应该尝试提取 description 字段 (Other 类型)", () => {
+      const standardTool: StandardTool = { type: "other", name: "CustomTool", input: { description: "Do something useful" } };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -237,6 +257,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "CustomTool",
             toolInput: { description: "Do something useful" },
+            standardTool,
           },
         ],
       };
@@ -273,6 +294,7 @@ describe("getMessageCopyContent", () => {
 
   describe("混合内容", () => {
     it("应该正确组合多种类型的主体内容", () => {
+      const standardTool: StandardTool = { type: "file_read", path: "/app.ts" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",
@@ -284,6 +306,7 @@ describe("getMessageCopyContent", () => {
             content: "",
             toolName: "Read",
             toolInput: { file_path: "/app.ts" },
+            standardTool,
           },
           { type: "tool_result", content: "const app = 1;", isError: false },
         ],

@@ -233,13 +233,14 @@ describe("Player Page", () => {
 /**
  * Story 2.12: 智能文件选择集成测试
  * Task 6.4, 6.5
+ * Story 8.12: 更新为使用 tool-utils 和 standardTool
  */
 describe("Story 2.12 - 智能文件选择", () => {
-  describe("file-path-extractor 集成", () => {
+  describe("tool-utils 集成", () => {
     // 这些测试验证文件路径提取逻辑与实际消息结构的集成
-    it("应该从 tool_use 消息中提取文件路径", async () => {
+    it("应该从 tool_use 消息中提取文件路径 (使用 standardTool)", async () => {
       // 导入实际的提取函数进行集成测试
-      const { extractFilePathWithPriority } = await import("@/lib/file-path-extractor");
+      const { extractFilePathWithPriority } = await import("@/lib/tool-utils");
       
       const message = {
         id: "msg-1",
@@ -250,8 +251,13 @@ describe("Story 2.12 - 智能文件选择", () => {
             type: "tool_use" as const,
             content: "",
             toolName: "Read",
-            toolInput: { file_path: "src/components/Button.tsx" },
+            toolInput: {},
             toolUseId: "tu-1",
+            // Story 8.12: 使用 standardTool
+            standardTool: {
+              type: "file_read" as const,
+              path: "src/components/Button.tsx",
+            },
           },
         ],
       };
@@ -264,7 +270,7 @@ describe("Story 2.12 - 智能文件选择", () => {
     });
 
     it("应该从历史消息中向前搜索文件路径", async () => {
-      const { findRecentFilePathEnhanced } = await import("@/lib/file-path-extractor");
+      const { findRecentFilePathEnhanced } = await import("@/lib/tool-utils");
       
       const messages = [
         {
@@ -276,8 +282,14 @@ describe("Story 2.12 - 智能文件选择", () => {
               type: "tool_use" as const,
               content: "",
               toolName: "Write",
-              toolInput: { file_path: "src/utils/helper.ts" },
+              toolInput: {},
               toolUseId: "tu-1",
+              // Story 8.12: 使用 standardTool
+              standardTool: {
+                type: "file_write" as const,
+                path: "src/utils/helper.ts",
+                content: "// helper file",
+              },
             },
           ],
         },
@@ -313,7 +325,7 @@ describe("Story 2.12 - 智能文件选择", () => {
     });
 
     it("应该正确转换绝对路径为相对路径", async () => {
-      const { toRelativePath } = await import("@/lib/file-path-extractor");
+      const { toRelativePath } = await import("@/lib/tool-utils");
       
       // Linux 绝对路径
       expect(toRelativePath("/home/user/project/src/main.ts", "/home/user/project"))

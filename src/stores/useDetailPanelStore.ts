@@ -1,11 +1,13 @@
 /**
  * useDetailPanelStore - 详情面板状态管理
  * Story 2.15: Task 8.3
+ * Story 8.12: 添加 standardTool 支持
  *
  * 管理右侧面板的 Tab 切换和内容状态
  */
 
 import { create } from "zustand";
+import type { StandardTool } from "@/types/message";
 
 /** 右侧面板 Tab 类型 */
 export type RightPanelTab = "code" | "terminal" | "tool";
@@ -21,6 +23,8 @@ export interface ToolDetail {
     toolOutput?: string;
     isError?: boolean;
     duration?: number;
+    /** Story 8.12: 标准化工具类型，用于选择渲染器 */
+    standardTool?: StandardTool;
 }
 
 /** 终端内容数据 */

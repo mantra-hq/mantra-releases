@@ -1,12 +1,14 @@
 /**
  * Session File Extractor - 从会话日志中提取文件内容
  * Story 2.30: AC2 - 会话日志内容回退
+ * Story 8.12: Task 6 - 使用 standardTool 替代工具名和路径字段匹配
  *
  * 当文件在 Git 历史和工作目录中都不存在时，
  * 尝试从会话的 tool_use Write 操作中提取文件内容。
  */
 
 import type { NarrativeMessage } from "@/types/message";
+import { isFileWriteTool, isFileEditTool, getToolPath, getToolContent } from "@/lib/tool-utils";
 
 /**
  * 从会话消息中提取文件内容的结果
@@ -24,8 +26,7 @@ export interface SessionFileResult {
 
 /**
  * 从消息中提取 Write 工具调用的文件路径和内容
- * 
- * Story 8.11: 优先使用 standardTool.path，回退到现有多字段检查逻辑
+ * Story 8.12: 使用 standardTool.type 判断，直接用 standardTool.path
  */
 function extractWriteToolContent(
     message: NarrativeMessage,
@@ -36,47 +37,20 @@ function extractWriteToolContent(
     for (const block of message.content) {
         // 检查 ToolUse 块
         if (block.type === "tool_use") {
-            const toolName = block.toolName?.toLowerCase() ?? "";
-            // 匹配 Write 相关的工具名
-            if (
-                toolName === "write" ||
-                toolName === "write_file" ||
-                toolName === "writefile" ||
-                toolName === "create_file" ||
-                toolName === "createfile"
-            ) {
-                // Story 8.11: 优先使用 standardTool.path (AC: #6)
-                let filePath = "";
+            const { standardTool } = block;
+
+            // Story 8.12: 使用 standardTool.type 判断写入/编辑工具
+            if (isFileWriteTool(standardTool) || isFileEditTool(standardTool)) {
+                const filePath = getToolPath(standardTool) ?? "";
                 let content = "";
 
-                // 优先使用 standardTool (类型已在 ContentBlock 中定义为 StandardTool | undefined)
-                const standardTool = block.standardTool;
-                if (standardTool && (standardTool.type === "file_write" || standardTool.type === "file_edit")) {
-                    filePath = standardTool.path;
-                    // file_write 有 content 字段，file_edit 有 newString 字段
-                    if (standardTool.type === "file_write" && standardTool.content !== undefined) {
-                        content = standardTool.content;
-                    } else if (standardTool.type === "file_edit" && standardTool.newString !== undefined) {
-                        // 对于 edit 操作，使用 newString 作为内容（完整替换后的内容不可用）
-                        // 注意: 这只是 partial content，通常不够完整
-                        content = standardTool.newString;
-                    }
+                // file_write 有 content 字段
+                if (isFileWriteTool(standardTool)) {
+                    content = getToolContent(standardTool) ?? "";
                 }
-
-                // 回退到现有的多字段检查逻辑
-                if (!filePath) {
-                    const input = block.toolInput as Record<string, unknown> | undefined;
-                    if (input) {
-                        filePath =
-                            (input.file_path as string) ||
-                            (input.filePath as string) ||
-                            (input.path as string) ||
-                            "";
-                        content = content ||
-                            (input.content as string) ||
-                            (input.file_content as string) ||
-                            "";
-                    }
+                // file_edit 有 newString 字段（部分内容）
+                else if (isFileEditTool(standardTool) && standardTool?.type === "file_edit") {
+                    content = standardTool.newString ?? "";
                 }
 
                 // 规范化路径进行比较
@@ -90,16 +64,13 @@ function extractWriteToolContent(
         }
 
         // 检查 ToolResult 块（某些格式可能在 result 中包含内容）
-        // 注意: ContentBlock 使用 content 字段存储工具结果内容
-        // Read 工具的输出可能带有行号前缀，需要去除
+        // 注意: Parser 层已处理行号前缀，这里直接使用 content
         if (block.type === "tool_result" && block.associatedFilePath) {
             const normalizedTarget = normalizePath(targetPath);
             const normalizedPath = normalizePath(block.associatedFilePath);
 
             if (normalizedPath === normalizedTarget && block.content) {
-                // 去除可能存在的行号前缀 (如 "1→", "42|" 等)
-                const cleanContent = stripLineNumberPrefix(block.content);
-                return { content: cleanContent, path: block.associatedFilePath };
+                return { content: block.content, path: block.associatedFilePath };
             }
         }
     }
@@ -115,35 +86,6 @@ function normalizePath(path: string): string {
         .replace(/^\.\//, "")
         .replace(/^\//, "")
         .toLowerCase();
-}
-
-/**
- * 去除行号前缀 (如 "1→", "42|", "  123→" 等格式)
- * 
- * tool_result 中的内容可能带有 Claude 的行号格式:
- * - "1→import ..." 或 "1|import ..."
- * - 行号可能有前导空格用于对齐
- */
-function stripLineNumberPrefix(content: string): string {
-    const lines = content.split('\n');
-
-    // 检测是否大部分行都有行号前缀（避免误处理）
-    const lineNumberPattern = /^\s*\d+[→|]/;
-    const linesWithPrefix = lines.filter(line => lineNumberPattern.test(line)).length;
-
-    // 如果超过 50% 的非空行有行号前缀，才进行处理
-    const nonEmptyLines = lines.filter(line => line.trim().length > 0).length;
-    if (nonEmptyLines === 0 || linesWithPrefix / nonEmptyLines < 0.5) {
-        return content;
-    }
-
-    return lines
-        .map(line => {
-            // 匹配 "空格+数字+→或|" 格式，提取后面的内容
-            const match = line.match(/^\s*\d+[→|](.*)$/);
-            return match ? match[1] : line;
-        })
-        .join('\n');
 }
 
 /**

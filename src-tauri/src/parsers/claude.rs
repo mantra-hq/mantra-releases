@@ -9,10 +9,41 @@ use std::collections::HashMap;
 use std::fs;
 
 use chrono::{DateTime, Utc};
+use regex::Regex;
 use serde::Deserialize;
 
 use super::{LogParser, ParseError};
 use crate::models::{sources, ContentBlock, GitInfo, MantraSession, Message, Role, SessionMetadata, ToolResultData, normalize_tool};
+
+/// Strip line number prefixes from file read output (Story 8.12: AC5)
+///
+/// Claude Code's file read tool outputs include line number prefixes like:
+/// - "   1|content" (padded number + pipe)
+/// - "42|content" (unpadded number + pipe)
+/// - "   1→content" (padded number + arrow)
+/// - "  42→content" (padded number + arrow)
+///
+/// This function removes these prefixes while preserving the actual content.
+/// Note: The original code indentation (spaces after the delimiter) is preserved.
+fn strip_line_number_prefix(content: &str) -> String {
+    use once_cell::sync::Lazy;
+
+    // Regex for line number prefix pattern
+    // Matches: optional whitespace + digits + (pipe or arrow)
+    // Does NOT consume spaces after the delimiter - those are part of the code indentation
+    // Examples: "   1|", "42|", "   1→", "  42→"
+    static LINE_PREFIX_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"^\s*\d+[|→]").unwrap()
+    });
+
+    content
+        .lines()
+        .map(|line| {
+            LINE_PREFIX_REGEX.replace(line, "").to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Parser for Claude Code conversation logs
 #[derive(Debug, Default)]
@@ -327,7 +358,7 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
         }
         "tool_result" => {
             let tool_use_id = block.get("tool_use_id")?.as_str()?.to_string();
-            let content = if let Some(c) = block.get("content") {
+            let raw_content = if let Some(c) = block.get("content") {
                 if let Some(s) = c.as_str() {
                     s.to_string()
                 } else {
@@ -336,6 +367,10 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             } else {
                 String::new()
             };
+            // Story 8.12: Strip line number prefixes from tool result content (AC5)
+            // This is applied to all tool results as it's a safe operation
+            // (only affects lines matching the line number pattern)
+            let content = strip_line_number_prefix(&raw_content);
             let is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
             // Use tool_use_id as correlation_id
             Some(ContentBlock::ToolResult {
@@ -616,15 +651,19 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
             tool_use_id,
             content,
             is_error,
-        } => ContentBlock::ToolResult {
-            tool_use_id: tool_use_id.clone(),
-            content: content.as_string(),
-            is_error: *is_error,
-            correlation_id: Some(tool_use_id.clone()),
-            structured_result: None,
-            display_content: None,
-            render_as_markdown: None,
-            user_decision: None,
+        } => {
+            // Story 8.12: Strip line number prefixes from tool result content (AC5)
+            let stripped_content = strip_line_number_prefix(&content.as_string());
+            ContentBlock::ToolResult {
+                tool_use_id: tool_use_id.clone(),
+                content: stripped_content,
+                is_error: *is_error,
+                correlation_id: Some(tool_use_id.clone()),
+                structured_result: None,
+                display_content: None,
+                render_as_markdown: None,
+                user_decision: None,
+            }
         },
     }
 }
@@ -1268,5 +1307,61 @@ mod tests {
         } else {
             panic!("Expected ToolUse content block");
         }
+    }
+
+    // Story 8.12: Tests for strip_line_number_prefix (AC5)
+    #[test]
+    fn test_strip_line_number_prefix_pipe_format() {
+        // Test pipe format: "   1|content"
+        let input = "   1|fn main() {\n   2|    println!(\"Hello\");\n   3|}";
+        let expected = "fn main() {\n    println!(\"Hello\");\n}";
+        assert_eq!(strip_line_number_prefix(input), expected);
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_arrow_format() {
+        // Test arrow format: "  42→content"
+        let input = "  42→const x = 1;\n  43→const y = 2;";
+        let expected = "const x = 1;\nconst y = 2;";
+        assert_eq!(strip_line_number_prefix(input), expected);
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_unpadded() {
+        // Test unpadded numbers
+        let input = "1|line one\n2|line two\n10|line ten";
+        let expected = "line one\nline two\nline ten";
+        assert_eq!(strip_line_number_prefix(input), expected);
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_mixed() {
+        // Test content without line numbers (should remain unchanged)
+        let input = "Hello World\nNo line numbers here";
+        assert_eq!(strip_line_number_prefix(input), input);
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_empty() {
+        // Test empty content
+        let input = "";
+        assert_eq!(strip_line_number_prefix(input), "");
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_preserves_content_with_pipe() {
+        // Test that pipes in content are preserved (not line number format)
+        let input = "This is a | pipe in text\nAnother line | with pipe";
+        // These don't match the pattern (no leading digits), so unchanged
+        assert_eq!(strip_line_number_prefix(input), input);
+    }
+
+    #[test]
+    fn test_strip_line_number_prefix_with_space_after_delimiter() {
+        // Test format with space after delimiter: "1| content"
+        // The space after the delimiter is preserved (part of code indentation)
+        let input = "1| fn main() {";
+        let expected = " fn main() {";
+        assert_eq!(strip_line_number_prefix(input), expected);
     }
 }

@@ -1,6 +1,7 @@
 /**
  * useMessageFilterStore - 消息过滤状态管理
  * Story 2.16: Task 1
+ * Story 8.12: Task 9 - 使用 standardTool.type 进行过滤
  *
  * 管理消息类型过滤和搜索的状态:
  * - selectedTypes: 选中的过滤类型集合
@@ -10,6 +11,7 @@
 
 import { create } from "zustand";
 import type { ContentBlock, NarrativeMessage } from "@/types/message";
+import { isFileTool, isTerminalTool, isSearchTool } from "@/lib/tool-utils";
 
 /**
  * 消息类型配置
@@ -27,6 +29,7 @@ export interface MessageTypeConfig {
 
 /**
  * 预定义的消息类型配置
+ * Story 8.12: 使用 standardTool.type 进行匹配
  * label 使用 i18n key，在 UI 组件中翻译
  */
 export const MESSAGE_TYPES: MessageTypeConfig[] = [
@@ -46,19 +49,15 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
         id: "file",
         label: "message.file",
         icon: "📄",
-        match: (b) =>
-            b.type === "tool_use" &&
-            (b.toolName?.includes("file") ?? false),
+        // Story 8.12: 使用 standardTool 判断文件类工具
+        match: (b) => b.type === "tool_use" && isFileTool(b.standardTool),
     },
     {
         id: "terminal",
         label: "message.command",
         icon: "$",
-        match: (b) =>
-            b.type === "tool_use" &&
-            ["run_command", "bash", "shell", "command"].some((name) =>
-                b.toolName?.toLowerCase().includes(name)
-            ),
+        // Story 8.12: 使用 standardTool 判断终端类工具
+        match: (b) => b.type === "tool_use" && isTerminalTool(b.standardTool),
     },
     {
         id: "thinking",
@@ -70,11 +69,8 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
         id: "search",
         label: "common.search",
         icon: "🔍",
-        match: (b) =>
-            b.type === "tool_use" &&
-            ["search", "grep", "find"].some((name) =>
-                b.toolName?.toLowerCase().includes(name)
-            ),
+        // Story 8.12: 使用 standardTool 判断搜索类工具
+        match: (b) => b.type === "tool_use" && isSearchTool(b.standardTool),
     },
 ];
 

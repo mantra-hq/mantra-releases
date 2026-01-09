@@ -36,11 +36,11 @@ import { useSearchStore } from "@/stores/useSearchStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useTimeMachine, type SnapshotResult } from "@/hooks/useTimeMachine";
-// Story 2.12: 使用增强的文件路径提取模块
+// Story 8.12: 使用 tool-utils 模块的文件路径工具
 import {
   findRecentFilePathEnhanced,
   toRelativePath,
-} from "@/lib/file-path-extractor";
+} from "@/lib/tool-utils";
 // Story 2.30: 会话日志文件提取
 import { extractFileFromSession } from "@/lib/session-file-extractor";
 // Story 2.17: TopBar 面包屑导航

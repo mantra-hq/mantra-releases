@@ -8,10 +8,15 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ToolDetailPanel } from "./ToolDetailPanel";
 
 describe("ToolDetailPanel", () => {
+    // Story 8.12: 添加 standardTool 用于渲染器选择
     const defaultProps = {
         toolName: "read_file",
         toolInput: { path: "/src/test.ts" },
         toolOutput: "file content here",
+        standardTool: {
+            type: "file_read" as const,
+            path: "/src/test.ts",
+        },
     };
 
     it("应该渲染详情面板", () => {

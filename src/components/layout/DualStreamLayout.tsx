@@ -264,6 +264,7 @@ export const DualStreamLayout = React.forwardRef<
     );
 
     // Story 2.15: 工具详情面板
+    // Story 8.12: 传递 standardTool 用于渲染器选择
     const renderToolDetailPanel = toolDetail ? (
       <ToolDetailPanel
         toolName={toolDetail.toolName}
@@ -272,6 +273,7 @@ export const DualStreamLayout = React.forwardRef<
         isError={toolDetail.isError}
         duration={toolDetail.duration}
         onClose={closePanel}
+        standardTool={toolDetail.standardTool}
       />
     ) : null;
 
