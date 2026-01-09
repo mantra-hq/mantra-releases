@@ -3,7 +3,7 @@
 //! Provides parsers for converting conversation logs from different
 //! AI coding assistants (Claude, Gemini, Cursor, Codex) into MantraSession format.
 
-mod claude;
+pub mod claude;
 pub mod codex;
 pub mod cursor;
 mod error;

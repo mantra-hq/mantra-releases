@@ -5,12 +5,16 @@
 //! - ~/.claude/projects/<project-path>/<session-id>.jsonl
 //! - Each line is a JSON object with message data
 
-use std::collections::HashMap;
+mod path;
+mod types;
+
+pub use path::{ClaudePaths, ClaudeSessionFile, decode_claude_path, extract_cwd_from_file_content, get_claude_dir, get_claude_projects_dir};
+pub use types::{ClaudeConversation, ClaudeMessage, ClaudeContent, ClaudeContentBlock, ClaudeToolResultContent};
+
 use std::fs;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use serde::Deserialize;
 
 use super::{LogParser, ParseError};
 use crate::models::{sources, ContentBlock, GitInfo, MantraSession, Message, Role, SessionMetadata, ToolResultData, normalize_tool};
@@ -73,7 +77,7 @@ impl ClaudeParser {
         
         // Try to extract cwd from file content first (read first few lines)
         // This handles the case where the file has some system events with cwd info
-        let cwd = Self::extract_cwd_from_file_content(path)
+        let cwd = extract_cwd_from_file_content(path)
             .or_else(|| {
                 // Fallback: decode the parent directory name
                 // Claude stores sessions in ~/.claude/projects/<encoded-path>/<session-id>.jsonl
@@ -82,7 +86,7 @@ impl ClaudeParser {
                     .parent()
                     .and_then(|p| p.file_name())
                     .and_then(|s| s.to_str())
-                    .map(|encoded_path| Self::decode_claude_path(encoded_path))
+                    .map(|encoded_path| decode_claude_path(encoded_path))
             })
             .unwrap_or_default();
         
@@ -95,47 +99,6 @@ impl ClaudeParser {
         
         Ok(session)
     }
-    
-    /// Try to extract cwd from file content by reading the first few lines
-    fn extract_cwd_from_file_content(path: &str) -> Option<String> {
-        use std::io::{BufRead, BufReader};
-        
-        let file = std::fs::File::open(path).ok()?;
-        let reader = BufReader::new(file);
-        
-        for line in reader.lines().take(20) {
-            if let Ok(line) = line {
-                if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if let Some(cwd) = record.get("cwd").and_then(|v| v.as_str()) {
-                        if !cwd.is_empty() {
-                            return Some(cwd.to_string());
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-    
-    /// Decode Claude's encoded project path
-    /// Claude encodes paths by replacing / with -
-    /// e.g., -mnt-disk0-project-foo -> /mnt/disk0/project/foo
-    /// 
-    /// Note: This simple replacement works because Claude's encoding is straightforward.
-    /// Project names with hyphens will be decoded incorrectly, but since we primarily
-    /// need this for matching with existing sessions that have the real cwd, this is
-    /// acceptable - the key is consistency within the same project folder.
-    fn decode_claude_path(encoded_path: &str) -> String {
-        if !encoded_path.starts_with('-') {
-            return encoded_path.to_string();
-        }
-        
-        // Claude encodes paths by replacing / with -
-        // Simply replace all - with / to decode
-        encoded_path.replace('-', "/")
-    }
-
-
 
     /// Parse JSONL format (one JSON object per line)
     fn parse_jsonl(&self, content: &str) -> Result<MantraSession, ParseError> {
@@ -435,106 +398,6 @@ fn parse_tool_use_result(tool_use_result: &serde_json::Value) -> Option<ToolResu
     None
 }
 
-// Internal structures for deserializing Claude's legacy JSON format
-
-/// Claude conversation file structure (legacy JSON format)
-#[derive(Debug, Deserialize)]
-struct ClaudeConversation {
-    /// Unique conversation ID
-    id: String,
-
-    /// Working directory (optional)
-    #[serde(default)]
-    cwd: Option<String>,
-
-    /// Conversation creation time (optional)
-    #[serde(default)]
-    created_at: Option<DateTime<Utc>>,
-
-    /// Last update time (optional)
-    #[serde(default)]
-    updated_at: Option<DateTime<Utc>>,
-
-    /// Model name (optional)
-    #[serde(default)]
-    model: Option<String>,
-
-    /// Conversation title (optional)
-    #[serde(default)]
-    title: Option<String>,
-
-    /// Messages in the conversation
-    #[serde(default)]
-    messages: Vec<ClaudeMessage>,
-}
-
-/// Claude message structure
-#[derive(Debug, Deserialize)]
-struct ClaudeMessage {
-    /// Message role (user or assistant)
-    role: String,
-
-    /// Message content (can be string or array)
-    content: ClaudeContent,
-
-    /// Message timestamp (optional)
-    #[serde(default)]
-    timestamp: Option<DateTime<Utc>>,
-}
-
-/// Claude content can be either a simple string or an array of content blocks
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ClaudeContent {
-    /// Simple text content
-    Text(String),
-    /// Array of content blocks
-    Blocks(Vec<ClaudeContentBlock>),
-}
-
-/// Individual content block in Claude format
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ClaudeContentBlock {
-    /// Plain text
-    Text { text: String },
-
-    /// Thinking/reasoning content
-    Thinking { thinking: String },
-
-    /// Tool use request
-    ToolUse {
-        id: String,
-        name: String,
-        input: serde_json::Value,
-    },
-
-    /// Tool result
-    ToolResult {
-        tool_use_id: String,
-        content: ClaudeToolResultContent,
-        #[serde(default)]
-        is_error: bool,
-    },
-}
-
-/// Tool result content can be string or structured
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ClaudeToolResultContent {
-    Text(String),
-    Structured(serde_json::Value),
-}
-
-impl ClaudeToolResultContent {
-    fn as_string(&self) -> String {
-        match self {
-            Self::Text(s) => s.clone(),
-            Self::Structured(v) => v.to_string(),
-        }
-    }
-}
-
 impl LogParser for ClaudeParser {
     fn parse_file(&self, path: &str) -> Result<MantraSession, ParseError> {
         let content = fs::read_to_string(path)?;
@@ -698,137 +561,6 @@ fn convert_block(block: &ClaudeContentBlock) -> Option<ContentBlock> {
     }
 }
 
-/// Reorganize messages to follow Mantra message structure specification
-///
-/// Mantra 消息结构规范：
-/// 1. 文本消息 (thinking + text) → 一条消息
-/// 2. 工具调用消息 (tool_use + tool_result) → 每个工具调用一条独立消息
-///
-/// Claude 原始结构：
-/// - assistant 消息包含 thinking + text + tool_use
-/// - 下一条 user 消息包含 tool_result
-///
-/// 转换后：
-/// - 消息 1 (assistant): thinking + text
-/// - 消息 2 (assistant): tool_use + tool_result
-#[allow(dead_code)]
-fn reorganize_messages(raw_messages: Vec<Message>) -> Vec<Message> {
-    // Step 1: Collect all tool_results by tool_use_id
-    let mut tool_results: HashMap<String, (ContentBlock, Option<DateTime<Utc>>)> = HashMap::new();
-
-    for msg in &raw_messages {
-        for block in &msg.content_blocks {
-            if let ContentBlock::ToolResult { tool_use_id, .. } = block {
-                tool_results.insert(tool_use_id.clone(), (block.clone(), msg.timestamp));
-            }
-        }
-    }
-
-    // Step 2: Reorganize messages
-    let mut result = Vec::new();
-
-    for msg in raw_messages {
-        // Skip messages that only contain tool_results (they'll be merged into tool_use messages)
-        let only_tool_results = msg.content_blocks.iter().all(|b| matches!(b, ContentBlock::ToolResult { .. }));
-        if only_tool_results && !msg.content_blocks.is_empty() {
-            continue;
-        }
-
-        // Separate text blocks and tool_use blocks
-        let mut text_blocks = Vec::new();
-        let mut tool_uses: Vec<(ContentBlock, Option<DateTime<Utc>>)> = Vec::new();
-
-        for block in msg.content_blocks {
-            match &block {
-                ContentBlock::Text { .. } | ContentBlock::Thinking { .. } => {
-                    text_blocks.push(block);
-                }
-                ContentBlock::ToolUse { id, .. } => {
-                    // Find matching tool_result timestamp
-                    let result_ts = tool_results.get(id).and_then(|(_, ts)| *ts);
-                    tool_uses.push((block, result_ts));
-                }
-                ContentBlock::ToolResult { .. } => {
-                    // Already collected, skip
-                }
-                // Handle new content block types - treat as text-like content
-                ContentBlock::CodeDiff { .. } | ContentBlock::Image { .. } | ContentBlock::Reference { .. } | ContentBlock::CodeSuggestion { .. } => {
-                    text_blocks.push(block);
-                }
-            }
-        }
-
-        // Create text message if we have text/thinking content
-        if !text_blocks.is_empty() {
-            result.push(Message {
-                role: msg.role.clone(),
-                content_blocks: text_blocks,
-                timestamp: msg.timestamp,
-                mentioned_files: Vec::new(),
-                message_id: None,
-                parent_id: None,
-                is_sidechain: false,
-                source_metadata: None,
-            });
-        }
-
-        // Create tool action messages
-        for (tool_use, result_timestamp) in tool_uses {
-            let mut tool_blocks = vec![tool_use.clone()];
-
-            // Add matching tool_result if found
-            if let ContentBlock::ToolUse { id, name, input, .. } = &tool_use {
-                if let Some((tool_result, _)) = tool_results.get(id) {
-                    tool_blocks.push(tool_result.clone());
-                }
-
-                // Extract file paths for mentioned_files
-                let mentioned_files = extract_file_paths(name, input);
-
-                result.push(Message {
-                    role: msg.role.clone(),
-                    content_blocks: tool_blocks,
-                    timestamp: result_timestamp.or(msg.timestamp),
-                    mentioned_files,
-                    message_id: None,
-                    parent_id: None,
-                    is_sidechain: false,
-                    source_metadata: None,
-                });
-            }
-        }
-    }
-
-    result
-}
-
-/// Extract file paths from tool input
-#[allow(dead_code)]
-fn extract_file_paths(tool_name: &str, input: &serde_json::Value) -> Vec<String> {
-    let mut files = Vec::new();
-
-    // Common file operation tools
-    let file_tools = ["Read", "Write", "Edit", "Glob", "Grep", "read_file", "write_file", "edit_file"];
-    if !file_tools.iter().any(|t| tool_name.to_lowercase().contains(&t.to_lowercase())) {
-        return files;
-    }
-
-    // Extract from common path fields
-    let path_fields = ["file_path", "filePath", "path", "file", "target_file", "source_file"];
-    if let Some(obj) = input.as_object() {
-        for field in path_fields {
-            if let Some(value) = obj.get(field) {
-                if let Some(s) = value.as_str() {
-                    if !s.is_empty() {
-                        files.push(s.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    files
-}
 
 #[cfg(test)]
 mod tests {
