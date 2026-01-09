@@ -2,6 +2,7 @@
  * Copy Utils - 复制相关工具函数
  * Story 2.22: Task 2
  * Story 8.12: Task 4 - 使用 standardTool 替代 toolName 字符串匹配
+ * Story 8.13: 使用新工具类型判断函数
  *
  * 根据消息类型智能提取主体内容用于复制
  */
@@ -13,16 +14,23 @@ import {
   isFileWriteTool,
   isFileEditTool,
   isSearchTool,
-  isOtherTool,
+  isUnknownTool,
+  isWebFetchTool,
+  isWebSearchTool,
+  isSubTaskTool,
+  isTodoManageTool,
+  isKnowledgeQueryTool,
   getToolPath,
   getToolCommand,
   getToolPattern,
   getOtherToolName,
 } from "@/lib/tool-utils";
+import type { StandardTool } from "@/types/message";
 
 /**
  * 从 ToolCall 块提取主体内容（可直接使用的内容）
  * Story 8.12: 使用 standardTool 进行类型判断和内容提取
+ * Story 8.13: 使用新工具类型判断函数
  */
 function getToolCallContent(block: ContentBlock): string {
   const { standardTool, toolInput: input } = block;
@@ -51,18 +59,46 @@ function getToolCallContent(block: ContentBlock): string {
     if (pattern) return pattern;
   }
 
-  // Other 类型工具 - 特殊处理
-  if (isOtherTool(standardTool)) {
-    const toolName = getOtherToolName(standardTool);
+  // Story 8.13: 新工具类型的复制规则
 
-    // TodoWrite - 不复制（通常是结构化数据）
-    if (toolName === "TodoWrite") {
-      return "";
-    }
+  // WebFetch - 复制 URL
+  if (isWebFetchTool(standardTool)) {
+    const st = standardTool as Extract<StandardTool, { type: "web_fetch" }>;
+    return st.url || "";
+  }
+
+  // WebSearch - 复制查询
+  if (isWebSearchTool(standardTool)) {
+    const st = standardTool as Extract<StandardTool, { type: "web_search" }>;
+    return st.query || "";
+  }
+
+  // SubTask - 复制 prompt
+  if (isSubTaskTool(standardTool)) {
+    const st = standardTool as Extract<StandardTool, { type: "sub_task" }>;
+    return st.prompt || "";
+  }
+
+  // KnowledgeQuery - 复制 question
+  if (isKnowledgeQueryTool(standardTool)) {
+    const st = standardTool as Extract<StandardTool, { type: "knowledge_query" }>;
+    return st.question || "";
+  }
+
+  // TodoManage - 不复制（通常是结构化数据）
+  if (isTodoManageTool(standardTool)) {
+    return "";
+  }
+
+  // Unknown 类型工具 - 通用处理
+  // 注意: 以下 toolName 字符串匹配是 Unknown 类型的启发式回退，
+  // 不违背 StandardTool 完备化目标（AC3），因为仅对未知工具生效。
+  if (isUnknownTool(standardTool)) {
+    const toolName = getOtherToolName(standardTool);
 
     // 从 toolInput 尝试提取内容
     if (input) {
-      // WebFetch/WebSearch - 复制 URL 或查询
+      // 尝试提取 URL 或查询 (Unknown 类型的启发式回退)
       if (toolName?.toLowerCase().includes("web")) {
         const url = input.url;
         const query = input.query;
@@ -70,11 +106,8 @@ function getToolCallContent(block: ContentBlock): string {
         if (typeof query === "string") return query;
       }
 
-      // Task 工具 - 复制 prompt
-      if (toolName?.toLowerCase() === "task") {
-        const prompt = input.prompt;
-        if (typeof prompt === "string") return prompt;
-      }
+      // 尝试提取 prompt
+      if (typeof input.prompt === "string") return input.prompt;
     }
   }
 

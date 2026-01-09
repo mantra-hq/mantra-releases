@@ -8,7 +8,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { isTerminalTool, isFileTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
+import { isTerminalTool, isFileTool, isTodoManageTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
 import type { ContentBlock } from "@/types/message";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -205,8 +205,8 @@ export function ContentBlockRenderer({
       );
 
     case "tool_use":
-      // TodoWrite 使用专属卡片
-      if (block.toolName === "TodoWrite" && block.toolUseId) {
+      // Story 8.13: TodoManage 使用专属卡片（使用 standardTool 类型判断）
+      if (isTodoManageTool(block.standardTool) && block.toolUseId) {
         return (
           <TodoWriteCard
             toolUseId={block.toolUseId}

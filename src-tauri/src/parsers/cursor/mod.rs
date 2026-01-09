@@ -813,16 +813,16 @@ mod tests {
 
     #[test]
     fn test_standard_tool_mapping_unknown() {
-        // Test AC2: Unknown tools map to StandardTool::Other
+        // Test AC2: Unknown tools map to StandardTool::Unknown
         let input = serde_json::json!({"custom_param": "value"});
         let standard_tool = normalize_tool("custom_cursor_tool", &input);
 
         match standard_tool {
-            crate::models::StandardTool::Other { name, input: tool_input } => {
+            crate::models::StandardTool::Unknown { name, input: tool_input } => {
                 assert_eq!(name, "custom_cursor_tool");
                 assert_eq!(tool_input, serde_json::json!({"custom_param": "value"}));
             }
-            _ => panic!("Expected Other variant"),
+            _ => panic!("Expected Unknown variant"),
         }
     }
 

@@ -241,6 +241,8 @@ export interface StandardToolContentSearch {
 /**
  * 标准化工具类型 - 其他工具
  * Story 8.10: 对应后端 StandardTool::Other
+ * Story 8.13: 重命名为 Unknown，应趋近于零
+ * @deprecated 使用 StandardToolUnknown 代替
  */
 export interface StandardToolOther {
   type: "other";
@@ -249,8 +251,129 @@ export interface StandardToolOther {
 }
 
 /**
+ * 标准化工具类型 - 未知工具
+ * Story 8.13: 对应后端 StandardTool::Unknown (原 Other)
+ * 如果生产环境中出现大量 Unknown，说明需要扩展 StandardTool
+ */
+export interface StandardToolUnknown {
+  type: "unknown";
+  name: string;
+  input: Record<string, unknown>;
+}
+
+// === Story 8.13: 新增工具类型 ===
+
+/**
+ * 标准化工具类型 - Web 获取
+ * Story 8.13: 对应后端 StandardTool::WebFetch
+ */
+export interface StandardToolWebFetch {
+  type: "web_fetch";
+  url: string;
+  prompt?: string;
+}
+
+/**
+ * 标准化工具类型 - Web 搜索
+ * Story 8.13: 对应后端 StandardTool::WebSearch
+ */
+export interface StandardToolWebSearch {
+  type: "web_search";
+  query: string;
+}
+
+/**
+ * 标准化工具类型 - 知识查询
+ * Story 8.13: 对应后端 StandardTool::KnowledgeQuery
+ */
+export interface StandardToolKnowledgeQuery {
+  type: "knowledge_query";
+  repo?: string;
+  question: string;
+}
+
+/**
+ * 标准化工具类型 - 代码执行
+ * Story 8.13: 对应后端 StandardTool::CodeExec
+ */
+export interface StandardToolCodeExec {
+  type: "code_exec";
+  code: string;
+  language?: string;
+}
+
+/**
+ * 标准化工具类型 - 诊断
+ * Story 8.13: 对应后端 StandardTool::Diagnostic
+ */
+export interface StandardToolDiagnostic {
+  type: "diagnostic";
+  uri?: string;
+}
+
+/**
+ * 标准化工具类型 - 笔记本编辑
+ * Story 8.13: 对应后端 StandardTool::NotebookEdit
+ */
+export interface StandardToolNotebookEdit {
+  type: "notebook_edit";
+  notebookPath: string;
+  cellId?: string;
+  newSource: string;
+}
+
+/**
+ * 标准化工具类型 - 任务管理
+ * Story 8.13: 对应后端 StandardTool::TodoManage
+ */
+export interface StandardToolTodoManage {
+  type: "todo_manage";
+  todos: Record<string, unknown>;
+}
+
+/**
+ * 标准化工具类型 - 子任务/代理
+ * Story 8.13: 对应后端 StandardTool::SubTask
+ */
+export interface StandardToolSubTask {
+  type: "sub_task";
+  prompt: string;
+  agentType?: string;
+}
+
+/**
+ * 标准化工具类型 - 用户问询
+ * Story 8.13: 对应后端 StandardTool::UserPrompt
+ */
+export interface StandardToolUserPrompt {
+  type: "user_prompt";
+  question?: string;
+  options?: Record<string, unknown>;
+}
+
+/**
+ * 标准化工具类型 - 计划模式
+ * Story 8.13: 对应后端 StandardTool::PlanMode
+ */
+export interface StandardToolPlanMode {
+  type: "plan_mode";
+  entering: boolean;
+}
+
+/**
+ * 标准化工具类型 - 技能调用
+ * Story 8.13: 对应后端 StandardTool::SkillInvoke
+ */
+export interface StandardToolSkillInvoke {
+  type: "skill_invoke";
+  skill: string;
+  args?: string;
+}
+
+/**
  * 标准化工具类型 (Discriminated Union)
  * Story 8.10: 对应后端 StandardTool 枚举
+ * Story 8.13: 扩展完整应用级概念，添加 Unknown
  */
 export type StandardTool =
   | StandardToolFileRead
@@ -259,7 +382,19 @@ export type StandardTool =
   | StandardToolShellExec
   | StandardToolFileSearch
   | StandardToolContentSearch
-  | StandardToolOther;
+  | StandardToolWebFetch
+  | StandardToolWebSearch
+  | StandardToolKnowledgeQuery
+  | StandardToolCodeExec
+  | StandardToolDiagnostic
+  | StandardToolNotebookEdit
+  | StandardToolTodoManage
+  | StandardToolSubTask
+  | StandardToolUserPrompt
+  | StandardToolPlanMode
+  | StandardToolSkillInvoke
+  | StandardToolUnknown
+  | StandardToolOther; // 保留向后兼容
 
 /**
  * 工具结果数据 - 文件读取

@@ -913,10 +913,10 @@ mod tests {
             assert_eq!(name, "update_plan");
             assert!(standard_tool.is_some());
             match standard_tool {
-                Some(crate::models::StandardTool::Other { name: tool_name, .. }) => {
+                Some(crate::models::StandardTool::Unknown { name: tool_name, .. }) => {
                     assert_eq!(tool_name, "update_plan");
                 }
-                _ => panic!("Expected Other, got {:?}", standard_tool),
+                _ => panic!("Expected Unknown, got {:?}", standard_tool),
             }
         } else {
             panic!("Expected ToolUse block");

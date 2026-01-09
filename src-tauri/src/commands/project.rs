@@ -425,10 +425,11 @@ pub async fn sync_project(
         db.get_project_sessions(&project_id)?
     };
 
-    // Build a map of existing session IDs to message counts
-    let existing_session_map: std::collections::HashMap<String, u32> = existing_sessions
+    // Build a map of existing session IDs to (message_count, source)
+    // This allows us to only update sessions from the same source
+    let existing_session_map: std::collections::HashMap<String, (u32, String)> = existing_sessions
         .iter()
-        .map(|s| (s.id.clone(), s.message_count))
+        .map(|s| (s.id.clone(), (s.message_count, s.source.clone())))
         .collect();
 
     // Scan for sessions in the project directory
@@ -535,17 +536,30 @@ pub async fn sync_project(
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
 
     for session in all_sessions {
-        if let Some(&old_count) = existing_session_map.get(&session.id) {
+        if let Some((old_count, existing_source)) = existing_session_map.get(&session.id) {
+            // Only update if the source matches to prevent cross-source contamination
+            // This prevents a Claude session from overwriting a Cursor session's data
+            if session.source != *existing_source {
+                eprintln!(
+                    "[sync_project] Skipping session {} - source mismatch (existing: {}, new: {})",
+                    session.id,
+                    existing_source,
+                    session.source
+                );
+                continue;
+            }
+
             let new_count = session.messages.len() as u32;
             eprintln!(
-                "[sync_project] Session {}: old_count={}, new_count={}, force={}",
+                "[sync_project] Session {}: old_count={}, new_count={}, force={}, source={}",
                 session.id,
                 old_count,
                 new_count,
-                force
+                force,
+                session.source
             );
             // Update if: new messages added OR force re-parse requested
-            if new_count > old_count || force {
+            if new_count > *old_count || force {
                 // Session has updates or force re-parse
                 eprintln!(
                     "[sync_project] Updating session {} with {} messages",
@@ -555,7 +569,7 @@ pub async fn sync_project(
                 db.update_session(&session)?;
                 updated_sessions.push(UpdatedSession {
                     session_id: session.id.clone(),
-                    old_message_count: old_count,
+                    old_message_count: *old_count,
                     new_message_count: new_count,
                 });
             } else {

@@ -40,9 +40,14 @@ pub enum Role {
 ///
 /// Unifies tool semantics across different import sources (Claude, Gemini, Cursor, Codex),
 /// eliminating the need for frontend compatibility code.
+///
+/// Story 8.13: Complete application-level concept coverage.
+/// All tools map to semantic types; Unknown should trend toward zero in production.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StandardTool {
+    // === 文件操作 ===
+
     /// Read file content
     FileRead {
         path: String,
@@ -67,12 +72,16 @@ pub enum StandardTool {
         new_string: Option<String>,
     },
 
+    // === 终端操作 ===
+
     /// Execute shell command
     ShellExec {
         command: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         cwd: Option<String>,
     },
+
+    // === 搜索操作 ===
 
     /// File search (Glob pattern matching)
     FileSearch {
@@ -88,8 +97,99 @@ pub enum StandardTool {
         path: Option<String>,
     },
 
-    /// Other/unknown tool (preserves original data)
-    Other {
+    // === 网络操作 (Story 8.13) ===
+
+    /// Fetch web page content
+    WebFetch {
+        url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+    },
+
+    /// Search the web
+    WebSearch {
+        query: String,
+    },
+
+    // === 知识查询 (Story 8.13) ===
+
+    /// Query knowledge base (MCP deepwiki, etc.)
+    KnowledgeQuery {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        repo: Option<String>,
+        question: String,
+    },
+
+    // === 代码操作 (Story 8.13) ===
+
+    /// Execute code (MCP ide executeCode)
+    CodeExec {
+        code: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+    },
+
+    /// Get diagnostics (MCP ide getDiagnostics)
+    Diagnostic {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        uri: Option<String>,
+    },
+
+    /// Edit Jupyter notebook cell
+    NotebookEdit {
+        notebook_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cell_id: Option<String>,
+        new_source: String,
+    },
+
+    // === 任务管理 (Story 8.13) ===
+
+    /// Manage todo list (TodoWrite)
+    TodoManage {
+        todos: serde_json::Value,
+    },
+
+    // === 代理操作 (Story 8.13) ===
+
+    /// Launch sub-task/agent (Task tool)
+    SubTask {
+        prompt: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        agent_type: Option<String>,
+    },
+
+    // === 用户交互 (Story 8.13) ===
+
+    /// Ask user a question (AskUserQuestion)
+    UserPrompt {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        question: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        options: Option<serde_json::Value>,
+    },
+
+    // === 计划模式 (Story 8.13) ===
+
+    /// Enter/exit plan mode
+    PlanMode {
+        entering: bool,
+    },
+
+    // === 技能调用 (Story 8.13) ===
+
+    /// Invoke a skill
+    SkillInvoke {
+        skill: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        args: Option<String>,
+    },
+
+    // === 真正的未知 (Story 8.13: Other → Unknown) ===
+
+    /// Unknown tool (should trend toward zero in production)
+    /// If you see many Unknown tools, consider extending StandardTool.
+    Unknown {
         name: String,
         input: serde_json::Value,
     },
@@ -150,17 +250,21 @@ pub enum ToolResultData {
 /// * `input` - Tool input parameters as JSON Value
 ///
 /// # Returns
-/// Standardized tool type. Unknown tools return `StandardTool::Other`.
+/// Standardized tool type. Unknown tools return `StandardTool::Unknown`.
+///
+/// # Version Suffix Handling
+/// Cursor uses versioned tool names (e.g., "read_file_v2"). Version suffixes
+/// are automatically stripped for matching (e.g., "read_file_v2" -> "read_file").
 ///
 /// # Tool Name Mapping
-/// | StandardTool    | Claude                  | Gemini            | Cursor           | Codex         |
-/// |-----------------|-------------------------|-------------------|------------------|---------------|
-/// | FileRead        | Read, read_file         | read_file         | read_file        | read_file     |
-/// | FileWrite       | Write, write_file       | write_file        | write_file       | write_file    |
-/// | FileEdit        | Edit, edit_file         | edit_file         | edit_file        | apply_diff    |
-/// | ShellExec       | Bash, bash              | run_shell_command | run_terminal_cmd | shell         |
-/// | FileSearch      | Glob, glob              | glob              | -                | search_files  |
-/// | ContentSearch   | Grep, grep              | grep              | -                | -             |
+/// | StandardTool    | Claude                  | Gemini            | Cursor                        | Codex         |
+/// |-----------------|-------------------------|-------------------|-------------------------------|---------------|
+/// | FileRead        | Read, read_file         | read_file         | read_file, view_file          | read_file     |
+/// | FileWrite       | Write, write_file       | write_file        | write_file, write_to_file     | write_file    |
+/// | FileEdit        | Edit, edit_file         | edit_file         | edit_file, replace_file_content| apply_diff   |
+/// | ShellExec       | Bash, bash              | run_shell_command | run_terminal_cmd              | shell         |
+/// | FileSearch      | Glob, glob              | glob              | find_by_name, list_dir        | search_files  |
+/// | ContentSearch   | Grep, grep              | grep              | grep_search                   | -             |
 pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
     // Helper: extract path from input (supports file_path and path)
     let get_path = || -> String {
@@ -182,10 +286,25 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
         input.get(key).and_then(|v| v.as_u64()).map(|n| n as u32)
     };
 
-    // Case-insensitive name matching
-    match name.to_lowercase().as_str() {
-        // FileRead: Read, read_file
-        "read" | "read_file" => {
+    // Normalize tool name: strip version suffixes (e.g., "_v2", "_v3")
+    // Cursor uses versioned tool names like "read_file_v2"
+    let normalized_name = name.to_lowercase();
+    let base_name = if let Some(idx) = normalized_name.rfind("_v") {
+        // Check if the suffix after "_v" is a number
+        let suffix = &normalized_name[idx + 2..];
+        if suffix.chars().all(|c| c.is_ascii_digit()) && !suffix.is_empty() {
+            &normalized_name[..idx]
+        } else {
+            normalized_name.as_str()
+        }
+    } else {
+        normalized_name.as_str()
+    };
+
+    // Case-insensitive name matching with normalized base name
+    match base_name {
+        // FileRead: Read, read_file, view_file (Cursor uses view_file)
+        "read" | "read_file" | "view_file" => {
             let start = get_u32("start_line").or_else(|| get_u32("offset"));
             // end_line takes priority; if not present, calculate from offset + limit
             // Note: Claude uses offset (start line) + limit (line count), so end = offset + limit
@@ -204,17 +323,17 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
             }
         }
 
-        // FileWrite: Write, write_file
-        "write" | "write_file" => StandardTool::FileWrite {
+        // FileWrite: Write, write_file, write_to_file (Cursor)
+        "write" | "write_file" | "write_to_file" => StandardTool::FileWrite {
             path: get_path(),
             content: get_str("content").unwrap_or_default(),
         },
 
-        // FileEdit: Edit, edit_file, apply_diff
-        "edit" | "edit_file" | "apply_diff" => StandardTool::FileEdit {
+        // FileEdit: Edit, edit_file, apply_diff, replace_file_content (Cursor)
+        "edit" | "edit_file" | "apply_diff" | "replace_file_content" => StandardTool::FileEdit {
             path: get_path(),
-            old_string: get_str("old_string"),
-            new_string: get_str("new_string").or_else(|| get_str("diff")),
+            old_string: get_str("old_string").or_else(|| get_str("OldString")),
+            new_string: get_str("new_string").or_else(|| get_str("NewString")).or_else(|| get_str("diff")),
         },
 
         // ShellExec: Bash, bash, run_shell_command, run_terminal_cmd, shell
@@ -223,23 +342,137 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
             cwd: get_str("cwd").or_else(|| get_str("working_dir")),
         },
 
-        // FileSearch: Glob, glob, search_files
-        "glob" | "search_files" => StandardTool::FileSearch {
-            pattern: get_str("pattern").unwrap_or_default(),
+        // FileSearch: Glob, glob, search_files, find_by_name, list_dir (Cursor)
+        "glob" | "search_files" | "find_by_name" | "list_dir" => StandardTool::FileSearch {
+            pattern: get_str("pattern").or_else(|| get_str("Pattern")).unwrap_or_default(),
+            path: get_str("path").or_else(|| get_str("DirectoryPath")),
+        },
+
+        // ContentSearch: Grep, grep, grep_search (Cursor)
+        "grep" | "grep_search" => StandardTool::ContentSearch {
+            pattern: get_str("pattern").or_else(|| get_str("query")).or_else(|| get_str("Query")).unwrap_or_default(),
             path: get_str("path"),
         },
 
-        // ContentSearch: Grep, grep
-        "grep" => StandardTool::ContentSearch {
-            pattern: get_str("pattern").unwrap_or_default(),
-            path: get_str("path"),
+        // === Story 8.13: New tool mappings ===
+
+        // WebFetch: Fetch web page content
+        "webfetch" | "web_fetch" => StandardTool::WebFetch {
+            url: get_str("url").unwrap_or_default(),
+            prompt: get_str("prompt"),
         },
 
-        // Unknown tool: preserve original
-        _ => StandardTool::Other {
-            name: name.to_string(),
+        // WebSearch: Search the web
+        "websearch" | "web_search" => StandardTool::WebSearch {
+            query: get_str("query").unwrap_or_default(),
+        },
+
+        // NotebookEdit: Edit Jupyter notebook cell
+        "notebookedit" | "notebook_edit" => StandardTool::NotebookEdit {
+            notebook_path: get_str("notebook_path").unwrap_or_default(),
+            cell_id: get_str("cell_id"),
+            new_source: get_str("new_source").unwrap_or_default(),
+        },
+
+        // TodoManage: Manage todo list (TodoWrite)
+        "todowrite" | "todo_write" => StandardTool::TodoManage {
+            todos: input.get("todos").cloned().unwrap_or(serde_json::Value::Null),
+        },
+
+        // SubTask: Launch sub-task/agent (Task tool)
+        "task" => StandardTool::SubTask {
+            prompt: get_str("prompt").unwrap_or_default(),
+            agent_type: get_str("subagent_type").or_else(|| get_str("agent_type")),
+        },
+
+        // UserPrompt: Ask user a question (AskUserQuestion)
+        "askuserquestion" | "ask_user_question" => StandardTool::UserPrompt {
+            question: get_str("question"),
+            options: input.get("options").cloned(),
+        },
+
+        // PlanMode: Enter/exit plan mode
+        "enterplanmode" | "enter_plan_mode" => StandardTool::PlanMode { entering: true },
+        "exitplanmode" | "exit_plan_mode" => StandardTool::PlanMode { entering: false },
+
+        // SkillInvoke: Invoke a skill
+        "skill" => StandardTool::SkillInvoke {
+            skill: get_str("skill").unwrap_or_default(),
+            args: get_str("args"),
+        },
+
+        // TaskOutput and KillShell - treat as ShellExec variants
+        "taskoutput" | "task_output" | "killshell" | "kill_shell" => StandardTool::ShellExec {
+            command: format!("{}:{}", base_name, input.get("task_id").or(input.get("shell_id")).and_then(|v| v.as_str()).unwrap_or("")),
+            cwd: None,
+        },
+
+        // Default case: check for MCP tool patterns before falling back to Unknown
+        _ => {
+            // Handle MCP tools (mcp__server__function pattern)
+            if base_name.starts_with("mcp__") {
+                normalize_mcp_tool(name, base_name, input)
+            } else {
+                StandardTool::Unknown {
+                    name: name.to_string(),
+                    input: input.clone(),
+                }
+            }
+        }
+    }
+}
+
+/// Normalizes MCP tools to appropriate StandardTool variants.
+///
+/// MCP tool naming convention: mcp__<server>__<function>
+/// Examples:
+/// - mcp__deepwiki__ask_question -> KnowledgeQuery
+/// - mcp__ide__executeCode -> CodeExec
+/// - mcp__ide__getDiagnostics -> Diagnostic
+fn normalize_mcp_tool(original_name: &str, base_name: &str, input: &serde_json::Value) -> StandardTool {
+    // Helper: extract string field
+    let get_str = |key: &str| -> Option<String> {
+        input.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    // Extract server and function from mcp__server__function pattern
+    let parts: Vec<&str> = base_name.split("__").collect();
+    if parts.len() >= 3 {
+        let _server = parts[1];
+        let function = parts[2..].join("__"); // Handle nested underscores
+
+        match function.as_str() {
+            // Knowledge query functions (deepwiki, etc.)
+            "ask_question" | "read_wiki_contents" | "read_wiki_structure" => {
+                StandardTool::KnowledgeQuery {
+                    repo: get_str("repoName").or_else(|| get_str("repo")),
+                    question: get_str("question").unwrap_or_default(),
+                }
+            }
+
+            // Code execution functions
+            "executecode" | "execute_code" | "run_code" => StandardTool::CodeExec {
+                code: get_str("code").unwrap_or_default(),
+                language: get_str("language"),
+            },
+
+            // Diagnostic functions
+            "getdiagnostics" | "get_diagnostics" | "diagnostics" => StandardTool::Diagnostic {
+                uri: get_str("uri").or_else(|| get_str("path")),
+            },
+
+            // Default: Unknown MCP tool
+            _ => StandardTool::Unknown {
+                name: original_name.to_string(),
+                input: input.clone(),
+            },
+        }
+    } else {
+        // Invalid MCP tool pattern
+        StandardTool::Unknown {
+            name: original_name.to_string(),
             input: input.clone(),
-        },
+        }
     }
 }
 
@@ -1367,13 +1600,13 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_tool_other_serialization() {
-        let tool = StandardTool::Other {
+    fn test_standard_tool_unknown_serialization() {
+        let tool = StandardTool::Unknown {
             name: "custom_tool".to_string(),
             input: serde_json::json!({"key": "value", "number": 42}),
         };
         let json = serde_json::to_string(&tool).unwrap();
-        assert!(json.contains(r#""type":"other""#));
+        assert!(json.contains(r#""type":"unknown""#));
         assert!(json.contains(r#""name":"custom_tool""#));
         assert!(json.contains(r#""input""#));
 
@@ -1425,7 +1658,7 @@ mod tests {
                 pattern: "TODO".to_string(),
                 path: Some("/".to_string()),
             },
-            StandardTool::Other {
+            StandardTool::Unknown {
                 name: "custom".to_string(),
                 input: serde_json::json!({}),
             },
@@ -1717,6 +1950,99 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_normalize_tool_cursor_versioned_read_file() {
+        // Cursor uses versioned tool names like "read_file_v2"
+        let input = serde_json::json!({"file_path": "/src/main.rs", "start_line": 1, "end_line": 50});
+        let tool = normalize_tool("read_file_v2", &input);
+        match tool {
+            StandardTool::FileRead { path, start_line, end_line } => {
+                assert_eq!(path, "/src/main.rs");
+                assert_eq!(start_line, Some(1));
+                assert_eq!(end_line, Some(50));
+            }
+            _ => panic!("Expected FileRead, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_versioned_edit_file() {
+        let input = serde_json::json!({"file_path": "/src/lib.rs", "old_string": "foo", "new_string": "bar"});
+        let tool = normalize_tool("edit_file_v2", &input);
+        match tool {
+            StandardTool::FileEdit { path, old_string, new_string } => {
+                assert_eq!(path, "/src/lib.rs");
+                assert_eq!(old_string, Some("foo".to_string()));
+                assert_eq!(new_string, Some("bar".to_string()));
+            }
+            _ => panic!("Expected FileEdit, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_view_file() {
+        let input = serde_json::json!({"file_path": "/readme.md"});
+        let tool = normalize_tool("view_file", &input);
+        match tool {
+            StandardTool::FileRead { path, .. } => {
+                assert_eq!(path, "/readme.md");
+            }
+            _ => panic!("Expected FileRead, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_grep_search() {
+        let input = serde_json::json!({"query": "TODO", "path": "/src"});
+        let tool = normalize_tool("grep_search", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, path } => {
+                assert_eq!(pattern, "TODO");
+                assert_eq!(path, Some("/src".to_string()));
+            }
+            _ => panic!("Expected ContentSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_find_by_name() {
+        let input = serde_json::json!({"Pattern": "*.rs", "DirectoryPath": "/src"});
+        let tool = normalize_tool("find_by_name", &input);
+        match tool {
+            StandardTool::FileSearch { pattern, path } => {
+                assert_eq!(pattern, "*.rs");
+                assert_eq!(path, Some("/src".to_string()));
+            }
+            _ => panic!("Expected FileSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_version_suffix_v3() {
+        // Test versioned suffix _v3
+        let input = serde_json::json!({"file_path": "/test.rs"});
+        let tool = normalize_tool("write_file_v3", &input);
+        match tool {
+            StandardTool::FileWrite { path, .. } => {
+                assert_eq!(path, "/test.rs");
+            }
+            _ => panic!("Expected FileWrite, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_version_suffix_not_number() {
+        // "_va" should NOT be stripped (not a version suffix)
+        let input = serde_json::json!({"file_path": "/test.rs"});
+        let tool = normalize_tool("some_va_tool", &input);
+        match tool {
+            StandardTool::Unknown { name, .. } => {
+                assert_eq!(name, "some_va_tool");
+            }
+            _ => panic!("Expected Unknown, got {:?}", tool),
+        }
+    }
+
     // --- Codex Tool Names ---
 
     #[test]
@@ -1790,24 +2116,39 @@ mod tests {
         let input = serde_json::json!({"custom_param": "value"});
         let tool = normalize_tool("CustomTool", &input);
         match tool {
-            StandardTool::Other { name, input: tool_input } => {
+            StandardTool::Unknown { name, input: tool_input } => {
                 assert_eq!(name, "CustomTool");
                 assert_eq!(tool_input["custom_param"], "value");
             }
-            _ => panic!("Expected Other"),
+            _ => panic!("Expected Unknown"),
         }
     }
 
     #[test]
-    fn test_normalize_tool_mcp_tool() {
-        let input = serde_json::json!({"query": "test"});
+    fn test_normalize_tool_mcp_tool_knowledge_query() {
+        // Story 8.13: MCP deepwiki tools should map to KnowledgeQuery
+        let input = serde_json::json!({"repoName": "facebook/react", "question": "How does React work?"});
         let tool = normalize_tool("mcp__deepwiki__ask_question", &input);
         match tool {
-            StandardTool::Other { name, input: tool_input } => {
-                assert_eq!(name, "mcp__deepwiki__ask_question");
-                assert_eq!(tool_input["query"], "test");
+            StandardTool::KnowledgeQuery { repo, question } => {
+                assert_eq!(repo, Some("facebook/react".to_string()));
+                assert_eq!(question, "How does React work?");
             }
-            _ => panic!("Expected Other"),
+            _ => panic!("Expected KnowledgeQuery, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_mcp_tool_unknown() {
+        // Story 8.13: Unknown MCP tools should still map to Unknown
+        let input = serde_json::json!({"custom": "value"});
+        let tool = normalize_tool("mcp__custom_server__custom_function", &input);
+        match tool {
+            StandardTool::Unknown { name, input: tool_input } => {
+                assert_eq!(name, "mcp__custom_server__custom_function");
+                assert_eq!(tool_input["custom"], "value");
+            }
+            _ => panic!("Expected Unknown, got {:?}", tool),
         }
     }
 
@@ -2531,5 +2872,311 @@ mod tests {
         let json = serde_json::to_string(&block).unwrap();
         let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, block);
+    }
+
+    // ===== Story 8.13: New StandardTool Types Tests =====
+
+    #[test]
+    fn test_normalize_tool_webfetch() {
+        let input = serde_json::json!({"url": "https://example.com", "prompt": "summarize"});
+        let tool = normalize_tool("WebFetch", &input);
+        match tool {
+            StandardTool::WebFetch { url, prompt } => {
+                assert_eq!(url, "https://example.com");
+                assert_eq!(prompt, Some("summarize".to_string()));
+            }
+            _ => panic!("Expected WebFetch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_websearch() {
+        let input = serde_json::json!({"query": "rust programming"});
+        let tool = normalize_tool("WebSearch", &input);
+        match tool {
+            StandardTool::WebSearch { query } => {
+                assert_eq!(query, "rust programming");
+            }
+            _ => panic!("Expected WebSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_todowrite() {
+        let input = serde_json::json!({"todos": [{"content": "Task 1", "status": "pending"}]});
+        let tool = normalize_tool("TodoWrite", &input);
+        match tool {
+            StandardTool::TodoManage { todos } => {
+                assert!(todos.is_array());
+            }
+            _ => panic!("Expected TodoManage, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_task() {
+        let input = serde_json::json!({"prompt": "explore the codebase", "subagent_type": "Explore"});
+        let tool = normalize_tool("Task", &input);
+        match tool {
+            StandardTool::SubTask { prompt, agent_type } => {
+                assert_eq!(prompt, "explore the codebase");
+                assert_eq!(agent_type, Some("Explore".to_string()));
+            }
+            _ => panic!("Expected SubTask, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_askuserquestion() {
+        let input = serde_json::json!({"question": "Which option?", "options": {"a": "Option A"}});
+        let tool = normalize_tool("AskUserQuestion", &input);
+        match tool {
+            StandardTool::UserPrompt { question, options } => {
+                assert_eq!(question, Some("Which option?".to_string()));
+                assert!(options.is_some());
+            }
+            _ => panic!("Expected UserPrompt, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_enterplanmode() {
+        let input = serde_json::json!({});
+        let tool = normalize_tool("EnterPlanMode", &input);
+        match tool {
+            StandardTool::PlanMode { entering } => {
+                assert!(entering);
+            }
+            _ => panic!("Expected PlanMode, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_exitplanmode() {
+        let input = serde_json::json!({});
+        let tool = normalize_tool("ExitPlanMode", &input);
+        match tool {
+            StandardTool::PlanMode { entering } => {
+                assert!(!entering);
+            }
+            _ => panic!("Expected PlanMode, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_skill() {
+        let input = serde_json::json!({"skill": "commit", "args": "-m 'message'"});
+        let tool = normalize_tool("Skill", &input);
+        match tool {
+            StandardTool::SkillInvoke { skill, args } => {
+                assert_eq!(skill, "commit");
+                assert_eq!(args, Some("-m 'message'".to_string()));
+            }
+            _ => panic!("Expected SkillInvoke, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_notebookedit() {
+        let input = serde_json::json!({"notebook_path": "/path/to/notebook.ipynb", "cell_id": "cell-1", "new_source": "print('hello')"});
+        let tool = normalize_tool("NotebookEdit", &input);
+        match tool {
+            StandardTool::NotebookEdit { notebook_path, cell_id, new_source } => {
+                assert_eq!(notebook_path, "/path/to/notebook.ipynb");
+                assert_eq!(cell_id, Some("cell-1".to_string()));
+                assert_eq!(new_source, "print('hello')");
+            }
+            _ => panic!("Expected NotebookEdit, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_standard_tool_webfetch_serialization() {
+        let tool = StandardTool::WebFetch {
+            url: "https://example.com".to_string(),
+            prompt: Some("summarize".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"web_fetch""#));
+        assert!(json.contains(r#""url":"https://example.com""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_websearch_serialization() {
+        let tool = StandardTool::WebSearch {
+            query: "rust tutorial".to_string(),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"web_search""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_todomanage_serialization() {
+        let tool = StandardTool::TodoManage {
+            todos: serde_json::json!([{"content": "test", "status": "pending"}]),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"todo_manage""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_subtask_serialization() {
+        let tool = StandardTool::SubTask {
+            prompt: "analyze code".to_string(),
+            agent_type: Some("code-reviewer".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"sub_task""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_userprompt_serialization() {
+        let tool = StandardTool::UserPrompt {
+            question: Some("Choose one".to_string()),
+            options: Some(serde_json::json!({"a": "A", "b": "B"})),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"user_prompt""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_planmode_serialization() {
+        let tool = StandardTool::PlanMode { entering: true };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"plan_mode""#));
+        assert!(json.contains(r#""entering":true"#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_skillinvoke_serialization() {
+        let tool = StandardTool::SkillInvoke {
+            skill: "commit".to_string(),
+            args: Some("-m 'fix'".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"skill_invoke""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_knowledgequery_serialization() {
+        let tool = StandardTool::KnowledgeQuery {
+            repo: Some("facebook/react".to_string()),
+            question: "How does React work?".to_string(),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"knowledge_query""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_codeexec_serialization() {
+        let tool = StandardTool::CodeExec {
+            code: "console.log('hello')".to_string(),
+            language: Some("javascript".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"code_exec""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_diagnostic_serialization() {
+        let tool = StandardTool::Diagnostic {
+            uri: Some("file:///path/to/file.ts".to_string()),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"diagnostic""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_notebookedit_serialization() {
+        let tool = StandardTool::NotebookEdit {
+            notebook_path: "/notebook.ipynb".to_string(),
+            cell_id: Some("cell-1".to_string()),
+            new_source: "print('hi')".to_string(),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"notebook_edit""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_standard_tool_roundtrip_all_new_variants() {
+        // Story 8.13: Test roundtrip for all new variants
+        let new_tools = vec![
+            StandardTool::WebFetch {
+                url: "https://example.com".to_string(),
+                prompt: None,
+            },
+            StandardTool::WebSearch {
+                query: "test".to_string(),
+            },
+            StandardTool::KnowledgeQuery {
+                repo: None,
+                question: "test".to_string(),
+            },
+            StandardTool::CodeExec {
+                code: "test".to_string(),
+                language: None,
+            },
+            StandardTool::Diagnostic { uri: None },
+            StandardTool::NotebookEdit {
+                notebook_path: "test.ipynb".to_string(),
+                cell_id: None,
+                new_source: "test".to_string(),
+            },
+            StandardTool::TodoManage {
+                todos: serde_json::json!([]),
+            },
+            StandardTool::SubTask {
+                prompt: "test".to_string(),
+                agent_type: None,
+            },
+            StandardTool::UserPrompt {
+                question: None,
+                options: None,
+            },
+            StandardTool::PlanMode { entering: false },
+            StandardTool::SkillInvoke {
+                skill: "test".to_string(),
+                args: None,
+            },
+        ];
+
+        for tool in new_tools {
+            let json = serde_json::to_string(&tool).unwrap();
+            let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, tool);
+        }
     }
 }

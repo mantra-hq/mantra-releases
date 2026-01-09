@@ -1,6 +1,7 @@
 /**
  * Tool Utils - 工具类型判断工具函数
  * Story 8.12: Task 1
+ * Story 8.13: 扩展新工具类型支持
  *
  * 基于 StandardToolType 的统一工具类型判断模块
  * 替代散落在各组件中的 toolName.toLowerCase().includes() 逻辑
@@ -10,14 +11,40 @@ import type { StandardTool } from "@/types/message";
 
 /**
  * 标准工具类型常量
+ * Story 8.13: 扩展完整应用级概念
  */
 export const StandardToolTypes = {
+  // 文件操作
   FILE_READ: "file_read",
   FILE_WRITE: "file_write",
   FILE_EDIT: "file_edit",
+  // 终端操作
   SHELL_EXEC: "shell_exec",
+  // 搜索操作
   FILE_SEARCH: "file_search",
   CONTENT_SEARCH: "content_search",
+  // 网络操作 (Story 8.13)
+  WEB_FETCH: "web_fetch",
+  WEB_SEARCH: "web_search",
+  // 知识查询 (Story 8.13)
+  KNOWLEDGE_QUERY: "knowledge_query",
+  // 代码操作 (Story 8.13)
+  CODE_EXEC: "code_exec",
+  DIAGNOSTIC: "diagnostic",
+  NOTEBOOK_EDIT: "notebook_edit",
+  // 任务管理 (Story 8.13)
+  TODO_MANAGE: "todo_manage",
+  // 代理操作 (Story 8.13)
+  SUB_TASK: "sub_task",
+  // 用户交互 (Story 8.13)
+  USER_PROMPT: "user_prompt",
+  // 计划模式 (Story 8.13)
+  PLAN_MODE: "plan_mode",
+  // 技能调用 (Story 8.13)
+  SKILL_INVOKE: "skill_invoke",
+  // 未知工具 (Story 8.13: Other → Unknown)
+  UNKNOWN: "unknown",
+  /** @deprecated 使用 UNKNOWN 代替 */
   OTHER: "other",
 } as const;
 
@@ -99,9 +126,189 @@ export function isSearchTool(standardTool: StandardTool | undefined): boolean {
 /**
  * 检查是否为其他类型工具
  * @param standardTool 标准化工具对象
+ * @deprecated 使用 isUnknownTool 代替
  */
 export function isOtherTool(standardTool: StandardTool | undefined): boolean {
-  return standardTool?.type === StandardToolTypes.OTHER;
+  return (
+    standardTool?.type === StandardToolTypes.OTHER ||
+    standardTool?.type === StandardToolTypes.UNKNOWN
+  );
+}
+
+/**
+ * 检查是否为未知类型工具
+ * Story 8.13: 新增，替代 isOtherTool
+ * @param standardTool 标准化工具对象
+ */
+export function isUnknownTool(standardTool: StandardTool | undefined): boolean {
+  return (
+    standardTool?.type === StandardToolTypes.UNKNOWN ||
+    standardTool?.type === StandardToolTypes.OTHER
+  );
+}
+
+// === Story 8.13: 新增工具类型判断函数 ===
+
+/**
+ * 检查是否为网络获取工具
+ * @param standardTool 标准化工具对象
+ */
+export function isWebFetchTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.WEB_FETCH;
+}
+
+/**
+ * 检查是否为网络搜索工具
+ * @param standardTool 标准化工具对象
+ */
+export function isWebSearchTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.WEB_SEARCH;
+}
+
+/**
+ * 检查是否为网络类工具 (网络获取/网络搜索)
+ * @param standardTool 标准化工具对象
+ */
+export function isWebTool(standardTool: StandardTool | undefined): boolean {
+  if (!standardTool) return false;
+  return (
+    standardTool.type === StandardToolTypes.WEB_FETCH ||
+    standardTool.type === StandardToolTypes.WEB_SEARCH
+  );
+}
+
+/**
+ * 检查是否为知识查询工具
+ * @param standardTool 标准化工具对象
+ */
+export function isKnowledgeQueryTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.KNOWLEDGE_QUERY;
+}
+
+/**
+ * 检查是否为代码执行工具
+ * @param standardTool 标准化工具对象
+ */
+export function isCodeExecTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.CODE_EXEC;
+}
+
+/**
+ * 检查是否为诊断工具
+ * @param standardTool 标准化工具对象
+ */
+export function isDiagnosticTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.DIAGNOSTIC;
+}
+
+/**
+ * 检查是否为笔记本编辑工具
+ * @param standardTool 标准化工具对象
+ */
+export function isNotebookEditTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.NOTEBOOK_EDIT;
+}
+
+/**
+ * 检查是否为任务管理工具
+ * @param standardTool 标准化工具对象
+ */
+export function isTodoManageTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.TODO_MANAGE;
+}
+
+/**
+ * 检查是否为子任务/代理工具
+ * @param standardTool 标准化工具对象
+ */
+export function isSubTaskTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.SUB_TASK;
+}
+
+/**
+ * 检查是否为用户问询工具
+ * @param standardTool 标准化工具对象
+ */
+export function isUserPromptTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.USER_PROMPT;
+}
+
+/**
+ * 检查是否为计划模式工具
+ * @param standardTool 标准化工具对象
+ */
+export function isPlanModeTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.PLAN_MODE;
+}
+
+/**
+ * 检查是否为技能调用工具
+ * @param standardTool 标准化工具对象
+ */
+export function isSkillInvokeTool(standardTool: StandardTool | undefined): boolean {
+  return standardTool?.type === StandardToolTypes.SKILL_INVOKE;
+}
+
+/**
+ * 检查是否为代理/自动化类工具 (子任务/计划模式/技能调用)
+ * @param standardTool 标准化工具对象
+ */
+export function isAgentTool(standardTool: StandardTool | undefined): boolean {
+  if (!standardTool) return false;
+  return (
+    standardTool.type === StandardToolTypes.SUB_TASK ||
+    standardTool.type === StandardToolTypes.PLAN_MODE ||
+    standardTool.type === StandardToolTypes.SKILL_INVOKE
+  );
+}
+
+/**
+ * 检查是否为用户交互类工具 (用户问询/任务管理)
+ * @param standardTool 标准化工具对象
+ */
+export function isInteractiveTool(standardTool: StandardTool | undefined): boolean {
+  if (!standardTool) return false;
+  return (
+    standardTool.type === StandardToolTypes.USER_PROMPT ||
+    standardTool.type === StandardToolTypes.TODO_MANAGE
+  );
+}
+
+// === Story 8.13: Unknown 日志记录 ===
+
+/**
+ * 记录 Unknown 工具出现
+ * 开发环境下帮助发现需要扩展的新类型
+ * @param standardTool Unknown 类型工具对象
+ */
+export function logUnknownTool(standardTool: StandardTool | undefined): void {
+  if (!standardTool || !isUnknownTool(standardTool)) return;
+
+  // 仅在开发环境记录
+  if (import.meta.env.DEV) {
+    const name =
+      standardTool.type === "unknown" || standardTool.type === "other"
+        ? (standardTool as { name: string }).name
+        : "unknown";
+    console.warn(
+      `[StandardTool] Unknown tool detected: "${name}". Consider extending StandardTool enum.`,
+      standardTool
+    );
+  }
+}
+
+/**
+ * 获取 Unknown 工具的名称
+ * Story 8.13: 兼容 unknown 和 other 类型
+ * @param standardTool 标准化工具对象
+ * @returns 工具名称，如果不是 unknown/other 类型则返回 undefined
+ */
+export function getUnknownToolName(standardTool: StandardTool | undefined): string | undefined {
+  if (!standardTool) return undefined;
+  if (standardTool.type === "unknown" || standardTool.type === "other") {
+    return (standardTool as { name: string }).name;
+  }
+  return undefined;
 }
 
 /**
