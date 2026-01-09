@@ -30,4 +30,3 @@ export type { QuickOpenProps } from "./QuickOpen";
 
 export { DiffModeToggle } from "./DiffModeToggle";
 export type { DiffModeToggleProps } from "./DiffModeToggle";
-
