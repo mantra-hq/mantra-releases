@@ -21,7 +21,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 
 use super::{LogParser, ParseError};
-use crate::models::{sources, ContentBlock, MantraSession, Message, SessionMetadata};
+use crate::models::{normalize_tool, sources, ContentBlock, MantraSession, Message, SessionMetadata, TokensBreakdown};
 
 pub use path::{get_gemini_dir, get_gemini_tmp_dir, GeminiPaths, GeminiSessionFile};
 pub use types::*;
@@ -71,6 +71,14 @@ impl GeminiParser {
         let mut last_model: Option<String> = None;
         let mut total_tokens: u64 = 0;
 
+        // Token breakdown accumulators (AC1)
+        let mut tb_input: u64 = 0;
+        let mut tb_output: u64 = 0;
+        let mut tb_cached: u64 = 0;
+        let mut tb_thoughts: u64 = 0;
+        let mut tb_tool: u64 = 0;
+        let mut has_breakdown = false;
+
         for gemini_msg in &conversation.messages {
             // Skip non-includable messages (info, error, warning)
             if !gemini_msg.msg_type.should_include() {
@@ -96,11 +104,55 @@ impl GeminiParser {
                         total_tokens += output.max(0) as u64;
                     }
                 }
+
+                // Accumulate token breakdown fields (AC1)
+                if let Some(v) = tokens.input {
+                    tb_input += v.max(0) as u64;
+                    has_breakdown = true;
+                }
+                if let Some(v) = tokens.output {
+                    tb_output += v.max(0) as u64;
+                    has_breakdown = true;
+                }
+                if let Some(v) = tokens.cached {
+                    tb_cached += v.max(0) as u64;
+                    has_breakdown = true;
+                }
+                if let Some(v) = tokens.thoughts {
+                    tb_thoughts += v.max(0) as u64;
+                    has_breakdown = true;
+                }
+                if let Some(v) = tokens.tool {
+                    tb_tool += v.max(0) as u64;
+                    has_breakdown = true;
+                }
             }
 
             let converted = self.convert_message(gemini_msg)?;
             messages.extend(converted);
         }
+
+        // Build tokens_breakdown (AC1)
+        let tokens_breakdown = if has_breakdown {
+            Some(TokensBreakdown {
+                input: if tb_input > 0 { Some(tb_input) } else { None },
+                output: if tb_output > 0 { Some(tb_output) } else { None },
+                cached: if tb_cached > 0 { Some(tb_cached) } else { None },
+                thoughts: if tb_thoughts > 0 { Some(tb_thoughts) } else { None },
+                tool: if tb_tool > 0 { Some(tb_tool) } else { None },
+            })
+        } else {
+            None
+        };
+
+        // Build source_metadata (AC4)
+        let source_metadata = if !conversation.project_hash.is_empty() {
+            Some(serde_json::json!({
+                "project_hash": conversation.project_hash
+            }))
+        } else {
+            None
+        };
 
         let mut session = MantraSession {
             id: conversation.session_id,
@@ -114,6 +166,8 @@ impl GeminiParser {
                 title: conversation.summary,
                 original_path: file_path.map(String::from),
                 total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+                tokens_breakdown,
+                source_metadata,
                 ..Default::default()
             },
         };
@@ -193,15 +247,16 @@ impl GeminiParser {
                 // Generate correlation_id using tool_call.id (deterministic)
                 let correlation_id = Some(tool_call.id.clone());
 
-                // Add ToolUse
+                // Add ToolUse with StandardTool mapping (AC3) and display metadata (AC2)
+                let standard_tool = Some(normalize_tool(&tool_call.name, &tool_call.args));
                 tool_blocks.push(ContentBlock::ToolUse {
                     id: tool_call.id.clone(),
                     name: tool_call.name.clone(),
                     input: tool_call.args.clone(),
                     correlation_id: correlation_id.clone(),
-                    standard_tool: None,
-                    display_name: None,
-                    description: None,
+                    standard_tool,
+                    display_name: tool_call.display_name.clone(),
+                    description: tool_call.description.clone(),
                 });
 
                 // Add ToolResult if available
@@ -211,14 +266,15 @@ impl GeminiParser {
                         let is_error = tool_call.status == "error";
                         let content = response.response.as_content();
 
+                        // Add ToolResult with display metadata (AC2)
                         tool_blocks.push(ContentBlock::ToolResult {
                             tool_use_id: tool_call.id.clone(),
                             content,
                             is_error,
                             correlation_id: correlation_id.clone(),
                             structured_result: None,
-                            display_content: None,
-                            render_as_markdown: None,
+                            display_content: tool_call.result_display.clone(),
+                            render_as_markdown: tool_call.render_output_as_markdown,
                             user_decision: None,
                         });
                     }
@@ -978,6 +1034,292 @@ mod tests {
 
         // Check tokens
         assert_eq!(session.metadata.total_tokens, Some(7823));
+    }
+
+    // === Story 8-7 New Tests ===
+
+    #[test]
+    fn test_parse_tokens_breakdown() {
+        // AC1: Token 细分解析测试
+        let json = r#"{
+            "sessionId": "tokens-breakdown-test",
+            "projectHash": "abc123",
+            "startTime": "2026-01-09T10:00:00Z",
+            "lastUpdated": "2026-01-09T10:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2026-01-09T10:01:00Z",
+                    "type": "gemini",
+                    "content": "Test",
+                    "tokens": {
+                        "input": 100,
+                        "output": 50,
+                        "cached": 10,
+                        "thoughts": 20,
+                        "tool": 5,
+                        "total": 185
+                    }
+                },
+                {
+                    "id": "m2",
+                    "timestamp": "2026-01-09T10:02:00Z",
+                    "type": "gemini",
+                    "content": "More",
+                    "tokens": {
+                        "input": 200,
+                        "output": 100,
+                        "cached": 20,
+                        "thoughts": 40,
+                        "tool": 10,
+                        "total": 370
+                    }
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // Verify tokens_breakdown is populated with accumulated values
+        let tb = session.metadata.tokens_breakdown.as_ref().expect("tokens_breakdown should exist");
+        assert_eq!(tb.input, Some(300));   // 100 + 200
+        assert_eq!(tb.output, Some(150));  // 50 + 100
+        assert_eq!(tb.cached, Some(30));   // 10 + 20
+        assert_eq!(tb.thoughts, Some(60)); // 20 + 40
+        assert_eq!(tb.tool, Some(15));     // 5 + 10
+    }
+
+    #[test]
+    fn test_parse_display_metadata() {
+        // AC2: 显示元数据映射测试
+        let json = r#"{
+            "sessionId": "display-metadata-test",
+            "projectHash": "abc",
+            "startTime": "2026-01-09T10:00:00Z",
+            "lastUpdated": "2026-01-09T10:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2026-01-09T10:01:00Z",
+                    "type": "gemini",
+                    "content": "",
+                    "toolCalls": [{
+                        "id": "t1",
+                        "name": "run_shell_command",
+                        "args": {"command": "ls"},
+                        "displayName": "Shell Command",
+                        "description": "Execute shell commands in terminal",
+                        "resultDisplay": "file1.txt\nfile2.txt",
+                        "renderOutputAsMarkdown": false,
+                        "status": "success",
+                        "result": [{
+                            "functionResponse": {
+                                "id": "t1",
+                                "name": "run_shell_command",
+                                "response": {"output": "file1.txt\nfile2.txt"}
+                            }
+                        }]
+                    }]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        let tool_msg = &session.messages[0];
+        
+        // Check ToolUse display fields
+        if let ContentBlock::ToolUse { display_name, description, .. } = &tool_msg.content_blocks[0] {
+            assert_eq!(display_name, &Some("Shell Command".to_string()));
+            assert_eq!(description, &Some("Execute shell commands in terminal".to_string()));
+        } else {
+            panic!("Expected ToolUse block");
+        }
+
+        // Check ToolResult display fields
+        if let ContentBlock::ToolResult { display_content, render_as_markdown, .. } = &tool_msg.content_blocks[1] {
+            assert_eq!(display_content, &Some("file1.txt\nfile2.txt".to_string()));
+            assert_eq!(render_as_markdown, &Some(false));
+        } else {
+            panic!("Expected ToolResult block");
+        }
+    }
+
+    #[test]
+    fn test_standard_tool_mapping() {
+        // AC3: StandardTool 映射测试
+        use crate::models::StandardTool;
+        
+        let json = r#"{
+            "sessionId": "standard-tool-test",
+            "projectHash": "abc",
+            "startTime": "2026-01-09T10:00:00Z",
+            "lastUpdated": "2026-01-09T10:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2026-01-09T10:01:00Z",
+                    "type": "gemini",
+                    "content": "",
+                    "toolCalls": [
+                        {
+                            "id": "t1",
+                            "name": "read_file",
+                            "args": {"path": "/tmp/test.rs", "start_line": 1, "end_line": 100},
+                            "status": "success"
+                        },
+                        {
+                            "id": "t2",
+                            "name": "write_file",
+                            "args": {"path": "/tmp/out.rs", "content": "fn main() {}"},
+                            "status": "success"
+                        },
+                        {
+                            "id": "t3",
+                            "name": "run_shell_command",
+                            "args": {"command": "cargo build"},
+                            "status": "success"
+                        },
+                        {
+                            "id": "t4",
+                            "name": "grep",
+                            "args": {"pattern": "TODO", "path": "/src"},
+                            "status": "success"
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // 4 tool calls = 4 messages
+        assert_eq!(session.messages.len(), 4);
+
+        // Check read_file -> FileRead
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[0].content_blocks[0] {
+            match standard_tool.as_ref().unwrap() {
+                StandardTool::FileRead { path, start_line, end_line } => {
+                    assert_eq!(path, "/tmp/test.rs");
+                    assert_eq!(start_line, &Some(1));
+                    assert_eq!(end_line, &Some(100));
+                }
+                _ => panic!("Expected FileRead"),
+            }
+        }
+
+        // Check write_file -> FileWrite
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[1].content_blocks[0] {
+            match standard_tool.as_ref().unwrap() {
+                StandardTool::FileWrite { path, content } => {
+                    assert_eq!(path, "/tmp/out.rs");
+                    assert_eq!(content, "fn main() {}");
+                }
+                _ => panic!("Expected FileWrite"),
+            }
+        }
+
+        // Check run_shell_command -> ShellExec
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[2].content_blocks[0] {
+            match standard_tool.as_ref().unwrap() {
+                StandardTool::ShellExec { command, .. } => {
+                    assert_eq!(command, "cargo build");
+                }
+                _ => panic!("Expected ShellExec"),
+            }
+        }
+
+        // Check grep -> ContentSearch
+        if let ContentBlock::ToolUse { standard_tool, .. } = &session.messages[3].content_blocks[0] {
+            match standard_tool.as_ref().unwrap() {
+                StandardTool::ContentSearch { pattern, path } => {
+                    assert_eq!(pattern, "TODO");
+                    assert_eq!(path, &Some("/src".to_string()));
+                }
+                _ => panic!("Expected ContentSearch"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_source_metadata_passthrough() {
+        // AC4: source_metadata 透传测试
+        let json = r#"{
+            "sessionId": "source-metadata-test",
+            "projectHash": "abc123def456",
+            "startTime": "2026-01-09T10:00:00Z",
+            "lastUpdated": "2026-01-09T10:05:00Z",
+            "messages": []
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        let source_meta = session.metadata.source_metadata.as_ref().expect("source_metadata should exist");
+        assert_eq!(source_meta["project_hash"], "abc123def456");
+    }
+
+    #[test]
+    fn test_backward_compatibility_no_new_fields() {
+        // AC5: 向后兼容测试 - 旧日志不包含新字段
+        let json = r#"{
+            "sessionId": "old-format-test",
+            "projectHash": "",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": "Hello"
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // All new fields should be None
+        assert!(session.metadata.tokens_breakdown.is_none());
+        assert!(session.metadata.source_metadata.is_none());
+        
+        // Existing functionality should work
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.id, "old-format-test");
+    }
+
+    #[test]
+    fn test_backward_compatibility_partial_tokens() {
+        // AC5: 向后兼容测试 - 部分 tokens 字段
+        let json = r#"{
+            "sessionId": "partial-tokens-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": "Hello",
+                    "tokens": {"input": 100, "output": 50}
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        let tb = session.metadata.tokens_breakdown.as_ref().expect("tokens_breakdown should exist");
+        assert_eq!(tb.input, Some(100));
+        assert_eq!(tb.output, Some(50));
+        assert!(tb.cached.is_none());
+        assert!(tb.thoughts.is_none());
+        assert!(tb.tool.is_none());
     }
 }
 
