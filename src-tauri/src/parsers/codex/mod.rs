@@ -232,6 +232,10 @@ impl CodexParser {
                     content: output,
                     is_error,
                     correlation_id: Some(call_id),
+                    structured_result: None,
+                    display_content: None,
+                    render_as_markdown: None,
+                    user_decision: None,
                 }];
 
                 // Use pending call's timestamp if available

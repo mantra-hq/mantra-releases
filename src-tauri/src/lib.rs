@@ -221,8 +221,7 @@ mod debug_sync_test {
 mod debug_full_sync_test {
     use std::path::PathBuf;
     use crate::parsers::{ClaudeParser, LogParser};
-    use crate::storage::Database;
-    use crate::models::{MantraSession, sources};
+    use crate::models::MantraSession;
     use std::collections::HashMap;
 
     #[test]

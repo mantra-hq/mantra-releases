@@ -214,6 +214,10 @@ impl GeminiParser {
                             content,
                             is_error,
                             correlation_id: correlation_id.clone(),
+                            structured_result: None,
+                            display_content: None,
+                            render_as_markdown: None,
+                            user_decision: None,
                         });
                     }
                 }

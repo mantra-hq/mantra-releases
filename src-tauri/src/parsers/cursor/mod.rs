@@ -249,6 +249,10 @@ impl CursorParser {
                         content: result_str.clone(),
                         is_error: tfd.status.as_deref() == Some("failed"),
                         correlation_id,
+                        structured_result: None,
+                        display_content: None,
+                        render_as_markdown: None,
+                        user_decision: None,
                     });
                 }
             }
@@ -276,6 +280,10 @@ impl CursorParser {
                             content: result.to_string(),
                             is_error: tool_result.is_error,
                             correlation_id,
+                            structured_result: None,
+                            display_content: None,
+                            render_as_markdown: None,
+                            user_decision: None,
                         });
                     }
                 }

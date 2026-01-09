@@ -95,6 +95,51 @@ pub enum StandardTool {
     },
 }
 
+/// Structured tool result data
+///
+/// Preserves structured information from tool execution results (e.g., Claude toolUseResult),
+/// enabling frontend to display file paths, line numbers, and other semantic information
+/// without parsing strings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolResultData {
+    /// File read result
+    FileRead {
+        file_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        start_line: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        num_lines: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total_lines: Option<u32>,
+    },
+
+    /// File write result
+    FileWrite { file_path: String },
+
+    /// File edit result
+    FileEdit {
+        file_path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        old_string: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        new_string: Option<String>,
+    },
+
+    /// Shell command execution result
+    ShellExec {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stdout: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stderr: Option<String>,
+    },
+
+    /// Other result (passthrough original data)
+    Other { data: serde_json::Value },
+}
+
 /// Normalizes a tool call to a StandardTool variant.
 ///
 /// Maps tool names from various sources (Claude, Gemini, Cursor, Codex) to
@@ -240,6 +285,23 @@ pub enum ContentBlock {
         /// Unified correlation ID for pairing with ToolUse
         #[serde(skip_serializing_if = "Option::is_none")]
         correlation_id: Option<String>,
+
+        // === New: Structured result fields ===
+        /// Structured tool result data (from Claude toolUseResult, etc.)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        structured_result: Option<ToolResultData>,
+
+        /// UI display content (Gemini: resultDisplay)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display_content: Option<String>,
+
+        /// Whether to render display_content as Markdown (Gemini: renderOutputAsMarkdown)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        render_as_markdown: Option<bool>,
+
+        /// User decision for tool execution (Cursor: approved/rejected)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user_decision: Option<String>,
     },
 
     /// Code diff content (new code changes)
@@ -579,6 +641,10 @@ mod tests {
             content: "File content here".to_string(),
             is_error: false,
             correlation_id: Some("corr_123".to_string()),
+            structured_result: None,
+            display_content: None,
+            render_as_markdown: None,
+            user_decision: None,
         };
         let json = serde_json::to_string(&block).unwrap();
         assert!(json.contains(r#""type":"tool_result""#));
@@ -1866,5 +1932,353 @@ mod tests {
             }
             _ => panic!("Expected FileRead"),
         }
+    }
+
+    // ===== ToolResultData 序列化/反序列化测试 =====
+
+    #[test]
+    fn test_tool_result_data_file_read_serialization() {
+        let data = ToolResultData::FileRead {
+            file_path: "/tmp/test.rs".to_string(),
+            start_line: Some(10),
+            num_lines: Some(100),
+            total_lines: Some(500),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"file_read""#));
+        assert!(json.contains(r#""file_path":"/tmp/test.rs""#));
+        assert!(json.contains(r#""start_line":10"#));
+        assert!(json.contains(r#""num_lines":100"#));
+        assert!(json.contains(r#""total_lines":500"#));
+
+        let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, data);
+    }
+
+    #[test]
+    fn test_tool_result_data_file_read_skip_none_fields() {
+        let data = ToolResultData::FileRead {
+            file_path: "/tmp/test.rs".to_string(),
+            start_line: None,
+            num_lines: None,
+            total_lines: None,
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"file_read""#));
+        assert!(json.contains(r#""file_path":"/tmp/test.rs""#));
+        assert!(!json.contains("start_line"));
+        assert!(!json.contains("num_lines"));
+        assert!(!json.contains("total_lines"));
+    }
+
+    #[test]
+    fn test_tool_result_data_file_write_serialization() {
+        let data = ToolResultData::FileWrite {
+            file_path: "/tmp/output.txt".to_string(),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"file_write""#));
+        assert!(json.contains(r#""file_path":"/tmp/output.txt""#));
+
+        let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, data);
+    }
+
+    #[test]
+    fn test_tool_result_data_file_edit_serialization() {
+        let data = ToolResultData::FileEdit {
+            file_path: "/tmp/edit.rs".to_string(),
+            old_string: Some("old content".to_string()),
+            new_string: Some("new content".to_string()),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"file_edit""#));
+        assert!(json.contains(r#""file_path":"/tmp/edit.rs""#));
+        assert!(json.contains(r#""old_string":"old content""#));
+        assert!(json.contains(r#""new_string":"new content""#));
+
+        let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, data);
+    }
+
+    #[test]
+    fn test_tool_result_data_file_edit_skip_none_strings() {
+        let data = ToolResultData::FileEdit {
+            file_path: "/tmp/edit.rs".to_string(),
+            old_string: None,
+            new_string: None,
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"file_edit""#));
+        assert!(!json.contains("old_string"));
+        assert!(!json.contains("new_string"));
+    }
+
+    #[test]
+    fn test_tool_result_data_shell_exec_serialization() {
+        let data = ToolResultData::ShellExec {
+            exit_code: Some(0),
+            stdout: Some("output".to_string()),
+            stderr: Some("error".to_string()),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"shell_exec""#));
+        assert!(json.contains(r#""exit_code":0"#));
+        assert!(json.contains(r#""stdout":"output""#));
+        assert!(json.contains(r#""stderr":"error""#));
+
+        let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, data);
+    }
+
+    #[test]
+    fn test_tool_result_data_shell_exec_skip_none_fields() {
+        let data = ToolResultData::ShellExec {
+            exit_code: None,
+            stdout: None,
+            stderr: None,
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"shell_exec""#));
+        assert!(!json.contains("exit_code"));
+        assert!(!json.contains("stdout"));
+        assert!(!json.contains("stderr"));
+    }
+
+    #[test]
+    fn test_tool_result_data_other_serialization() {
+        let data = ToolResultData::Other {
+            data: serde_json::json!({"key": "value", "number": 42}),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains(r#""type":"other""#));
+        assert!(json.contains(r#""data""#));
+
+        let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, data);
+    }
+
+    #[test]
+    fn test_tool_result_data_deserialize_partial_file_read() {
+        // Deserialize without optional fields
+        let json = r#"{"type":"file_read","file_path":"/tmp/test.rs"}"#;
+        let data: ToolResultData = serde_json::from_str(json).unwrap();
+        match data {
+            ToolResultData::FileRead { file_path, start_line, num_lines, total_lines } => {
+                assert_eq!(file_path, "/tmp/test.rs");
+                assert!(start_line.is_none());
+                assert!(num_lines.is_none());
+                assert!(total_lines.is_none());
+            }
+            _ => panic!("Expected FileRead variant"),
+        }
+    }
+
+    #[test]
+    fn test_tool_result_data_roundtrip_all_variants() {
+        let variants = vec![
+            ToolResultData::FileRead {
+                file_path: "/test".to_string(),
+                start_line: Some(1),
+                num_lines: Some(10),
+                total_lines: Some(100),
+            },
+            ToolResultData::FileWrite {
+                file_path: "/test".to_string(),
+            },
+            ToolResultData::FileEdit {
+                file_path: "/test".to_string(),
+                old_string: Some("old".to_string()),
+                new_string: Some("new".to_string()),
+            },
+            ToolResultData::ShellExec {
+                exit_code: Some(0),
+                stdout: Some("out".to_string()),
+                stderr: Some("err".to_string()),
+            },
+            ToolResultData::Other {
+                data: serde_json::json!({"custom": true}),
+            },
+        ];
+
+        for variant in variants {
+            let json = serde_json::to_string(&variant).unwrap();
+            let deserialized: ToolResultData = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, variant);
+        }
+    }
+
+    // ===== ToolResult 扩展字段测试 =====
+
+    #[test]
+    fn test_tool_result_with_structured_result() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "tool_123".to_string(),
+            content: "File read successfully".to_string(),
+            is_error: false,
+            correlation_id: Some("tool_123".to_string()),
+            structured_result: Some(ToolResultData::FileRead {
+                file_path: "/tmp/test.rs".to_string(),
+                start_line: Some(1),
+                num_lines: Some(100),
+                total_lines: Some(500),
+            }),
+            display_content: None,
+            render_as_markdown: None,
+            user_decision: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""structured_result""#));
+        assert!(json.contains(r#""type":"file_read""#));
+        assert!(json.contains(r#""file_path":"/tmp/test.rs""#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_tool_result_with_display_content() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "tool_456".to_string(),
+            content: "raw content".to_string(),
+            is_error: false,
+            correlation_id: None,
+            structured_result: None,
+            display_content: Some("**Formatted** content".to_string()),
+            render_as_markdown: Some(true),
+            user_decision: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""display_content":"**Formatted** content""#));
+        assert!(json.contains(r#""render_as_markdown":true"#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_tool_result_with_user_decision() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "tool_789".to_string(),
+            content: "Approved action result".to_string(),
+            is_error: false,
+            correlation_id: None,
+            structured_result: None,
+            display_content: None,
+            render_as_markdown: None,
+            user_decision: Some("approved".to_string()),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""user_decision":"approved""#));
+
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
+    }
+
+    #[test]
+    fn test_tool_result_backward_compat() {
+        // Old format JSON without new fields
+        let old_json = r#"{
+            "type": "tool_result",
+            "tool_use_id": "123",
+            "content": "file content",
+            "is_error": false
+        }"#;
+        let block: ContentBlock = serde_json::from_str(old_json).unwrap();
+        match block {
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content,
+                is_error,
+                correlation_id,
+                structured_result,
+                display_content,
+                render_as_markdown,
+                user_decision,
+            } => {
+                assert_eq!(tool_use_id, "123");
+                assert_eq!(content, "file content");
+                assert!(!is_error);
+                assert!(correlation_id.is_none());
+                // New fields should be None (backward compat)
+                assert!(structured_result.is_none());
+                assert!(display_content.is_none());
+                assert!(render_as_markdown.is_none());
+                assert!(user_decision.is_none());
+            }
+            _ => panic!("Expected ToolResult"),
+        }
+    }
+
+    #[test]
+    fn test_tool_result_backward_compat_with_correlation_id() {
+        // Old format with correlation_id but without new fields
+        let old_json = r#"{
+            "type": "tool_result",
+            "tool_use_id": "456",
+            "content": "result",
+            "is_error": true,
+            "correlation_id": "corr_456"
+        }"#;
+        let block: ContentBlock = serde_json::from_str(old_json).unwrap();
+        match block {
+            ContentBlock::ToolResult {
+                correlation_id,
+                structured_result,
+                display_content,
+                render_as_markdown,
+                user_decision,
+                ..
+            } => {
+                assert_eq!(correlation_id, Some("corr_456".to_string()));
+                assert!(structured_result.is_none());
+                assert!(display_content.is_none());
+                assert!(render_as_markdown.is_none());
+                assert!(user_decision.is_none());
+            }
+            _ => panic!("Expected ToolResult"),
+        }
+    }
+
+    #[test]
+    fn test_tool_result_skip_none_new_fields() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "tool_abc".to_string(),
+            content: "result".to_string(),
+            is_error: false,
+            correlation_id: None,
+            structured_result: None,
+            display_content: None,
+            render_as_markdown: None,
+            user_decision: None,
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        // None fields should be skipped
+        assert!(!json.contains("structured_result"));
+        assert!(!json.contains("display_content"));
+        assert!(!json.contains("render_as_markdown"));
+        assert!(!json.contains("user_decision"));
+        assert!(!json.contains("correlation_id"));
+    }
+
+    #[test]
+    fn test_tool_result_all_new_fields() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "complete_tool".to_string(),
+            content: "raw result".to_string(),
+            is_error: false,
+            correlation_id: Some("complete_tool".to_string()),
+            structured_result: Some(ToolResultData::ShellExec {
+                exit_code: Some(0),
+                stdout: Some("output".to_string()),
+                stderr: None,
+            }),
+            display_content: Some("Formatted output".to_string()),
+            render_as_markdown: Some(false),
+            user_decision: Some("approved".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&block).unwrap();
+        let deserialized: ContentBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, block);
     }
 }

@@ -301,7 +301,16 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             };
             let is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
             // Use tool_use_id as correlation_id
-            Some(ContentBlock::ToolResult { tool_use_id: tool_use_id.clone(), content, is_error, correlation_id: Some(tool_use_id) })
+            Some(ContentBlock::ToolResult {
+                tool_use_id: tool_use_id.clone(),
+                content,
+                is_error,
+                correlation_id: Some(tool_use_id),
+                structured_result: None,
+                display_content: None,
+                render_as_markdown: None,
+                user_decision: None,
+            })
         }
         _ => None,
     }
@@ -540,6 +549,10 @@ fn convert_block(block: &ClaudeContentBlock) -> ContentBlock {
             content: content.as_string(),
             is_error: *is_error,
             correlation_id: Some(tool_use_id.clone()),
+            structured_result: None,
+            display_content: None,
+            render_as_markdown: None,
+            user_decision: None,
         },
     }
 }
