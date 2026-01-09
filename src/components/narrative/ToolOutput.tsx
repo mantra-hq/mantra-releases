@@ -10,9 +10,10 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { ChevronRight, Check, X, Code2 } from "lucide-react";
+import { ChevronRight, Check, X, Code2, FileText, Edit3, Terminal, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import type { ToolResultData } from "@/types/message";
 
 /**
  * 去除 Read 工具输出中的行号前缀
@@ -55,6 +56,11 @@ export interface ToolOutputProps {
   onHover?: (toolUseId: string | null) => void;
   /** 自定义 className */
   className?: string;
+  // === Story 8.11: 新增字段 ===
+  /** 结构化结果 (AC: #4) */
+  structuredResult?: ToolResultData;
+  /** 用户决策 (AC: #5) */
+  userDecision?: string;
 }
 
 /**
@@ -67,6 +73,78 @@ function getDefaultExtensionForTool(toolName?: string): string {
   if (name.includes("grep")) return ".txt";
   if (name.includes("glob")) return ".txt";
   return ".txt";
+}
+
+/**
+ * Story 8.11: 渲染 structuredResult 摘要 (AC #4)
+ *
+ * - FileRead: 显示 "读取 {path} L{start}-L{end} ({numLines}/{totalLines} 行)"
+ * - FileWrite: 显示 "写入 {path}"
+ * - FileEdit: 显示 "编辑 {path}"
+ * - ShellExec: 显示退出码徽章 (绿色/红色)
+ *
+ * @param result 结构化工具结果
+ * @param t i18n 翻译函数
+ * @returns 渲染的摘要节点，未知类型返回 null
+ */
+function renderStructuredResultSummary(
+  result: ToolResultData,
+  t: (key: string, options?: Record<string, unknown>) => string
+): React.ReactNode {
+  switch (result.type) {
+    case "file_read": {
+      const fileName = result.filePath.split("/").pop() || result.filePath;
+      // Fix: endLine = startLine + numLines - 1 (e.g., L10 + 5 lines = L10-L14)
+      const lineRange = result.startLine !== undefined && result.numLines !== undefined
+        ? `L${result.startLine}-L${result.startLine + result.numLines - 1}`
+        : "";
+      const lineInfo = result.numLines !== undefined && result.totalLines !== undefined
+        ? t("message.lines", { count: `${result.numLines}/${result.totalLines}` })
+        : "";
+      return (
+        <>
+          <FileText className="h-3.5 w-3.5 shrink-0" />
+          <span>{t("message.readFile", { fileName })} {lineRange} {lineInfo}</span>
+        </>
+      );
+    }
+    case "file_write": {
+      const fileName = result.filePath.split("/").pop() || result.filePath;
+      return (
+        <>
+          <FileText className="h-3.5 w-3.5 shrink-0" />
+          <span>{t("message.writeFile", { fileName })}</span>
+        </>
+      );
+    }
+    case "file_edit": {
+      const fileName = result.filePath.split("/").pop() || result.filePath;
+      return (
+        <>
+          <Edit3 className="h-3.5 w-3.5 shrink-0" />
+          <span>{t("message.editFile", { fileName })}</span>
+        </>
+      );
+    }
+    case "shell_exec": {
+      const isSuccess = result.exitCode === 0;
+      return (
+        <>
+          <Terminal className="h-3.5 w-3.5 shrink-0" />
+          <span>{t("message.shellExec")}</span>
+          <span className={cn(
+            "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono",
+            isSuccess ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
+          )}>
+            exit {result.exitCode ?? "?"}
+          </span>
+        </>
+      );
+    }
+    default:
+      // 未知类型返回 null，由调用方处理回退逻辑
+      return null;
+  }
 }
 
 /**
@@ -88,6 +166,8 @@ export function ToolOutput({
   isHighlighted = false,
   onHover,
   className,
+  structuredResult,
+  userDecision,
 }: ToolOutputProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
@@ -180,6 +260,27 @@ export function ToolOutput({
     >
       {/* 头部区域：使用 flex 容器包裹 Trigger 和独立按钮 */}
       <div className="flex items-center">
+        {/* Story 8.11: userDecision 徽章 (AC #5) */}
+        {userDecision && (
+          <div className={cn(
+            "ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0",
+            userDecision === "approved"
+              ? "bg-success/10 text-success"
+              : "bg-destructive/10 text-destructive"
+          )}>
+            {userDecision === "approved" ? (
+              <>
+                <CheckCircle2 className="h-3 w-3" />
+                <span>{t("message.approved")}</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="h-3 w-3" />
+                <span>{t("message.rejected")}</span>
+              </>
+            )}
+          </div>
+        )}
         <Collapsible.Trigger
           className={cn(
             // 头部样式
@@ -202,15 +303,16 @@ export function ToolOutput({
             <Check className="h-4 w-4 shrink-0 text-success" />
           )}
 
-          {/* 预览内容 */}
-          <span
-            className={cn(
-              "flex-1 truncate font-mono text-xs",
-              "text-muted-foreground"
-            )}
-          >
-            {isOpen ? (isError ? t("message.errorDetails") : t("message.executeResult")) : previewContent}
-          </span>
+          {/* Story 8.11: structuredResult 摘要 (AC #4) */}
+          {structuredResult ? (
+            <span className={cn("flex items-center gap-1.5 flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
+              {renderStructuredResultSummary(structuredResult, t)}
+            </span>
+          ) : (
+            <span className={cn("flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
+              {isOpen ? (isError ? t("message.errorDetails") : t("message.executeResult")) : previewContent}
+            </span>
+          )}
 
           {/* 展开箭头 */}
           <ChevronRight

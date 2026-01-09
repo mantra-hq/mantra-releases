@@ -23,11 +23,14 @@ import {
     Clock,
     ExternalLink,
     ListTodo,
+    Edit3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCollapsible } from "@/hooks/useCollapsible";
 import { FloatingCollapseBar } from "@/components/common/FloatingCollapseBar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
+import type { StandardTool } from "@/types/message";
 
 /** 工具调用状态 */
 export type ToolCallStatus = "pending" | "success" | "error";
@@ -56,6 +59,13 @@ export interface ToolCallCardProps {
     onJumpToOutput?: (toolUseId: string) => void;
     /** 自定义 className */
     className?: string;
+    // === Story 8.11: 新增字段 ===
+    /** 工具显示名称 (优先于 toolName 显示) */
+    displayName?: string;
+    /** 工具描述 (悬停 Tooltip 显示) */
+    description?: string;
+    /** 标准化工具类型 */
+    standardTool?: StandardTool;
 }
 
 /** 工具摘要模板配置 */
@@ -273,6 +283,65 @@ function getToolSummary(
     };
 }
 
+/**
+ * Story 8.11: 使用 standardTool 生成更优摘要
+ * 
+ * 优先级:
+ * 1. 使用 standardTool 的结构化信息
+ * 2. 回退到现有 SUMMARY_TEMPLATES 逻辑
+ */
+function getToolSummaryWithStandardTool(
+    toolName: string,
+    input?: Record<string, unknown>,
+    standardTool?: StandardTool
+): { icon: React.ComponentType<{ className?: string }>; summary: string } {
+    // 如果有 standardTool，优先使用它
+    if (standardTool) {
+        switch (standardTool.type) {
+            case "file_read": {
+                const fileName = getFileName(standardTool.path);
+                const lineInfo = standardTool.startLine !== undefined && standardTool.endLine !== undefined
+                    ? ` L${standardTool.startLine}-L${standardTool.endLine}`
+                    : standardTool.startLine !== undefined
+                        ? ` L${standardTool.startLine}`
+                        : "";
+                return { icon: FileText, summary: `${fileName}${lineInfo}` };
+            }
+            case "file_write": {
+                const fileName = getFileName(standardTool.path);
+                return { icon: FileText, summary: fileName };
+            }
+            case "file_edit": {
+                const fileName = getFileName(standardTool.path);
+                return { icon: Edit3, summary: `${fileName} (${i18n.t("message.edit")})` };
+            }
+            case "shell_exec": {
+                const cmd = standardTool.command;
+                const truncated = cmd.length > 50 ? cmd.slice(0, 50) + "..." : cmd;
+                return { icon: Terminal, summary: `$ ${truncated}` };
+            }
+            case "file_search": {
+                return { icon: Search, summary: standardTool.pattern };
+            }
+            case "content_search": {
+                return { icon: Search, summary: `"${standardTool.pattern}"` };
+            }
+            case "other":
+                // 回退到现有逻辑
+                break;
+        }
+    }
+
+    // 回退到现有的 SUMMARY_TEMPLATES 逻辑
+    return getToolSummary(toolName, input);
+}
+
+/** 从路径中提取文件名 */
+function getFileName(path: string): string {
+    const parts = path.split("/");
+    return parts[parts.length - 1] || path;
+}
+
 /** 格式化耗时 */
 function formatDuration(seconds: number): string {
     if (seconds < 1) {
@@ -302,9 +371,15 @@ export function ToolCallCard({
     onViewDetail,
     onJumpToOutput,
     className,
+    displayName,
+    description,
+    standardTool,
 }: ToolCallCardProps) {
     const { t } = useTranslation();
-    const { icon: Icon, summary } = getToolSummary(toolName, toolInput);
+    // Story 8.11: 使用 standardTool 生成更优摘要，回退到现有逻辑
+    const { icon: Icon, summary } = getToolSummaryWithStandardTool(toolName, toolInput, standardTool);
+    // Story 8.11: 优先显示 displayName
+    const effectiveToolName = displayName || toolName;
 
     // AC #11, #12, #13: 使用 useCollapsible 管理折叠状态和浮动栏
     const {
@@ -377,10 +452,25 @@ export function ToolCallCard({
                 {/* 工具图标 */}
                 <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
 
-                {/* 工具名称 */}
-                <span className="font-medium text-sm text-foreground shrink-0">
-                    {toolName}
-                </span>
+                {/* 工具名称 + 可选 Tooltip (Story 8.11) */}
+                {description ? (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="font-medium text-sm text-foreground shrink-0 cursor-help underline decoration-dotted underline-offset-2">
+                                    {effectiveToolName}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs">{description}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                ) : (
+                    <span className="font-medium text-sm text-foreground shrink-0">
+                        {effectiveToolName}
+                    </span>
+                )}
 
                 {/* 智能摘要 (当有值且不等于工具名时显示) */}
                 {summary && summary !== toolName && (

@@ -20,6 +20,30 @@ export interface ChainOfThoughtProps {
   defaultOpen?: boolean;
   /** 自定义 className */
   className?: string;
+  // === Story 8.11: 新增字段 (AC #7) ===
+  /** 思考主题 (Gemini) */
+  subject?: string;
+  /** 思考时间戳 (Gemini) */
+  thinkingTimestamp?: string;
+}
+
+/**
+ * 格式化思考时间戳为用户友好显示
+ * 支持多种格式: ISO 8601, 毫秒时间戳, 或直接显示原始值
+ */
+function formatThinkingTimestamp(timestamp: string): string {
+  // 尝试解析为日期
+  const date = new Date(timestamp);
+  if (!isNaN(date.getTime())) {
+    // 有效日期，显示时:分:秒
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+  // 无法解析，返回原始值
+  return timestamp;
 }
 
 /**
@@ -35,6 +59,8 @@ export function ChainOfThought({
   content,
   defaultOpen = false,
   className,
+  subject,
+  thinkingTimestamp,
 }: ChainOfThoughtProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
@@ -76,8 +102,19 @@ export function ChainOfThought({
           💭
         </span>
 
-        {/* 标题 */}
-        <span>{t("message.thinkingProcess")}</span>
+        {/* Story 8.11: 优先显示 subject，否则显示默认标题 (AC #7) */}
+        {subject ? (
+          <span className="font-semibold">{subject}</span>
+        ) : (
+          <span>{t("message.thinkingProcess")}</span>
+        )}
+
+        {/* Story 8.11: 显示时间戳 (AC #7) */}
+        {thinkingTimestamp && (
+          <span className="ml-auto text-[10px] text-muted-foreground/60">
+            {formatThinkingTimestamp(thinkingTimestamp)}
+          </span>
+        )}
 
         {/* 展开箭头 */}
         <ChevronRight

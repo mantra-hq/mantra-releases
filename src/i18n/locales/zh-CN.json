@@ -302,7 +302,15 @@
     "tasks": "{{count}} 个任务",
     "todoCompleted": "{{completed}}/{{total}} 完成",
     "todoInProgress": "{{count}} 进行中",
-    "details": "详情"
+    "details": "详情",
+    "codeSuggestion": "代码建议",
+    "readFile": "读取 {{fileName}}",
+    "writeFile": "写入 {{fileName}}",
+    "editFile": "编辑 {{fileName}}",
+    "shellExec": "命令执行",
+    "approved": "已批准",
+    "rejected": "已拒绝",
+    "exitCode": "退出码"
   },
   "filter": {
     "clearFilter": "清除过滤",

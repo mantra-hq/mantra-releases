@@ -302,7 +302,15 @@
     "tasks": "{{count}} tasks",
     "todoCompleted": "{{completed}}/{{total}} done",
     "todoInProgress": "{{count}} in progress",
-    "details": "Details"
+    "details": "Details",
+    "codeSuggestion": "Code Suggestion",
+    "readFile": "Read {{fileName}}",
+    "writeFile": "Write {{fileName}}",
+    "editFile": "Edit {{fileName}}",
+    "shellExec": "Command Execution",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "exitCode": "Exit Code"
   },
   "filter": {
     "clearFilter": "Clear Filter",

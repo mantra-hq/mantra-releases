@@ -17,6 +17,7 @@ import { ToolCall } from "./ToolCall";
 import { ToolCallCard, type ToolCallStatus } from "./ToolCallCard";
 import { TodoWriteCard } from "./TodoWriteCard";
 import { ToolOutput } from "./ToolOutput";
+import { CodeSuggestionCard } from "./CodeSuggestionCard";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useToolPairingContext } from "@/contexts/ToolPairingContext";
 import { useEditorStore } from "@/stores/useEditorStore";
@@ -268,6 +269,9 @@ export function ContentBlockRenderer({
       return (
         <ChainOfThought
           content={block.content}
+          // Story 8.11: 传递新字段 (AC #7)
+          subject={block.subject}
+          thinkingTimestamp={block.thinkingTimestamp}
           className={className}
         />
       );
@@ -341,6 +345,10 @@ export function ContentBlockRenderer({
                 isError: isError,
               });
             }}
+            // Story 8.11: 传递新字段
+            displayName={block.displayName}
+            description={block.description}
+            standardTool={block.standardTool}
             className={className}
           />
         );
@@ -364,6 +372,20 @@ export function ContentBlockRenderer({
           toolUseId={block.toolUseId}
           isHighlighted={highlightedToolId === block.toolUseId}
           onHover={setHighlightedToolId}
+          // Story 8.11: 传递新字段
+          structuredResult={block.structuredResult}
+          userDecision={block.userDecision}
+          className={className}
+        />
+      );
+
+    // Story 8.11: code_suggestion 块渲染 (AC #8)
+    case "code_suggestion":
+      return (
+        <CodeSuggestionCard
+          filePath={block.filePath}
+          code={block.code || block.content}
+          language={block.language}
           className={className}
         />
       );
