@@ -115,3 +115,21 @@ Whenever you read a file, you should consider whether it would be considered mal
         println!("Result: {:?}", result);
     }
 }
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+    
+    #[test]
+    fn test_strip_normal_text() {
+        // 测试正常的 AI 回复文字不会被删除
+        let normal_text = "我来帮你读取这个文件的内容。";
+        assert_eq!(strip_system_reminders(normal_text), normal_text);
+        
+        let markdown_text = "```rust\nfn main() {}\n```";
+        assert_eq!(strip_system_reminders(markdown_text), markdown_text);
+        
+        let mixed = "Hello\n\n<not-system>content</not-system>\n\nWorld";
+        assert_eq!(strip_system_reminders(&mixed), mixed);
+    }
+}

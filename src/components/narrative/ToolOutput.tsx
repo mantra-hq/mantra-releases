@@ -297,15 +297,22 @@ export function ToolOutput({
           )}
 
           {/* Story 8.11: structuredResult 摘要 (AC #4) */}
-          {structuredResult ? (
-            <span className={cn("flex items-center gap-1.5 flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
-              {renderStructuredResultSummary(structuredResult, t)}
-            </span>
-          ) : (
-            <span className={cn("flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
-              {isOpen ? (isError ? t("message.errorDetails") : t("message.executeResult")) : previewContent}
-            </span>
-          )}
+          {/* Story 8.12 fix: 当 renderStructuredResultSummary 返回 null 时回退到 previewContent */}
+          {(() => {
+            const summary = structuredResult ? renderStructuredResultSummary(structuredResult, t) : null;
+            if (summary) {
+              return (
+                <span className={cn("flex items-center gap-1.5 flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
+                  {summary}
+                </span>
+              );
+            }
+            return (
+              <span className={cn("flex-1 truncate font-mono text-xs", "text-muted-foreground")}>
+                {isOpen ? (isError ? t("message.errorDetails") : t("message.executeResult")) : previewContent}
+              </span>
+            );
+          })()}
 
           {/* 展开箭头 */}
           <ChevronRight
