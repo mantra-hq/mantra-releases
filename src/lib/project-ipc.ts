@@ -1,6 +1,7 @@
 /**
  * project-ipc - Tauri IPC 项目功能封装
  * Story 2.11: Task 5
+ * Story 9.2: Task 5.2 (使用 IPC 适配器)
  *
  * 提供项目和 Git 相关的 Tauri IPC 调用封装：
  * - getProject - 根据 ID 获取项目
@@ -10,7 +11,7 @@
  * - detectGitRepo - 检测 Git 仓库
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/ipc-adapter";
 import type { Project, RepresentativeFile, SnapshotResult } from "@/types/project";
 
 /**

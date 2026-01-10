@@ -1,9 +1,11 @@
 /**
  * Sanitizer IPC 封装 - Story 3-2 Task 8
+ * Story 9.2: Task 5.4 (使用 IPC 适配器)
+ *
  * 前端调用 Rust sanitizer 的 IPC 接口
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/ipc-adapter';
 import type {
     SanitizationResult,
     SanitizationRule,

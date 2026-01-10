@@ -1,12 +1,13 @@
 /**
  * search-ipc - 搜索 IPC 封装
  * Story 2.10: Task 4
+ * Story 9.2: Task 5.3 (使用 IPC 适配器)
  *
  * 封装 Tauri IPC 调用，用于全局搜索功能
  * 与后端 Tanzou 搜索引擎交互
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/ipc-adapter";
 import type { SearchResult } from "@/stores/useSearchStore";
 
 /**

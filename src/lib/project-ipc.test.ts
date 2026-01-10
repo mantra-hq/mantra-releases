@@ -1,16 +1,17 @@
 /**
  * project-ipc.test - 项目 IPC 测试
  * Story 2.11: Task 5
+ * Story 9.2: 更新 mock 为 IPC 适配器
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock Tauri invoke
-vi.mock("@tauri-apps/api/core", () => ({
+// Mock IPC 适配器
+vi.mock("@/lib/ipc-adapter", () => ({
   invoke: vi.fn(),
 }));
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/ipc-adapter";
 import {
   getProject,
   getProjectByCwd,

@@ -1,10 +1,18 @@
 /**
  * sanitizer-ipc 单元测试 - Story 3-2 Task 8.4
+ * Story 9.2: 更新 mock 为 IPC 适配器
+ *
  * 测试 IPC 封装函数的类型安全和行为
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { invoke } from '@tauri-apps/api/core';
+
+// Mock IPC 适配器
+vi.mock('@/lib/ipc-adapter', () => ({
+    invoke: vi.fn(),
+}));
+
+import { invoke } from '@/lib/ipc-adapter';
 import {
     sanitizeText,
     sanitizeSession,
@@ -13,11 +21,6 @@ import {
     getBuiltinRules,
 } from './sanitizer-ipc';
 import type { SanitizationResult } from '@/components/sanitizer/types';
-
-// Mock Tauri invoke
-vi.mock('@tauri-apps/api/core', () => ({
-    invoke: vi.fn(),
-}));
 
 const mockResult: SanitizationResult = {
     sanitized_text: 'const key = "[REDACTED:API_KEY]";',

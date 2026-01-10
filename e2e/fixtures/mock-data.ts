@@ -1,0 +1,442 @@
+/**
+ * Mock Data - E2E 测试 Mock 数据
+ * Story 9.2: Task 3
+ *
+ * 定义测试用的模拟数据:
+ * - MOCK_PROJECTS: 2-3 个测试项目
+ * - MOCK_SESSIONS: 每个项目 2-3 个会话
+ * - MOCK_MESSAGES: 每个会话 5-10 条消息
+ */
+
+import type { Project, SnapshotResult } from "@/types/project";
+import type { MantraSession, MantraMessage, MantraContentBlock } from "@/lib/session-utils";
+import type { SessionSummary } from "@/lib/project-ipc";
+import type { SanitizationRule } from "@/components/sanitizer/types";
+import type { DefaultPaths, ImportFileDoneEvent, ImportProgressEvent } from "@/lib/import-ipc";
+
+// =============================================================================
+// Mock Projects (AC #3: 2-3 个项目)
+// =============================================================================
+
+export const MOCK_PROJECTS: Project[] = [
+  {
+    id: "mock-project-alpha",
+    name: "Mock Project Alpha",
+    cwd: "/mock/projects/alpha",
+    session_count: 3,
+    non_empty_session_count: 3,
+    created_at: "2025-01-01T00:00:00Z",
+    last_activity: "2025-01-10T12:00:00Z",
+    git_repo_path: "/mock/projects/alpha",
+    has_git_repo: true,
+    git_remote_url: "https://github.com/mock/alpha",
+    is_empty: false,
+  },
+  {
+    id: "mock-project-beta",
+    name: "Mock Project Beta",
+    cwd: "/mock/projects/beta",
+    session_count: 2,
+    non_empty_session_count: 2,
+    created_at: "2025-01-02T00:00:00Z",
+    last_activity: "2025-01-09T10:00:00Z",
+    git_repo_path: "/mock/projects/beta",
+    has_git_repo: true,
+    git_remote_url: "https://github.com/mock/beta",
+    is_empty: false,
+  },
+  {
+    id: "mock-project-gamma",
+    name: "Mock Project Gamma",
+    cwd: "/mock/projects/gamma",
+    session_count: 2,
+    non_empty_session_count: 1,
+    created_at: "2025-01-03T00:00:00Z",
+    last_activity: "2025-01-08T08:00:00Z",
+    git_repo_path: null,
+    has_git_repo: false,
+    git_remote_url: null,
+    is_empty: false,
+  },
+];
+
+// =============================================================================
+// Mock Sessions (AC #3: 每项目 2-3 个会话)
+// =============================================================================
+
+export const MOCK_SESSION_SUMMARIES: SessionSummary[] = [
+  // Alpha 项目会话 (3 个)
+  {
+    id: "mock-session-alpha-1",
+    source: "claude",
+    created_at: "2025-01-10T10:00:00Z",
+    updated_at: "2025-01-10T12:00:00Z",
+    message_count: 8,
+    is_empty: false,
+    title: "实现用户认证模块",
+  },
+  {
+    id: "mock-session-alpha-2",
+    source: "claude",
+    created_at: "2025-01-09T14:00:00Z",
+    updated_at: "2025-01-09T16:00:00Z",
+    message_count: 6,
+    is_empty: false,
+    title: "修复登录页面 Bug",
+  },
+  {
+    id: "mock-session-alpha-3",
+    source: "gemini",
+    created_at: "2025-01-08T09:00:00Z",
+    updated_at: "2025-01-08T11:00:00Z",
+    message_count: 5,
+    is_empty: false,
+    title: "代码审查讨论",
+  },
+  // Beta 项目会话 (2 个)
+  {
+    id: "mock-session-beta-1",
+    source: "cursor",
+    created_at: "2025-01-09T08:00:00Z",
+    updated_at: "2025-01-09T10:00:00Z",
+    message_count: 10,
+    is_empty: false,
+    title: "重构数据库模型",
+  },
+  {
+    id: "mock-session-beta-2",
+    source: "claude",
+    created_at: "2025-01-07T15:00:00Z",
+    updated_at: "2025-01-07T17:00:00Z",
+    message_count: 7,
+    is_empty: false,
+    title: "添加单元测试",
+  },
+  // Gamma 项目会话 (2 个)
+  {
+    id: "mock-session-gamma-1",
+    source: "gemini",
+    created_at: "2025-01-08T06:00:00Z",
+    updated_at: "2025-01-08T08:00:00Z",
+    message_count: 5,
+    is_empty: false,
+    title: "项目初始化讨论",
+  },
+  {
+    id: "mock-session-gamma-2",
+    source: "claude",
+    created_at: "2025-01-05T10:00:00Z",
+    updated_at: "2025-01-05T10:30:00Z",
+    message_count: 0,
+    is_empty: true,
+    title: undefined,
+  },
+];
+
+// 项目 ID -> 会话列表映射
+export const MOCK_PROJECT_SESSIONS_MAP: Record<string, SessionSummary[]> = {
+  "mock-project-alpha": MOCK_SESSION_SUMMARIES.filter((s) => s.id.includes("alpha")),
+  "mock-project-beta": MOCK_SESSION_SUMMARIES.filter((s) => s.id.includes("beta")),
+  "mock-project-gamma": MOCK_SESSION_SUMMARIES.filter((s) => s.id.includes("gamma")),
+};
+
+// =============================================================================
+// Mock Messages (AC #3: 每会话 5-10 条消息)
+// =============================================================================
+
+/**
+ * 生成 Mock 消息
+ */
+function createMockMessage(
+  role: "user" | "assistant",
+  content: string,
+  timestamp: string,
+  blocks?: MantraContentBlock[]
+): MantraMessage {
+  return {
+    role,
+    timestamp,
+    content_blocks: blocks ?? [{ type: "text", text: content }],
+  };
+}
+
+/**
+ * Mock 会话详情
+ */
+export const MOCK_SESSIONS: Record<string, MantraSession> = {
+  "mock-session-alpha-1": {
+    id: "mock-session-alpha-1",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-10T10:00:00Z",
+    updated_at: "2025-01-10T12:00:00Z",
+    metadata: {
+      model: "claude-3-opus",
+      total_tokens: 5000,
+      title: "实现用户认证模块",
+      original_path: "/mock/logs/alpha-1.json",
+    },
+    messages: [
+      createMockMessage("user", "帮我实现一个用户认证模块", "2025-01-10T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来帮你设计用户认证模块。首先需要考虑以下几点...", "2025-01-10T10:01:00Z"),
+      createMockMessage("user", "请使用 JWT 方式实现", "2025-01-10T10:05:00Z"),
+      createMockMessage("assistant", "明白，我将使用 JWT 实现认证。让我先创建认证相关的文件...", "2025-01-10T10:06:00Z", [
+        { type: "text", text: "我将创建以下文件:" },
+        {
+          type: "tool_use",
+          id: "tool-1",
+          name: "Write",
+          input: { file_path: "src/auth/jwt.ts", content: "// JWT implementation" },
+          standard_tool: { type: "file_write", path: "src/auth/jwt.ts", content: "// JWT implementation" },
+        },
+      ]),
+      createMockMessage("assistant", "文件已创建。接下来实现登录逻辑...", "2025-01-10T10:10:00Z"),
+      createMockMessage("user", "能添加刷新 token 的功能吗？", "2025-01-10T11:00:00Z"),
+      createMockMessage("assistant", "当然可以，我来添加 refresh token 机制...", "2025-01-10T11:01:00Z"),
+      createMockMessage("user", "太棒了，谢谢！", "2025-01-10T12:00:00Z"),
+    ],
+  },
+  "mock-session-alpha-2": {
+    id: "mock-session-alpha-2",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-09T14:00:00Z",
+    updated_at: "2025-01-09T16:00:00Z",
+    metadata: {
+      model: "claude-3-sonnet",
+      total_tokens: 3000,
+      title: "修复登录页面 Bug",
+    },
+    messages: [
+      createMockMessage("user", "登录页面点击按钮没反应", "2025-01-09T14:00:00Z"),
+      createMockMessage("assistant", "让我检查一下登录按钮的事件处理...", "2025-01-09T14:01:00Z", [
+        { type: "text", text: "让我读取登录组件的代码" },
+        {
+          type: "tool_use",
+          id: "tool-2",
+          name: "Read",
+          input: { file_path: "src/components/Login.tsx" },
+          standard_tool: { type: "file_read", path: "src/components/Login.tsx" },
+        },
+      ]),
+      createMockMessage("assistant", "我发现问题了，onClick 事件没有正确绑定。", "2025-01-09T14:05:00Z"),
+      createMockMessage("user", "能修复一下吗？", "2025-01-09T14:10:00Z"),
+      createMockMessage("assistant", "已修复，问题是 async 函数没有 await。", "2025-01-09T15:00:00Z"),
+      createMockMessage("user", "现在可以了，感谢！", "2025-01-09T16:00:00Z"),
+    ],
+  },
+  "mock-session-alpha-3": {
+    id: "mock-session-alpha-3",
+    source: "gemini",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-08T09:00:00Z",
+    updated_at: "2025-01-08T11:00:00Z",
+    metadata: {
+      model: "gemini-pro",
+      total_tokens: 2500,
+      title: "代码审查讨论",
+    },
+    messages: [
+      createMockMessage("user", "帮我审查这段代码", "2025-01-08T09:00:00Z"),
+      createMockMessage("assistant", "好的，让我仔细看看这段代码...", "2025-01-08T09:01:00Z"),
+      createMockMessage("assistant", "我发现了几个可以改进的地方...", "2025-01-08T09:10:00Z"),
+      createMockMessage("user", "第一个建议很好，请帮我修改", "2025-01-08T10:00:00Z"),
+      createMockMessage("assistant", "好的，已完成修改。", "2025-01-08T11:00:00Z"),
+    ],
+  },
+  "mock-session-beta-1": {
+    id: "mock-session-beta-1",
+    source: "cursor",
+    cwd: "/mock/projects/beta",
+    created_at: "2025-01-09T08:00:00Z",
+    updated_at: "2025-01-09T10:00:00Z",
+    metadata: {
+      model: "gpt-4-turbo",
+      total_tokens: 8000,
+      title: "重构数据库模型",
+    },
+    messages: [
+      createMockMessage("user", "数据库模型需要重构", "2025-01-09T08:00:00Z"),
+      createMockMessage("assistant", "了解，让我分析当前的模型结构...", "2025-01-09T08:01:00Z"),
+      createMockMessage("user", "主要是用户表和订单表的关系", "2025-01-09T08:10:00Z"),
+      createMockMessage("assistant", "我建议使用外键关联...", "2025-01-09T08:15:00Z"),
+      createMockMessage("user", "好的，请实现", "2025-01-09T08:30:00Z"),
+      createMockMessage("assistant", "正在创建迁移文件...", "2025-01-09T08:31:00Z"),
+      createMockMessage("assistant", "迁移文件已创建", "2025-01-09T09:00:00Z"),
+      createMockMessage("user", "测试一下", "2025-01-09T09:30:00Z"),
+      createMockMessage("assistant", "测试通过！", "2025-01-09T09:45:00Z"),
+      createMockMessage("user", "完美！", "2025-01-09T10:00:00Z"),
+    ],
+  },
+  "mock-session-beta-2": {
+    id: "mock-session-beta-2",
+    source: "claude",
+    cwd: "/mock/projects/beta",
+    created_at: "2025-01-07T15:00:00Z",
+    updated_at: "2025-01-07T17:00:00Z",
+    metadata: {
+      model: "claude-3-sonnet",
+      total_tokens: 4000,
+      title: "添加单元测试",
+    },
+    messages: [
+      createMockMessage("user", "给用户服务添加单元测试", "2025-01-07T15:00:00Z"),
+      createMockMessage("assistant", "好的，我来为 UserService 编写测试...", "2025-01-07T15:01:00Z"),
+      createMockMessage("user", "使用 Jest", "2025-01-07T15:05:00Z"),
+      createMockMessage("assistant", "明白，使用 Jest + @testing-library...", "2025-01-07T15:06:00Z"),
+      createMockMessage("assistant", "测试文件已创建", "2025-01-07T16:00:00Z"),
+      createMockMessage("user", "运行测试", "2025-01-07T16:30:00Z"),
+      createMockMessage("assistant", "所有测试通过！覆盖率 85%", "2025-01-07T17:00:00Z"),
+    ],
+  },
+  "mock-session-gamma-1": {
+    id: "mock-session-gamma-1",
+    source: "gemini",
+    cwd: "/mock/projects/gamma",
+    created_at: "2025-01-08T06:00:00Z",
+    updated_at: "2025-01-08T08:00:00Z",
+    metadata: {
+      model: "gemini-pro",
+      total_tokens: 2000,
+      title: "项目初始化讨论",
+    },
+    messages: [
+      createMockMessage("user", "帮我初始化一个 React 项目", "2025-01-08T06:00:00Z"),
+      createMockMessage("assistant", "好的，我推荐使用 Vite + React + TypeScript...", "2025-01-08T06:01:00Z"),
+      createMockMessage("user", "好的，继续", "2025-01-08T06:30:00Z"),
+      createMockMessage("assistant", "执行初始化命令...", "2025-01-08T07:00:00Z"),
+      createMockMessage("assistant", "项目已初始化完成！", "2025-01-08T08:00:00Z"),
+    ],
+  },
+  "mock-session-gamma-2": {
+    id: "mock-session-gamma-2",
+    source: "claude",
+    cwd: "/mock/projects/gamma",
+    created_at: "2025-01-05T10:00:00Z",
+    updated_at: "2025-01-05T10:30:00Z",
+    metadata: {
+      model: "claude-3-haiku",
+      title: undefined,
+    },
+    messages: [],
+  },
+};
+
+// =============================================================================
+// Mock Git Data
+// =============================================================================
+
+export const MOCK_SNAPSHOT: SnapshotResult = {
+  content: `// Mock file content
+export function hello() {
+  console.log("Hello, World!");
+}
+`,
+  commit_hash: "abc1234def5678",
+  commit_message: "feat: add hello function",
+  commit_timestamp: 1704067200, // 2024-01-01 00:00:00 UTC
+};
+
+// =============================================================================
+// Mock Sanitization Data
+// =============================================================================
+
+export const MOCK_BUILTIN_RULES: SanitizationRule[] = [
+  {
+    name: "API Key",
+    pattern: "\\b[A-Za-z0-9]{32,}\\b",
+    replacement: "[REDACTED:API_KEY]",
+  },
+  {
+    name: "Email",
+    pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b",
+    replacement: "[REDACTED:EMAIL]",
+  },
+  {
+    name: "IP Address",
+    pattern: "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
+    replacement: "[REDACTED:IP]",
+  },
+];
+
+// =============================================================================
+// Mock Import Data
+// =============================================================================
+
+export const MOCK_DEFAULT_PATHS: DefaultPaths = {
+  claude: "/mock/home/.claude/logs",
+  gemini: "/mock/home/.gemini/logs",
+  cursor: "/mock/home/.cursor/logs",
+  codex: "/mock/home/.codex/logs",
+};
+
+export const MOCK_DISCOVERED_FILES = [
+  {
+    path: "/mock/logs/session1.json",
+    source: "claude" as const,
+    size: 1024,
+    modified: "2025-01-10T00:00:00Z",
+    sessionId: "discovered-session-1",
+    isImported: false,
+  },
+  {
+    path: "/mock/logs/session2.json",
+    source: "gemini" as const,
+    size: 2048,
+    modified: "2025-01-09T00:00:00Z",
+    sessionId: "discovered-session-2",
+    isImported: true,
+  },
+];
+
+// =============================================================================
+// Mock Search Data
+// =============================================================================
+
+export const MOCK_SEARCH_RESULTS = [
+  {
+    id: "search-1",
+    session_id: "mock-session-alpha-1",
+    project_id: "mock-project-alpha",
+    project_name: "Mock Project Alpha",
+    session_name: "实现用户认证模块",
+    message_id: "msg-1",
+    content: "帮我实现一个用户认证模块",
+    match_positions: [[4, 10]] as [number, number][],
+    timestamp: 1704880800,
+  },
+];
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * 根据项目 ID 获取会话列表
+ */
+export function getSessionsByProjectId(projectId: string): SessionSummary[] {
+  return MOCK_PROJECT_SESSIONS_MAP[projectId] ?? [];
+}
+
+/**
+ * 根据会话 ID 获取完整会话
+ */
+export function getSessionById(sessionId: string): MantraSession | null {
+  return MOCK_SESSIONS[sessionId] ?? null;
+}
+
+/**
+ * 根据会话 ID 获取所属项目
+ */
+export function getProjectBySessionId(sessionId: string): Project | null {
+  if (sessionId.includes("alpha")) {
+    return MOCK_PROJECTS.find((p) => p.id === "mock-project-alpha") ?? null;
+  }
+  if (sessionId.includes("beta")) {
+    return MOCK_PROJECTS.find((p) => p.id === "mock-project-beta") ?? null;
+  }
+  if (sessionId.includes("gamma")) {
+    return MOCK_PROJECTS.find((p) => p.id === "mock-project-gamma") ?? null;
+  }
+  return null;
+}

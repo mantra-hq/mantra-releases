@@ -1,12 +1,13 @@
 /**
  * useSanitizePreviewStore - 脱敏预览全局状态
  * Story 3.4: 主视图原生模式
+ * Story 9.2: Task 5.6 (使用 IPC 适配器)
  *
  * 管理脱敏预览的全局状态，供 TopBarActions 和 CodePanel 共享
  */
 
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/ipc-adapter';
 import { sanitizeSession } from '@/lib/ipc/sanitizer-ipc';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { useDetailPanelStore } from '@/stores/useDetailPanelStore';

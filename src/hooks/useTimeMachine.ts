@@ -3,6 +3,7 @@
  * Story 2.7: Task 2 - AC #3, #4
  * Story 2.12: Task 4 - AC #5 (File Not Found Handling)
  * Story 2.30: AC2 - Session Log Fallback
+ * Story 9.2: Task 5.5 (使用 IPC 适配器)
  *
  * 功能:
  * - 封装 Tauri IPC 调用获取历史快照
@@ -14,7 +15,7 @@
  */
 
 import { useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/ipc-adapter";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
 
 /**

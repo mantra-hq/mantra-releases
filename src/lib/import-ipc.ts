@@ -2,6 +2,7 @@
  * import-ipc - Tauri IPC 导入功能封装
  * Story 2.9: Task 6
  * Story 2.23: Import Progress Events
+ * Story 9.2: Task 5.1 (使用 IPC 适配器)
  *
  * 提供导入功能的 Tauri IPC 调用封装：
  * - scanLogDirectory - 扫描默认路径
@@ -11,7 +12,7 @@
  * - cancelImport - 取消导入
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/lib/ipc-adapter";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { DiscoveredFile, ImportSource, ImportResult, ImportProgressData } from "@/components/import";

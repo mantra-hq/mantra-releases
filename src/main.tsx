@@ -3,6 +3,7 @@
  * Story 2.8: Task 1
  * Story 2.10: Task 2.4 (Global Search Integration)
  * Story 2.21: Task 5 (移除 Dashboard，首页即 Player)
+ * Story 9.2: Task 2 (Playwright 测试环境注入)
  * Tech-Spec: 通知系统 Task 14
  *
  * 配置路由和全局 Providers
@@ -26,6 +27,28 @@ import "./i18n";
 // Monaco Editor 本地资源配置 (修复 AppImage 打包后编辑器无法加载问题)
 import "./lib/monaco-setup";
 import "./index.css";
+// Story 9.2: IPC 适配器 (用于测试环境 Mock 注入)
+import { setMockInvoke } from "./lib/ipc-adapter";
+
+// Story 9.2: Playwright 测试环境检测与 Mock 注入
+// 在 React 渲染前初始化，确保首次 IPC 调用使用 Mock
+const initTestEnv = async (): Promise<void> => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("playwright")) {
+    // 设置全局测试标志
+    window.__PLAYWRIGHT_TEST__ = true;
+    console.log("[Mantra] Playwright 测试模式已启用");
+
+    // 动态导入 Mock 处理器 (仅测试环境加载)
+    try {
+      const { mockInvoke } = await import("../e2e/fixtures/ipc-mock");
+      setMockInvoke(mockInvoke);
+      console.log("[Mantra] IPC Mock 已注入");
+    } catch (err) {
+      console.error("[Mantra] 加载 IPC Mock 失败:", err);
+    }
+  }
+};
 
 // Prevent flash of incorrect theme on initial load
 // Default is dark theme when no stored preference
@@ -55,7 +78,17 @@ function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+/**
+ * 应用启动函数
+ * Story 9.2 Fix: 确保测试环境 Mock 注入完成后再渲染 React
+ * 避免首次 IPC 调用在 Mock 注入前发生
+ */
+async function startApp() {
+  // 等待测试环境初始化完成 (如果是测试模式)
+  await initTestEnv();
+
+  // 渲染 React 应用
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="dark">
       <TooltipProvider delayDuration={300}>
@@ -84,4 +117,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       </TooltipProvider>
     </ThemeProvider>
   </React.StrictMode>
-);
+  );
+}
+
+// 启动应用
+startApp();
