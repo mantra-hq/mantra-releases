@@ -120,6 +120,7 @@ export function EditorTabs({ className }: EditorTabsProps) {
             {/* 标签容器 */}
             <div
                 ref={scrollContainerRef}
+                data-testid="editor-tabs"
                 role="tablist"
                 className="flex-1 flex overflow-x-auto scrollbar-none"
             >
@@ -139,6 +140,7 @@ export function EditorTabs({ className }: EditorTabsProps) {
                         <Tooltip key={tab.id}>
                             <TooltipTrigger asChild>
                                 <div
+                                    data-testid="tab-item"
                                     data-tab
                                     data-active={isActive}
                                     data-historical={isHistorical}

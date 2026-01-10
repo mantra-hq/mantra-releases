@@ -207,6 +207,7 @@ export function GlobalSearch() {
 
                 {/* Content */}
                 <Dialog.Content
+                    data-testid="global-search"
                     aria-label={t("search.globalSearch")}
                     onKeyDown={handleKeyDown}
                     className={cn(
@@ -233,6 +234,7 @@ export function GlobalSearch() {
                         <Search className="w-5 h-5 text-muted-foreground shrink-0" />
                         <input
                             ref={inputRef}
+                            data-testid="search-input"
                             type="text"
                             value={query}
                             onChange={handleInputChange}
@@ -265,7 +267,7 @@ export function GlobalSearch() {
                     </div>
 
                     {/* Results Area */}
-                    <div className="flex-1 overflow-hidden">
+                    <div data-testid="search-results" className="flex-1 overflow-hidden">
                         {/* Loading skeleton */}
                         {isLoading && hasQuery && results.length === 0 && (
                             <div className="p-4 space-y-3">

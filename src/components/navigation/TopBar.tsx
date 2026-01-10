@@ -143,7 +143,7 @@ export function TopBar({
               onClick={onDrawerOpen}
               aria-label={t("project.openDrawer")}
               className="h-8 w-8"
-              data-testid="topbar-menu-button"
+              data-testid="drawer-toggle"
             >
               <Menu className="h-4 w-4" />
             </Button>
@@ -161,36 +161,39 @@ export function TopBar({
               icon={<Menu className="h-4 w-4" />}
               onClick={onDrawerOpen}
               aria-label={t("project.openDrawer")}
-              testId="topbar-menu-button"
+              testId="drawer-toggle"
             />
 
             {/* Logo (Story 2.21 AC #14) */}
             {renderLogo()}
 
-            {/* 项目名 (AC3) */}
-            <BreadcrumbItem
-              icon={<FolderOpen className="h-4 w-4" />}
-              label={projectName}
-              onClick={onDrawerOpen}
-              truncate
-              testId="topbar-project-name"
-            />
+            {/* 面包屑导航 */}
+            <nav data-testid="breadcrumb" className="flex items-center gap-1" aria-label="Breadcrumb">
+              {/* 项目名 (AC3) */}
+              <BreadcrumbItem
+                icon={<FolderOpen className="h-4 w-4" />}
+                label={projectName}
+                onClick={onDrawerOpen}
+                truncate
+                testId="topbar-project-name"
+              />
 
-            {/* 分隔符 */}
-            <ChevronRight
-              className="h-4 w-4 text-muted-foreground shrink-0"
-              aria-hidden="true"
-            />
+              {/* 分隔符 */}
+              <ChevronRight
+                className="h-4 w-4 text-muted-foreground shrink-0"
+                aria-hidden="true"
+              />
 
-            {/* 会话名 + 下拉选择器 (AC4) */}
-            <SessionDropdown
-              currentSessionId={sessionId || ""}
-              currentSessionName={sessionName || ""}
-              messageCount={messageCount}
-              sessions={sessions}
-              onSessionSelect={onSessionSelect || (() => { })}
-              hideEmptySessions={hideEmptySessions}
-            />
+              {/* 会话名 + 下拉选择器 (AC4) */}
+              <SessionDropdown
+                currentSessionId={sessionId || ""}
+                currentSessionName={sessionName || ""}
+                messageCount={messageCount}
+                sessions={sessions}
+                onSessionSelect={onSessionSelect || (() => { })}
+                hideEmptySessions={hideEmptySessions}
+              />
+            </nav>
           </>
         );
     }

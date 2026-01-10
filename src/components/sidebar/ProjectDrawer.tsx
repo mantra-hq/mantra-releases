@@ -352,7 +352,7 @@ export function ProjectDrawer({
               {t("project.noMatch")}
             </div>
           ) : (
-            <div className="py-2">
+            <div data-testid="project-list" className="py-2">
               {filteredProjects.map((project) => (
                 <ProjectTreeItem
                   key={project.id}

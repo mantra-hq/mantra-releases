@@ -454,6 +454,7 @@ export function CodeSnapshotView({
 
   return (
     <div
+      data-testid="code-panel"
       className={cn(
         "flex h-full flex-col bg-background",
         shouldShowDiff && "diff-fade-out",
@@ -465,6 +466,7 @@ export function CodeSnapshotView({
 
       {/* 编辑器容器 (AC1) */}
       <div
+        data-testid="code-content"
         className={cn(
           "flex-1 overflow-hidden relative",
           isTransitioning && "animate-fade-in"

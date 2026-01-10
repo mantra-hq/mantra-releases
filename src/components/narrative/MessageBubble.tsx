@@ -89,6 +89,7 @@ export const MessageBubble = React.forwardRef<HTMLDivElement, MessageBubbleProps
     return (
       <div
         ref={combinedRef}
+        data-testid="message-item"
         data-index={index}
         data-selected={isSelected}
         role="button"

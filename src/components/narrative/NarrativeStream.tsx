@@ -188,6 +188,7 @@ export const NarrativeStream = React.forwardRef<
       ref={scrollContainerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      data-testid="message-list"
       className={cn(
         "h-full overflow-y-auto",
         // 自定义滚动条样式

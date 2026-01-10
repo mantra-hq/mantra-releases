@@ -95,7 +95,7 @@ export function SessionDropdown({
           role="combobox"
           aria-expanded={open}
           aria-label={t("session.selectSession")}
-          data-testid="session-dropdown-trigger"
+          data-testid="session-dropdown"
           className={cn(
             "h-8 px-2 gap-1.5 min-w-0",
             "text-muted-foreground hover:text-foreground",

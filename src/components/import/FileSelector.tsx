@@ -135,7 +135,7 @@ export function FileSelector({
   const scanButtonText = files.length > 0 ? t("import.rescan") : t("import.scanDefault");
 
   return (
-    <div data-testid="file-selector" className="space-y-3">
+    <div data-testid="file-list" className="space-y-3">
       {/* 工具栏：操作按钮 + 搜索框 */}
       <div className="flex items-center justify-between gap-3">
         {/* 左侧：操作按钮 */}

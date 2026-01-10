@@ -115,6 +115,10 @@ export function SearchResultItem({
 
     return (
         <div
+            data-testid="search-result-item"
+            data-title={result.sessionName}
+            data-project-name={result.projectName}
+            data-session-name={result.sessionName}
             role="option"
             aria-selected={isSelected}
             onClick={onClick}

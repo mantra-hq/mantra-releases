@@ -265,6 +265,7 @@ export const TimberLine = React.memo(function TimberLine({
 
     return (
         <div
+            data-testid="timeline"
             className={cn(
                 "relative w-full h-12 px-4 py-3",
                 "bg-muted/50 border-t border-border",
@@ -315,6 +316,7 @@ export const TimberLine = React.memo(function TimberLine({
 
                 {/* 滑块 (Knob) */}
                 <div
+                    data-testid="timeline-slider"
                     className={cn(
                         "absolute top-1/2 -translate-y-1/2 -translate-x-1/2",
                         "w-3.5 h-3.5 rounded-full",

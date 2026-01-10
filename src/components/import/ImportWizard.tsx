@@ -585,6 +585,7 @@ export function ImportWizard({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        data-testid="import-wizard"
         className="sm:max-w-[600px] max-h-[80vh] flex flex-col"
         aria-labelledby="import-wizard-title"
       >
