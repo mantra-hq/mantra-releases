@@ -43,6 +43,33 @@ export default defineConfig({
     video: 'on-first-retry',
   },
 
+  // Visual comparison (screenshot) settings
+  // @see https://playwright.dev/docs/test-snapshots
+  expect: {
+    toHaveScreenshot: {
+      // Maximum allowed pixel difference for full page screenshots
+      maxDiffPixels: 200,
+      // Pixel comparison threshold (0-1, lower is stricter)
+      threshold: 0.2,
+      // Disable animations for stable visual comparison
+      animations: 'disabled',
+    },
+    toMatchSnapshot: {
+      // Maximum allowed pixel difference for element screenshots
+      maxDiffPixels: 100,
+      // Slightly stricter threshold for component screenshots
+      threshold: 0.15,
+    },
+  },
+
+  // Snapshot directory for visual regression baselines
+  // Organized by test file: screenshots/visual.spec.ts-snapshots/
+  snapshotDir: './screenshots',
+
+  // Snapshot path template for better organization
+  // Format: {snapshotDir}/{testFileName}-snapshots/{snapshotName}-{projectName}{ext}
+  snapshotPathTemplate: '{snapshotDir}/{testFileName}-snapshots/{arg}-{projectName}{ext}',
+
   // Configure projects for major browsers
   projects: [
     {
