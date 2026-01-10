@@ -1,12 +1,14 @@
 /**
  * useProjects Hook - 获取项目列表
  * Story 2.8: Task 4
+ * Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
  *
  * 调用 Tauri IPC 获取项目列表，管理加载和错误状态
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+// Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
+import { invoke } from "@/lib/ipc-adapter";
 import type { Project } from "@/types/project";
 
 /**

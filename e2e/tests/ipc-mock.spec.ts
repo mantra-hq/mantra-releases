@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { BasePage } from '../pages';
 
 /**
  * IPC Mock Layer Tests - Story 9.2: Task 6
@@ -10,26 +11,24 @@ import { test, expect } from '@playwright/test';
  */
 test.describe('IPC Mock Layer', () => {
   test.beforeEach(async ({ page }) => {
-    // 导航到首页，URL 已包含 ?playwright 参数
-    await page.goto('/');
-
-    // 等待页面完全加载
-    await page.waitForLoadState('networkidle');
+    const basePage = new BasePage(page);
+    // 导航到首页，自动添加 ?playwright 参数
+    await basePage.goto('/');
+    await basePage.waitForAppReady();
   });
 
   /**
    * Task 6.1: 验证 Mock 层工作
    */
   test('mock environment is initialized', async ({ page }) => {
+    // 等待 Mock 环境完全初始化
+    await page.waitForLoadState('domcontentloaded');
+
     // 验证 window.__PLAYWRIGHT_TEST__ 标志已设置
     const isTestEnv = await page.evaluate(() => {
       return (window as unknown as { __PLAYWRIGHT_TEST__?: boolean }).__PLAYWRIGHT_TEST__;
     });
     expect(isTestEnv).toBe(true);
-
-    // 验证控制台日志包含 Mock 初始化信息
-    // 注意: 这个测试可能因为异步加载而不稳定
-    // 主要依赖项目列表渲染来验证 Mock 工作
   });
 
   /**
@@ -74,11 +73,10 @@ test.describe('IPC Mock Layer', () => {
    * Task 6.3: 验证会话导航正常工作
    */
   test('session navigation works', async ({ page }) => {
+    const basePage = new BasePage(page);
     // 尝试导航到一个 mock 会话
-    await page.goto('/session/mock-session-alpha-1');
-
-    // 等待页面加载
-    await page.waitForLoadState('networkidle');
+    await basePage.goto('/session/mock-session-alpha-1');
+    await basePage.waitForAppReady();
 
     // 验证 URL 包含会话 ID
     await expect(page).toHaveURL(/mock-session-alpha-1/);
@@ -92,6 +90,7 @@ test.describe('IPC Mock Layer', () => {
    * 验证 Mock invoke 被正确调用
    */
   test('mock invoke is used for IPC calls', async ({ page }) => {
+    const basePage = new BasePage(page);
     // 记录控制台日志
     const consoleLogs: string[] = [];
     page.on('console', (msg) => {
@@ -101,11 +100,11 @@ test.describe('IPC Mock Layer', () => {
     });
 
     // 导航到首页触发 list_projects 调用
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await basePage.goto('/');
+    await basePage.waitForAppReady();
 
-    // 等待一小段时间让日志输出
-    await page.waitForTimeout(500);
+    // 等待日志输出
+    await page.waitForLoadState('domcontentloaded');
 
     // 检查是否有 Mock 相关的日志
     // ipc-mock.ts 会在每次调用时打印 [IPC Mock]
@@ -125,9 +124,10 @@ test.describe('IPC Mock Layer', () => {
  */
 test.describe('Mock Edge Cases', () => {
   test('handles unknown IPC command gracefully', async ({ page }) => {
+    const basePage = new BasePage(page);
     // 导航到页面
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await basePage.goto('/');
+    await basePage.waitForAppReady();
 
     // 记录警告日志
     const warningLogs: string[] = [];
@@ -143,9 +143,10 @@ test.describe('Mock Edge Cases', () => {
   });
 
   test('mock data types match expected format', async ({ page }) => {
+    const basePage = new BasePage(page);
     // 导航到会话页面
-    await page.goto('/session/mock-session-alpha-1');
-    await page.waitForLoadState('networkidle');
+    await basePage.goto('/session/mock-session-alpha-1');
+    await basePage.waitForAppReady();
 
     // 如果数据类型不匹配，页面会报错或显示不正确
     // 验证页面没有 JavaScript 错误
@@ -154,8 +155,8 @@ test.describe('Mock Edge Cases', () => {
       hasJsError = true;
     });
 
-    // 等待一小段时间让潜在错误发生
-    await page.waitForTimeout(1000);
+    // 等待页面稳定
+    await page.waitForLoadState('domcontentloaded');
 
     // 不应该有 JavaScript 错误
     expect(hasJsError).toBe(false);

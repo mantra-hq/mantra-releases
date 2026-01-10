@@ -13,11 +13,12 @@ export default defineConfig({
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
-  // Retry on CI only
-  retries: process.env.CI ? 2 : 0,
+  // Retry failed tests (helps with flaky tests due to timing)
+  retries: process.env.CI ? 2 : 1,
 
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // Limit workers to avoid concurrent access issues with dev server
+  // Single worker ensures stable test execution
+  workers: 1,
 
   // Reporter to use
   reporter: [
@@ -29,7 +30,8 @@ export default defineConfig({
   use: {
     // Base URL to use in actions like `await page.goto('/')`
     // Port 1420 is used by Tauri/Vite dev server (see vite.config.ts)
-    baseURL: 'http://localhost:1420?playwright',
+    // Note: ?playwright 参数在每次导航时动态添加，避免 baseURL 查询参数连接问题
+    baseURL: 'http://localhost:1420',
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',

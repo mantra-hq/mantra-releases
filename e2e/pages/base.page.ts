@@ -1,6 +1,7 @@
 /**
  * BasePage - E2E 测试基础页面类
  * Story 9.3: Task 1
+ * Story 9.4: 修复 ?playwright 查询参数处理
  *
  * 提供所有页面类的通用功能:
  * - 导航方法: goto()
@@ -16,21 +17,34 @@ export class BasePage {
 
   /**
    * 导航到指定路径
+   * Story 9.4: 自动添加 ?playwright 参数以启用 Mock 环境
    * @param path - 相对路径，默认为 "/"
    */
   async goto(path: string = "/"): Promise<void> {
-    await this.page.goto(path);
+    // 自动添加 ?playwright 参数以启用 IPC Mock
+    const separator = path.includes("?") ? "&" : "?";
+    const urlWithPlaywright = `${path}${separator}playwright`;
+    await this.page.goto(urlWithPlaywright);
   }
 
   /**
    * 等待应用加载完成
-   * 检测 React root 元素可见
+   * 检测 React root 元素可见并等待 Mock 注入完成
    */
   async waitForAppReady(): Promise<void> {
     const root = this.page.locator("#root");
     await expect(root).toBeVisible();
     // 等待应用内容渲染
     await this.page.waitForLoadState("domcontentloaded");
+    // 等待 Mock 注入完成（检查控制台日志或特定元素）
+    // 给应用一点时间完成初始化
+    await this.page.waitForTimeout(300);
+    // 确保没有 React 错误边界或白屏
+    const hasContent = await root.locator("> *").count();
+    if (hasContent === 0) {
+      // 如果 root 内没有内容，再等一下
+      await this.page.waitForTimeout(500);
+    }
   }
 
   /**

@@ -18,7 +18,8 @@
 
 import * as React from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
+// Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
+import { invoke } from "@/lib/ipc-adapter";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
 import { getProjectByCwd, getRepresentativeFile, detectGitRepo, syncProject } from "@/lib/project-ipc";

@@ -2,12 +2,14 @@
  * useCurrentSession Hook - 获取当前会话及其项目信息
  * Story 2.17: Task 5
  * Story 1.9: 使用 session_id 获取项目（修复 cwd 更新后项目信息不同步问题）
+ * Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
  *
  * 封装获取当前会话、项目信息和同项目会话列表的逻辑
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+// Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
+import { invoke } from "@/lib/ipc-adapter";
 import type { Project } from "@/types/project";
 import type { MantraSession } from "@/lib/session-utils";
 import type { SessionSummary } from "@/components/navigation";

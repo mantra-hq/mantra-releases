@@ -34,7 +34,8 @@ import { SanitizeStatusBanner } from "@/components/sanitizer";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { useSanitizePreviewStore } from "@/stores/useSanitizePreviewStore";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
-import { invoke } from "@tauri-apps/api/core";
+// Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
+import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
 import { Files, PanelLeftClose, PanelLeft, ChevronsDownUp } from "lucide-react";
 import type { editor } from "monaco-editor";

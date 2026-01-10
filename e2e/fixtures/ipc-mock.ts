@@ -145,6 +145,40 @@ export async function mockInvoke<T>(cmd: string, args?: InvokeArgs): Promise<T> 
       } as T;
     }
 
+    case "list_files_at_commit": {
+      // 返回 Mock 文件列表
+      return [
+        "README.md",
+        "src/index.ts",
+        "src/components/App.tsx",
+        "package.json",
+      ] as T;
+    }
+
+    case "list_tree_at_commit": {
+      // 返回 Mock 文件树 (TreeNode[] 格式)
+      return [
+        {
+          name: "src",
+          path: "src",
+          type: "directory",
+          children: [
+            { name: "index.ts", path: "src/index.ts", type: "file" },
+            {
+              name: "components",
+              path: "src/components",
+              type: "directory",
+              children: [
+                { name: "App.tsx", path: "src/components/App.tsx", type: "file" },
+              ],
+            },
+          ],
+        },
+        { name: "README.md", path: "README.md", type: "file" },
+        { name: "package.json", path: "package.json", type: "file" },
+      ] as T;
+    }
+
     // ==========================================================================
     // 搜索相关 Mock (AC #4: 4.5)
     // ==========================================================================
