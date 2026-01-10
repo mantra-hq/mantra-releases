@@ -239,7 +239,7 @@ export function ImportComplete({
           </div>
         )}
 
-        {/* Story 2.29 V2: 空项目警告 */}
+        {/* Story 2.29 V2: 空项目警告 - 优化：添加高度限制和滚动 */}
         {hasEmptyProjects && (
           <div
             className="text-left p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30"
@@ -247,84 +247,110 @@ export function ImportComplete({
           >
             <div className="flex items-start gap-2">
               <Info className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-yellow-500">
                   {t("import.emptyProjectsWarning")}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {t("import.emptyProjectsWillBeHidden")}
                 </p>
-                <div className="mt-2 space-y-1">
-                  {emptyProjects.map((project) => (
-                    <div
-                      key={project.id}
-                      className="flex items-center gap-2 text-xs text-muted-foreground"
-                    >
-                      <FolderKanban className="w-3 h-3 text-yellow-500/70" />
-                      <span className="truncate">{project.name}</span>
-                    </div>
-                  ))}
-                </div>
+                <ScrollArea className="max-h-[100px] overflow-hidden mt-2">
+                  <div className="space-y-1 pr-2">
+                    {emptyProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                      >
+                        <FolderKanban className="w-3 h-3 text-yellow-500/70 flex-shrink-0" />
+                        <span className="truncate">{project.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
             </div>
           </div>
         )}
 
-        {/* Story 2.23: 失败文件列表和重试按钮 - 次要信息放在后面 */}
+        {/* Story 2.23: 失败文件列表和重试按钮 - 优化：稳健布局 + 滚动提示 */}
         {hasFailures && (
-          <div className="text-left">
+          <div className="text-left rounded-lg border border-red-500/20 bg-red-500/5 overflow-hidden">
+            {/* 可折叠的标题栏 */}
             <button
               onClick={() => setErrorsExpanded(!errorsExpanded)}
-              className="w-full flex items-center justify-between text-sm font-medium text-red-500 hover:text-red-400 transition-colors mb-2"
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2.5",
+                "text-sm font-medium text-red-500 hover:bg-red-500/10 transition-colors",
+                errorsExpanded && "border-b border-red-500/20"
+              )}
               data-testid="toggle-errors"
             >
-              <span>{t("import.failedFiles")} ({failureCount})</span>
+              <div className="flex items-center gap-2">
+                <FileX className="w-4 h-4" />
+                <span>{t("import.failedFiles")} ({failureCount})</span>
+              </div>
               <ChevronDown
                 className={cn(
-                  "w-4 h-4 transition-transform",
+                  "w-4 h-4 transition-transform duration-200",
                   !errorsExpanded && "-rotate-90"
                 )}
               />
             </button>
 
+            {/* 展开的内容区域 - 关键：overflow-hidden 确保不会撑破布局 */}
             {errorsExpanded && (
-              <ScrollArea className="max-h-[120px] mb-3">
-                <div className="space-y-1">
-                  {failedResults.map((result) => (
-                    <div
-                      key={result.filePath}
-                      className="px-3 py-2 rounded-md bg-red-500/5 border border-red-500/20"
-                    >
-                      <div className="text-sm font-mono text-foreground truncate">
-                        {getFileName(result.filePath)}
-                      </div>
-                      {result.error && (
-                        <div className="text-xs text-red-400 mt-0.5 truncate">
-                          {result.error}
+              <div className="relative">
+                <ScrollArea className="max-h-[200px] overflow-hidden">
+                  <div className="p-2 space-y-1.5">
+                    {failedResults.map((result) => (
+                      <div
+                        key={result.filePath}
+                        className="px-3 py-2 rounded-md bg-background/50 border border-red-500/10 group"
+                      >
+                        <div
+                          className="text-sm font-mono text-foreground truncate"
+                          title={result.filePath}
+                        >
+                          {getFileName(result.filePath)}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
+                        {result.error && (
+                          <div
+                            className="text-xs text-red-400 mt-1 line-clamp-2"
+                            title={result.error}
+                          >
+                            {result.error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+                {/* 底部渐变遮罩 - 提示用户可以滚动 */}
+                {failureCount > 3 && (
+                  <div className="absolute bottom-0 left-0 right-2 h-6 bg-gradient-to-t from-red-500/10 to-transparent pointer-events-none" />
+                )}
+              </div>
             )}
 
+            {/* 重试按钮 */}
             {onRetryFailed && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRetry}
-                disabled={isRetrying}
-                className="w-full gap-2 text-red-500 hover:text-red-400 border-red-500/30 hover:border-red-500/50"
-                data-testid="retry-failed-button"
-              >
-                {isRetrying ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {isRetrying ? t("common.retrying") : `${t("import.retryFailed")} (${failureCount})`}
-              </Button>
+              <div className={cn("p-2", errorsExpanded && "border-t border-red-500/20")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetry}
+                  disabled={isRetrying}
+                  className="w-full gap-2 text-red-500 hover:text-red-400 border-red-500/30 hover:border-red-500/50 hover:bg-red-500/10"
+                  data-testid="retry-failed-button"
+                >
+                  {isRetrying ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {isRetrying ? t("common.retrying") : `${t("import.retryFailed")} (${failureCount})`}
+                </Button>
+              </div>
             )}
           </div>
         )}
