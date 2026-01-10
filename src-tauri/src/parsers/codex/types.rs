@@ -1,6 +1,7 @@
 //! Codex CLI data types and structures
 //!
 //! Defines types for parsing Codex CLI's JSONL conversation files.
+//! Aligned with official Codex protocol: codex-rs/protocol/src/models.rs
 //!
 //! ## Session File Structure
 //!
@@ -11,9 +12,22 @@
 //! ## JSONL Line Types
 //!
 //! - `session_meta`: Session metadata (id, cwd, timestamp, cli_version)
-//! - `response_item`: Messages and function calls
+//! - `response_item`: Messages, function calls, reasoning, web search, etc.
 //! - `event_msg`: Event messages (skipped)
 //! - `turn_context`: Turn context (skipped)
+//!
+//! ## ResponseItem Types (from official Codex protocol)
+//!
+//! - `message`: User or assistant message
+//! - `reasoning`: Reasoning model's thinking process (summary + encrypted content)
+//! - `local_shell_call`: Local shell command execution
+//! - `function_call`: Function/tool call
+//! - `function_call_output`: Function call result
+//! - `custom_tool_call`: Custom tool call
+//! - `custom_tool_call_output`: Custom tool result
+//! - `web_search_call`: Web search action
+//! - `ghost_snapshot`: Ghost commit snapshot
+//! - `compaction`: Compacted context summary
 
 use serde::Deserialize;
 
@@ -114,6 +128,7 @@ pub struct CodexGitInfo {
 }
 
 /// Response item from response_item line
+/// Aligned with official Codex protocol: codex-rs/protocol/src/models.rs
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CodexResponseItem {
@@ -123,6 +138,33 @@ pub enum CodexResponseItem {
         role: CodexRole,
         /// Content blocks
         content: Vec<CodexContentItem>,
+    },
+
+    /// Reasoning model's thinking process (o1, o3, gpt-5, etc.)
+    /// Contains summary (readable) and encrypted_content (opaque, for API continuation)
+    Reasoning {
+        /// Summary of reasoning steps (readable text)
+        #[serde(default)]
+        summary: Vec<ReasoningSummary>,
+        /// Raw reasoning content (when available, readable)
+        #[serde(default)]
+        content: Option<Vec<ReasoningContent>>,
+        /// Encrypted reasoning content (opaque, cannot be decrypted locally)
+        /// Used for: 1) token estimation, 2) session resume/fork with OpenAI API
+        #[serde(default)]
+        encrypted_content: Option<String>,
+    },
+
+    /// Local shell command execution
+    LocalShellCall {
+        /// Call ID
+        #[serde(default)]
+        call_id: Option<String>,
+        /// Shell status
+        #[serde(default)]
+        status: Option<LocalShellStatus>,
+        /// Shell action
+        action: LocalShellAction,
     },
 
     /// Function call
@@ -139,9 +181,183 @@ pub enum CodexResponseItem {
     FunctionCallOutput {
         /// Call ID
         call_id: String,
+        /// Output content (can be string or structured)
+        #[serde(flatten)]
+        output: FunctionCallOutputPayload,
+    },
+
+    /// Custom tool call
+    CustomToolCall {
+        /// Call ID
+        call_id: String,
+        /// Tool name
+        name: String,
+        /// Input (JSON string)
+        input: String,
+        /// Status
+        #[serde(default)]
+        status: Option<String>,
+    },
+
+    /// Custom tool call output
+    CustomToolCallOutput {
+        /// Call ID
+        call_id: String,
         /// Output content
         output: String,
     },
+
+    /// Web search action
+    WebSearchCall {
+        /// Search action details
+        action: WebSearchAction,
+        /// Status
+        #[serde(default)]
+        status: Option<String>,
+    },
+
+    /// Ghost commit snapshot (for version control integration)
+    GhostSnapshot {
+        /// Ghost commit information
+        ghost_commit: GhostCommit,
+    },
+
+    /// Compacted context summary (for long conversations)
+    #[serde(alias = "compaction_summary")]
+    Compaction {
+        /// Encrypted compaction content
+        encrypted_content: String,
+    },
+
+    /// Unknown response item type (for forward compatibility)
+    #[serde(other)]
+    Other,
+}
+
+/// Reasoning summary entry
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReasoningSummary {
+    /// Summary text
+    SummaryText {
+        /// The summary text content
+        text: String,
+    },
+}
+
+impl ReasoningSummary {
+    /// Get the text content
+    pub fn text(&self) -> &str {
+        match self {
+            ReasoningSummary::SummaryText { text } => text,
+        }
+    }
+}
+
+/// Reasoning content entry (when raw content is available)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReasoningContent {
+    /// Reasoning text
+    ReasoningText {
+        /// The reasoning text content
+        text: String,
+    },
+    /// Plain text
+    Text {
+        /// The text content
+        text: String,
+    },
+}
+
+impl ReasoningContent {
+    /// Get the text content
+    pub fn text(&self) -> &str {
+        match self {
+            ReasoningContent::ReasoningText { text } | ReasoningContent::Text { text } => text,
+        }
+    }
+}
+
+/// Local shell status
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalShellStatus {
+    /// In progress
+    InProgress,
+    /// Completed
+    Completed,
+    /// Unknown status
+    #[serde(other)]
+    Unknown,
+}
+
+/// Local shell action
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum LocalShellAction {
+    /// Execute command
+    Exec {
+        /// Command to execute
+        #[serde(default)]
+        command: Option<Vec<String>>,
+        /// Working directory
+        #[serde(default)]
+        cwd: Option<String>,
+        /// Exit code
+        #[serde(default)]
+        exit_code: Option<i32>,
+        /// Output
+        #[serde(default)]
+        output: Option<String>,
+    },
+    /// Unknown action
+    #[serde(other)]
+    Unknown,
+}
+
+/// Function call output payload
+#[derive(Debug, Clone, Deserialize)]
+pub struct FunctionCallOutputPayload {
+    /// Output content (string form)
+    #[serde(default)]
+    pub output: Option<String>,
+    /// Success flag
+    #[serde(default)]
+    pub success: Option<bool>,
+}
+
+impl FunctionCallOutputPayload {
+    /// Get the output string
+    pub fn get_output(&self) -> String {
+        self.output.clone().unwrap_or_default()
+    }
+}
+
+/// Web search action
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WebSearchAction {
+    /// Search query
+    Search {
+        /// The search query
+        #[serde(default)]
+        query: Option<String>,
+    },
+    /// Unknown action
+    #[serde(other)]
+    Unknown,
+}
+
+/// Ghost commit information
+#[derive(Debug, Clone, Deserialize)]
+pub struct GhostCommit {
+    /// Commit hash
+    #[serde(default)]
+    pub commit_hash: Option<String>,
+    /// Commit message
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 /// Role in Codex conversation
@@ -317,9 +533,177 @@ mod tests {
         match item {
             CodexResponseItem::FunctionCallOutput { call_id, output } => {
                 assert_eq!(call_id, "call_123");
-                assert!(output.contains("file1.txt"));
+                assert!(output.get_output().contains("file1.txt"));
             }
             _ => panic!("Expected FunctionCallOutput"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_function_call_output_with_success() {
+        let json = r#"{
+            "type": "function_call_output",
+            "call_id": "call_456",
+            "output": "Success!",
+            "success": true
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::FunctionCallOutput { call_id, output } => {
+                assert_eq!(call_id, "call_456");
+                assert_eq!(output.get_output(), "Success!");
+                assert_eq!(output.success, Some(true));
+            }
+            _ => panic!("Expected FunctionCallOutput"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_reasoning() {
+        let json = r#"{
+            "type": "reasoning",
+            "summary": [{"type": "summary_text", "text": "**Thinking about the problem**"}],
+            "content": null,
+            "encrypted_content": "gAAAAABo4kai..."
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::Reasoning { summary, content, encrypted_content } => {
+                assert_eq!(summary.len(), 1);
+                assert_eq!(summary[0].text(), "**Thinking about the problem**");
+                assert!(content.is_none());
+                assert!(encrypted_content.is_some());
+            }
+            _ => panic!("Expected Reasoning"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_reasoning_with_content() {
+        let json = r#"{
+            "type": "reasoning",
+            "summary": [{"type": "summary_text", "text": "Step 1"}],
+            "content": [
+                {"type": "reasoning_text", "text": "First, let me analyze..."},
+                {"type": "text", "text": "Then, I'll implement..."}
+            ]
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::Reasoning { summary, content, .. } => {
+                assert_eq!(summary.len(), 1);
+                assert!(content.is_some());
+                let contents = content.unwrap();
+                assert_eq!(contents.len(), 2);
+                assert_eq!(contents[0].text(), "First, let me analyze...");
+                assert_eq!(contents[1].text(), "Then, I'll implement...");
+            }
+            _ => panic!("Expected Reasoning"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_web_search_call() {
+        let json = r#"{
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {"type": "search", "query": "Rust async programming"}
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::WebSearchCall { action, status } => {
+                assert_eq!(status, Some("completed".to_string()));
+                if let WebSearchAction::Search { query } = action {
+                    assert_eq!(query, Some("Rust async programming".to_string()));
+                } else {
+                    panic!("Expected Search action");
+                }
+            }
+            _ => panic!("Expected WebSearchCall"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_custom_tool_call() {
+        let json = r#"{
+            "type": "custom_tool_call",
+            "call_id": "custom_123",
+            "name": "my_tool",
+            "input": "{\"param\": \"value\"}"
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::CustomToolCall { call_id, name, input, .. } => {
+                assert_eq!(call_id, "custom_123");
+                assert_eq!(name, "my_tool");
+                assert!(input.contains("param"));
+            }
+            _ => panic!("Expected CustomToolCall"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_compaction() {
+        let json = r#"{
+            "type": "compaction",
+            "encrypted_content": "ENCRYPTED_SUMMARY_CONTENT"
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::Compaction { encrypted_content } => {
+                assert_eq!(encrypted_content, "ENCRYPTED_SUMMARY_CONTENT");
+            }
+            _ => panic!("Expected Compaction"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_unknown_type() {
+        let json = r#"{
+            "type": "future_new_type",
+            "some_field": "value"
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        assert!(matches!(item, CodexResponseItem::Other));
+    }
+
+    #[test]
+    fn test_deserialize_local_shell_call() {
+        let json = r#"{
+            "type": "local_shell_call",
+            "call_id": "shell_123",
+            "status": "completed",
+            "action": {
+                "type": "exec",
+                "command": ["bash", "-c", "ls -la"],
+                "cwd": "/tmp",
+                "exit_code": 0,
+                "output": "file1.txt\nfile2.txt"
+            }
+        }"#;
+
+        let item: CodexResponseItem = serde_json::from_str(json).unwrap();
+        match item {
+            CodexResponseItem::LocalShellCall { call_id, status, action } => {
+                assert_eq!(call_id, Some("shell_123".to_string()));
+                assert!(matches!(status, Some(LocalShellStatus::Completed)));
+                if let LocalShellAction::Exec { command, cwd, exit_code, output } = action {
+                    assert_eq!(command, Some(vec!["bash".to_string(), "-c".to_string(), "ls -la".to_string()]));
+                    assert_eq!(cwd, Some("/tmp".to_string()));
+                    assert_eq!(exit_code, Some(0));
+                    assert!(output.unwrap().contains("file1.txt"));
+                } else {
+                    panic!("Expected Exec action");
+                }
+            }
+            _ => panic!("Expected LocalShellCall"),
         }
     }
 

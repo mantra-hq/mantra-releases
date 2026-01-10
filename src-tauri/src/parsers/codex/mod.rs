@@ -270,25 +270,29 @@ impl CodexParser {
                 // Find pending call
                 let pending = pending_calls.remove(&call_id);
 
+                // Get output string from payload
+                let output_str = output.get_output();
+
                 // Detect errors more robustly:
                 // - Explicit error prefixes from Codex CLI
                 // - Non-zero exit codes in shell output
                 // - Common error patterns (Rust panics, compilation errors, etc.)
-                let is_error = output.starts_with("Error:")
-                    || output.starts_with("error:")
-                    || output.starts_with("error[")  // Rust compiler errors
-                    || output.starts_with("FAILED")
-                    || output.starts_with("fatal:")  // Git fatal errors
-                    || output.starts_with("panic:")  // Explicit panic messages
-                    || output.contains("exit code: 1")
-                    || output.contains("exit status: 1")
-                    || output.contains("exited with code")  // Generic exit code pattern
-                    || output.contains("thread 'main' panicked")  // Rust panic
-                    || output.contains("thread '") && output.contains("' panicked")  // Any thread panic
-                    || (output.starts_with("Command failed") && output.contains("error"));
+                let is_error = output_str.starts_with("Error:")
+                    || output_str.starts_with("error:")
+                    || output_str.starts_with("error[")  // Rust compiler errors
+                    || output_str.starts_with("FAILED")
+                    || output_str.starts_with("fatal:")  // Git fatal errors
+                    || output_str.starts_with("panic:")  // Explicit panic messages
+                    || output_str.contains("exit code: 1")
+                    || output_str.contains("exit status: 1")
+                    || output_str.contains("exited with code")  // Generic exit code pattern
+                    || output_str.contains("thread 'main' panicked")  // Rust panic
+                    || output_str.contains("thread '") && output_str.contains("' panicked")  // Any thread panic
+                    || (output_str.starts_with("Command failed") && output_str.contains("error"))
+                    || output.success == Some(false);  // Explicit failure flag
 
                 // Strip system reminder tags from tool result content
-                let cleaned_output = crate::parsers::strip_system_reminders(&output);
+                let cleaned_output = crate::parsers::strip_system_reminders(&output_str);
                 let content_blocks = vec![ContentBlock::ToolResult {
                     tool_use_id: call_id.clone(),
                     content: cleaned_output,
@@ -313,6 +317,242 @@ impl CodexParser {
                     is_sidechain: false,
                     source_metadata: None,
                 });
+            }
+
+            CodexResponseItem::Reasoning { summary, content, .. } => {
+                // Extract readable text from reasoning
+                let mut reasoning_text = String::new();
+
+                // Add summary text
+                for s in &summary {
+                    if !reasoning_text.is_empty() {
+                        reasoning_text.push_str("\n");
+                    }
+                    reasoning_text.push_str(s.text());
+                }
+
+                // Add raw content if available
+                if let Some(contents) = content {
+                    for c in contents {
+                        if !reasoning_text.is_empty() {
+                            reasoning_text.push_str("\n");
+                        }
+                        reasoning_text.push_str(c.text());
+                    }
+                }
+
+                // Only add if we have readable content
+                if !reasoning_text.is_empty() {
+                    messages.push(Message {
+                        role: Role::Assistant,
+                        content_blocks: vec![ContentBlock::Thinking {
+                            thinking: reasoning_text,
+                            subject: None,
+                            timestamp: None,
+                        }],
+                        timestamp: ts,
+                        mentioned_files: Vec::new(),
+                        message_id: None,
+                        parent_id: None,
+                        is_sidechain: false,
+                        source_metadata: None,
+                    });
+                }
+            }
+
+            CodexResponseItem::LocalShellCall { call_id, action, status } => {
+                // Process local shell call as a tool use
+                if let LocalShellAction::Exec { command, cwd, exit_code, output } = action {
+                    let cmd_str = command
+                        .map(|c| c.join(" "))
+                        .unwrap_or_default();
+
+                    let call_id_str = call_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+                    // If we have output, it's a completed call - create both ToolUse and ToolResult
+                    if let Some(output_content) = output {
+                        let is_completed = matches!(status, Some(LocalShellStatus::Completed));
+                        let is_error = exit_code.map(|c| c != 0).unwrap_or(false);
+
+                        // Create ToolUse
+                        let input = serde_json::json!({
+                            "command": cmd_str,
+                            "cwd": cwd
+                        });
+
+                        messages.push(Message {
+                            role: Role::Assistant,
+                            content_blocks: vec![ContentBlock::ToolUse {
+                                id: call_id_str.clone(),
+                                name: "shell".to_string(),
+                                input: input.clone(),
+                                correlation_id: Some(call_id_str.clone()),
+                                standard_tool: Some(normalize_tool("shell", &input)),
+                                display_name: None,
+                                description: None,
+                            }],
+                            timestamp: ts,
+                            mentioned_files: Vec::new(),
+                            message_id: None,
+                            parent_id: None,
+                            is_sidechain: false,
+                            source_metadata: None,
+                        });
+
+                        // Create ToolResult if completed
+                        if is_completed {
+                            let cleaned_output = crate::parsers::strip_system_reminders(&output_content);
+                            messages.push(Message {
+                                role: Role::Assistant,
+                                content_blocks: vec![ContentBlock::ToolResult {
+                                    tool_use_id: call_id_str.clone(),
+                                    content: cleaned_output,
+                                    is_error,
+                                    correlation_id: Some(call_id_str),
+                                    structured_result: None,
+                                    display_content: None,
+                                    render_as_markdown: None,
+                                    user_decision: None,
+                                }],
+                                timestamp: ts,
+                                mentioned_files: Vec::new(),
+                                message_id: None,
+                                parent_id: None,
+                                is_sidechain: false,
+                                source_metadata: None,
+                            });
+                        }
+                    } else {
+                        // Just the call, no output yet
+                        let input = serde_json::json!({
+                            "command": cmd_str,
+                            "cwd": cwd
+                        });
+
+                        pending_calls.insert(
+                            call_id_str.clone(),
+                            PendingFunctionCall {
+                                name: "shell".to_string(),
+                                arguments: serde_json::to_string(&input).unwrap_or_default(),
+                                timestamp: ts,
+                                mentioned_files: Vec::new(),
+                            },
+                        );
+
+                        messages.push(Message {
+                            role: Role::Assistant,
+                            content_blocks: vec![ContentBlock::ToolUse {
+                                id: call_id_str.clone(),
+                                name: "shell".to_string(),
+                                input: input.clone(),
+                                correlation_id: Some(call_id_str),
+                                standard_tool: Some(normalize_tool("shell", &input)),
+                                display_name: None,
+                                description: None,
+                            }],
+                            timestamp: ts,
+                            mentioned_files: Vec::new(),
+                            message_id: None,
+                            parent_id: None,
+                            is_sidechain: false,
+                            source_metadata: None,
+                        });
+                    }
+                }
+            }
+
+            CodexResponseItem::CustomToolCall { call_id, name, input, .. } => {
+                // Store pending call
+                pending_calls.insert(
+                    call_id.clone(),
+                    PendingFunctionCall {
+                        name: name.clone(),
+                        arguments: input.clone(),
+                        timestamp: ts,
+                        mentioned_files: Vec::new(),
+                    },
+                );
+
+                let input_value = serde_json::from_str(&input).unwrap_or(serde_json::Value::Null);
+
+                messages.push(Message {
+                    role: Role::Assistant,
+                    content_blocks: vec![ContentBlock::ToolUse {
+                        id: call_id.clone(),
+                        name: name.clone(),
+                        input: input_value.clone(),
+                        correlation_id: Some(call_id),
+                        standard_tool: Some(normalize_tool(&name, &input_value)),
+                        display_name: None,
+                        description: None,
+                    }],
+                    timestamp: ts,
+                    mentioned_files: Vec::new(),
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
+                });
+            }
+
+            CodexResponseItem::CustomToolCallOutput { call_id, output } => {
+                let pending = pending_calls.remove(&call_id);
+                let cleaned_output = crate::parsers::strip_system_reminders(&output);
+                let is_error = output.starts_with("Error:") || output.starts_with("error:");
+
+                messages.push(Message {
+                    role: Role::Assistant,
+                    content_blocks: vec![ContentBlock::ToolResult {
+                        tool_use_id: call_id.clone(),
+                        content: cleaned_output,
+                        is_error,
+                        correlation_id: Some(call_id),
+                        structured_result: None,
+                        display_content: None,
+                        render_as_markdown: None,
+                        user_decision: None,
+                    }],
+                    timestamp: pending.as_ref().and_then(|p| p.timestamp).or(ts),
+                    mentioned_files: pending.map(|p| p.mentioned_files).unwrap_or_default(),
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
+                });
+            }
+
+            CodexResponseItem::WebSearchCall { action, .. } => {
+                if let WebSearchAction::Search { query } = action {
+                    if let Some(q) = query {
+                        let input = serde_json::json!({ "query": q });
+                        messages.push(Message {
+                            role: Role::Assistant,
+                            content_blocks: vec![ContentBlock::ToolUse {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                name: "web_search".to_string(),
+                                input: input.clone(),
+                                correlation_id: None,
+                                standard_tool: Some(normalize_tool("web_search", &input)),
+                                display_name: None,
+                                description: None,
+                            }],
+                            timestamp: ts,
+                            mentioned_files: Vec::new(),
+                            message_id: None,
+                            parent_id: None,
+                            is_sidechain: false,
+                            source_metadata: None,
+                        });
+                    }
+                }
+            }
+
+            // GhostSnapshot, Compaction, and Other are metadata/internal types
+            // We skip them as they don't represent user-visible conversation content
+            CodexResponseItem::GhostSnapshot { .. }
+            | CodexResponseItem::Compaction { .. }
+            | CodexResponseItem::Other => {
+                // Skip these types - they are internal to Codex
             }
         }
 
@@ -1059,6 +1299,145 @@ mod tests {
         // Existing functionality still works
         assert_eq!(session.id, "old-session-123");
         assert_eq!(session.cwd, "/home/user/project");
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].role, Role::User);
+    }
+
+    // ====== New ResponseItem Types Tests ======
+
+    #[test]
+    fn test_parse_reasoning_type() {
+        // Test parsing of reasoning type (from o1/o3/gpt-5 models)
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-reasoning","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"**Thinking about the problem**"}],"content":null,"encrypted_content":"gAAAAABo4kai..."}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        // Should have one message with Thinking block
+        assert_eq!(session.messages.len(), 1);
+
+        if let ContentBlock::Thinking { thinking, .. } = &session.messages[0].content_blocks[0] {
+            assert!(thinking.contains("Thinking about the problem"));
+        } else {
+            panic!("Expected Thinking block");
+        }
+    }
+
+    #[test]
+    fn test_parse_reasoning_with_raw_content() {
+        // Test reasoning with raw content (not encrypted)
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-reasoning-raw","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"Step 1"}],"content":[{"type":"reasoning_text","text":"First, analyze the code..."},{"type":"text","text":"Then implement the fix..."}]}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+
+        if let ContentBlock::Thinking { thinking, .. } = &session.messages[0].content_blocks[0] {
+            assert!(thinking.contains("Step 1"));
+            assert!(thinking.contains("First, analyze the code..."));
+            assert!(thinking.contains("Then implement the fix..."));
+        } else {
+            panic!("Expected Thinking block");
+        }
+    }
+
+    #[test]
+    fn test_parse_web_search_call() {
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-websearch","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"web_search_call","status":"completed","action":{"type":"search","query":"Rust async programming"}}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+
+        if let ContentBlock::ToolUse { name, input, .. } = &session.messages[0].content_blocks[0] {
+            assert_eq!(name, "web_search");
+            assert_eq!(input.get("query").and_then(|v| v.as_str()), Some("Rust async programming"));
+        } else {
+            panic!("Expected ToolUse block");
+        }
+    }
+
+    #[test]
+    fn test_parse_local_shell_call() {
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-localshell","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"local_shell_call","call_id":"shell_123","status":"completed","action":{"type":"exec","command":["bash","-c","ls -la"],"cwd":"/tmp","exit_code":0,"output":"file1.txt\nfile2.txt"}}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        // Should have ToolUse and ToolResult
+        assert_eq!(session.messages.len(), 2);
+
+        if let ContentBlock::ToolUse { name, input, .. } = &session.messages[0].content_blocks[0] {
+            assert_eq!(name, "shell");
+            assert!(input.get("command").is_some());
+        } else {
+            panic!("Expected ToolUse block");
+        }
+
+        if let ContentBlock::ToolResult { content, is_error, .. } = &session.messages[1].content_blocks[0] {
+            assert!(content.contains("file1.txt"));
+            assert!(!is_error);
+        } else {
+            panic!("Expected ToolResult block");
+        }
+    }
+
+    #[test]
+    fn test_parse_custom_tool_call() {
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-customtool","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"custom_123","name":"my_custom_tool","input":"{\"param\":\"value\"}"}}
+{"timestamp":"2025-10-05T10:21:24.326Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"custom_123","output":"Custom tool result"}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 2);
+
+        if let ContentBlock::ToolUse { name, .. } = &session.messages[0].content_blocks[0] {
+            assert_eq!(name, "my_custom_tool");
+        } else {
+            panic!("Expected ToolUse block");
+        }
+
+        if let ContentBlock::ToolResult { content, .. } = &session.messages[1].content_blocks[0] {
+            assert!(content.contains("Custom tool result"));
+        } else {
+            panic!("Expected ToolResult block");
+        }
+    }
+
+    #[test]
+    fn test_parse_unknown_response_item_type() {
+        // Unknown types should be silently skipped
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-unknown","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"future_new_type","some_field":"value"}}
+{"timestamp":"2025-10-05T10:21:24.326Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello"}]}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        // Should only have the user message, unknown type is skipped
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].role, Role::User);
+    }
+
+    #[test]
+    fn test_parse_compaction_skipped() {
+        // Compaction types should be skipped (internal to Codex)
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-compaction","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"compaction","encrypted_content":"ENCRYPTED_CONTENT"}}
+{"timestamp":"2025-10-05T10:21:24.326Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello"}]}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        // Should only have the user message, compaction is skipped
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].role, Role::User);
     }
