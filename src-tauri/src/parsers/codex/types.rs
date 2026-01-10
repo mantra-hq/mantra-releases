@@ -328,9 +328,24 @@ pub struct FunctionCallOutputPayload {
 }
 
 impl FunctionCallOutputPayload {
-    /// Get the output string
+    /// Get the output string, extracting from JSON wrapper if present.
+    ///
+    /// Codex shell output can be in two formats:
+    /// 1. JSON format: `{"metadata": {...}, "output": "actual content"}`
+    /// 2. Structured text: `Exit code: 0\nWall time: ...\nOutput:\nactual content`
+    ///
+    /// This method extracts the actual output content from either format.
     pub fn get_output(&self) -> String {
-        self.output.clone().unwrap_or_default()
+        let raw = self.output.clone().unwrap_or_default();
+
+        // Try to parse as JSON and extract the "output" field
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(output) = parsed.get("output").and_then(|v| v.as_str()) {
+                return output.to_string();
+            }
+        }
+
+        raw
     }
 }
 
@@ -725,5 +740,44 @@ mod tests {
         let git = meta.git.unwrap();
         assert_eq!(git.commit_hash, Some("abc123".to_string()));
         assert_eq!(git.branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_function_call_output_extracts_json_output() {
+        // JSON format: {"metadata": {...}, "output": "actual content"}
+        let payload = FunctionCallOutputPayload {
+            output: Some(r#"{"metadata":{"exit_code":0,"duration_seconds":0.1},"output":"file1.txt\nfile2.txt"}"#.to_string()),
+            success: Some(true),
+        };
+        assert_eq!(payload.get_output(), "file1.txt\nfile2.txt");
+    }
+
+    #[test]
+    fn test_function_call_output_returns_raw_for_plain_text() {
+        // Plain text format: Exit code: 0\nWall time: ...\nOutput:\nactual content
+        let payload = FunctionCallOutputPayload {
+            output: Some("Exit code: 0\nWall time: 0.1 seconds\nOutput:\nfile1.txt\nfile2.txt".to_string()),
+            success: Some(true),
+        };
+        assert_eq!(payload.get_output(), "Exit code: 0\nWall time: 0.1 seconds\nOutput:\nfile1.txt\nfile2.txt");
+    }
+
+    #[test]
+    fn test_function_call_output_returns_raw_for_non_shell_json() {
+        // JSON without "output" field should return as-is
+        let payload = FunctionCallOutputPayload {
+            output: Some(r#"{"status":"ok","data":"some value"}"#.to_string()),
+            success: Some(true),
+        };
+        assert_eq!(payload.get_output(), r#"{"status":"ok","data":"some value"}"#);
+    }
+
+    #[test]
+    fn test_function_call_output_handles_empty() {
+        let payload = FunctionCallOutputPayload {
+            output: None,
+            success: None,
+        };
+        assert_eq!(payload.get_output(), "");
     }
 }

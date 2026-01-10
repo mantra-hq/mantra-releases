@@ -928,11 +928,13 @@ impl Database {
     /// * `session` - The updated session
     pub fn update_session(&self, session: &MantraSession) -> Result<(), StorageError> {
         let raw_data = serde_json::to_string(session)?;
+        let is_empty = if session.is_empty() { 1 } else { 0 };
         self.connection().execute(
-            "UPDATE sessions SET message_count = ?1, updated_at = ?2, raw_data = ?3 WHERE id = ?4",
+            "UPDATE sessions SET message_count = ?1, updated_at = ?2, is_empty = ?3, raw_data = ?4 WHERE id = ?5",
             params![
                 session.messages.len() as i32,
                 session.updated_at.to_rfc3339(),
+                is_empty,
                 raw_data,
                 session.id
             ],
