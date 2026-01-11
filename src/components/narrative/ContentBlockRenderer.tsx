@@ -8,8 +8,8 @@
  */
 
 import { cn } from "@/lib/utils";
-import { isTerminalTool, isFileTool, isTodoManageTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
-import type { ContentBlock } from "@/types/message";
+import { isTerminalTool, isFileTool, isFileEditTool, isTodoManageTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
+import type { ContentBlock, StandardToolFileEdit } from "@/types/message";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -249,8 +249,20 @@ export function ContentBlockRenderer({
                   output: pairInfo?.outputContent ?? "",
                   isError: isError,
                 });
+              } : isFileEditTool(block.standardTool) ? () => {
+                // Story 8.11 AC#9: file_edit 工具 - 点击卡片在右侧代码面板显示 diff 视图
+                const fileEditTool = block.standardTool as StandardToolFileEdit;
+                const filePath = fileEditTool.path;
+                if (filePath) {
+                  openTab(filePath, {
+                    preview: true,
+                    content: fileEditTool.newString ?? "",
+                    previousContent: fileEditTool.oldString,
+                  });
+                  setActiveRightTab("code");
+                }
               } : isFileTool(block.standardTool) ? () => {
-                // 文件类工具 - 点击卡片打开文件到右侧代码面板
+                // 其他文件类工具 - 点击卡片打开文件到右侧代码面板
                 const filePath = getToolPath(block.standardTool);
                 if (filePath) {
                   // 使用 tool_result 的内容作为文件内容（如果有配对输出）

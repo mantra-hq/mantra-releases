@@ -7,7 +7,7 @@
  * 替代散落在各组件中的 toolName.toLowerCase().includes() 逻辑
  */
 
-import type { StandardTool } from "@/types/message";
+import type { StandardTool, StandardToolFileEdit } from "@/types/message";
 
 /**
  * 标准工具类型常量
@@ -68,9 +68,12 @@ export function isFileWriteTool(standardTool: StandardTool | undefined): boolean
 
 /**
  * 检查是否为文件编辑工具
+ * Story 8.11: 改为 Type Guard 以支持类型收窄
  * @param standardTool 标准化工具对象
  */
-export function isFileEditTool(standardTool: StandardTool | undefined): boolean {
+export function isFileEditTool(
+  standardTool: StandardTool | undefined
+): standardTool is StandardToolFileEdit {
   return standardTool?.type === StandardToolTypes.FILE_EDIT;
 }
 

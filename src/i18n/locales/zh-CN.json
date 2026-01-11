@@ -310,7 +310,8 @@
     "shellExec": "命令执行",
     "approved": "已批准",
     "rejected": "已拒绝",
-    "exitCode": "退出码"
+    "exitCode": "退出码",
+    "noContentToShow": "无内容可显示"
   },
   "filter": {
     "clearFilter": "清除过滤",

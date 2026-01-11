@@ -310,7 +310,8 @@
     "shellExec": "Command Execution",
     "approved": "Approved",
     "rejected": "Rejected",
-    "exitCode": "Exit Code"
+    "exitCode": "Exit Code",
+    "noContentToShow": "No content to display"
   },
   "filter": {
     "clearFilter": "Clear Filter",

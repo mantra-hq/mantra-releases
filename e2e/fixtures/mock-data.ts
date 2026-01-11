@@ -320,6 +320,80 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
     },
     messages: [],
   },
+  // Story 8.11 E2E 测试: file_edit 差异视图
+  "mock-session-file-edit": {
+    id: "mock-session-file-edit",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-11T10:00:00Z",
+    updated_at: "2025-01-11T12:00:00Z",
+    metadata: {
+      model: "claude-3-opus",
+      total_tokens: 3000,
+      title: "FileEdit Diff 测试会话",
+      original_path: "/mock/logs/file-edit-test.json",
+    },
+    messages: [
+      createMockMessage("user", "帮我修复这个函数的 bug", "2025-01-11T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来修复这个问题。", "2025-01-11T10:01:00Z", [
+        { type: "text", text: "我发现了问题，需要修改代码：" },
+        {
+          type: "tool_use",
+          id: "tool-file-edit-1",
+          name: "Edit",
+          input: {
+            file_path: "src/utils/calculator.ts",
+            old_string: "function add(a, b) {\n  return a - b; // Bug: should be +\n}",
+            new_string: "function add(a, b) {\n  return a + b; // Fixed\n}",
+          },
+          // 使用 snake_case 匹配后端真实格式
+          standard_tool: {
+            type: "file_edit",
+            path: "src/utils/calculator.ts",
+            old_string: "function add(a, b) {\n  return a - b; // Bug: should be +\n}",
+            new_string: "function add(a, b) {\n  return a + b; // Fixed\n}",
+          },
+        },
+      ]),
+      createMockMessage("assistant", "文件已修改。", "2025-01-11T10:02:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-file-edit-1",
+          content: "File edited successfully",
+          is_error: false,
+        },
+        { type: "text", text: "修复完成！现在 add 函数可以正确执行加法了。" },
+      ]),
+      createMockMessage("user", "再帮我添加一个新函数", "2025-01-11T10:05:00Z"),
+      createMockMessage("assistant", "好的，我来添加新函数。", "2025-01-11T10:06:00Z", [
+        { type: "text", text: "添加一个乘法函数：" },
+        {
+          type: "tool_use",
+          id: "tool-file-edit-2",
+          name: "Edit",
+          input: {
+            file_path: "src/utils/calculator.ts",
+            new_string: "function multiply(a, b) {\n  return a * b;\n}",
+          },
+          // 只有 new_string 没有 old_string 的情况 (使用 snake_case 匹配后端)
+          standard_tool: {
+            type: "file_edit",
+            path: "src/utils/calculator.ts",
+            new_string: "function multiply(a, b) {\n  return a * b;\n}",
+          },
+        },
+      ]),
+      createMockMessage("assistant", "新函数已添加。", "2025-01-11T10:07:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-file-edit-2",
+          content: "File edited successfully",
+          is_error: false,
+        },
+        { type: "text", text: "乘法函数已添加完成！" },
+      ]),
+    ],
+  },
 };
 
 // =============================================================================
@@ -429,7 +503,7 @@ export function getSessionById(sessionId: string): MantraSession | null {
  * 根据会话 ID 获取所属项目
  */
 export function getProjectBySessionId(sessionId: string): Project | null {
-  if (sessionId.includes("alpha")) {
+  if (sessionId.includes("alpha") || sessionId === "mock-session-file-edit") {
     return MOCK_PROJECTS.find((p) => p.id === "mock-project-alpha") ?? null;
   }
   if (sessionId.includes("beta")) {

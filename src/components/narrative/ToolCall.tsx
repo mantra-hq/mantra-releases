@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { isFileTool, isFileEditTool, getToolPath, getToolContent } from "@/lib/tool-utils";
 import type { StandardTool } from "@/types/message";
 import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { FileEditDiff } from "./FileEditDiff";
 
 export interface ToolCallProps {
   /** 工具名称 */
@@ -174,16 +175,25 @@ export function ToolCall({
               "bg-background"
             )}
           >
-            <pre
-              className={cn(
-                // JSON 显示样式
-                "font-mono text-xs",
-                "whitespace-pre-wrap break-all",
-                "text-muted-foreground"
-              )}
-            >
-              {formattedInput}
-            </pre>
+            {/* Story 8.11 Task 9: FileEdit 类型显示 diff 视图 */}
+            {isFileEditTool(standardTool) ? (
+              <FileEditDiff
+                filePath={standardTool.path}
+                oldString={standardTool.oldString}
+                newString={standardTool.newString}
+              />
+            ) : (
+              <pre
+                className={cn(
+                  // JSON 显示样式
+                  "font-mono text-xs",
+                  "whitespace-pre-wrap break-all",
+                  "text-muted-foreground"
+                )}
+              >
+                {formattedInput}
+              </pre>
+            )}
           </div>
         </Collapsible.Content>
       )}

@@ -249,6 +249,7 @@ export const TEST_SESSION_IDS = {
   BETA_2: "mock-session-beta-2",
   GAMMA_1: "mock-session-gamma-1",
   GAMMA_2: "mock-session-gamma-2",
+  FILE_EDIT: "mock-session-file-edit", // Story 8.11: FileEdit Diff 测试
 } as const;
 
 /**

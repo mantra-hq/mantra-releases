@@ -404,7 +404,8 @@ export function CodeSnapshotView({
       previousCodeRef.current = code;
 
       // 计算 Diff 装饰器 (Story 2.7 AC #5)
-      if (editorRef.current && previousCode) {
+      // 检查 monaco 是否已加载，避免 "Cannot read properties of undefined (reading 'Range')" 错误
+      if (editorRef.current && previousCode && (window as any).monaco) {
         const diffDecorations = computeDiffDecorations(previousCode, code);
 
         if (diffDecorations.length > 0) {
