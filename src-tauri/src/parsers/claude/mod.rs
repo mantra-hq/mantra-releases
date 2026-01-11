@@ -17,7 +17,19 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 
 use super::{LogParser, ParseError};
-use crate::models::{sources, ContentBlock, GitInfo, MantraSession, Message, Role, SessionMetadata, ToolResultData, normalize_tool};
+use crate::models::{sources, ContentBlock, GitInfo, MantraSession, Message, ParserInfo, Role, SessionMetadata, ToolResultData, UnknownFormatEntry, normalize_tool};
+
+/// Claude Parser version for compatibility tracking
+pub const CLAUDE_PARSER_VERSION: &str = "1.1.0";
+
+/// Supported content block types in Claude JSONL format
+pub const SUPPORTED_CONTENT_TYPES: &[&str] = &["text", "thinking", "tool_use", "tool_result", "image"];
+
+/// Supported message types in Claude JSONL format
+pub const SUPPORTED_MESSAGE_TYPES: &[&str] = &["user", "assistant", "summary"];
+
+/// Maximum raw JSON size to store in UnknownFormatEntry (1KB)
+const MAX_RAW_JSON_SIZE: usize = 1024;
 
 /// Strip line number prefixes from file read output (Story 8.12: AC5)
 ///
@@ -86,7 +98,7 @@ impl ClaudeParser {
                     .parent()
                     .and_then(|p| p.file_name())
                     .and_then(|s| s.to_str())
-                    .map(|encoded_path| decode_claude_path(encoded_path))
+                    .map(decode_claude_path)
             })
             .unwrap_or_default();
         
@@ -110,6 +122,9 @@ impl ClaudeParser {
         let mut version: Option<String> = None;
         let mut summary: Option<String> = None;
         let mut git_branch: Option<String> = None;
+
+        // Story 8.15: Collect unknown formats for monitoring
+        let mut all_unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
 
         // Track what types of records we've seen for better error messages
         let mut has_system_events = false;
@@ -193,12 +208,15 @@ impl ClaudeParser {
                     _ => continue,
                 };
 
-                // Parse content
-                let mut content_blocks = if let Some(content) = msg_obj.get("content") {
+                // Parse content (Story 8.15: now returns unknown_formats too)
+                let (mut content_blocks, unknown_formats) = if let Some(content) = msg_obj.get("content") {
                     parse_jsonl_content(content)
                 } else {
-                    Vec::new()
+                    (Vec::new(), Vec::new())
                 };
+
+                // Collect unknown formats
+                all_unknown_formats.extend(unknown_formats);
 
                 // Extract and apply toolUseResult if present (AC4)
                 // toolUseResult provides structured information about tool execution results
@@ -268,7 +286,7 @@ impl ClaudeParser {
 
         session.messages = messages;
         session.metadata = SessionMetadata {
-            model: version, // Use version as model info for now
+            model: version.clone(), // Use version as model info for now
             title: summary, // Use summary from summary record as title
             total_tokens: None,
             original_path: None,
@@ -277,6 +295,17 @@ impl ClaudeParser {
                 commit: None,
                 repository_url: None,
             }),
+            // Story 8.15: Add parser info and unknown formats
+            parser_info: Some(ParserInfo {
+                parser_version: CLAUDE_PARSER_VERSION.to_string(),
+                supported_formats: SUPPORTED_CONTENT_TYPES.iter().map(|s| s.to_string()).collect(),
+                detected_source_version: version,
+            }),
+            unknown_formats: if all_unknown_formats.is_empty() {
+                None
+            } else {
+                Some(all_unknown_formats)
+            },
             ..Default::default()
         };
 
@@ -285,54 +314,107 @@ impl ClaudeParser {
 }
 
 /// Parse content from JSONL message
-fn parse_jsonl_content(content: &serde_json::Value) -> Vec<ContentBlock> {
+/// Returns (content_blocks, unknown_format_entries)
+fn parse_jsonl_content(content: &serde_json::Value) -> (Vec<ContentBlock>, Vec<UnknownFormatEntry>) {
     match content {
         serde_json::Value::String(s) => {
             // Strip system reminder tags from text content
             let cleaned = super::strip_system_reminders(s);
             if cleaned.is_empty() {
-                Vec::new()
+                (Vec::new(), Vec::new())
             } else {
-                vec![ContentBlock::Text { text: cleaned }]
+                (vec![ContentBlock::Text { text: cleaned, is_degraded: None }], Vec::new())
             }
         }
         serde_json::Value::Array(arr) => {
-            arr.iter().filter_map(parse_jsonl_content_block).collect()
+            let mut blocks = Vec::new();
+            let mut unknown_formats = Vec::new();
+            for item in arr {
+                let (block, unknown) = parse_jsonl_content_block(item);
+                if let Some(b) = block {
+                    blocks.push(b);
+                }
+                if let Some(u) = unknown {
+                    unknown_formats.push(u);
+                }
+            }
+            (blocks, unknown_formats)
         }
-        _ => Vec::new(),
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
+/// Truncate raw JSON to maximum size for storage
+fn truncate_raw_json(json: &serde_json::Value) -> String {
+    let raw = serde_json::to_string(json).unwrap_or_default();
+    if raw.len() <= MAX_RAW_JSON_SIZE {
+        raw
+    } else {
+        format!("{}... [truncated]", &raw[..MAX_RAW_JSON_SIZE])
     }
 }
 
 /// Parse a single content block from JSONL
-fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> {
-    let block_type = block.get("type")?.as_str()?;
+/// Returns (content_block, unknown_format_entry)
+/// If block type is unknown, creates degraded Text block and records unknown format
+fn parse_jsonl_content_block(block: &serde_json::Value) -> (Option<ContentBlock>, Option<UnknownFormatEntry>) {
+    let block_type = match block.get("type").and_then(|t| t.as_str()) {
+        Some(t) => t,
+        None => return (None, None), // No type field, skip silently
+    };
 
     match block_type {
         "text" => {
-            let raw_text = block.get("text")?.as_str()?;
+            let raw_text = match block.get("text").and_then(|t| t.as_str()) {
+                Some(t) => t,
+                None => return (None, None),
+            };
             // Strip system reminder tags from text content
             let text = super::strip_system_reminders(raw_text);
             if text.is_empty() {
-                None
+                (None, None)
             } else {
-                Some(ContentBlock::Text { text })
+                (Some(ContentBlock::Text { text, is_degraded: None }), None)
             }
         }
         "thinking" => {
-            let thinking = block.get("thinking")?.as_str()?.to_string();
-            Some(ContentBlock::Thinking { thinking, subject: None, timestamp: None })
+            let thinking = match block.get("thinking").and_then(|t| t.as_str()) {
+                Some(t) => t.to_string(),
+                None => return (None, None),
+            };
+            (Some(ContentBlock::Thinking { thinking, subject: None, timestamp: None }), None)
         }
         "tool_use" => {
-            let id = block.get("id")?.as_str()?.to_string();
-            let name = block.get("name")?.as_str()?.to_string();
-            let input = block.get("input")?.clone();
+            let id = match block.get("id").and_then(|i| i.as_str()) {
+                Some(i) => i.to_string(),
+                None => return (None, None),
+            };
+            let name = match block.get("name").and_then(|n| n.as_str()) {
+                Some(n) => n.to_string(),
+                None => return (None, None),
+            };
+            let input = match block.get("input") {
+                Some(i) => i.clone(),
+                None => return (None, None),
+            };
             // Call normalize_tool() to get standardized tool type (AC3)
             let standard_tool = Some(normalize_tool(&name, &input));
             // Use id as correlation_id (Claude's tool_use_id is the correlation key)
-            Some(ContentBlock::ToolUse { id: id.clone(), name, input, correlation_id: Some(id), standard_tool, display_name: None, description: None })
+            (Some(ContentBlock::ToolUse {
+                id: id.clone(),
+                name,
+                input,
+                correlation_id: Some(id),
+                standard_tool,
+                display_name: None,
+                description: None,
+            }), None)
         }
         "tool_result" => {
-            let tool_use_id = block.get("tool_use_id")?.as_str()?.to_string();
+            let tool_use_id = match block.get("tool_use_id").and_then(|t| t.as_str()) {
+                Some(t) => t.to_string(),
+                None => return (None, None),
+            };
             let raw_content = if let Some(c) = block.get("content") {
                 if let Some(s) = c.as_str() {
                     s.to_string()
@@ -350,7 +432,7 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
             let content = super::strip_system_reminders(&stripped);
             let is_error = block.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
             // Use tool_use_id as correlation_id
-            Some(ContentBlock::ToolResult {
+            (Some(ContentBlock::ToolResult {
                 tool_use_id: tool_use_id.clone(),
                 content,
                 is_error,
@@ -359,9 +441,52 @@ fn parse_jsonl_content_block(block: &serde_json::Value) -> Option<ContentBlock> 
                 display_content: None,
                 render_as_markdown: None,
                 user_decision: None,
-            })
+            }), None)
         }
-        _ => None,
+        "image" => {
+            // Story 8.16: Parse image content block (AC2)
+            // Claude image format: { "type": "image", "source": { "media_type": "image/png", "data": "base64..." } }
+            let source = match block.get("source") {
+                Some(s) => s,
+                None => return (None, None),
+            };
+            let media_type = match source.get("media_type").and_then(|m| m.as_str()) {
+                Some(m) => m.to_string(),
+                None => return (None, None),
+            };
+            let data = match source.get("data").and_then(|d| d.as_str()) {
+                Some(d) => d.to_string(),
+                None => return (None, None),
+            };
+            // source_type is always "base64" for Claude
+            (Some(ContentBlock::Image {
+                media_type,
+                data,
+                source_type: Some("base64".to_string()),
+                alt_text: None,
+            }), None)
+        }
+        unknown_type => {
+            // Story 8.15: Unknown format - create degraded Text block
+            // Note: Unknown type is recorded in UnknownFormatEntry for monitoring
+
+            // Create degraded Text block with original JSON
+            let degraded_text = format!("[无法解析的内容块: {}]\n{}", unknown_type, truncate_raw_json(block));
+            let degraded_block = ContentBlock::Text {
+                text: degraded_text,
+                is_degraded: Some(true),
+            };
+
+            // Record unknown format entry
+            let unknown_entry = UnknownFormatEntry {
+                source: "claude".to_string(),
+                type_name: unknown_type.to_string(),
+                raw_json: truncate_raw_json(block),
+                timestamp: Utc::now().to_rfc3339(),
+            };
+
+            (Some(degraded_block), Some(unknown_entry))
+        }
     }
 }
 
@@ -505,7 +630,7 @@ fn convert_content(content: &ClaudeContent) -> Vec<ContentBlock> {
             if cleaned.is_empty() {
                 vec![]
             } else {
-                vec![ContentBlock::Text { text: cleaned }]
+                vec![ContentBlock::Text { text: cleaned, is_degraded: None }]
             }
         }
         ClaudeContent::Blocks(blocks) => blocks.iter().filter_map(convert_block).collect(),
@@ -521,7 +646,7 @@ fn convert_block(block: &ClaudeContentBlock) -> Option<ContentBlock> {
             if cleaned.is_empty() {
                 None
             } else {
-                Some(ContentBlock::Text { text: cleaned })
+                Some(ContentBlock::Text { text: cleaned, is_degraded: None })
             }
         }
         ClaudeContentBlock::Thinking { thinking } => Some(ContentBlock::Thinking {
@@ -556,6 +681,15 @@ fn convert_block(block: &ClaudeContentBlock) -> Option<ContentBlock> {
                 display_content: None,
                 render_as_markdown: None,
                 user_decision: None,
+            })
+        },
+        ClaudeContentBlock::Image { source } => {
+            // Story 8.16: Convert Claude image block (AC2)
+            Some(ContentBlock::Image {
+                media_type: source.media_type.clone(),
+                data: source.data.clone(),
+                source_type: Some("base64".to_string()),
+                alt_text: None,
             })
         },
     }
@@ -1125,5 +1259,215 @@ mod tests {
         let input = "1| fn main() {";
         let expected = " fn main() {";
         assert_eq!(strip_line_number_prefix(input), expected);
+    }
+
+    // ========== Story 8.15: Parser Resilience Enhancement Tests ==========
+
+    #[test]
+    fn test_parse_jsonl_unknown_content_block_degraded() {
+        // Test that unknown content block types are degraded to Text with is_degraded=true
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"future_block_type","data":"some data"},{"type":"text","text":"Normal text"}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content_blocks.len(), 2);
+
+        // First block should be degraded
+        if let ContentBlock::Text { text, is_degraded } = &session.messages[0].content_blocks[0] {
+            assert!(is_degraded.unwrap_or(false), "Unknown block should be degraded");
+            assert!(text.contains("future_block_type"), "Degraded block should contain type name");
+        } else {
+            panic!("Expected degraded Text block for unknown type");
+        }
+
+        // Second block should be normal text
+        if let ContentBlock::Text { text, is_degraded } = &session.messages[0].content_blocks[1] {
+            assert!(is_degraded.is_none() || !is_degraded.unwrap(), "Normal text should not be degraded");
+            assert_eq!(text, "Normal text");
+        } else {
+            panic!("Expected normal Text block");
+        }
+    }
+
+    #[test]
+    fn test_parse_jsonl_unknown_formats_collected() {
+        // Test that unknown formats are collected in session metadata
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"new_feature","value":123},{"type":"another_new","data":"test"}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        // Check unknown_formats is populated
+        assert!(session.metadata.unknown_formats.is_some());
+        let unknown_formats = session.metadata.unknown_formats.as_ref().unwrap();
+        assert_eq!(unknown_formats.len(), 2);
+
+        // Verify first unknown format entry
+        assert_eq!(unknown_formats[0].source, "claude");
+        assert_eq!(unknown_formats[0].type_name, "new_feature");
+        assert!(unknown_formats[0].raw_json.contains("123"));
+
+        // Verify second unknown format entry
+        assert_eq!(unknown_formats[1].source, "claude");
+        assert_eq!(unknown_formats[1].type_name, "another_new");
+    }
+
+    #[test]
+    fn test_parse_jsonl_parser_info_included() {
+        // Test that parser_info is included in session metadata
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","version":"2.1.0","message":{"role":"user","content":"Hello"},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert!(session.metadata.parser_info.is_some());
+        let parser_info = session.metadata.parser_info.as_ref().unwrap();
+
+        assert_eq!(parser_info.parser_version, CLAUDE_PARSER_VERSION);
+        assert!(parser_info.supported_formats.contains(&"text".to_string()));
+        assert!(parser_info.supported_formats.contains(&"thinking".to_string()));
+        assert!(parser_info.supported_formats.contains(&"tool_use".to_string()));
+        assert!(parser_info.supported_formats.contains(&"tool_result".to_string()));
+        assert_eq!(parser_info.detected_source_version, Some("2.1.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_jsonl_no_unknown_formats_when_all_known() {
+        // Test that unknown_formats is None when all content blocks are known types
+        let jsonl = r#"{"type":"assistant","sessionId":"s1","cwd":"/test","message":{"role":"assistant","content":[{"type":"text","text":"Hello"},{"type":"thinking","thinking":"Let me think..."}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        // unknown_formats should be None when no unknown types
+        assert!(session.metadata.unknown_formats.is_none());
+    }
+
+    #[test]
+    fn test_truncate_raw_json_small() {
+        // Test that small JSON is not truncated
+        let small_json = serde_json::json!({"type": "test", "value": 123});
+        let result = truncate_raw_json(&small_json);
+        assert!(!result.contains("truncated"));
+        assert!(result.contains("test"));
+    }
+
+    #[test]
+    fn test_truncate_raw_json_large() {
+        // Test that large JSON is truncated
+        let large_content = "x".repeat(2000);
+        let large_json = serde_json::json!({"type": "test", "data": large_content});
+        let result = truncate_raw_json(&large_json);
+        assert!(result.contains("truncated"));
+        assert!(result.len() <= MAX_RAW_JSON_SIZE + 20); // Allow for "... [truncated]" suffix
+    }
+
+    // ========== Story 8.16: Image Content Block Tests ==========
+
+    #[test]
+    fn test_parse_jsonl_image_content_block() {
+        // Test AC2: Parse image type content block from JSONL
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","message":{"role":"user","content":[{"type":"image","source":{"media_type":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content_blocks.len(), 1);
+
+        if let ContentBlock::Image { media_type, data, source_type, alt_text } = &session.messages[0].content_blocks[0] {
+            assert_eq!(media_type, "image/png");
+            assert!(data.starts_with("iVBORw0KGgo"));
+            assert_eq!(*source_type, Some("base64".to_string()));
+            assert!(alt_text.is_none());
+        } else {
+            panic!("Expected Image content block");
+        }
+    }
+
+    #[test]
+    fn test_parse_jsonl_image_with_text() {
+        // Test AC2: Parse image alongside text content
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","message":{"role":"user","content":[{"type":"text","text":"Here is a screenshot:"},{"type":"image","source":{"media_type":"image/jpeg","data":"/9j/4AAQSkZJRg=="}}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content_blocks.len(), 2);
+
+        // First block is text
+        if let ContentBlock::Text { text, .. } = &session.messages[0].content_blocks[0] {
+            assert_eq!(text, "Here is a screenshot:");
+        } else {
+            panic!("Expected Text content block first");
+        }
+
+        // Second block is image
+        if let ContentBlock::Image { media_type, .. } = &session.messages[0].content_blocks[1] {
+            assert_eq!(media_type, "image/jpeg");
+        } else {
+            panic!("Expected Image content block second");
+        }
+    }
+
+    #[test]
+    fn test_parse_jsonl_image_missing_source() {
+        // Test graceful handling of image without source field
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","message":{"role":"user","content":[{"type":"image"},{"type":"text","text":"fallback"}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        // Image without source should be skipped, only text remains
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content_blocks.len(), 1);
+        assert!(matches!(session.messages[0].content_blocks[0], ContentBlock::Text { .. }));
+    }
+
+    #[test]
+    fn test_parse_jsonl_image_missing_media_type() {
+        // Test graceful handling of image without media_type
+        let jsonl = r#"{"type":"user","sessionId":"s1","cwd":"/test","message":{"role":"user","content":[{"type":"image","source":{"data":"base64data"}},{"type":"text","text":"fallback"}]},"timestamp":"2024-01-01T00:00:00Z"}"#;
+
+        let parser = ClaudeParser::new();
+        let session = parser.parse_jsonl(jsonl).unwrap();
+
+        // Image without media_type should be skipped
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].content_blocks.len(), 1);
+        assert!(matches!(session.messages[0].content_blocks[0], ContentBlock::Text { .. }));
+    }
+
+    #[test]
+    fn test_convert_block_image() {
+        // Test convert_block for ClaudeContentBlock::Image
+        let block = ClaudeContentBlock::Image {
+            source: types::ClaudeImageSource {
+                media_type: "image/webp".to_string(),
+                data: "UklGRlYAAABXRUJQ".to_string(),
+                source_type: Some("base64".to_string()),
+            },
+        };
+
+        let result = convert_block(&block);
+        assert!(result.is_some());
+
+        if let Some(ContentBlock::Image { media_type, data, source_type, alt_text }) = result {
+            assert_eq!(media_type, "image/webp");
+            assert_eq!(data, "UklGRlYAAABXRUJQ");
+            assert_eq!(source_type, Some("base64".to_string()));
+            assert!(alt_text.is_none());
+        } else {
+            panic!("Expected Image content block");
+        }
+    }
+
+    #[test]
+    fn test_supported_content_types_includes_image() {
+        // Verify image is in SUPPORTED_CONTENT_TYPES
+        assert!(SUPPORTED_CONTENT_TYPES.contains(&"image"));
     }
 }

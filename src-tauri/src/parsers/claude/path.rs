@@ -235,13 +235,11 @@ pub fn extract_cwd_from_file_content(path: &str) -> Option<String> {
     let file = std::fs::File::open(path).ok()?;
     let reader = BufReader::new(file);
     
-    for line in reader.lines().take(20) {
-        if let Ok(line) = line {
-            if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
-                if let Some(cwd) = record.get("cwd").and_then(|v| v.as_str()) {
-                    if !cwd.is_empty() {
-                        return Some(cwd.to_string());
-                    }
+    for line in reader.lines().take(20).flatten() {
+        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&line) {
+            if let Some(cwd) = record.get("cwd").and_then(|v| v.as_str()) {
+                if !cwd.is_empty() {
+                    return Some(cwd.to_string());
                 }
             }
         }
