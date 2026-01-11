@@ -22,10 +22,30 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 
 use super::{LogParser, ParseError};
-use crate::models::{sources, normalize_tool, ContentBlock, GitInfo, MantraSession, Message, Role, SessionMetadata};
+use crate::models::{sources, normalize_tool, ContentBlock, GitInfo, MantraSession, Message, ParserInfo, Role, SessionMetadata, UnknownFormatEntry};
 
 pub use path::{get_codex_dir, get_codex_sessions_dir, CodexPaths, CodexSessionFile};
 pub use types::*;
+
+/// Codex Parser version for compatibility tracking (Story 8.15)
+pub const CODEX_PARSER_VERSION: &str = "1.1.0";
+
+/// Supported response item types in Codex format
+pub const SUPPORTED_RESPONSE_TYPES: &[&str] = &[
+    "message",
+    "reasoning",
+    "local_shell_call",
+    "function_call",
+    "function_call_output",
+    "custom_tool_call",
+    "custom_tool_call_output",
+    "web_search_call",
+    "ghost_snapshot",
+    "compaction",
+];
+
+/// Maximum raw JSON size to store in UnknownFormatEntry (1KB)
+const MAX_RAW_JSON_SIZE: usize = 1024;
 
 /// Parser for Codex CLI conversation logs
 #[derive(Debug, Default)]
@@ -48,11 +68,13 @@ impl CodexParser {
     }
 
     /// Parse a Codex JSONL file
+    /// Story 8.15: Enhanced with unknown format collection
     fn parse_jsonl(&self, content: &str, file_path: Option<&str>) -> Result<MantraSession, ParseError> {
         let mut session_meta: Option<CodexSessionMeta> = None;
         let mut messages: Vec<Message> = Vec::new();
         let mut pending_calls: HashMap<String, PendingFunctionCall> = HashMap::new();
         let mut last_timestamp: Option<DateTime<Utc>> = None;
+        let mut unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
 
         for line in content.lines() {
             let line = line.trim();
@@ -75,20 +97,27 @@ impl CodexParser {
                     session_meta = Some(meta);
                 }
                 CodexLineType::ResponseItem => {
-                    self.process_response_item(
+                    // Story 8.15: Collect unknown formats from response items
+                    if let Some(entry) = self.process_response_item(
                         rollout_line.payload,
                         &rollout_line.timestamp,
                         &mut messages,
                         &mut pending_calls,
-                    )?;
+                    )? {
+                        unknown_formats.push(entry);
+                    }
                 }
                 CodexLineType::EventMsg | CodexLineType::TurnContext => {
                     // Skip these line types
                 }
                 CodexLineType::Unknown => {
-                    // Log unknown line types for debugging (future Codex versions may add new types)
-                    #[cfg(debug_assertions)]
-                    eprintln!("Warning: Unknown Codex line type encountered, skipping");
+                    // Story 8.15: Record unknown line types
+                    unknown_formats.push(UnknownFormatEntry {
+                        source: "codex".to_string(),
+                        type_name: "unknown_line_type".to_string(),
+                        raw_json: truncate_raw_json_str(line),
+                        timestamp: rollout_line.timestamp.clone(),
+                    });
                 }
             }
         }
@@ -141,6 +170,13 @@ impl CodexParser {
             }
         };
 
+        // Story 8.15: Set parser_info and unknown_formats
+        let parser_info = Some(ParserInfo {
+            parser_version: CODEX_PARSER_VERSION.to_string(),
+            supported_formats: SUPPORTED_RESPONSE_TYPES.iter().map(|s| s.to_string()).collect(),
+            detected_source_version: meta.cli_version.clone(),
+        });
+
         Ok(MantraSession {
             id: meta.id,
             source: sources::CODEX.to_string(),
@@ -156,20 +192,23 @@ impl CodexParser {
                 git,  // AC1: Set git info
                 instructions,  // AC2: Set instructions
                 source_metadata,  // AC4: Set source_metadata
+                parser_info,  // Story 8.15: Set parser info
+                unknown_formats: if unknown_formats.is_empty() { None } else { Some(unknown_formats) },  // Story 8.15
                 ..Default::default()
             },
         })
     }
 
     /// Process a response_item payload
+    /// Story 8.15: Now returns Option<UnknownFormatEntry> to collect unknown formats
     fn process_response_item(
         &self,
         payload: serde_json::Value,
         timestamp: &str,
         messages: &mut Vec<Message>,
         pending_calls: &mut HashMap<String, PendingFunctionCall>,
-    ) -> Result<(), ParseError> {
-        let item: CodexResponseItem = serde_json::from_value(payload)
+    ) -> Result<Option<UnknownFormatEntry>, ParseError> {
+        let item: CodexResponseItem = serde_json::from_value(payload.clone())
             .map_err(|e| ParseError::invalid_format(format!("Invalid response_item: {}", e)))?;
 
         let ts = parse_timestamp(timestamp).ok();
@@ -178,7 +217,7 @@ impl CodexParser {
             CodexResponseItem::Message { role, content } => {
                 // Skip empty messages
                 if content.is_empty() {
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 // Skip environment_context messages (they start with <environment_context>)
@@ -186,7 +225,7 @@ impl CodexParser {
                 if first_text.trim().starts_with("<environment_context>")
                     || first_text.trim().starts_with("# AGENTS.md")
                 {
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 // Strip system reminder tags and filter empty blocks
@@ -197,14 +236,14 @@ impl CodexParser {
                         if cleaned.is_empty() {
                             None
                         } else {
-                            Some(ContentBlock::Text { text: cleaned })
+                            Some(ContentBlock::Text { text: cleaned, is_degraded: None })
                         }
                     })
                     .collect();
 
                 // Skip messages with no content after cleaning
                 if content_blocks.is_empty() {
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 messages.push(Message {
@@ -547,16 +586,25 @@ impl CodexParser {
                 }
             }
 
-            // GhostSnapshot, Compaction, and Other are metadata/internal types
+            // GhostSnapshot and Compaction are metadata/internal types
             // We skip them as they don't represent user-visible conversation content
             CodexResponseItem::GhostSnapshot { .. }
-            | CodexResponseItem::Compaction { .. }
-            | CodexResponseItem::Other => {
+            | CodexResponseItem::Compaction { .. } => {
                 // Skip these types - they are internal to Codex
+            }
+
+            // Story 8.15: Unknown response item types are recorded for monitoring
+            CodexResponseItem::Other => {
+                return Ok(Some(UnknownFormatEntry {
+                    source: "codex".to_string(),
+                    type_name: "unknown_response_type".to_string(),
+                    raw_json: truncate_raw_json(&payload),
+                    timestamp: timestamp.to_string(),
+                }));
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Parse all sessions from the Codex CLI directory
@@ -640,6 +688,25 @@ fn parse_timestamp(timestamp: &str) -> Result<DateTime<Utc>, ParseError> {
                 .map(|ndt| ndt.and_utc())
         })
         .map_err(|e| ParseError::invalid_format(format!("Invalid timestamp '{}': {}", timestamp, e)))
+}
+
+/// Truncate raw JSON to maximum size for storage (Story 8.15)
+fn truncate_raw_json(json: &serde_json::Value) -> String {
+    let raw = serde_json::to_string(json).unwrap_or_default();
+    if raw.len() <= MAX_RAW_JSON_SIZE {
+        raw
+    } else {
+        format!("{}... [truncated]", &raw[..MAX_RAW_JSON_SIZE])
+    }
+}
+
+/// Truncate raw JSON string to maximum size for storage (Story 8.15)
+fn truncate_raw_json_str(json_str: &str) -> String {
+    if json_str.len() <= MAX_RAW_JSON_SIZE {
+        json_str.to_string()
+    } else {
+        format!("{}... [truncated]", &json_str[..MAX_RAW_JSON_SIZE])
+    }
 }
 
 /// Extract file paths from function call arguments
@@ -754,14 +821,14 @@ mod tests {
         // Check user message
         assert_eq!(session.messages[0].role, Role::User);
         match &session.messages[0].content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "Help me with this code"),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "Help me with this code"),
             _ => panic!("Expected Text block"),
         }
 
         // Check assistant message
         assert_eq!(session.messages[1].role, Role::Assistant);
         match &session.messages[1].content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "I'll help you with that."),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "I'll help you with that."),
             _ => panic!("Expected Text block"),
         }
     }
@@ -930,7 +997,7 @@ mod tests {
         // Only the "Hello" message should be included
         assert_eq!(session.messages.len(), 1);
         match &session.messages[0].content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "Hello"),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "Hello"),
             _ => panic!("Expected Text block"),
         }
     }
@@ -1440,5 +1507,107 @@ mod tests {
         // Should only have the user message, compaction is skipped
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].role, Role::User);
+    }
+
+    // ===== Story 8.15: Parser 弹性增强测试 =====
+
+    #[test]
+    fn test_parser_version_constant() {
+        // Verify parser version is defined
+        assert!(!CODEX_PARSER_VERSION.is_empty());
+        assert!(CODEX_PARSER_VERSION.starts_with("1."));
+    }
+
+    #[test]
+    fn test_supported_formats_defined() {
+        // Verify supported formats list is populated
+        assert!(!SUPPORTED_RESPONSE_TYPES.is_empty());
+        assert!(SUPPORTED_RESPONSE_TYPES.contains(&"message"));
+        assert!(SUPPORTED_RESPONSE_TYPES.contains(&"function_call"));
+        assert!(SUPPORTED_RESPONSE_TYPES.contains(&"reasoning"));
+    }
+
+    #[test]
+    fn test_truncate_raw_json_short() {
+        let json = serde_json::json!({"type": "test", "value": 123});
+        let result = truncate_raw_json(&json);
+        assert!(!result.contains("[truncated]"));
+        assert!(result.contains("test"));
+    }
+
+    #[test]
+    fn test_truncate_raw_json_long() {
+        let long_content = "x".repeat(2000);
+        let json = serde_json::json!({"type": "test", "content": long_content});
+        let result = truncate_raw_json(&json);
+        assert!(result.contains("[truncated]"));
+        assert!(result.len() <= MAX_RAW_JSON_SIZE + 20);
+    }
+
+    #[test]
+    fn test_truncate_raw_json_str_short() {
+        let json_str = r#"{"type": "test"}"#;
+        let result = truncate_raw_json_str(json_str);
+        assert_eq!(result, json_str);
+        assert!(!result.contains("[truncated]"));
+    }
+
+    #[test]
+    fn test_truncate_raw_json_str_long() {
+        let long_str = format!(r#"{{"content": "{}"}}"#, "x".repeat(2000));
+        let result = truncate_raw_json_str(&long_str);
+        assert!(result.contains("[truncated]"));
+        assert!(result.len() <= MAX_RAW_JSON_SIZE + 20);
+    }
+
+    #[test]
+    fn test_parser_info_populated() {
+        let parser = CodexParser::new();
+        let session = parser.parse_string(SIMPLE_SESSION).unwrap();
+
+        assert!(session.metadata.parser_info.is_some());
+        let parser_info = session.metadata.parser_info.unwrap();
+        assert_eq!(parser_info.parser_version, CODEX_PARSER_VERSION);
+        assert!(!parser_info.supported_formats.is_empty());
+    }
+
+    #[test]
+    fn test_unknown_response_type_collected() {
+        // Session with unknown response_item type
+        let jsonl = r#"{"timestamp":"2025-10-05T10:21:15.988Z","type":"session_meta","payload":{"id":"test-unknown-collected","timestamp":"2025-10-05T10:21:15.983Z","cwd":"/tmp"}}
+{"timestamp":"2025-10-05T10:21:23.326Z","type":"response_item","payload":{"type":"future_new_type","some_field":"value"}}
+{"timestamp":"2025-10-05T10:21:24.326Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello"}]}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        // Unknown format should be collected
+        assert!(session.metadata.unknown_formats.is_some());
+        let unknown = session.metadata.unknown_formats.unwrap();
+        assert_eq!(unknown.len(), 1);
+        assert_eq!(unknown[0].source, "codex");
+        assert_eq!(unknown[0].type_name, "unknown_response_type");
+    }
+
+    #[test]
+    fn test_known_response_types_no_unknown_formats() {
+        // Session with only known response types should have no unknown_formats
+        let parser = CodexParser::new();
+        let session = parser.parse_string(SIMPLE_SESSION).unwrap();
+
+        // No unknown formats for known types
+        assert!(session.metadata.unknown_formats.is_none());
+    }
+
+    #[test]
+    fn test_detected_source_version_from_cli_version() {
+        let jsonl = r#"{"timestamp":"2025-12-30T20:00:00.000Z","type":"session_meta","payload":{"id":"test-version","timestamp":"2025-12-30T20:00:00.000Z","cwd":"/tmp","cli_version":"0.77.0"}}"#;
+
+        let parser = CodexParser::new();
+        let session = parser.parse_string(jsonl).unwrap();
+
+        assert!(session.metadata.parser_info.is_some());
+        let parser_info = session.metadata.parser_info.unwrap();
+        assert_eq!(parser_info.detected_source_version, Some("0.77.0".to_string()));
     }
 }

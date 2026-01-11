@@ -295,7 +295,7 @@ mod debug_full_sync_test {
                         println!("  -> Session content preview:");
                         for (i, msg) in session.messages.iter().take(3).enumerate() {
                             let preview = match &msg.content_blocks.first() {
-                                Some(crate::models::ContentBlock::Text { text }) => 
+                                Some(crate::models::ContentBlock::Text { text, .. }) =>
                                     text.chars().take(50).collect::<String>(),
                                 _ => "non-text".to_string(),
                             };
@@ -319,7 +319,7 @@ mod debug_full_sync_test {
         // 检查消息内容是否正确（应该不是 "Warmup"）
         let first_msg = &target_sessions[0].messages[0];
         let first_text = match &first_msg.content_blocks.first() {
-            Some(crate::models::ContentBlock::Text { text }) => text.clone(),
+            Some(crate::models::ContentBlock::Text { text, .. }) => text.clone(),
             _ => String::new(),
         };
         println!("First message content: {}", first_text.chars().take(100).collect::<String>());

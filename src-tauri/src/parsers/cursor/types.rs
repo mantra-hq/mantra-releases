@@ -157,6 +157,33 @@ pub struct CursorBubble {
 
     /// Timestamp (may be present in some bubbles)
     pub timestamp: Option<i64>,
+
+    /// Story 8.16: Images attached to this message
+    /// Format: Array of image objects with base64 data or URLs
+    #[serde(default)]
+    pub images: Vec<CursorImage>,
+}
+
+/// Story 8.16: Image data in Cursor bubbles
+/// Cursor may store images as base64 data or URLs
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorImage {
+    /// MIME type (e.g., "image/png", "image/jpeg")
+    #[serde(default)]
+    pub mime_type: Option<String>,
+
+    /// Base64 encoded image data
+    #[serde(default)]
+    pub data: Option<String>,
+
+    /// Image URL (alternative to base64 data)
+    #[serde(default)]
+    pub url: Option<String>,
+
+    /// Optional alternative text for accessibility
+    #[serde(default)]
+    pub alt: Option<String>,
 }
 
 /// Tool call data from Cursor's toolFormerData field

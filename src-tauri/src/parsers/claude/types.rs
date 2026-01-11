@@ -84,6 +84,24 @@ pub enum ClaudeContentBlock {
         #[serde(default)]
         is_error: bool,
     },
+
+    /// Image content (base64 encoded)
+    Image {
+        source: ClaudeImageSource,
+    },
+}
+
+/// Claude image source structure
+/// Contains the base64-encoded image data and its MIME type
+#[derive(Debug, Deserialize)]
+pub struct ClaudeImageSource {
+    /// MIME type of the image (e.g., "image/png", "image/jpeg")
+    pub media_type: String,
+    /// Base64-encoded image data
+    pub data: String,
+    /// Source type (always "base64" for Claude)
+    #[serde(default, rename = "type")]
+    pub source_type: Option<String>,
 }
 
 /// Tool result content can be string or structured

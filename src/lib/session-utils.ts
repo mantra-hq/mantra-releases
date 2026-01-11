@@ -30,7 +30,7 @@ function convertStandardTool(backendTool: Record<string, unknown> | undefined): 
         }
     }
 
-    return tool as StandardTool;
+    return tool as unknown as StandardTool;
 }
 
 /**
@@ -48,6 +48,18 @@ export interface MantraSession {
         total_tokens?: number;
         title?: string;
         original_path?: string;
+        // Story 8.15: Parser 弹性增强字段
+        parser_info?: {
+            parser_version: string;
+            supported_formats: string[];
+            detected_source_version?: string;
+        };
+        unknown_formats?: Array<{
+            source: string;
+            type_name: string;
+            raw_json: string;
+            timestamp: string;
+        }>;
     };
 }
 
@@ -61,10 +73,10 @@ export interface MantraMessage {
 }
 
 /**
- * 后端内容块类型 (Story 8.12: 包含 standardTool)
+ * 后端内容块类型 (Story 8.12: 包含 standardTool, Story 8.15: 包含 is_degraded, Story 8.16: 包含 image)
  */
 export type MantraContentBlock =
-    | { type: "text"; text: string }
+    | { type: "text"; text: string; is_degraded?: boolean }
     | { type: "thinking"; thinking: string; subject?: string; timestamp?: string }
     | {
         type: "tool_use";
@@ -85,7 +97,15 @@ export type MantraContentBlock =
         render_as_markdown?: boolean;
         user_decision?: string;
     }
-    | { type: "code_suggestion"; file_path?: string; code?: string; language?: string };
+    | { type: "code_suggestion"; file_path?: string; code?: string; language?: string }
+    // Story 8.16: Image 内容块类型
+    | {
+        type: "image";
+        media_type: string;
+        data: string;
+        source_type?: string;
+        alt_text?: string;
+    };
 
 /**
  * tool_use 信息缓存，用于关联 tool_result
@@ -112,6 +132,8 @@ function convertContentBlock(
             return {
                 type: "text",
                 content: block.text,
+                // Story 8.15: 传递降级标记
+                isDegraded: block.is_degraded,
             };
         case "thinking":
             return {
@@ -171,6 +193,14 @@ function convertContentBlock(
                 filePath: block.file_path,
                 code: block.code,
                 language: block.language,
+            };
+        // Story 8.16: Image 内容块转换
+        case "image":
+            return {
+                type: "image",
+                content: "",
+                source: block.data,
+                mediaType: block.media_type,
             };
         default:
             // Fallback for unknown types

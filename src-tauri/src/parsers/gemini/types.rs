@@ -170,6 +170,22 @@ pub struct GeminiPart {
 
     /// Function response
     pub function_response: Option<GeminiFunctionResponse>,
+
+    /// Story 8.15: Capture unknown fields for degradation monitoring
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl GeminiPart {
+    /// Check if this part has any unknown/unrecognized fields
+    pub fn has_unknown_fields(&self) -> bool {
+        !self.unknown_fields.is_empty()
+    }
+
+    /// Get the list of unknown field names
+    pub fn unknown_field_names(&self) -> Vec<String> {
+        self.unknown_fields.keys().cloned().collect()
+    }
 }
 
 /// Inline data (e.g., base64 encoded images)
@@ -394,12 +410,14 @@ mod tests {
                 inline_data: None,
                 function_call: None,
                 function_response: None,
+                unknown_fields: serde_json::Map::new(),
             },
             GeminiPart {
                 text: Some("World".to_string()),
                 inline_data: None,
                 function_call: None,
                 function_response: None,
+                unknown_fields: serde_json::Map::new(),
             },
         ]);
         assert_eq!(content.as_text(), "Hello World");

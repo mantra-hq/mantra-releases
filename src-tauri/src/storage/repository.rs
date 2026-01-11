@@ -1059,7 +1059,7 @@ impl Database {
                 // Extract text content from content blocks
                 for block in &message.content_blocks {
                     let text = match block {
-                        ContentBlock::Text { text } => text.clone(),
+                        ContentBlock::Text { text, .. } => text.clone(),
                         ContentBlock::Thinking { thinking, .. } => thinking.clone(),
                         ContentBlock::ToolResult { content, .. } => content.clone(),
                         _ => continue,

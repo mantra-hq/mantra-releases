@@ -19,11 +19,12 @@ import { ToolCallCard, type ToolCallStatus } from "./ToolCallCard";
 import { TodoWriteCard } from "./TodoWriteCard";
 import { ToolOutput } from "./ToolOutput";
 import { CodeSuggestionCard } from "./CodeSuggestionCard";
+import { ImageBlock } from "./ImageBlock";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { useToolPairingContext } from "@/contexts/ToolPairingContext";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, AlertTriangle } from "lucide-react";
 
 /** 长 markdown 折叠阈值 (行数) */
 const LONG_MARKDOWN_THRESHOLD = 15;
@@ -70,10 +71,36 @@ export function ContentBlockRenderer({
   const pairingContext = useToolPairingContext();
 
   switch (block.type) {
-    case "text":
+    case "text": {
+      // Story 8.15: 降级内容块显示警告指示器 (Task 6.2)
+      const isDegraded = block.isDegraded === true;
+
       // 检测是否为长 markdown
       const lines = block.content.split('\n');
       const isLongMarkdown = lines.length > LONG_MARKDOWN_THRESHOLD;
+
+      // 降级内容块包装器
+      const DegradedWrapper = ({ children }: { children: React.ReactNode }) => {
+        if (!isDegraded) return <>{children}</>;
+        return (
+          <div
+            className={cn(
+              "relative border border-amber-500/30 rounded-lg",
+              "bg-amber-500/5"
+            )}
+          >
+            <div className="absolute -top-2.5 left-2 px-1.5 bg-background">
+              <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                降级格式
+              </span>
+            </div>
+            <div className="pt-3 pb-2 px-2">
+              {children}
+            </div>
+          </div>
+        );
+      };
 
       // 长 markdown 显示折叠卡片
       if (isLongMarkdown) {
@@ -94,35 +121,37 @@ export function ContentBlockRenderer({
         };
 
         return (
-          <div
-            className={cn(
-              "group rounded-lg border border-border bg-muted/30 p-3",
-              "hover:bg-muted/50 hover:border-primary/30 transition-colors cursor-pointer",
-              className
-            )}
-            onClick={handleOpenPreview}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && handleOpenPreview(e)}
-          >
-            {/* 预览内容 */}
-            <div className="prose prose-sm dark:prose-invert max-w-none line-clamp-3 text-muted-foreground">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {previewContent}
-              </ReactMarkdown>
-            </div>
+          <DegradedWrapper>
+            <div
+              className={cn(
+                "group rounded-lg border border-border bg-muted/30 p-3",
+                "hover:bg-muted/50 hover:border-primary/30 transition-colors cursor-pointer",
+                className
+              )}
+              onClick={handleOpenPreview}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && handleOpenPreview(e)}
+            >
+              {/* 预览内容 */}
+              <div className="prose prose-sm dark:prose-invert max-w-none line-clamp-3 text-muted-foreground">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {previewContent}
+                </ReactMarkdown>
+              </div>
 
-            {/* 展开提示 */}
-            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              <span>{lineCount} 行</span>
-              <span className="flex-1" />
-              <span className="group-hover:text-primary transition-colors flex items-center gap-1">
-                点击展开查看
-                <ChevronRight className="h-3.5 w-3.5" />
-              </span>
+              {/* 展开提示 */}
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                <span>{lineCount} 行</span>
+                <span className="flex-1" />
+                <span className="group-hover:text-primary transition-colors flex items-center gap-1">
+                  点击展开查看
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </span>
+              </div>
             </div>
-          </div>
+          </DegradedWrapper>
         );
       }
 
@@ -159,39 +188,42 @@ export function ContentBlockRenderer({
       };
 
       return (
-        <div
-          className={cn(
-            // Markdown 渲染样式
-            "prose prose-sm dark:prose-invert max-w-none",
-            // 自定义 prose 样式覆盖
-            "prose-p:my-1 prose-p:leading-relaxed",
-            "prose-pre:bg-transparent prose-pre:p-0",
-            // 内联代码样式 - 确保浅色/深色模式下文字可读
-            "prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
-            "prose-code:text-foreground prose-code:font-normal",
-            "prose-code:before:content-none prose-code:after:content-none",
-            // 引用块样式 - 确保文字颜色足够深
-            "prose-blockquote:border-l-primary prose-blockquote:text-foreground/80",
-            // 列表样式
-            "prose-ul:my-1 prose-ol:my-1",
-            "prose-li:my-0",
-            // 标题样式
-            "prose-headings:mt-2 prose-headings:mb-1",
-            // 表格样式 - 确保文字可读
-            "prose-th:text-foreground prose-td:text-foreground/90",
-            // 强调样式
-            "prose-strong:text-foreground prose-em:text-foreground/90",
-            className
-          )}
-        >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={markdownComponents}
+        <DegradedWrapper>
+          <div
+            className={cn(
+              // Markdown 渲染样式
+              "prose prose-sm dark:prose-invert max-w-none",
+              // 自定义 prose 样式覆盖
+              "prose-p:my-1 prose-p:leading-relaxed",
+              "prose-pre:bg-transparent prose-pre:p-0",
+              // 内联代码样式 - 确保浅色/深色模式下文字可读
+              "prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
+              "prose-code:text-foreground prose-code:font-normal",
+              "prose-code:before:content-none prose-code:after:content-none",
+              // 引用块样式 - 确保文字颜色足够深
+              "prose-blockquote:border-l-primary prose-blockquote:text-foreground/80",
+              // 列表样式
+              "prose-ul:my-1 prose-ol:my-1",
+              "prose-li:my-0",
+              // 标题样式
+              "prose-headings:mt-2 prose-headings:mb-1",
+              // 表格样式 - 确保文字可读
+              "prose-th:text-foreground prose-td:text-foreground/90",
+              // 强调样式
+              "prose-strong:text-foreground prose-em:text-foreground/90",
+              className
+            )}
           >
-            {block.content}
-          </ReactMarkdown>
-        </div>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents}
+            >
+              {block.content}
+            </ReactMarkdown>
+          </div>
+        </DegradedWrapper>
       );
+    }
 
     case "thinking":
       return (
@@ -372,6 +404,18 @@ export function ContentBlockRenderer({
           filePath={block.filePath}
           code={block.code || block.content}
           language={block.language}
+          className={className}
+        />
+      );
+
+    // Story 8.16: image 块渲染 (AC #5)
+    case "image":
+      return (
+        <ImageBlock
+          data={block.source || block.content}
+          mediaType={block.mediaType || "image/png"}
+          sourceType={block.source?.startsWith("http") ? "url" : "base64"}
+          altText={block.content ? undefined : "用户上传的图片"}
           className={className}
         />
       );

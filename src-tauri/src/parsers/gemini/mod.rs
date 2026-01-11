@@ -21,10 +21,22 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 
 use super::{LogParser, ParseError};
-use crate::models::{normalize_tool, sources, ContentBlock, MantraSession, Message, SessionMetadata, TokensBreakdown};
+use crate::models::{normalize_tool, sources, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, TokensBreakdown, UnknownFormatEntry};
 
 pub use path::{get_gemini_dir, get_gemini_tmp_dir, GeminiPaths, GeminiSessionFile};
 pub use types::*;
+
+/// Gemini Parser version for compatibility tracking
+pub const GEMINI_PARSER_VERSION: &str = "1.1.0";
+
+/// Supported message types in Gemini format
+pub const SUPPORTED_MESSAGE_TYPES: &[&str] = &["user", "gemini"];
+
+/// Supported content part types in Gemini format
+pub const SUPPORTED_PART_TYPES: &[&str] = &["text", "inline_data", "function_call", "function_response"];
+
+/// Maximum raw JSON size to store in UnknownFormatEntry (1KB)
+const MAX_RAW_JSON_SIZE: usize = 1024;
 
 /// Parser for Gemini CLI conversation logs
 #[derive(Debug, Default)]
@@ -70,6 +82,9 @@ impl GeminiParser {
         let mut messages = Vec::new();
         let mut last_model: Option<String> = None;
         let mut total_tokens: u64 = 0;
+
+        // Story 8.15: Collect unknown formats for monitoring
+        let mut all_unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
 
         // Token breakdown accumulators (AC1)
         let mut tb_input: u64 = 0;
@@ -128,8 +143,9 @@ impl GeminiParser {
                 }
             }
 
-            let converted = self.convert_message(gemini_msg)?;
+            let (converted, unknown_formats) = self.convert_message(gemini_msg)?;
             messages.extend(converted);
+            all_unknown_formats.extend(unknown_formats);
         }
 
         // Build tokens_breakdown (AC1)
@@ -162,12 +178,23 @@ impl GeminiParser {
             updated_at,
             messages,
             metadata: SessionMetadata {
-                model: last_model,
+                model: last_model.clone(),
                 title: conversation.summary,
                 original_path: file_path.map(String::from),
                 total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
                 tokens_breakdown,
                 source_metadata,
+                // Story 8.15: Add parser info and unknown formats
+                parser_info: Some(ParserInfo {
+                    parser_version: GEMINI_PARSER_VERSION.to_string(),
+                    supported_formats: SUPPORTED_PART_TYPES.iter().map(|s| s.to_string()).collect(),
+                    detected_source_version: last_model,
+                }),
+                unknown_formats: if all_unknown_formats.is_empty() {
+                    None
+                } else {
+                    Some(all_unknown_formats)
+                },
                 ..Default::default()
             },
         };
@@ -190,13 +217,15 @@ impl GeminiParser {
     /// 2. 工具调用消息 (tool_use + tool_result) → 每个工具调用一条独立消息
     ///
     /// 这样设计确保每个消息是语义完整的单元，便于前端渲染和理解。
-    fn convert_message(&self, gemini_msg: &GeminiMessage) -> Result<Vec<Message>, ParseError> {
+    /// Story 8.15: Returns (messages, unknown_format_entries) for monitoring
+    fn convert_message(&self, gemini_msg: &GeminiMessage) -> Result<(Vec<Message>, Vec<UnknownFormatEntry>), ParseError> {
         let role = match gemini_msg.msg_type.to_mantra_role() {
             Some(r) => r,
-            None => return Ok(Vec::new()), // Skip messages with unknown role
+            None => return Ok((Vec::new(), Vec::new())), // Skip messages with unknown role
         };
 
         let mut messages = Vec::new();
+        let mut unknown_formats = Vec::new();
         let timestamp = parse_timestamp(&gemini_msg.timestamp).ok();
 
         // === 消息 1: 思考 + 文本内容 ===
@@ -213,12 +242,65 @@ impl GeminiParser {
             }
         }
 
-        // Add text content (strip system reminder tags)
-        if !gemini_msg.content.is_empty() {
-            let text = gemini_msg.content.as_text();
-            let cleaned = crate::parsers::strip_system_reminders(&text);
-            if !cleaned.is_empty() {
-                text_blocks.push(ContentBlock::Text { text: cleaned });
+        // Add text content and check for unknown fields in parts
+        match &gemini_msg.content {
+            GeminiContent::Text(s) => {
+                let cleaned = crate::parsers::strip_system_reminders(s);
+                if !cleaned.is_empty() {
+                    text_blocks.push(ContentBlock::Text { text: cleaned, is_degraded: None });
+                }
+            }
+            GeminiContent::Parts(parts) => {
+                let mut text_parts = Vec::new();
+                for part in parts {
+                    // Collect known text content
+                    if let Some(text) = &part.text {
+                        text_parts.push(text.clone());
+                    }
+                    // Story 8.16: Parse inline_data as Image block (AC3)
+                    if let Some(inline_data) = &part.inline_data {
+                        if let (Some(mime_type), Some(data)) = (&inline_data.mime_type, &inline_data.data) {
+                            // Only process if mime_type indicates an image
+                            if mime_type.starts_with("image/") {
+                                text_blocks.push(ContentBlock::Image {
+                                    media_type: mime_type.clone(),
+                                    data: data.clone(),
+                                    source_type: Some("base64".to_string()),
+                                    alt_text: None,
+                                });
+                            }
+                        }
+                    }
+                    // Story 8.15: Check for unknown fields in GeminiPart
+                    if part.has_unknown_fields() {
+                        for field_name in part.unknown_field_names() {
+                            let raw_value = part.unknown_fields.get(&field_name)
+                                .map(|v| truncate_raw_json(v))
+                                .unwrap_or_default();
+
+                            unknown_formats.push(UnknownFormatEntry {
+                                source: "gemini".to_string(),
+                                type_name: field_name.clone(),
+                                raw_json: raw_value,
+                                timestamp: Utc::now().to_rfc3339(),
+                            });
+
+                            // Create degraded text block for unknown field
+                            let degraded_text = format!("[无法解析的内容: {}]", field_name);
+                            text_blocks.push(ContentBlock::Text {
+                                text: degraded_text,
+                                is_degraded: Some(true),
+                            });
+                        }
+                    }
+                }
+                if !text_parts.is_empty() {
+                    let combined = text_parts.join("");
+                    let cleaned = crate::parsers::strip_system_reminders(&combined);
+                    if !cleaned.is_empty() {
+                        text_blocks.push(ContentBlock::Text { text: cleaned, is_degraded: None });
+                    }
+                }
             }
         }
 
@@ -302,7 +384,7 @@ impl GeminiParser {
             }
         }
 
-        Ok(messages)
+        Ok((messages, unknown_formats))
     }
 
     /// Extract file paths from tool call arguments
@@ -399,6 +481,16 @@ impl LogParser for GeminiParser {
 
     fn parse_string(&self, content: &str) -> Result<MantraSession, ParseError> {
         self.parse_json(content, None)
+    }
+}
+
+/// Truncate raw JSON to maximum size for storage
+fn truncate_raw_json(json: &serde_json::Value) -> String {
+    let raw = serde_json::to_string(json).unwrap_or_default();
+    if raw.len() <= MAX_RAW_JSON_SIZE {
+        raw
+    } else {
+        format!("{}... [truncated]", &raw[..MAX_RAW_JSON_SIZE])
     }
 }
 
@@ -570,7 +662,7 @@ mod tests {
         assert_eq!(session.messages[0].role, Role::User);
         assert_eq!(session.messages[0].content_blocks.len(), 1);
         match &session.messages[0].content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "Help me with this code"),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "Help me with this code"),
             _ => panic!("Expected Text block"),
         }
 
@@ -605,7 +697,7 @@ mod tests {
 
         // Second block should be text
         match &gemini_msg.content_blocks[1] {
-            ContentBlock::Text { text } => assert_eq!(text, "Let me analyze this."),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "Let me analyze this."),
             _ => panic!("Expected Text block"),
         }
     }
@@ -626,7 +718,7 @@ mod tests {
         assert_eq!(text_msg.role, Role::Assistant);
         assert_eq!(text_msg.content_blocks.len(), 1);
         match &text_msg.content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "I'll list the files for you."),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "I'll list the files for you."),
             _ => panic!("Expected Text block"),
         }
 
@@ -862,7 +954,7 @@ mod tests {
         let session = parser.parse_string(json).unwrap();
 
         match &session.messages[0].content_blocks[0] {
-            ContentBlock::Text { text } => assert_eq!(text, "First part. Second part."),
+            ContentBlock::Text { text, .. } => assert_eq!(text, "First part. Second part."),
             _ => panic!("Expected Text block"),
         }
     }
@@ -1323,6 +1415,264 @@ mod tests {
         assert!(tb.cached.is_none());
         assert!(tb.thoughts.is_none());
         assert!(tb.tool.is_none());
+    }
+
+    // ========== Story 8.15: Parser Resilience Enhancement Tests ==========
+
+    #[test]
+    fn test_parser_info_included() {
+        let json = r#"{
+            "sessionId": "parser-info-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": "Hello",
+                    "model": "gemini-2.0-flash"
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        assert!(session.metadata.parser_info.is_some());
+        let parser_info = session.metadata.parser_info.as_ref().unwrap();
+
+        assert_eq!(parser_info.parser_version, GEMINI_PARSER_VERSION);
+        assert!(parser_info.supported_formats.contains(&"text".to_string()));
+        assert!(parser_info.supported_formats.contains(&"inline_data".to_string()));
+        assert!(parser_info.supported_formats.contains(&"function_call".to_string()));
+        assert!(parser_info.supported_formats.contains(&"function_response".to_string()));
+        assert_eq!(parser_info.detected_source_version, Some("gemini-2.0-flash".to_string()));
+    }
+
+    #[test]
+    fn test_unknown_part_fields_detected() {
+        // Test that unknown fields in content parts are detected and recorded
+        let json = r#"{
+            "sessionId": "unknown-fields-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": [
+                        {"text": "Normal text"},
+                        {"newFeature": "some data", "anotherNew": 123}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // Should have unknown_formats recorded
+        assert!(session.metadata.unknown_formats.is_some());
+        let unknown_formats = session.metadata.unknown_formats.as_ref().unwrap();
+
+        // Should have 2 unknown fields: newFeature and anotherNew
+        assert_eq!(unknown_formats.len(), 2);
+        assert!(unknown_formats.iter().any(|e| e.type_name == "newFeature" && e.source == "gemini"));
+        assert!(unknown_formats.iter().any(|e| e.type_name == "anotherNew" && e.source == "gemini"));
+    }
+
+    #[test]
+    fn test_no_unknown_formats_when_all_known() {
+        let json = r#"{
+            "sessionId": "known-fields-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": [
+                        {"text": "Only known text field"}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // unknown_formats should be None when no unknown fields
+        assert!(session.metadata.unknown_formats.is_none());
+    }
+
+    #[test]
+    fn test_degraded_content_blocks_created() {
+        let json = r#"{
+            "sessionId": "degraded-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00Z",
+            "lastUpdated": "2025-12-30T20:05:00Z",
+            "messages": [
+                {
+                    "id": "m1",
+                    "timestamp": "2025-12-30T20:01:00Z",
+                    "type": "gemini",
+                    "content": [
+                        {"unknownType": "data"}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        // Should have a message with a degraded content block
+        assert_eq!(session.messages.len(), 1);
+        assert!(!session.messages[0].content_blocks.is_empty());
+
+        // Find the degraded block
+        let degraded_block = session.messages[0].content_blocks.iter()
+            .find(|b| matches!(b, ContentBlock::Text { is_degraded: Some(true), .. }));
+
+        assert!(degraded_block.is_some(), "Should have a degraded text block");
+        if let Some(ContentBlock::Text { text, .. }) = degraded_block {
+            assert!(text.contains("unknownType"), "Degraded block should mention unknown field name");
+        }
+    }
+
+    // ========== Story 8.16: Gemini inline_data Image Parsing Tests ==========
+
+    #[test]
+    fn test_parse_inline_data_image() {
+        // Test that inline_data in GeminiPart is correctly parsed as ContentBlock::Image
+        let json = r#"{
+            "sessionId": "image-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00.000Z",
+            "lastUpdated": "2025-12-30T20:00:00.000Z",
+            "messages": [
+                {
+                    "id": "msg-1",
+                    "timestamp": "2025-12-30T20:00:10.000Z",
+                    "type": "user",
+                    "content": [
+                        {"text": "Here is an image: "},
+                        {"inlineData": {"mimeType": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        let msg = &session.messages[0];
+
+        // Should have 2 content blocks: Text and Image
+        assert_eq!(msg.content_blocks.len(), 2);
+
+        // Check Text block
+        match &msg.content_blocks[0] {
+            ContentBlock::Image { media_type, data, source_type, alt_text } => {
+                assert_eq!(media_type, "image/png");
+                assert!(data.contains("iVBORw0KGgo"));
+                assert_eq!(source_type, &Some("base64".to_string()));
+                assert_eq!(alt_text, &None);
+            }
+            _ => panic!("Expected Image block first (inline_data processed before text)"),
+        }
+
+        // Check that text is also present
+        match &msg.content_blocks[1] {
+            ContentBlock::Text { text, .. } => {
+                assert!(text.contains("Here is an image"));
+            }
+            _ => panic!("Expected Text block second"),
+        }
+    }
+
+    #[test]
+    fn test_parse_inline_data_non_image_ignored() {
+        // Test that non-image inline_data is NOT parsed as Image block
+        let json = r#"{
+            "sessionId": "non-image-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00.000Z",
+            "lastUpdated": "2025-12-30T20:00:00.000Z",
+            "messages": [
+                {
+                    "id": "msg-1",
+                    "timestamp": "2025-12-30T20:00:10.000Z",
+                    "type": "user",
+                    "content": [
+                        {"text": "Here is a file: "},
+                        {"inlineData": {"mimeType": "application/pdf", "data": "JVBERi0xLjQ="}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        let msg = &session.messages[0];
+
+        // Should have only 1 content block (Text) since non-image is ignored
+        assert_eq!(msg.content_blocks.len(), 1);
+
+        match &msg.content_blocks[0] {
+            ContentBlock::Text { text, .. } => {
+                assert!(text.contains("Here is a file"));
+            }
+            _ => panic!("Expected only Text block for non-image inline_data"),
+        }
+    }
+
+    #[test]
+    fn test_parse_inline_data_missing_fields() {
+        // Test that incomplete inline_data (missing fields) is gracefully handled
+        let json = r#"{
+            "sessionId": "incomplete-test",
+            "projectHash": "abc",
+            "startTime": "2025-12-30T20:00:00.000Z",
+            "lastUpdated": "2025-12-30T20:00:00.000Z",
+            "messages": [
+                {
+                    "id": "msg-1",
+                    "timestamp": "2025-12-30T20:00:10.000Z",
+                    "type": "user",
+                    "content": [
+                        {"text": "Incomplete image: "},
+                        {"inlineData": {"mimeType": "image/png"}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let parser = GeminiParser::new();
+        let session = parser.parse_string(json).unwrap();
+
+        assert_eq!(session.messages.len(), 1);
+        let msg = &session.messages[0];
+
+        // Should have only 1 content block (Text) since image is incomplete
+        assert_eq!(msg.content_blocks.len(), 1);
+
+        match &msg.content_blocks[0] {
+            ContentBlock::Text { text, .. } => {
+                assert!(text.contains("Incomplete image"));
+            }
+            _ => panic!("Expected only Text block for incomplete inline_data"),
+        }
     }
 }
 

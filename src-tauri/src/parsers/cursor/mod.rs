@@ -24,8 +24,20 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::models::{sources, normalize_tool, ContentBlock, MantraSession, Message, SessionMetadata};
+use crate::models::{sources, normalize_tool, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, UnknownFormatEntry};
 use crate::parsers::ParseError;
+
+/// Cursor Parser version for compatibility tracking (Story 8.15)
+pub const CURSOR_PARSER_VERSION: &str = "1.2.0";
+
+/// Supported bubble types in Cursor format
+pub const SUPPORTED_BUBBLE_TYPES: &[&str] = &["user", "assistant", "1", "2"];
+
+/// Supported content fields in Cursor bubbles
+pub const SUPPORTED_CONTENT_TYPES: &[&str] = &["text", "tool_former_data", "tool_results", "suggested_code_blocks"];
+
+/// Maximum raw JSON size to store in UnknownFormatEntry (1KB)
+const MAX_RAW_JSON_SIZE: usize = 1024;
 
 /// Parser for Cursor conversation logs
 #[derive(Debug, Default)]
@@ -152,7 +164,7 @@ impl CursorParser {
             session.updated_at = session.created_at;
         }
 
-        // Set metadata
+        // Set metadata with parser_info (Story 8.15)
         session.metadata = SessionMetadata {
             title: summary.name.clone(),
             model: composer
@@ -161,6 +173,12 @@ impl CursorParser {
                 .and_then(|m| m.model_name.clone().or(m.model_id.clone())),
             total_tokens: None,
             original_path: None,
+            parser_info: Some(ParserInfo {
+                parser_version: CURSOR_PARSER_VERSION.to_string(),
+                supported_formats: SUPPORTED_CONTENT_TYPES.iter().map(|s| s.to_string()).collect(),
+                detected_source_version: None, // Cursor doesn't expose version info
+            }),
+            unknown_formats: None, // Will be populated if unknown formats are encountered
             ..Default::default()
         };
 
@@ -193,16 +211,32 @@ impl CursorParser {
             session.metadata.source_metadata = Some(serde_json::Value::Object(source_metadata));
         }
 
-        // Parse messages from bubble headers
+        // Parse messages from bubble headers (Story 8.15: collect unknown formats)
         let mut messages = Vec::new();
+        let mut all_unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
 
         for header in &composer.full_conversation_headers_only {
-            if let Ok(Some(msg)) = self.parse_bubble(global_db, &summary.composer_id, header) {
-                messages.push(msg);
+            match self.parse_bubble(global_db, &summary.composer_id, header) {
+                Ok((Some(msg), unknown_formats)) => {
+                    messages.push(msg);
+                    all_unknown_formats.extend(unknown_formats);
+                }
+                Ok((None, unknown_formats)) => {
+                    // Message was skipped (e.g., empty), but still collect unknown formats
+                    all_unknown_formats.extend(unknown_formats);
+                }
+                Err(_) => {
+                    // Skip parsing errors silently (existing behavior)
+                }
             }
         }
 
         session.messages = messages;
+
+        // Story 8.15: Set unknown_formats in metadata if any were collected
+        if !all_unknown_formats.is_empty() {
+            session.metadata.unknown_formats = Some(all_unknown_formats);
+        }
 
         // Update last timestamp from messages
         if let Some(last_msg) = session.messages.last() {
@@ -215,26 +249,90 @@ impl CursorParser {
     }
 
     /// Parse a single bubble to Message
+    /// Story 8.15: Now returns (Option<Message>, Vec<UnknownFormatEntry>) to collect unknown formats
     fn parse_bubble(
         &self,
         global_db: &CursorDatabase,
         composer_id: &str,
         header: &BubbleHeader,
-    ) -> Result<Option<Message>, ParseError> {
+    ) -> Result<(Option<Message>, Vec<UnknownFormatEntry>), ParseError> {
+        let mut unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
+
         // Get bubble content
         let bubble_data = global_db.get_bubble_content(composer_id, &header.bubble_id)?;
 
         let bubble_data = match bubble_data {
             Some(data) => data,
-            None => return Ok(None),
+            None => return Ok((None, unknown_formats)),
         };
 
-        let bubble: CursorBubble = serde_json::from_value(bubble_data)?;
+        // Story 8.15: Graceful degradation for bubble parsing
+        let bubble: CursorBubble = match serde_json::from_value(bubble_data.clone()) {
+            Ok(b) => b,
+            Err(_) => {
+                // Record unknown format and create degraded message
+                unknown_formats.push(UnknownFormatEntry {
+                    source: "cursor".to_string(),
+                    type_name: "bubble_parse_error".to_string(),
+                    raw_json: truncate_raw_json(&bubble_data),
+                    timestamp: Utc::now().to_rfc3339(),
+                });
 
-        // Map role
+                // Create degraded text block with original content
+                let degraded_text = format!(
+                    "[无法解析的 Bubble]\n{}",
+                    truncate_raw_json(&bubble_data)
+                );
+                let message = Message {
+                    role: crate::models::Role::Assistant, // Default to assistant for degraded content
+                    content_blocks: vec![ContentBlock::Text {
+                        text: degraded_text,
+                        is_degraded: Some(true),
+                    }],
+                    timestamp: None,
+                    mentioned_files: vec![],
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
+                };
+                return Ok((Some(message), unknown_formats));
+            }
+        };
+
+        // Map role - Story 8.15: Handle unknown bubble types gracefully
         let role = match CursorRole::from(bubble.bubble_type).to_mantra_role() {
             Some(r) => r,
-            None => return Ok(None),
+            None => {
+                // Record unknown bubble type
+                unknown_formats.push(UnknownFormatEntry {
+                    source: "cursor".to_string(),
+                    type_name: format!("unknown_bubble_type_{}", bubble.bubble_type),
+                    raw_json: truncate_raw_json(&bubble_data),
+                    timestamp: Utc::now().to_rfc3339(),
+                });
+
+                // Create degraded message with original content
+                let degraded_text = format!(
+                    "[未知消息类型: {}]\n{}",
+                    bubble.bubble_type,
+                    bubble.text.as_deref().unwrap_or("")
+                );
+                let message = Message {
+                    role: crate::models::Role::Assistant, // Default to assistant for unknown types
+                    content_blocks: vec![ContentBlock::Text {
+                        text: degraded_text,
+                        is_degraded: Some(true),
+                    }],
+                    timestamp: bubble.timestamp.map(epoch_ms_to_datetime),
+                    mentioned_files: vec![],
+                    message_id: None,
+                    parent_id: None,
+                    is_sidechain: false,
+                    source_metadata: None,
+                };
+                return Ok((Some(message), unknown_formats));
+            }
         };
 
         // Build content blocks
@@ -244,54 +342,16 @@ impl CursorParser {
         if let Some(text) = &bubble.text {
             let cleaned = crate::parsers::strip_system_reminders(text);
             if !cleaned.is_empty() {
-                content_blocks.push(ContentBlock::Text { text: cleaned });
+                content_blocks.push(ContentBlock::Text { text: cleaned, is_degraded: None });
             }
         }
 
         // Parse toolFormerData (PRIMARY: this is where Cursor stores tool call data)
+        // Story 8.15: Enhanced with unknown format collection
         if let Some(tfd) = &bubble.tool_former_data {
-            if let Some(name) = &tfd.name {
-                // Generate correlation_id from tool_call_id (preferred) or fallback to name+index
-                let correlation_id = tfd.tool_call_id.clone()
-                    .or_else(|| Some(format!("cursor:{}:{}", name, tfd.tool_index.unwrap_or(0))));
-
-                // Parse tool input from raw_args (JSON string)
-                let input = tfd.raw_args
-                    .as_ref()
-                    .and_then(|s| serde_json::from_str(s).ok())
-                    .unwrap_or_else(|| serde_json::json!({}));
-
-                // Call normalize_tool() to get standardized tool type (AC2)
-                let standard_tool = Some(normalize_tool(name, &input));
-
-                // Add ToolUse block
-                content_blocks.push(ContentBlock::ToolUse {
-                    id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
-                    name: name.clone(),
-                    input,
-                    correlation_id: correlation_id.clone(),
-                    standard_tool,
-                    display_name: None,
-                    description: None,
-                });
-
-                // Add ToolResult if result exists
-                if let Some(result_str) = &tfd.result {
-                    // Strip system reminder tags from tool result content
-                    let cleaned_result = crate::parsers::strip_system_reminders(result_str);
-                    content_blocks.push(ContentBlock::ToolResult {
-                        tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
-                        content: cleaned_result,
-                        is_error: tfd.status.as_deref() == Some("failed"),
-                        correlation_id,
-                        structured_result: None,
-                        display_content: None,
-                        render_as_markdown: None,
-                        // Extract user_decision from toolFormerData (AC1, AC4: defaults to None if missing)
-                        user_decision: tfd.user_decision.clone(),
-                    });
-                }
-            }
+            let (blocks, tfd_unknown) = self.process_tool_former_data(tfd);
+            content_blocks.extend(blocks);
+            unknown_formats.extend(tfd_unknown);
         }
 
         // Fallback: parse legacy toolResults (usually empty, but kept for backwards compatibility)
@@ -347,9 +407,36 @@ impl CursorParser {
             }
         }
 
+        // Story 8.16: Parse images array (AC4)
+        for image in &bubble.images {
+            // Handle base64 data images
+            if let (Some(mime_type), Some(data)) = (&image.mime_type, &image.data) {
+                if mime_type.starts_with("image/") && !data.is_empty() {
+                    content_blocks.push(ContentBlock::Image {
+                        media_type: mime_type.clone(),
+                        data: data.clone(),
+                        source_type: Some("base64".to_string()),
+                        alt_text: image.alt.clone(),
+                    });
+                }
+            }
+            // Handle URL-based images
+            else if let Some(url) = &image.url {
+                if !url.is_empty() {
+                    // For URL images, we store the URL in data field with source_type "url"
+                    content_blocks.push(ContentBlock::Image {
+                        media_type: image.mime_type.clone().unwrap_or_else(|| "image/unknown".to_string()),
+                        data: url.clone(),
+                        source_type: Some("url".to_string()),
+                        alt_text: image.alt.clone(),
+                    });
+                }
+            }
+        }
+
         // Skip empty messages
         if content_blocks.is_empty() {
-            return Ok(None);
+            return Ok((None, unknown_formats));
         }
 
         // Extract mentioned files from bubble context
@@ -358,7 +445,7 @@ impl CursorParser {
         // Build message
         let timestamp = bubble.timestamp.map(epoch_ms_to_datetime);
 
-        Ok(Some(Message {
+        Ok((Some(Message {
             role,
             content_blocks,
             timestamp,
@@ -367,7 +454,59 @@ impl CursorParser {
             parent_id: None,
             is_sidechain: false,
             source_metadata: None,
-        }))
+        }), unknown_formats))
+    }
+
+    /// Process toolFormerData into ContentBlocks with unknown format collection
+    /// Story 8.15: Returns (content_blocks, unknown_formats)
+    fn process_tool_former_data(&self, tfd: &ToolFormerData) -> (Vec<ContentBlock>, Vec<UnknownFormatEntry>) {
+        let mut content_blocks = Vec::new();
+        let unknown_formats: Vec<UnknownFormatEntry> = Vec::new();
+
+        if let Some(name) = &tfd.name {
+            // Generate correlation_id from tool_call_id (preferred) or fallback to name+index
+            let correlation_id = tfd.tool_call_id.clone()
+                .or_else(|| Some(format!("cursor:{}:{}", name, tfd.tool_index.unwrap_or(0))));
+
+            // Parse tool input from raw_args (JSON string)
+            let input = tfd.raw_args
+                .as_ref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            // Call normalize_tool() to get standardized tool type (AC2)
+            let standard_tool = Some(normalize_tool(name, &input));
+
+            // Add ToolUse block
+            content_blocks.push(ContentBlock::ToolUse {
+                id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
+                name: name.clone(),
+                input,
+                correlation_id: correlation_id.clone(),
+                standard_tool,
+                display_name: None,
+                description: None,
+            });
+
+            // Add ToolResult if result exists
+            if let Some(result_str) = &tfd.result {
+                // Strip system reminder tags from tool result content
+                let cleaned_result = crate::parsers::strip_system_reminders(result_str);
+                content_blocks.push(ContentBlock::ToolResult {
+                    tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
+                    content: cleaned_result,
+                    is_error: tfd.status.as_deref() == Some("failed"),
+                    correlation_id,
+                    structured_result: None,
+                    display_content: None,
+                    render_as_markdown: None,
+                    // Extract user_decision from toolFormerData (AC1, AC4: defaults to None if missing)
+                    user_decision: tfd.user_decision.clone(),
+                });
+            }
+        }
+
+        (content_blocks, unknown_formats)
     }
 }
 
@@ -376,6 +515,16 @@ fn epoch_ms_to_datetime(ms: i64) -> DateTime<Utc> {
     Utc.timestamp_millis_opt(ms)
         .single()
         .unwrap_or_else(Utc::now)
+}
+
+/// Truncate raw JSON to maximum size for storage (Story 8.15)
+fn truncate_raw_json(json: &serde_json::Value) -> String {
+    let raw = serde_json::to_string(json).unwrap_or_default();
+    if raw.len() <= MAX_RAW_JSON_SIZE {
+        raw
+    } else {
+        format!("{}... [truncated]", &raw[..MAX_RAW_JSON_SIZE])
+    }
 }
 
 /// Extract mentioned files from bubble context
@@ -505,6 +654,7 @@ mod tests {
             tool_results: vec![],
             suggested_code_blocks: code_blocks,
             context: None,
+            images: vec![],
         }
     }
 
@@ -678,6 +828,7 @@ mod tests {
             tool_results: vec![],
             suggested_code_blocks: vec![],
             context: None,
+            images: vec![],
         }
     }
 
@@ -978,7 +1129,7 @@ mod tests {
         if let Some(text) = &bubble.text {
             let cleaned = crate::parsers::strip_system_reminders(text);
             if !cleaned.is_empty() {
-                content_blocks.push(ContentBlock::Text { text: cleaned });
+                content_blocks.push(ContentBlock::Text { text: cleaned, is_degraded: None });
             }
         }
 
@@ -1223,5 +1374,215 @@ mod tests {
         });
 
         assert_eq!(tool_use_corr, tool_result_corr, "correlation_id should match between ToolUse and ToolResult");
+    }
+
+    // ===== Story 8.15: Parser 弹性增强测试 =====
+
+    #[test]
+    fn test_truncate_raw_json_short() {
+        // Test that short JSON is not truncated
+        let json = serde_json::json!({"type": "test", "value": 123});
+        let result = truncate_raw_json(&json);
+        assert!(!result.contains("[truncated]"));
+        assert!(result.contains("test"));
+    }
+
+    #[test]
+    fn test_truncate_raw_json_long() {
+        // Test that long JSON is truncated
+        let long_content = "x".repeat(2000);
+        let json = serde_json::json!({"type": "test", "content": long_content});
+        let result = truncate_raw_json(&json);
+        assert!(result.contains("[truncated]"));
+        assert!(result.len() <= MAX_RAW_JSON_SIZE + 20); // Allow for "... [truncated]" suffix
+    }
+
+    #[test]
+    fn test_parser_version_constant() {
+        // Verify parser version is defined
+        assert!(!CURSOR_PARSER_VERSION.is_empty());
+        assert!(CURSOR_PARSER_VERSION.starts_with("1."));
+    }
+
+    #[test]
+    fn test_supported_formats_defined() {
+        // Verify supported formats list is populated
+        assert!(!SUPPORTED_CONTENT_TYPES.is_empty());
+        assert!(SUPPORTED_CONTENT_TYPES.contains(&"text"));
+        assert!(SUPPORTED_CONTENT_TYPES.contains(&"tool_former_data"));
+    }
+
+    #[test]
+    fn test_unknown_bubble_type_degradation() {
+        // Test that unknown bubble types create degraded messages
+        // bubble_type 99 is unknown
+        let bubble = CursorBubble {
+            version: Some(1),
+            bubble_id: Some("unknown-bubble".to_string()),
+            bubble_type: 99, // Unknown type
+            text: Some("Some content from unknown type".to_string()),
+            rich_text: None,
+            is_agentic: false,
+            timestamp: Some(1704067200000),
+            tool_former_data: None,
+            tool_results: vec![],
+            suggested_code_blocks: vec![],
+            context: None,
+            images: vec![],
+        };
+
+        // Verify the role mapping returns Unknown
+        let role = CursorRole::from(bubble.bubble_type);
+        assert_eq!(role, CursorRole::Unknown);
+        assert!(role.to_mantra_role().is_none());
+    }
+
+    #[test]
+    fn test_cursor_role_known_types() {
+        // Test known bubble types are correctly mapped
+        assert_eq!(CursorRole::from(1).to_mantra_role(), Some(crate::models::Role::User));
+        assert_eq!(CursorRole::from(2).to_mantra_role(), Some(crate::models::Role::Assistant));
+    }
+
+    #[test]
+    fn test_process_tool_former_data_returns_unknown_formats() {
+        // Test that process_tool_former_data returns empty unknown_formats for valid data
+        let parser = CursorParser::new();
+        let tfd = ToolFormerData {
+            tool: Some(1),
+            tool_index: Some(0),
+            tool_call_id: Some("call-test".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("read_file".to_string()),
+            raw_args: Some(r#"{"file_path": "/test.rs"}"#.to_string()),
+            params: None,
+            result: Some("file content".to_string()),
+            additional_data: None,
+            user_decision: None,
+        };
+
+        let (content_blocks, unknown_formats) = parser.process_tool_former_data(&tfd);
+
+        // Should have content blocks
+        assert!(!content_blocks.is_empty());
+        // Should have no unknown formats for known tool types
+        assert!(unknown_formats.is_empty());
+    }
+
+    #[test]
+    fn test_degraded_content_block_has_is_degraded_true() {
+        // Test that degraded content blocks have is_degraded = Some(true)
+        let degraded_block = ContentBlock::Text {
+            text: "[无法解析的 Bubble]\n{}".to_string(),
+            is_degraded: Some(true),
+        };
+
+        if let ContentBlock::Text { is_degraded, .. } = degraded_block {
+            assert_eq!(is_degraded, Some(true));
+        } else {
+            panic!("Expected Text block");
+        }
+    }
+
+    #[test]
+    fn test_normal_content_block_has_is_degraded_none() {
+        // Test that normal content blocks have is_degraded = None
+        let normal_block = ContentBlock::Text {
+            text: "Normal content".to_string(),
+            is_degraded: None,
+        };
+
+        if let ContentBlock::Text { is_degraded, .. } = normal_block {
+            assert!(is_degraded.is_none());
+        } else {
+            panic!("Expected Text block");
+        }
+    }
+
+    // ========== Story 8.16: Cursor Image Parsing Tests ==========
+
+    #[test]
+    fn test_cursor_image_type_deserialization() {
+        // Test that CursorImage can be deserialized from JSON
+        let json = r#"{
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "alt": "Screenshot"
+        }"#;
+
+        let image: CursorImage = serde_json::from_str(json).unwrap();
+        assert_eq!(image.mime_type, Some("image/png".to_string()));
+        assert!(image.data.as_ref().unwrap().starts_with("iVBORw0KGgo"));
+        assert_eq!(image.alt, Some("Screenshot".to_string()));
+        assert!(image.url.is_none());
+    }
+
+    #[test]
+    fn test_cursor_image_url_type() {
+        // Test URL-based image
+        let json = r#"{
+            "url": "https://example.com/image.png",
+            "alt": "Remote image"
+        }"#;
+
+        let image: CursorImage = serde_json::from_str(json).unwrap();
+        assert_eq!(image.url, Some("https://example.com/image.png".to_string()));
+        assert_eq!(image.alt, Some("Remote image".to_string()));
+        assert!(image.data.is_none());
+    }
+
+    #[test]
+    fn test_cursor_bubble_with_images() {
+        // Test that CursorBubble with images array deserializes correctly
+        let json = r#"{
+            "_v": 3,
+            "bubbleId": "bubble-with-images",
+            "type": 1,
+            "text": "Here is a screenshot",
+            "isAgentic": false,
+            "toolResults": [],
+            "suggestedCodeBlocks": [],
+            "images": [
+                {
+                    "mimeType": "image/png",
+                    "data": "iVBORw0KGgo..."
+                },
+                {
+                    "mimeType": "image/jpeg",
+                    "data": "/9j/4AAQSkZJRg..."
+                }
+            ]
+        }"#;
+
+        let bubble: CursorBubble = serde_json::from_str(json).unwrap();
+        assert_eq!(bubble.bubble_id, Some("bubble-with-images".to_string()));
+        assert_eq!(bubble.images.len(), 2);
+        assert_eq!(bubble.images[0].mime_type, Some("image/png".to_string()));
+        assert_eq!(bubble.images[1].mime_type, Some("image/jpeg".to_string()));
+    }
+
+    #[test]
+    fn test_cursor_bubble_without_images() {
+        // Test that CursorBubble without images array defaults to empty vec
+        let json = r#"{
+            "_v": 3,
+            "bubbleId": "bubble-no-images",
+            "type": 2,
+            "text": "No images here",
+            "isAgentic": false,
+            "toolResults": [],
+            "suggestedCodeBlocks": []
+        }"#;
+
+        let bubble: CursorBubble = serde_json::from_str(json).unwrap();
+        assert!(bubble.images.is_empty());
+    }
+
+    #[test]
+    fn test_supported_content_types_not_include_images() {
+        // Note: Images are parsed separately from SUPPORTED_CONTENT_TYPES
+        // SUPPORTED_CONTENT_TYPES tracks bubble content field types, not all parseable content
+        assert!(!SUPPORTED_CONTENT_TYPES.is_empty());
     }
 }

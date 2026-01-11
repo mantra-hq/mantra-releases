@@ -114,6 +114,12 @@ export interface ContentBlock {
   thinkingTimestamp?: string;
   /** 代码内容 (code_suggestion 专用, Cursor) */
   code?: string;
+  // === Story 8.15: Parser 弹性增强 ===
+  /**
+   * 是否为降级内容块
+   * Story 8.15: 当 Parser 遇到未知格式时，会创建降级的 Text 块保留原始内容
+   */
+  isDegraded?: boolean;
 }
 
 /**
@@ -480,5 +486,40 @@ export interface SessionMetadata {
   instructions?: string;
   /** 来源特定元数据透传 */
   sourceMetadata?: Record<string, unknown>;
+  // === Story 8.15: Parser 弹性增强 ===
+  /** Parser 信息 */
+  parserInfo?: ParserInfo;
+  /** 未识别格式记录 */
+  unknownFormats?: UnknownFormatEntry[];
+}
+
+// === Story 8.15: Parser 弹性增强类型定义 ===
+
+/**
+ * Parser 信息
+ * Story 8.15: 对应后端 ParserInfo 结构
+ */
+export interface ParserInfo {
+  /** Parser 版本号 (e.g., "1.0.0") */
+  parserVersion: string;
+  /** 支持的格式列表 */
+  supportedFormats: string[];
+  /** 检测到的源工具版本 */
+  detectedSourceVersion?: string;
+}
+
+/**
+ * 未识别格式记录
+ * Story 8.15: 对应后端 UnknownFormatEntry 结构
+ */
+export interface UnknownFormatEntry {
+  /** 来源 (e.g., "claude", "gemini", "cursor", "codex") */
+  source: string;
+  /** 未识别的类型名称 */
+  typeName: string;
+  /** 原始 JSON 内容 (截断至 1KB) */
+  rawJson: string;
+  /** 发现时间戳 (ISO 8601) */
+  timestamp: string;
 }
 
