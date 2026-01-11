@@ -244,10 +244,42 @@ export function ContentBlockRenderer({
             onClick={
               isTerminalTool(block.standardTool) ? () => {
                 // 终端类工具 - 点击卡片打开终端 Tab
+                // Story 8.11 fix: 优先使用 structuredResult 中的 stdout/stderr/exitCode
+                const structuredResult = pairInfo?.structuredResult;
+                let terminalOutput = pairInfo?.outputContent ?? "";
+                let exitCode: number | undefined;
+
+                if (structuredResult?.type === "shell_exec") {
+                  // 优先使用结构化输出
+                  const stdout = structuredResult.stdout ?? "";
+                  const stderr = structuredResult.stderr ?? "";
+                  // 组合 stdout 和 stderr
+                  terminalOutput = stdout + (stderr ? (stdout ? "\n" : "") + stderr : "");
+                  exitCode = structuredResult.exitCode;
+                } else if (terminalOutput.startsWith("{")) {
+                  // 回退: 尝试从 JSON 格式的 content 中解析输出
+                  // 某些后端返回格式: {"output": "...", "metadata": {"exit_code": 0}}
+                  try {
+                    const parsed = JSON.parse(terminalOutput);
+                    if (typeof parsed.output === "string") {
+                      terminalOutput = parsed.output;
+                    }
+                    // 尝试提取 exit_code
+                    if (parsed.metadata?.exit_code !== undefined) {
+                      exitCode = parsed.metadata.exit_code;
+                    } else if (parsed.exit_code !== undefined) {
+                      exitCode = parsed.exit_code;
+                    }
+                  } catch {
+                    // JSON 解析失败，保持原样
+                  }
+                }
+
                 openTerminalDetail({
                   command: getToolCommand(block.standardTool),
-                  output: pairInfo?.outputContent ?? "",
+                  output: terminalOutput,
                   isError: isError,
+                  exitCode,
                 });
               } : isFileEditTool(block.standardTool) ? () => {
                 // Story 8.11 AC#9: file_edit 工具 - 点击卡片在右侧代码面板显示 diff 视图

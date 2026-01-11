@@ -13,7 +13,7 @@ import type { MantraSession, MantraMessage, MantraContentBlock } from "@/lib/ses
 import type { SessionSummary } from "@/lib/project-ipc";
 import type { SanitizationRule } from "@/components/sanitizer/types";
 import type { DefaultPaths } from "@/lib/import-ipc";
-import type { StandardToolFileEdit } from "@/types/message";
+import type { StandardToolFileEdit, StandardToolShellExec, ToolResultDataShellExec } from "@/types/message";
 
 // =============================================================================
 // Mock Projects (AC #3: 2-3 个项目)
@@ -466,6 +466,164 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
       ]),
     ],
   },
+  // Shell 命令执行测试会话 (Story 8.11 fix)
+  "mock-session-shell-exec": {
+    id: "mock-session-shell-exec",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-13T10:00:00Z",
+    updated_at: "2025-01-13T12:00:00Z",
+    metadata: {
+      model: "claude-3-opus",
+      total_tokens: 1500,
+      title: "终端命令执行测试",
+      original_path: "/mock/logs/shell-exec-test.json",
+    },
+    messages: [
+      createMockMessage("user", "帮我运行测试", "2025-01-13T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来运行测试。", "2025-01-13T10:01:00Z", [
+        { type: "text", text: "执行测试命令：" },
+        {
+          type: "tool_use",
+          id: "tool-shell-1",
+          name: "Bash",
+          input: {
+            command: "npm test",
+          },
+          standard_tool: {
+            type: "shell_exec",
+            command: "npm test",
+            cwd: "/mock/projects/alpha",
+          } as StandardToolShellExec,
+        },
+      ]),
+      createMockMessage("assistant", "测试完成。", "2025-01-13T10:02:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-shell-1",
+          content: "Test Suites: 5 passed, 5 total\nTests: 25 passed, 25 total\nTime: 3.5s",
+          is_error: false,
+          structured_result: {
+            type: "shell_exec",
+            exitCode: 0,
+            stdout: "Test Suites: 5 passed, 5 total\nTests: 25 passed, 25 total\nTime: 3.5s",
+            stderr: "",
+          } as ToolResultDataShellExec,
+        },
+        { type: "text", text: "所有测试都通过了！" },
+      ]),
+      createMockMessage("user", "再运行一下 lint 检查", "2025-01-13T10:05:00Z"),
+      createMockMessage("assistant", "好的，运行 lint 检查。", "2025-01-13T10:06:00Z", [
+        { type: "text", text: "执行 lint 命令：" },
+        {
+          type: "tool_use",
+          id: "tool-shell-2",
+          name: "Bash",
+          input: {
+            command: "npm run lint",
+          },
+          standard_tool: {
+            type: "shell_exec",
+            command: "npm run lint",
+            cwd: "/mock/projects/alpha",
+          } as StandardToolShellExec,
+        },
+      ]),
+      createMockMessage("assistant", "Lint 检查有问题。", "2025-01-13T10:07:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-shell-2",
+          content: "/src/utils.ts:15:1 warning Missing return type",
+          is_error: true,
+          structured_result: {
+            type: "shell_exec",
+            exitCode: 1,
+            stdout: "",
+            stderr: "/src/utils.ts:15:1 warning Missing return type",
+          } as ToolResultDataShellExec,
+        },
+        { type: "text", text: "发现一个 lint 警告，需要添加返回类型。" },
+      ]),
+    ],
+  },
+  // Shell 命令执行测试会话 - JSON 格式 content (无 structured_result)
+  // 模拟真实后端数据格式
+  "mock-session-shell-json": {
+    id: "mock-session-shell-json",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-14T10:00:00Z",
+    updated_at: "2025-01-14T12:00:00Z",
+    metadata: {
+      model: "claude-3-opus",
+      total_tokens: 1500,
+      title: "终端命令 JSON 格式测试",
+      original_path: "/mock/logs/shell-json-test.json",
+    },
+    messages: [
+      createMockMessage("user", "列出当前目录", "2025-01-14T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来列出目录。", "2025-01-14T10:01:00Z", [
+        { type: "text", text: "执行 ls 命令：" },
+        {
+          type: "tool_use",
+          id: "tool-shell-json-1",
+          name: "Bash",
+          input: {
+            command: "ls -la",
+          },
+          standard_tool: {
+            type: "shell_exec",
+            command: "ls -la",
+            cwd: "/mock/projects/alpha",
+          } as StandardToolShellExec,
+        },
+      ]),
+      createMockMessage("assistant", "目录列表如下。", "2025-01-14T10:02:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-shell-json-1",
+          // 模拟真实后端返回的 JSON 格式 content (无 structured_result)
+          content: JSON.stringify({
+            output: "总计 48512\ndrwxr-xr-x 16 decker decker 4096 10月 13 13:22 .\ndrwxrwxr-x  7 decker decker 4096 10月 13 08:17 ..\n-rw-r--r--  1 decker decker  236 10月 12 11:00 README.md\ndrwxr-xr-x  3 decker decker 4096 10月 13 11:00 src",
+            metadata: { exit_code: 0, duration_seconds: 0.2 },
+          }),
+          is_error: false,
+          // 注意：没有 structured_result，测试 JSON 解析回退逻辑
+        },
+        { type: "text", text: "以上是目录内容。" },
+      ]),
+      createMockMessage("user", "运行一个会失败的命令", "2025-01-14T10:05:00Z"),
+      createMockMessage("assistant", "好的，执行命令。", "2025-01-14T10:06:00Z", [
+        { type: "text", text: "执行命令：" },
+        {
+          type: "tool_use",
+          id: "tool-shell-json-2",
+          name: "Bash",
+          input: {
+            command: "cat nonexistent.txt",
+          },
+          standard_tool: {
+            type: "shell_exec",
+            command: "cat nonexistent.txt",
+            cwd: "/mock/projects/alpha",
+          } as StandardToolShellExec,
+        },
+      ]),
+      createMockMessage("assistant", "命令执行失败。", "2025-01-14T10:07:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-shell-json-2",
+          // 模拟失败命令的 JSON 格式 content
+          content: JSON.stringify({
+            output: "cat: nonexistent.txt: No such file or directory",
+            metadata: { exit_code: 1, duration_seconds: 0.1 },
+          }),
+          is_error: true,
+        },
+        { type: "text", text: "文件不存在。" },
+      ]),
+    ],
+  },
 };
 
 // =============================================================================
@@ -587,7 +745,7 @@ export function getSessionById(sessionId: string): MantraSession | null {
  * 根据会话 ID 获取所属项目
  */
 export function getProjectBySessionId(sessionId: string): Project | null {
-  if (sessionId.includes("alpha") || sessionId === "mock-session-file-edit" || sessionId === "mock-session-dart-highlight") {
+  if (sessionId.includes("alpha") || sessionId === "mock-session-file-edit" || sessionId === "mock-session-dart-highlight" || sessionId === "mock-session-shell-exec" || sessionId === "mock-session-shell-json") {
     return MOCK_PROJECTS.find((p) => p.id === "mock-project-alpha") ?? null;
   }
   if (sessionId.includes("beta")) {

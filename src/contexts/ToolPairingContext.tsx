@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import type { NarrativeMessage } from "@/types/message";
+import type { NarrativeMessage, ToolResultData } from "@/types/message";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 
 /** 配对信息 */
@@ -20,6 +20,8 @@ export interface ToolPairInfo {
   callMessageId?: string;
   /** tool_result 所在的消息 ID */
   outputMessageId?: string;
+  /** Story 8.11 fix: 结构化结果数据 (shell_exec 等) */
+  structuredResult?: ToolResultData;
 }
 
 /** 滚动回调类型 */
@@ -60,6 +62,8 @@ function buildPairMap(messages: NarrativeMessage[]): Map<string, ToolPairInfo> {
           existing.outputContent = block.content;
           existing.isError = block.isError;
           existing.outputMessageId = message.id;
+          // Story 8.11 fix: 保存结构化结果 (shell_exec exitCode/stdout/stderr 等)
+          existing.structuredResult = block.structuredResult;
         } else {
           // tool_result 先于 tool_use 出现（理论上不应该发生）
           map.set(block.toolUseId, {
@@ -68,6 +72,7 @@ function buildPairMap(messages: NarrativeMessage[]): Map<string, ToolPairInfo> {
             outputContent: block.content,
             isError: block.isError,
             outputMessageId: message.id,
+            structuredResult: block.structuredResult,
           });
         }
       }
