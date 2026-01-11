@@ -12,7 +12,8 @@ import type { Project, SnapshotResult } from "@/types/project";
 import type { MantraSession, MantraMessage, MantraContentBlock } from "@/lib/session-utils";
 import type { SessionSummary } from "@/lib/project-ipc";
 import type { SanitizationRule } from "@/components/sanitizer/types";
-import type { DefaultPaths, ImportFileDoneEvent, ImportProgressEvent } from "@/lib/import-ipc";
+import type { DefaultPaths } from "@/lib/import-ipc";
+import type { StandardToolFileEdit } from "@/types/message";
 
 // =============================================================================
 // Mock Projects (AC #3: 2-3 个项目)
@@ -350,9 +351,9 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
           standard_tool: {
             type: "file_edit",
             path: "src/utils/calculator.ts",
-            old_string: "function add(a, b) {\n  return a - b; // Bug: should be +\n}",
-            new_string: "function add(a, b) {\n  return a + b; // Fixed\n}",
-          },
+            oldString: "function add(a, b) {\n  return a - b; // Bug: should be +\n}",
+            newString: "function add(a, b) {\n  return a + b; // Fixed\n}",
+          } as StandardToolFileEdit,
         },
       ]),
       createMockMessage("assistant", "文件已修改。", "2025-01-11T10:02:00Z", [
@@ -379,8 +380,8 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
           standard_tool: {
             type: "file_edit",
             path: "src/utils/calculator.ts",
-            new_string: "function multiply(a, b) {\n  return a * b;\n}",
-          },
+            newString: "function multiply(a, b) {\n  return a * b;\n}",
+          } as StandardToolFileEdit,
         },
       ]),
       createMockMessage("assistant", "新函数已添加。", "2025-01-11T10:07:00Z", [

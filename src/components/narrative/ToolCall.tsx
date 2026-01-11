@@ -14,7 +14,8 @@ import { ChevronRight, Wrench, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isFileTool, isFileEditTool, getToolPath, getToolContent } from "@/lib/tool-utils";
 import type { StandardTool } from "@/types/message";
-import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import { FileEditDiff } from "./FileEditDiff";
 
 export interface ToolCallProps {
@@ -61,8 +62,9 @@ export function ToolCall({
   const formattedInput = formatJson(toolInput);
   const hasInput = toolInput && Object.keys(toolInput).length > 0;
 
-  // 从 store 获取 setCode 方法
-  const setCode = useTimeTravelStore((state) => state.setCode);
+  // 使用 EditorStore 的 openTab 和 DetailPanelStore 的 setActiveRightTab
+  const openTab = useEditorStore((state) => state.openTab);
+  const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
 
   // Story 8.12: 使用 standardTool 判断工具类型和提取内容
   const isFileOperation = isFileTool(standardTool);
@@ -71,17 +73,28 @@ export function ToolCall({
   const codeContent = getToolContent(standardTool)
     ?? (isFileEditTool(standardTool) && standardTool?.type === "file_edit" ? standardTool.newString : null);
 
-  // 处理"查看代码"按钮点击
+  // 处理"查看代码"按钮点击 - 使用 openTab 打开文件
   const handleViewCode = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // 阻止触发折叠
       if (filePath && codeContent) {
-        setCode(codeContent, filePath);
+        // 对于 file_edit 工具，同时传入 oldString 用于 diff 视图
+        if (isFileEditTool(standardTool) && standardTool.type === "file_edit") {
+          openTab(filePath, {
+            preview: true,
+            content: codeContent,
+            previousContent: standardTool.oldString,
+          });
+        } else {
+          openTab(filePath, {
+            preview: true,
+            content: codeContent,
+          });
+        }
+        setActiveRightTab("code");
       }
-      // 对于 Read 工具，代码在 tool_result 中，用户需要点击结果查看
-      // 不再显示占位文本
     },
-    [filePath, codeContent, setCode]
+    [filePath, codeContent, standardTool, openTab, setActiveRightTab]
   );
 
   // 只有当有代码内容时才显示查看按钮 (Write/Edit 工具)

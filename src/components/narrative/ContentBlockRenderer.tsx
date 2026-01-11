@@ -8,8 +8,8 @@
  */
 
 import { cn } from "@/lib/utils";
-import { isTerminalTool, isFileTool, isFileEditTool, isTodoManageTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
-import type { ContentBlock, StandardToolFileEdit } from "@/types/message";
+import { isTerminalTool, isFileEditTool, isFileWriteTool, isFileReadTool, isTodoManageTool, getToolPath, getToolCommand } from "@/lib/tool-utils";
+import type { ContentBlock, StandardToolFileEdit, StandardToolFileWrite } from "@/types/message";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -261,11 +261,22 @@ export function ContentBlockRenderer({
                   });
                   setActiveRightTab("code");
                 }
-              } : isFileTool(block.standardTool) ? () => {
-                // 其他文件类工具 - 点击卡片打开文件到右侧代码面板
+              } : isFileWriteTool(block.standardTool) ? () => {
+                // file_write 工具 - 使用 standardTool.content 作为文件内容
+                const fileWriteTool = block.standardTool as StandardToolFileWrite;
+                const filePath = fileWriteTool.path;
+                if (filePath) {
+                  openTab(filePath, {
+                    preview: true,
+                    content: fileWriteTool.content,
+                  });
+                  setActiveRightTab("code");
+                }
+              } : isFileReadTool(block.standardTool) ? () => {
+                // file_read 工具 - 使用 tool_result 的内容作为文件内容
                 const filePath = getToolPath(block.standardTool);
                 if (filePath) {
-                  // 使用 tool_result 的内容作为文件内容（如果有配对输出）
+                  // tool_result 的内容应该是文件内容（Parser 已处理行号前缀）
                   const fileContent = pairInfo?.outputContent;
                   openTab(filePath, {
                     preview: true,

@@ -13,7 +13,8 @@ import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight, Check, X, Code2, FileText, Edit3, Terminal, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTimeTravelStore } from "@/stores/useTimeTravelStore";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import type { ToolResultData } from "@/types/message";
 
 export interface ToolOutputProps {
@@ -165,8 +166,9 @@ export function ToolOutput({
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
-  // 从 store 获取 setCode 方法
-  const setCode = useTimeTravelStore((state) => state.setCode);
+  // 使用 EditorStore 的 openTab 和 DetailPanelStore 的 setActiveRightTab
+  const openTab = useEditorStore((state) => state.openTab);
+  const setActiveRightTab = useDetailPanelStore((state) => state.setActiveRightTab);
 
   // 悬停处理
   const handleMouseEnter = React.useCallback(() => {
@@ -210,16 +212,20 @@ export function ToolOutput({
   );
 
   // 处理"查看代码"按钮点击
-  // Story 8.12: 使用 structuredResult 获取文件路径，Parser 已处理行号前缀
+  // 使用 openTab 在右侧代码面板打开文件
   const handleViewCode = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       // 优先使用 structuredResult 中的路径，然后是传入的 filePath
       const path = getFilePathFromResult(structuredResult, filePath);
-      // Story 8.12: Parser 已处理行号前缀，直接使用 content
-      setCode(content, path);
+      // 使用 openTab 打开文件，传入内容
+      openTab(path, {
+        preview: true,
+        content: content,
+      });
+      setActiveRightTab("code");
     },
-    [content, filePath, structuredResult, setCode]
+    [content, filePath, structuredResult, openTab, setActiveRightTab]
   );
 
   // 是否显示查看代码按钮
