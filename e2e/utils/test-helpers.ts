@@ -250,6 +250,7 @@ export const TEST_SESSION_IDS = {
   GAMMA_1: "mock-session-gamma-1",
   GAMMA_2: "mock-session-gamma-2",
   FILE_EDIT: "mock-session-file-edit", // Story 8.11: FileEdit Diff 测试
+  DART_HIGHLIGHT: "mock-session-dart-highlight", // Dart 语法高亮测试
 } as const;
 
 /**

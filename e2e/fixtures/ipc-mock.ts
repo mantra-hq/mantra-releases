@@ -12,6 +12,7 @@ import {
   MOCK_SESSION_SUMMARIES,
   MOCK_SESSIONS,
   MOCK_SNAPSHOT,
+  MOCK_DART_CODE,
   MOCK_BUILTIN_RULES,
   MOCK_DEFAULT_PATHS,
   MOCK_DISCOVERED_FILES,
@@ -131,14 +132,45 @@ export async function mockInvoke<T>(cmd: string, args?: InvokeArgs): Promise<T> 
     }
 
     case "get_file_at_head": {
+      const filePath = getArg<string>(args, "filePath");
+      // 为 Dart 文件返回 Dart 代码
+      if (filePath?.endsWith(".dart")) {
+        return {
+          content: MOCK_DART_CODE,
+          commit_hash: "dart123abc",
+          commit_message: "feat: add user model",
+          commit_timestamp: 1704153600,
+        } as T;
+      }
       return MOCK_SNAPSHOT as T;
     }
 
     case "get_snapshot_at_time": {
+      const filePath = getArg<string>(args, "filePath");
+      // 为 Dart 文件返回 Dart 代码
+      if (filePath?.endsWith(".dart")) {
+        return {
+          content: MOCK_DART_CODE,
+          commit_hash: "dart123abc",
+          commit_message: "feat: add user model",
+          commit_timestamp: 1704153600,
+        } as T;
+      }
       return MOCK_SNAPSHOT as T;
     }
 
     case "get_snapshot_with_fallback": {
+      const filePath = getArg<string>(args, "filePath");
+      // 为 Dart 文件返回 Dart 代码
+      if (filePath?.endsWith(".dart")) {
+        return {
+          content: MOCK_DART_CODE,
+          commit_hash: "dart123abc",
+          commit_message: "feat: add user model",
+          commit_timestamp: 1704153600,
+          source: "git",
+        } as T;
+      }
       return {
         ...MOCK_SNAPSHOT,
         source: "git",

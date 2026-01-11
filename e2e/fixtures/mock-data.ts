@@ -394,6 +394,77 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
       ]),
     ],
   },
+  // Dart 语法高亮测试会话
+  "mock-session-dart-highlight": {
+    id: "mock-session-dart-highlight",
+    source: "claude",
+    cwd: "/mock/projects/alpha",
+    created_at: "2025-01-12T10:00:00Z",
+    updated_at: "2025-01-12T12:00:00Z",
+    metadata: {
+      model: "claude-3-opus",
+      total_tokens: 2000,
+      title: "Dart 语法高亮测试",
+      original_path: "/mock/logs/dart-highlight-test.json",
+    },
+    messages: [
+      createMockMessage("user", "帮我写一个 Dart 类", "2025-01-12T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来创建一个 Dart 类。", "2025-01-12T10:01:00Z", [
+        { type: "text", text: "创建 User 类：" },
+        {
+          type: "tool_use",
+          id: "tool-dart-1",
+          name: "Write",
+          input: {
+            file_path: "lib/models/user.dart",
+            content: `class User {
+  final String name;
+  final int age;
+
+  User({required this.name, required this.age});
+
+  void greet() {
+    print('Hello, I am \$name and I am \$age years old.');
+  }
+}`,
+          },
+          standard_tool: {
+            type: "file_write",
+            path: "lib/models/user.dart",
+            content: `class User {
+  final String name;
+  final int age;
+
+  User({required this.name, required this.age});
+
+  void greet() {
+    print('Hello, I am \$name and I am \$age years old.');
+  }
+}`,
+          },
+        },
+      ]),
+      createMockMessage("assistant", "Dart 类已创建。", "2025-01-12T10:02:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "tool-dart-1",
+          // 工具输出内容应该是实际的代码（用于代码面板显示）
+          content: `class User {
+  final String name;
+  final int age;
+
+  User({required this.name, required this.age});
+
+  void greet() {
+    print('Hello, I am \$name and I am \$age years old.');
+  }
+}`,
+          is_error: false,
+        },
+        { type: "text", text: "User 类已创建完成！" },
+      ]),
+    ],
+  },
 };
 
 // =============================================================================
@@ -410,6 +481,18 @@ export function hello() {
   commit_message: "feat: add hello function",
   commit_timestamp: 1704067200, // 2024-01-01 00:00:00 UTC
 };
+
+// Dart 代码用于语法高亮测试
+export const MOCK_DART_CODE = `class User {
+  final String name;
+  final int age;
+
+  User({required this.name, required this.age});
+
+  void greet() {
+    print('Hello, I am \$name and I am \$age years old.');
+  }
+}`;
 
 // =============================================================================
 // Mock Sanitization Data
@@ -503,7 +586,7 @@ export function getSessionById(sessionId: string): MantraSession | null {
  * 根据会话 ID 获取所属项目
  */
 export function getProjectBySessionId(sessionId: string): Project | null {
-  if (sessionId.includes("alpha") || sessionId === "mock-session-file-edit") {
+  if (sessionId.includes("alpha") || sessionId === "mock-session-file-edit" || sessionId === "mock-session-dart-highlight") {
     return MOCK_PROJECTS.find((p) => p.id === "mock-project-alpha") ?? null;
   }
   if (sessionId.includes("beta")) {

@@ -31,10 +31,8 @@ import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
 
-/**
- * 语言映射表 - 根据文件扩展名识别语言
- */
-const LANGUAGE_MAP: Record<string, string> = {
+// 后备语言映射表 (Monaco 未加载时使用)
+const FALLBACK_LANGUAGE_MAP: Record<string, string> = {
   ".ts": "typescript",
   ".tsx": "typescript",
   ".js": "javascript",
@@ -56,10 +54,46 @@ const LANGUAGE_MAP: Record<string, string> = {
   ".xml": "xml",
   ".vue": "vue",
   ".svelte": "svelte",
+  ".dart": "dart",
+  ".kt": "kotlin",
+  ".swift": "swift",
+  ".rb": "ruby",
+  ".php": "php",
+  ".java": "java",
+  ".c": "c",
+  ".cpp": "cpp",
+  ".h": "c",
+  ".hpp": "cpp",
+  ".cs": "csharp",
 };
 
+// 缓存 Monaco 语言扩展名映射 (运行时从 Monaco 获取)
+let languageExtensionCache: Map<string, string> | null = null;
+
 /**
- * 根据文件路径获取语言标识
+ * 初始化语言扩展名缓存 (从 Monaco 运行时获取)
+ */
+function initLanguageCache(): Map<string, string> | null {
+  if (languageExtensionCache) return languageExtensionCache;
+
+  const monaco = (window as any).monaco;
+  if (!monaco?.languages?.getLanguages) return null;
+
+  languageExtensionCache = new Map();
+  for (const lang of monaco.languages.getLanguages()) {
+    if (lang.extensions) {
+      for (const ext of lang.extensions) {
+        // 扩展名可能带或不带点，统一为带点格式
+        const normalizedExt = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
+        languageExtensionCache.set(normalizedExt, lang.id);
+      }
+    }
+  }
+  return languageExtensionCache;
+}
+
+/**
+ * 根据文件路径获取语言标识 (优先使用 Monaco 内置语言注册表，后备使用静态映射)
  * @param filePath - 文件路径
  * @returns Monaco Editor 语言标识符
  */
@@ -68,7 +102,16 @@ export function getLanguageFromPath(filePath: string): string {
   const lastDotIndex = filePath.lastIndexOf(".");
   if (lastDotIndex === -1) return "plaintext";
   const ext = filePath.slice(lastDotIndex).toLowerCase();
-  return LANGUAGE_MAP[ext] || "plaintext";
+
+  // 优先使用 Monaco 运行时缓存
+  const cache = initLanguageCache();
+  if (cache) {
+    const lang = cache.get(ext);
+    if (lang) return lang;
+  }
+
+  // 后备使用静态映射
+  return FALLBACK_LANGUAGE_MAP[ext] || "plaintext";
 }
 
 export interface CodeSnapshotViewProps {
