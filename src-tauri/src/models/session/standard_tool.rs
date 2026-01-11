@@ -41,6 +41,11 @@ pub enum StandardTool {
         new_string: Option<String>,
     },
 
+    /// Story 8.17: Delete file (Cursor delete_file)
+    FileDelete {
+        path: String,
+    },
+
     // === 终端操作 ===
 
     /// Execute shell command
@@ -306,20 +311,25 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
             new_string: get_str("new_string").or_else(|| get_str("NewString")).or_else(|| get_str("diff")),
         },
 
+        // Story 8.17: FileDelete - delete_file (Cursor)
+        "delete_file" => StandardTool::FileDelete {
+            path: get_path(),
+        },
+
         // ShellExec: Bash, bash, run_shell_command, run_terminal_cmd, shell
         "bash" | "run_shell_command" | "run_terminal_cmd" | "shell" => StandardTool::ShellExec {
             command: get_str("command").unwrap_or_default(),
             cwd: get_str("cwd").or_else(|| get_str("working_dir")),
         },
 
-        // FileSearch: Glob, glob, search_files, find_by_name, list_dir (Cursor)
-        "glob" | "search_files" | "find_by_name" | "list_dir" => StandardTool::FileSearch {
+        // FileSearch: Glob, glob, search_files, find_by_name, list_dir, glob_file_search (Cursor)
+        "glob" | "search_files" | "find_by_name" | "list_dir" | "glob_file_search" => StandardTool::FileSearch {
             pattern: get_str("pattern").or_else(|| get_str("Pattern")).unwrap_or_default(),
             path: get_str("path").or_else(|| get_str("DirectoryPath")),
         },
 
-        // ContentSearch: Grep, grep, grep_search (Cursor)
-        "grep" | "grep_search" => StandardTool::ContentSearch {
+        // ContentSearch: Grep, grep, grep_search, codebase_search, semantic_search, ripgrep (Cursor)
+        "grep" | "grep_search" | "codebase_search" | "semantic_search_full" | "ripgrep_raw_search" | "rg" => StandardTool::ContentSearch {
             pattern: get_str("pattern").or_else(|| get_str("query")).or_else(|| get_str("Query")).unwrap_or_default(),
             path: get_str("path"),
         },
@@ -379,9 +389,17 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
 
         // Default case: check for MCP tool patterns before falling back to Unknown
         _ => {
-            // Handle MCP tools (mcp__server__function pattern)
+            // Handle Claude MCP tools (mcp__server__function pattern with double underscores)
             if base_name.starts_with("mcp__") {
                 normalize_mcp_tool(name, base_name, input)
+            }
+            // Story 8.17 AC7: Handle Cursor MCP tools (mcp_* pattern with single underscore)
+            // Preserve original name and map to Unknown for frontend to identify via mcp_ prefix
+            else if base_name.starts_with("mcp_") {
+                StandardTool::Unknown {
+                    name: name.to_string(),
+                    input: input.clone(),
+                }
             } else {
                 StandardTool::Unknown {
                     name: name.to_string(),
@@ -695,6 +713,140 @@ mod tests {
         }
     }
 
+    // ===== Story 8.17: FileDelete Tests =====
+
+    #[test]
+    fn test_standard_tool_file_delete_serialization() {
+        let tool = StandardTool::FileDelete {
+            path: "/tmp/to_delete.txt".to_string(),
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains(r#""type":"file_delete""#));
+        assert!(json.contains(r#""path":"/tmp/to_delete.txt""#));
+
+        let deserialized: StandardTool = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, tool);
+    }
+
+    #[test]
+    fn test_normalize_tool_delete_file() {
+        let input = serde_json::json!({"file_path": "/src/obsolete.rs"});
+        let tool = normalize_tool("delete_file", &input);
+        match tool {
+            StandardTool::FileDelete { path } => {
+                assert_eq!(path, "/src/obsolete.rs");
+            }
+            _ => panic!("Expected FileDelete, got {:?}", tool),
+        }
+    }
+
+    // ===== Story 8.17: Cursor Tool Mapping Tests =====
+
+    #[test]
+    fn test_normalize_tool_cursor_glob_file_search() {
+        let input = serde_json::json!({"pattern": "*.rs", "path": "/src"});
+        let tool = normalize_tool("glob_file_search", &input);
+        match tool {
+            StandardTool::FileSearch { pattern, path } => {
+                assert_eq!(pattern, "*.rs");
+                assert_eq!(path, Some("/src".to_string()));
+            }
+            _ => panic!("Expected FileSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_codebase_search() {
+        let input = serde_json::json!({"query": "fn main"});
+        let tool = normalize_tool("codebase_search", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, path } => {
+                assert_eq!(pattern, "fn main");
+                assert!(path.is_none());
+            }
+            _ => panic!("Expected ContentSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_semantic_search() {
+        let input = serde_json::json!({"query": "error handling"});
+        let tool = normalize_tool("semantic_search_full", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, .. } => {
+                assert_eq!(pattern, "error handling");
+            }
+            _ => panic!("Expected ContentSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_ripgrep() {
+        let input = serde_json::json!({"pattern": "TODO", "path": "/project"});
+        let tool = normalize_tool("ripgrep_raw_search", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, path } => {
+                assert_eq!(pattern, "TODO");
+                assert_eq!(path, Some("/project".to_string()));
+            }
+            _ => panic!("Expected ContentSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_rg() {
+        // 'rg' is an alias for ripgrep
+        let input = serde_json::json!({"pattern": "FIXME"});
+        let tool = normalize_tool("rg", &input);
+        match tool {
+            StandardTool::ContentSearch { pattern, .. } => {
+                assert_eq!(pattern, "FIXME");
+            }
+            _ => panic!("Expected ContentSearch, got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_web_search() {
+        let input = serde_json::json!({"query": "rust async await"});
+        let tool = normalize_tool("web_search", &input);
+        match tool {
+            StandardTool::WebSearch { query } => {
+                assert_eq!(query, "rust async await");
+            }
+            _ => panic!("Expected WebSearch, got {:?}", tool),
+        }
+    }
+
+    // Story 8.17 AC7: Cursor MCP tool tests
+    #[test]
+    fn test_normalize_tool_cursor_mcp_single_underscore() {
+        // Cursor uses single underscore MCP tool naming (mcp_*)
+        let input = serde_json::json!({"url": "https://example.com"});
+        let tool = normalize_tool("mcp_browser_navigate", &input);
+        match tool {
+            StandardTool::Unknown { name, input: tool_input } => {
+                // Original name should be preserved for frontend identification
+                assert_eq!(name, "mcp_browser_navigate");
+                assert_eq!(tool_input.get("url").unwrap().as_str().unwrap(), "https://example.com");
+            }
+            _ => panic!("Expected Unknown (MCP tool), got {:?}", tool),
+        }
+    }
+
+    #[test]
+    fn test_normalize_tool_cursor_mcp_fetch_resource() {
+        // Test fetch_mcp_resource tool mapping
+        let input = serde_json::json!({"resource": "some_resource"});
+        let tool = normalize_tool("mcp_fetch_resource", &input);
+        match tool {
+            StandardTool::Unknown { name, .. } => {
+                assert!(name.starts_with("mcp_"));
+            }
+            _ => panic!("Expected Unknown (MCP tool), got {:?}", tool),
+        }
+    }
+
     #[test]
     fn test_standard_tool_roundtrip_all_new_variants() {
         let new_tools = vec![
@@ -734,6 +886,10 @@ mod tests {
             StandardTool::SkillInvoke {
                 skill: "test".to_string(),
                 args: None,
+            },
+            // Story 8.17: FileDelete
+            StandardTool::FileDelete {
+                path: "/tmp/delete_me.txt".to_string(),
             },
         ];
 

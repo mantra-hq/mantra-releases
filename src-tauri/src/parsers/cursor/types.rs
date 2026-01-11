@@ -162,6 +162,57 @@ pub struct CursorBubble {
     /// Format: Array of image objects with base64 data or URLs
     #[serde(default)]
     pub images: Vec<CursorImage>,
+
+    /// Story 8.17: All thinking blocks from this message
+    /// Contains AI reasoning/thinking content before response
+    #[serde(default, alias = "allThinkingBlocks")]
+    pub all_thinking_blocks: Vec<CursorThinkingBlock>,
+}
+
+/// Story 8.17: Thinking block data in Cursor bubbles
+/// Cursor stores thinking blocks in allThinkingBlocks array
+/// The structure can be either a simple string or an object with text and metadata
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum CursorThinkingBlock {
+    /// Simple text thinking block
+    Text(String),
+    /// Structured thinking block with metadata
+    Structured {
+        /// The thinking content
+        #[serde(alias = "content")]
+        text: Option<String>,
+        /// Optional timestamp (epoch milliseconds)
+        timestamp: Option<i64>,
+        /// Optional subject/topic
+        subject: Option<String>,
+    },
+}
+
+impl CursorThinkingBlock {
+    /// Extract the thinking text content
+    pub fn get_text(&self) -> Option<&str> {
+        match self {
+            CursorThinkingBlock::Text(s) => Some(s.as_str()),
+            CursorThinkingBlock::Structured { text, .. } => text.as_deref(),
+        }
+    }
+
+    /// Extract the timestamp if available
+    pub fn get_timestamp(&self) -> Option<i64> {
+        match self {
+            CursorThinkingBlock::Text(_) => None,
+            CursorThinkingBlock::Structured { timestamp, .. } => *timestamp,
+        }
+    }
+
+    /// Extract the subject if available
+    pub fn get_subject(&self) -> Option<&str> {
+        match self {
+            CursorThinkingBlock::Text(_) => None,
+            CursorThinkingBlock::Structured { subject, .. } => subject.as_deref(),
+        }
+    }
 }
 
 /// Story 8.16: Image data in Cursor bubbles
