@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
+import { ChevronRight, ChevronDown, Folder, FolderOpen, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEditorStore } from "@/stores/useEditorStore";
@@ -24,8 +24,8 @@ export interface TreeNode {
     /** 完整路径 */
     path: string;
     /** 节点类型 */
-    type: "file" | "directory";
-    /** 子节点 (仅目录) */
+    type: "file" | "directory" | "submodule";
+    /** 子节点 (仅目录和子模块) */
     children?: TreeNode[];
 }
 
@@ -48,6 +48,10 @@ interface FlatNode {
     depth: number;
     isExpanded: boolean;
 }
+
+/** 判断节点是否可展开 (目录或子模块) */
+const isExpandableNode = (node: TreeNode): boolean =>
+    node.type === "directory" || node.type === "submodule";
 
 /**
  * 文件树组件
@@ -73,7 +77,7 @@ export function FileTree({
                 const isExpanded = expandedFolders.has(node.path);
                 result.push({ node, depth, isExpanded });
 
-                if (node.type === "directory" && isExpanded && node.children) {
+                if (isExpandableNode(node) && isExpanded && node.children) {
                     flatten(node.children, depth + 1);
                 }
             }
@@ -97,7 +101,7 @@ export function FileTree({
     });
 
     const handleNodeClick = (node: TreeNode) => {
-        if (node.type === "directory") {
+        if (isExpandableNode(node)) {
             toggleFolder(node.path);
         } else {
             onFileClick?.(node.path);
@@ -114,12 +118,19 @@ export function FileTree({
     const renderNode = (flatNode: FlatNode, _index: number, style?: React.CSSProperties) => {
         const { node, depth, isExpanded } = flatNode;
         const isActive = node.path === activeFilePath;
-        const Icon =
-            node.type === "directory"
-                ? isExpanded
-                    ? FolderOpen
-                    : Folder
-                : getFileIcon(node.path);
+        const isExpandable = isExpandableNode(node);
+
+        // 选择图标
+        const getNodeIcon = () => {
+            if (node.type === "submodule") {
+                return GitBranch; // 子模块使用 Git 分支图标
+            }
+            if (node.type === "directory") {
+                return isExpanded ? FolderOpen : Folder;
+            }
+            return getFileIcon(node.path);
+        };
+        const Icon = getNodeIcon();
 
         return (
             <div
@@ -128,7 +139,7 @@ export function FileTree({
                 data-active={isActive}
                 role="treeitem"
                 aria-selected={isActive}
-                aria-expanded={node.type === "directory" ? isExpanded : undefined}
+                aria-expanded={isExpandable ? isExpanded : undefined}
                 style={style}
                 onClick={() => handleNodeClick(node)}
                 onDoubleClick={() => handleNodeDoubleClick(node)}
@@ -142,7 +153,7 @@ export function FileTree({
                 <div style={{ width: depth * 16 }} className="flex-shrink-0" />
 
                 {/* 展开/折叠图标 */}
-                {node.type === "directory" ? (
+                {isExpandable ? (
                     <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
                         {isExpanded ? (
                             <ChevronDown className="h-3 w-3" />
@@ -154,11 +165,12 @@ export function FileTree({
                     <span className="w-4 flex-shrink-0" />
                 )}
 
-                {/* 文件/文件夹图标 */}
+                {/* 文件/文件夹/子模块图标 */}
                 <Icon
                     className={cn(
                         "h-4 w-4 flex-shrink-0",
-                        node.type === "directory" && "text-amber-500"
+                        node.type === "directory" && "text-amber-500",
+                        node.type === "submodule" && "text-purple-500"
                     )}
                 />
 
