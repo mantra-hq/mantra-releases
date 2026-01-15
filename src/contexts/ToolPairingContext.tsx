@@ -15,6 +15,8 @@ export interface ToolPairInfo {
   toolName: string;
   toolInput?: Record<string, unknown>;
   outputContent?: string;
+  /** Story 8.19 fix: 显示内容 (从 JSON 中提取的实际内容，优先于 outputContent) */
+  displayContent?: string;
   isError?: boolean;
   /** tool_use 所在的消息 ID */
   callMessageId?: string;
@@ -60,6 +62,8 @@ function buildPairMap(messages: NarrativeMessage[]): Map<string, ToolPairInfo> {
         const existing = map.get(block.toolUseId);
         if (existing) {
           existing.outputContent = block.content;
+          // Story 8.19 fix: 保存 displayContent (从 JSON 中提取的实际内容)
+          existing.displayContent = block.displayContent;
           existing.isError = block.isError;
           existing.outputMessageId = message.id;
           // Story 8.11 fix: 保存结构化结果 (shell_exec exitCode/stdout/stderr 等)
@@ -70,6 +74,7 @@ function buildPairMap(messages: NarrativeMessage[]): Map<string, ToolPairInfo> {
             toolUseId: block.toolUseId,
             toolName: block.associatedToolName || "Unknown",
             outputContent: block.content,
+            displayContent: block.displayContent,
             isError: block.isError,
             outputMessageId: message.id,
             structuredResult: block.structuredResult,

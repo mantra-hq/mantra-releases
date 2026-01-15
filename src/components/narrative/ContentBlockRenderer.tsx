@@ -340,8 +340,8 @@ export function ContentBlockRenderer({
                 // file_read 工具 - 使用 tool_result 的内容作为文件内容
                 const filePath = getToolPath(block.standardTool);
                 if (filePath) {
-                  // tool_result 的内容应该是文件内容（Parser 已处理行号前缀）
-                  const fileContent = pairInfo?.outputContent;
+                  // Story 8.19 fix: 优先使用 displayContent (从 JSON 中提取的实际内容)
+                  const fileContent = pairInfo?.displayContent ?? pairInfo?.outputContent;
                   openTab(filePath, {
                     preview: true,
                     content: fileContent || undefined,
