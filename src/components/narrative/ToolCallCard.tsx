@@ -300,10 +300,10 @@ function getToolSummaryWithStandardTool(
         switch (standardTool.type) {
             case "file_read": {
                 const fileName = getFileName(standardTool.path);
-                const lineInfo = standardTool.startLine !== undefined && standardTool.endLine !== undefined
-                    ? ` L${standardTool.startLine}-L${standardTool.endLine}`
-                    : standardTool.startLine !== undefined
-                        ? ` L${standardTool.startLine}`
+                const lineInfo = standardTool.start_line !== undefined && standardTool.end_line !== undefined
+                    ? ` L${standardTool.start_line}-L${standardTool.end_line}`
+                    : standardTool.start_line !== undefined
+                        ? ` L${standardTool.start_line}`
                         : "";
                 return { icon: FileText, summary: `${fileName}${lineInfo}` };
             }

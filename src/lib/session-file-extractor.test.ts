@@ -41,8 +41,8 @@ function createFileWriteTool(path: string, content: string): StandardTool {
 }
 
 // 辅助函数：创建 file_edit standardTool
-function createFileEditTool(path: string, oldString?: string, newString?: string): StandardTool {
-    return { type: "file_edit", path, oldString, newString };
+function createFileEditTool(path: string, old_string?: string, new_string?: string): StandardTool {
+    return { type: "file_edit", path, old_string, new_string };
 }
 
 // 辅助函数：创建 file_read standardTool

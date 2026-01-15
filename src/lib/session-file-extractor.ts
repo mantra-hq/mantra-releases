@@ -48,9 +48,9 @@ function extractWriteToolContent(
                 if (isFileWriteTool(standardTool)) {
                     content = getToolContent(standardTool) ?? "";
                 }
-                // file_edit 有 newString 字段（部分内容）
+                // file_edit 有 new_string 字段（部分内容）
                 else if (isFileEditTool(standardTool) && standardTool?.type === "file_edit") {
-                    content = standardTool.newString ?? "";
+                    content = standardTool.new_string ?? "";
                 }
 
                 // 规范化路径进行比较

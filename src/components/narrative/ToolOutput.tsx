@@ -18,7 +18,7 @@ import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
 import type { ToolResultData } from "@/types/message";
 
 export interface ToolOutputProps {
-  /** 输出内容 */
+  /** 输出内容 (原始 content) */
   content: string;
   /** 是否为错误结果 */
   isError?: boolean;
@@ -41,11 +41,14 @@ export interface ToolOutputProps {
   structuredResult?: ToolResultData;
   /** 用户决策 (AC: #5) */
   userDecision?: string;
+  // === Story 8.19: 显示内容 ===
+  /** 显示内容 (优先于 content，用于提取 JSON 中的实际内容) */
+  displayContent?: string;
 }
 
 /**
  * Story 8.12: 从 structuredResult 获取文件路径用于代码显示
- * 添加防御性检查：filePath 可能为 undefined（数据不完整）
+ * 添加防御性检查：file_path 可能为 undefined（数据不完整）
  */
 function getFilePathFromResult(result?: ToolResultData, fallbackPath?: string): string {
   if (result) {
@@ -53,9 +56,9 @@ function getFilePathFromResult(result?: ToolResultData, fallbackPath?: string): 
       case "file_read":
       case "file_write":
       case "file_edit":
-        // 防御性检查：filePath 可能为 undefined
-        if (result.filePath) {
-          return result.filePath;
+        // 防御性检查：file_path 可能为 undefined
+        if (result.file_path) {
+          return result.file_path;
         }
         break;
     }
@@ -81,15 +84,15 @@ function renderStructuredResultSummary(
 ): React.ReactNode {
   switch (result.type) {
     case "file_read": {
-      // 防御性检查：filePath 可能为 undefined（数据不完整）
-      if (!result.filePath) return null;
-      const fileName = result.filePath.split("/").pop() || result.filePath;
+      // 防御性检查：file_path 可能为 undefined（数据不完整）
+      if (!result.file_path) return null;
+      const fileName = result.file_path.split("/").pop() || result.file_path;
       // Fix: endLine = startLine + numLines - 1 (e.g., L10 + 5 lines = L10-L14)
-      const lineRange = result.startLine !== undefined && result.numLines !== undefined
-        ? `L${result.startLine}-L${result.startLine + result.numLines - 1}`
+      const lineRange = result.start_line !== undefined && result.num_lines !== undefined
+        ? `L${result.start_line}-L${result.start_line + result.num_lines - 1}`
         : "";
-      const lineInfo = result.numLines !== undefined && result.totalLines !== undefined
-        ? t("message.lines", { count: `${result.numLines}/${result.totalLines}` })
+      const lineInfo = result.num_lines !== undefined && result.total_lines !== undefined
+        ? t("message.lines", { count: `${result.num_lines}/${result.total_lines}` })
         : "";
       return (
         <>
@@ -99,9 +102,9 @@ function renderStructuredResultSummary(
       );
     }
     case "file_write": {
-      // 防御性检查：filePath 可能为 undefined（数据不完整）
-      if (!result.filePath) return null;
-      const fileName = result.filePath.split("/").pop() || result.filePath;
+      // 防御性检查：file_path 可能为 undefined（数据不完整）
+      if (!result.file_path) return null;
+      const fileName = result.file_path.split("/").pop() || result.file_path;
       return (
         <>
           <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -110,9 +113,9 @@ function renderStructuredResultSummary(
       );
     }
     case "file_edit": {
-      // 防御性检查：filePath 可能为 undefined（数据不完整）
-      if (!result.filePath) return null;
-      const fileName = result.filePath.split("/").pop() || result.filePath;
+      // 防御性检查：file_path 可能为 undefined（数据不完整）
+      if (!result.file_path) return null;
+      const fileName = result.file_path.split("/").pop() || result.file_path;
       return (
         <>
           <Edit3 className="h-3.5 w-3.5 shrink-0" />
@@ -121,7 +124,7 @@ function renderStructuredResultSummary(
       );
     }
     case "shell_exec": {
-      const isSuccess = result.exitCode === 0;
+      const isSuccess = result.exit_code === 0;
       return (
         <>
           <Terminal className="h-3.5 w-3.5 shrink-0" />
@@ -130,7 +133,7 @@ function renderStructuredResultSummary(
             "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono",
             isSuccess ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"
           )}>
-            exit {result.exitCode ?? "?"}
+            exit {result.exit_code ?? "?"}
           </span>
         </>
       );
@@ -162,7 +165,13 @@ export function ToolOutput({
   className,
   structuredResult,
   userDecision,
+  displayContent,
 }: ToolOutputProps) {
+  // Story 8.19: 优先使用 displayContent，否则使用 content
+  // 注意：使用 !== undefined 而不是 ||，避免空字符串被视为 falsy
+  const effectiveContent = displayContent !== undefined && displayContent !== null 
+    ? displayContent 
+    : content;
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
@@ -181,55 +190,33 @@ export function ToolOutput({
 
   // 截断长内容的预览
   const previewLength = 100;
-  const isLongContent = content.length > previewLength;
+  const isLongContent = effectiveContent.length > previewLength;
   const previewContent = isLongContent
-    ? content.slice(0, previewLength) + "..."
-    : content;
+    ? effectiveContent.slice(0, previewLength) + "..."
+    : effectiveContent;
 
-  // 检测内容是否看起来像代码或文件内容
-  // 放宽条件：超过 100 字符且包含常见代码特征或行号
-  const looksLikeCode = content.length > 100 && (
-    content.includes("function ") ||
-    content.includes("const ") ||
-    content.includes("let ") ||
-    content.includes("var ") ||
-    content.includes("import ") ||
-    content.includes("export ") ||
-    content.includes("class ") ||
-    content.includes("interface ") ||
-    content.includes("type ") ||
-    content.includes("def ") ||
-    content.includes("fn ") ||
-    content.includes("pub ") ||
-    content.includes("package ") ||
-    content.includes("struct ") ||
-    content.includes("impl ") ||
-    content.includes("use ") ||
-    content.includes("mod ") ||
-    content.includes("→") || // 行号前缀 (Read 工具输出)
-    content.includes("│") || // 可能的表格或代码格式
-    /^\s*\d+[\s→|]/.test(content) // 以行号开头
-  );
+  // Story 8.19: 通过 structuredResult 类型判断是否是文件操作
+  const isFileOperation = structuredResult?.type === "file_read" ||
+    structuredResult?.type === "file_write" ||
+    structuredResult?.type === "file_edit";
 
   // 处理"查看代码"按钮点击
-  // 使用 openTab 在右侧代码面板打开文件
   const handleViewCode = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // 优先使用 structuredResult 中的路径，然后是传入的 filePath
       const path = getFilePathFromResult(structuredResult, filePath);
-      // 使用 openTab 打开文件，传入内容
+      // Story 8.19: 使用 effectiveContent (优先 displayContent)
       openTab(path, {
         preview: true,
-        content: content,
+        content: effectiveContent,
       });
       setActiveRightTab("code");
     },
-    [content, filePath, structuredResult, openTab, setActiveRightTab]
+    [effectiveContent, filePath, structuredResult, openTab, setActiveRightTab]
   );
 
-  // 是否显示查看代码按钮
-  const showViewCodeButton = !isError && (filePath || looksLikeCode);
+  // Story 8.19: 简化判断 - 通过 structuredResult 或 filePath 判断
+  const showViewCodeButton = !isError && (isFileOperation || filePath);
 
   // 阻止事件冒泡，避免触发父组件的消息选中逻辑
   const handleRootClick = React.useCallback((e: React.MouseEvent) => {
@@ -373,7 +360,8 @@ export function ToolOutput({
               isError ? "text-destructive" : "text-muted-foreground"
             )}
           >
-            {content}
+            {/* Story 8.19: 使用 effectiveContent */}
+            {effectiveContent}
           </pre>
         </div>
       </Collapsible.Content>

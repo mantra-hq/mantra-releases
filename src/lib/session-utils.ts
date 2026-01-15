@@ -9,31 +9,6 @@ import type { NarrativeMessage, ContentBlock, StandardTool, ToolResultData } fro
 import { isFileTool, getToolPath } from "@/lib/tool-utils";
 
 /**
- * 将后端 StandardTool (snake_case) 转换为前端格式 (camelCase)
- * 后端字段: old_string, new_string
- * 前端字段: oldString, newString
- */
-function convertStandardTool(backendTool: Record<string, unknown> | undefined): StandardTool | undefined {
-    if (!backendTool) return undefined;
-
-    const tool = { ...backendTool } as Record<string, unknown>;
-
-    // 转换 file_edit 类型的字段
-    if (tool.type === "file_edit") {
-        if ("old_string" in tool) {
-            tool.oldString = tool.old_string;
-            delete tool.old_string;
-        }
-        if ("new_string" in tool) {
-            tool.newString = tool.new_string;
-            delete tool.new_string;
-        }
-    }
-
-    return tool as unknown as StandardTool;
-}
-
-/**
  * 后端 MantraSession 类型 (来自 Rust)
  */
 export interface MantraSession {
@@ -145,8 +120,7 @@ function convertContentBlock(
             };
         case "tool_use": {
             // Story 8.12: 使用 standardTool 获取文件路径
-            // 转换 snake_case 字段名为 camelCase
-            const standardTool = convertStandardTool(block.standard_tool as Record<string, unknown> | undefined);
+            const standardTool = block.standard_tool as StandardTool | undefined;
             const filePath = isFileTool(standardTool) ? getToolPath(standardTool) : undefined;
 
             // 缓存到映射中，供后续 tool_result 使用
@@ -179,8 +153,7 @@ function convertContentBlock(
                 toolUseId: block.tool_use_id,
                 associatedFilePath: toolUseInfo?.filePath,
                 associatedToolName: toolUseInfo?.toolName,
-                // Story 8.12: 传递 structuredResult 和其他新字段
-                structuredResult: block.structured_result,
+                structuredResult: block.structured_result as ToolResultData | undefined,
                 displayContent: block.display_content,
                 renderAsMarkdown: block.render_as_markdown,
                 userDecision: block.user_decision,

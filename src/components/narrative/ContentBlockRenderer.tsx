@@ -287,7 +287,7 @@ export function ContentBlockRenderer({
                   const stderr = structuredResult.stderr ?? "";
                   // 组合 stdout 和 stderr
                   terminalOutput = stdout + (stderr ? (stdout ? "\n" : "") + stderr : "");
-                  exitCode = structuredResult.exitCode;
+                  exitCode = structuredResult.exit_code;
                 } else if (terminalOutput.startsWith("{")) {
                   // 回退: 尝试从 JSON 格式的 content 中解析输出
                   // 某些后端返回格式: {"output": "...", "metadata": {"exit_code": 0}}
@@ -320,8 +320,8 @@ export function ContentBlockRenderer({
                 if (filePath) {
                   openTab(filePath, {
                     preview: true,
-                    content: fileEditTool.newString ?? "",
-                    previousContent: fileEditTool.oldString,
+                    content: fileEditTool.new_string ?? "",
+                    previousContent: fileEditTool.old_string,
                   });
                   setActiveRightTab("code");
                 }
@@ -393,6 +393,8 @@ export function ContentBlockRenderer({
           // Story 8.11: 传递新字段
           structuredResult={block.structuredResult}
           userDecision={block.userDecision}
+          // Story 8.19: 传递 displayContent
+          displayContent={block.displayContent}
           className={className}
         />
       );

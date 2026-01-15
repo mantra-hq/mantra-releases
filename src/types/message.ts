@@ -189,8 +189,8 @@ export interface TokensBreakdown {
 export interface StandardToolFileRead {
   type: "file_read";
   path: string;
-  startLine?: number;
-  endLine?: number;
+  start_line?: number;
+  end_line?: number;
 }
 
 /**
@@ -210,8 +210,8 @@ export interface StandardToolFileWrite {
 export interface StandardToolFileEdit {
   type: "file_edit";
   path: string;
-  oldString?: string;
-  newString?: string;
+  old_string?: string;
+  new_string?: string;
 }
 
 /**
@@ -323,9 +323,9 @@ export interface StandardToolDiagnostic {
  */
 export interface StandardToolNotebookEdit {
   type: "notebook_edit";
-  notebookPath: string;
-  cellId?: string;
-  newSource: string;
+  notebook_path: string;
+  cell_id?: string;
+  new_source: string;
 }
 
 /**
@@ -344,7 +344,7 @@ export interface StandardToolTodoManage {
 export interface StandardToolSubTask {
   type: "sub_task";
   prompt: string;
-  agentType?: string;
+  agent_type?: string;
 }
 
 /**
@@ -408,10 +408,10 @@ export type StandardTool =
  */
 export interface ToolResultDataFileRead {
   type: "file_read";
-  filePath: string;
-  startLine?: number;
-  numLines?: number;
-  totalLines?: number;
+  file_path: string;
+  start_line?: number;
+  num_lines?: number;
+  total_lines?: number;
 }
 
 /**
@@ -420,7 +420,7 @@ export interface ToolResultDataFileRead {
  */
 export interface ToolResultDataFileWrite {
   type: "file_write";
-  filePath: string;
+  file_path: string;
 }
 
 /**
@@ -429,9 +429,9 @@ export interface ToolResultDataFileWrite {
  */
 export interface ToolResultDataFileEdit {
   type: "file_edit";
-  filePath: string;
-  oldString?: string;
-  newString?: string;
+  file_path: string;
+  old_string?: string;
+  new_string?: string;
 }
 
 /**
@@ -440,7 +440,7 @@ export interface ToolResultDataFileEdit {
  */
 export interface ToolResultDataShellExec {
   type: "shell_exec";
-  exitCode?: number;
+  exit_code?: number;
   stdout?: string;
   stderr?: string;
 }

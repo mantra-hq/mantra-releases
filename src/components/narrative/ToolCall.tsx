@@ -69,21 +69,21 @@ export function ToolCall({
   // Story 8.12: 使用 standardTool 判断工具类型和提取内容
   const isFileOperation = isFileTool(standardTool);
   const filePath = getToolPath(standardTool);
-  // file_write: 使用 content; file_edit: 使用 newString (从 standardTool 获取)
+  // file_write: 使用 content; file_edit: 使用 new_string (从 standardTool 获取)
   const codeContent = getToolContent(standardTool)
-    ?? (isFileEditTool(standardTool) && standardTool?.type === "file_edit" ? standardTool.newString : null);
+    ?? (isFileEditTool(standardTool) && standardTool?.type === "file_edit" ? standardTool.new_string : null);
 
   // 处理"查看代码"按钮点击 - 使用 openTab 打开文件
   const handleViewCode = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // 阻止触发折叠
       if (filePath && codeContent) {
-        // 对于 file_edit 工具，同时传入 oldString 用于 diff 视图
+        // 对于 file_edit 工具，同时传入 old_string 用于 diff 视图
         if (isFileEditTool(standardTool) && standardTool.type === "file_edit") {
           openTab(filePath, {
             preview: true,
             content: codeContent,
-            previousContent: standardTool.oldString,
+            previousContent: standardTool.old_string,
           });
         } else {
           openTab(filePath, {
@@ -192,8 +192,8 @@ export function ToolCall({
             {isFileEditTool(standardTool) ? (
               <FileEditDiff
                 filePath={standardTool.path}
-                oldString={standardTool.oldString}
-                newString={standardTool.newString}
+                oldString={standardTool.old_string}
+                newString={standardTool.new_string}
               />
             ) : (
               <pre

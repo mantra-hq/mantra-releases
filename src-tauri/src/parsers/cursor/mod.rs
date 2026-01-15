@@ -377,31 +377,38 @@ impl CursorParser {
                 if let (Some(id), Some(name)) = (&tool_result.id, &tool_result.name) {
                     let correlation_id = Some(id.clone());
                     let input = serde_json::json!({});
-                    // Call normalize_tool() for legacy path (AC2)
-                    let standard_tool = Some(normalize_tool(name, &input));
+                    let standard_tool = normalize_tool(name, &input);
 
                     content_blocks.push(ContentBlock::ToolUse {
                         id: id.clone(),
                         name: name.clone(),
-                        input,
+                        input: input.clone(),
                         correlation_id: correlation_id.clone(),
-                        standard_tool,
+                        standard_tool: Some(standard_tool),
                         display_name: None,
                         description: None,
                     });
 
                     if let Some(result) = &tool_result.result {
-                        // Strip system reminder tags from tool result content
-                        let cleaned_result = crate::parsers::strip_system_reminders(&result.to_string());
+                        // Fix: Handle serde_json::Value correctly
+                        // - If String: use the string content directly
+                        // - If Object/other: serialize to JSON string
+                        let result_str = match result {
+                            serde_json::Value::String(s) => s.clone(),
+                            _ => serde_json::to_string(result).unwrap_or_default(),
+                        };
+
+                        let (cleaned_result, display_content, structured_result) =
+                            process_tool_result_content(name, &result_str, &input);
+
                         content_blocks.push(ContentBlock::ToolResult {
                             tool_use_id: id.clone(),
                             content: cleaned_result,
                             is_error: tool_result.is_error,
                             correlation_id,
-                            structured_result: None,
-                            display_content: None,
+                            structured_result,
+                            display_content,
                             render_as_markdown: None,
-                            // Legacy path has no user_decision (AC4: defaults to None)
                             user_decision: None,
                         });
                     }
@@ -494,15 +501,16 @@ impl CursorParser {
             // Call normalize_tool() to get standardized tool type (AC2)
             let standard_tool = normalize_tool(name, &input);
 
-            // Story 8.19: Parse structured result from StandardTool before moving it
-            let structured_result = if let Some(result_str) = &tfd.result {
-                let cleaned_result = crate::parsers::strip_system_reminders(result_str);
-                parse_cursor_tool_result(&standard_tool, &cleaned_result)
-            } else {
-                None
-            };
+            // Process tool result using unified helper function
+            let (cleaned_result, display_content, structured_result) =
+                if let Some(result_str) = &tfd.result {
+                    let (cleaned, display, structured) = process_tool_result_content(name, result_str, &input);
+                    (Some(cleaned), display, structured)
+                } else {
+                    (None, None, None)
+                };
 
-            // Add ToolUse block (standard_tool is cloned here)
+            // Add ToolUse block
             content_blocks.push(ContentBlock::ToolUse {
                 id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
                 name: name.clone(),
@@ -514,19 +522,15 @@ impl CursorParser {
             });
 
             // Add ToolResult if result exists
-            if let Some(result_str) = &tfd.result {
-                // Strip system reminder tags from tool result content
-                let cleaned_result = crate::parsers::strip_system_reminders(result_str);
-
+            if let Some(content) = cleaned_result {
                 content_blocks.push(ContentBlock::ToolResult {
                     tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
-                    content: cleaned_result,
+                    content,
                     is_error: tfd.status.as_deref() == Some("failed"),
                     correlation_id,
                     structured_result,
-                    display_content: None,
+                    display_content,
                     render_as_markdown: None,
-                    // Extract user_decision from toolFormerData (AC1, AC4: defaults to None if missing)
                     user_decision: tfd.user_decision.clone(),
                 });
             }
@@ -625,6 +629,65 @@ fn extract_exit_code_from_result(result: &str) -> Option<i32> {
     }
 
     None
+}
+
+/// Extract display content from Cursor JSON result (Story 8.19)
+///
+/// Cursor's read_file may return JSON in various formats:
+/// - {"contents": "file content...", "numCharactersInRequestedRange": 5134, ...}
+/// - {"content": "file content..."}
+/// - {"text": "file content..."}
+/// - {"value": "file content..."}
+///
+/// This function tries multiple common field names to extract the actual content.
+fn extract_display_content_from_result(result: &str) -> Option<String> {
+    // Try to parse as JSON
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(result) {
+        // Try multiple common field names for content extraction
+        // Order: most specific to most generic
+        let content_fields = ["contents", "content", "text", "value", "output", "data"];
+        
+        for field in content_fields {
+            if let Some(content) = json.get(field).and_then(|v| v.as_str()) {
+                if !content.is_empty() {
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+    // Not JSON or no extractable content - return None (use original content)
+    None
+}
+
+/// Process tool result content - unified logic for both toolFormerData and legacy paths
+///
+/// Extracts display content from JSON and generates structured result data.
+/// This function consolidates the common processing logic to avoid duplication.
+///
+/// # Arguments
+/// * `tool_name` - The tool name (e.g., "read_file", "edit_file")
+/// * `result` - The raw result string
+/// * `input` - The tool input parameters (used for StandardTool normalization)
+///
+/// # Returns
+/// Tuple of (cleaned_content, display_content, structured_result)
+fn process_tool_result_content(
+    tool_name: &str,
+    result: &str,
+    input: &serde_json::Value,
+) -> (String, Option<String>, Option<ToolResultData>) {
+    // Strip system reminder tags
+    let cleaned_content = crate::parsers::strip_system_reminders(result);
+
+    // Extract display content from JSON
+    let display_content = extract_display_content_from_result(&cleaned_content);
+
+    // Normalize tool and parse structured result
+    let standard_tool = normalize_tool(tool_name, input);
+    let content_for_parsing = display_content.as_deref().unwrap_or(&cleaned_content);
+    let structured_result = parse_cursor_tool_result(&standard_tool, content_for_parsing);
+
+    (cleaned_content, display_content, structured_result)
 }
 
 /// Convert epoch milliseconds to DateTime<Utc>
@@ -2106,6 +2169,86 @@ mod tests {
         assert_eq!(extract_exit_code_from_result("no exit code here"), None);
     }
 
+    // ========== Story 8.19 Fix: JSON content extraction tests ==========
+
+    #[test]
+    fn test_extract_display_content_from_json_contents() {
+        // Test "contents" field (Cursor primary format)
+        let json = r#"{"contents": "fn main() {\n    println!(\"Hello\");\n}", "numCharactersInRequestedRange": 50}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("fn main()"));
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_content() {
+        // Test "content" field (singular form)
+        let json = r#"{"content": "file content here", "metadata": {}}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "file content here");
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_text() {
+        // Test "text" field
+        let json = r#"{"text": "some text content", "type": "file"}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "some text content");
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_value() {
+        // Test "value" field
+        let json = r#"{"value": "value content", "key": "test"}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "value content");
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_output() {
+        // Test "output" field (Claude shell format)
+        let json = r#"{"output": "command output", "exitCode": 0}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "command output");
+    }
+
+    #[test]
+    fn test_extract_display_content_from_plain_text() {
+        // Test plain text (not JSON) - should return None
+        let plain = "fn main() {\n    println!(\"Hello\");\n}";
+        let result = extract_display_content_from_result(plain);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_no_content_field() {
+        // Test JSON without any content field - should return None
+        let json = r#"{"status": "ok", "code": 200}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_display_content_from_json_empty_content() {
+        // Test JSON with empty content field - should return None (skip empty)
+        let json = r#"{"contents": "", "other": "value"}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_display_content_priority_order() {
+        // Test that "contents" has higher priority than "content"
+        let json = r#"{"contents": "primary", "content": "secondary"}"#;
+        let result = extract_display_content_from_result(json);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "primary");
+    }
+
     #[test]
     fn test_e2e_process_tool_former_data_with_structured_result() {
         // End-to-end test: Verify process_tool_former_data sets structured_result
@@ -2205,6 +2348,92 @@ mod tests {
 
         if let Some(ContentBlock::ToolResult { structured_result, .. }) = tool_result {
             assert!(structured_result.is_none(), "Unknown tool should have structured_result = None");
+        }
+    }
+
+    #[test]
+    fn test_e2e_process_tool_former_data_json_result_correct_line_count() {
+        // Story 8.19 Fix: Verify JSON result extracts display_content and counts lines correctly
+        let parser = CursorParser::new();
+        
+        // Simulate Cursor read_file returning JSON with "contents" field
+        let json_result = r#"{"contents": "line1\nline2\nline3", "numCharactersInRequestedRange": 18}"#;
+        
+        let tfd = ToolFormerData {
+            tool: Some(1),
+            tool_index: Some(0),
+            tool_call_id: Some("call-json-read".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("read_file".to_string()),
+            raw_args: Some(r#"{"file_path": "/src/test.rs", "start_line": 1, "end_line": 10}"#.to_string()),
+            params: None,
+            result: Some(json_result.to_string()),
+            additional_data: None,
+            user_decision: None,
+        };
+
+        let (content_blocks, _) = parser.process_tool_former_data(&tfd);
+
+        // Find ToolResult and verify
+        let tool_result = content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(tool_result.is_some(), "ToolResult block should exist");
+
+        if let Some(ContentBlock::ToolResult { structured_result, display_content, .. }) = tool_result {
+            // Verify display_content is extracted
+            assert!(display_content.is_some(), "display_content should be extracted from JSON");
+            assert_eq!(display_content.as_ref().unwrap(), "line1\nline2\nline3");
+
+            // Verify structured_result has correct line count (3 lines, not JSON line count)
+            assert!(structured_result.is_some(), "structured_result should be Some");
+            match structured_result.as_ref().unwrap() {
+                ToolResultData::FileRead { num_lines, .. } => {
+                    assert_eq!(*num_lines, Some(3), "num_lines should be 3 (from extracted content, not JSON)");
+                }
+                _ => panic!("Expected ToolResultData::FileRead"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_e2e_process_tool_former_data_plain_text_result() {
+        // Verify plain text result (not JSON) still works correctly
+        let parser = CursorParser::new();
+        
+        let plain_result = "fn main() {\n    println!(\"Hello\");\n}";
+        
+        let tfd = ToolFormerData {
+            tool: Some(1),
+            tool_index: Some(0),
+            tool_call_id: Some("call-plain-read".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("read_file".to_string()),
+            raw_args: Some(r#"{"file_path": "/src/main.rs"}"#.to_string()),
+            params: None,
+            result: Some(plain_result.to_string()),
+            additional_data: None,
+            user_decision: None,
+        };
+
+        let (content_blocks, _) = parser.process_tool_former_data(&tfd);
+
+        let tool_result = content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(tool_result.is_some());
+
+        if let Some(ContentBlock::ToolResult { structured_result, display_content, content, .. }) = tool_result {
+            // Plain text: display_content should be None, content should be original
+            assert!(display_content.is_none(), "display_content should be None for plain text");
+            assert_eq!(content, plain_result);
+
+            // Verify line count is correct (3 lines)
+            assert!(structured_result.is_some());
+            match structured_result.as_ref().unwrap() {
+                ToolResultData::FileRead { num_lines, .. } => {
+                    assert_eq!(*num_lines, Some(3), "num_lines should be 3");
+                }
+                _ => panic!("Expected ToolResultData::FileRead"),
+            }
         }
     }
 
