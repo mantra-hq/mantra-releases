@@ -13,7 +13,7 @@ import type { MantraSession, MantraMessage, MantraContentBlock } from "@/lib/ses
 import type { SessionSummary } from "@/lib/project-ipc";
 import type { SanitizationRule } from "@/components/sanitizer/types";
 import type { DefaultPaths } from "@/lib/import-ipc";
-import type { StandardToolFileEdit, StandardToolShellExec, ToolResultDataShellExec } from "@/types/message";
+import type { StandardToolFileEdit, StandardToolFileRead, StandardToolShellExec, ToolResultDataFileRead, ToolResultDataShellExec } from "@/types/message";
 
 // =============================================================================
 // Mock Projects (AC #3: 2-3 个项目)
@@ -112,6 +112,16 @@ export const MOCK_SESSION_SUMMARIES: SessionSummary[] = [
     message_count: 7,
     is_empty: false,
     title: "添加单元测试",
+  },
+  // Story 8.19: Cursor 工具调用测试会话
+  {
+    id: "mock-session-cursor-tools",
+    source: "cursor",
+    created_at: "2025-01-15T10:00:00Z",
+    updated_at: "2025-01-15T12:00:00Z",
+    message_count: 6,
+    is_empty: false,
+    title: "Cursor 工具调用测试",
   },
   // Gamma 项目会话 (2 个)
   {
@@ -288,6 +298,91 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
       createMockMessage("assistant", "测试文件已创建", "2025-01-07T16:00:00Z"),
       createMockMessage("user", "运行测试", "2025-01-07T16:30:00Z"),
       createMockMessage("assistant", "所有测试通过！覆盖率 85%", "2025-01-07T17:00:00Z"),
+    ],
+  },
+  // Story 8.19 E2E 测试: Cursor structured_result
+  "mock-session-cursor-tools": {
+    id: "mock-session-cursor-tools",
+    source: "cursor",
+    cwd: "/mock/projects/beta",
+    created_at: "2025-01-15T10:00:00Z",
+    updated_at: "2025-01-15T12:00:00Z",
+    metadata: {
+      model: "gpt-4-turbo",
+      total_tokens: 5000,
+      title: "Cursor 工具调用测试",
+      original_path: "/mock/logs/cursor-tools-test.json",
+    },
+    messages: [
+      createMockMessage("user", "帮我看一下 main.rs 的内容", "2025-01-15T10:00:00Z"),
+      createMockMessage("assistant", "好的，我来读取文件内容。", "2025-01-15T10:01:00Z", [
+        { type: "text", text: "读取文件：" },
+        {
+          type: "tool_use",
+          id: "cursor-tool-read-1",
+          name: "read_file_v2",
+          input: {
+            file_path: "/src/main.rs",
+            start_line: 1,
+            end_line: 50,
+          },
+          standard_tool: {
+            type: "file_read",
+            path: "/src/main.rs",
+            start_line: 1,
+            end_line: 50,
+          } as StandardToolFileRead,
+        },
+      ]),
+      createMockMessage("assistant", "文件内容如下。", "2025-01-15T10:02:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "cursor-tool-read-1",
+          content: "fn main() {\n    println!(\"Hello, world!\");\n}\n\nfn helper() {\n    // TODO: implement\n}",
+          is_error: false,
+          structured_result: {
+            type: "file_read",
+            filePath: "/src/main.rs",
+            startLine: 1,
+            numLines: 7,
+            totalLines: undefined,
+          } as ToolResultDataFileRead,
+        },
+        { type: "text", text: "这是一个简单的 Rust 程序入口。" },
+      ]),
+      createMockMessage("user", "运行 cargo build", "2025-01-15T10:05:00Z"),
+      createMockMessage("assistant", "好的，执行编译命令。", "2025-01-15T10:06:00Z", [
+        { type: "text", text: "执行命令：" },
+        {
+          type: "tool_use",
+          id: "cursor-tool-shell-1",
+          name: "run_terminal_cmd",
+          input: {
+            command: "cargo build",
+            cwd: "/mock/projects/beta",
+          },
+          standard_tool: {
+            type: "shell_exec",
+            command: "cargo build",
+            cwd: "/mock/projects/beta",
+          } as StandardToolShellExec,
+        },
+      ]),
+      createMockMessage("assistant", "编译完成。", "2025-01-15T10:07:00Z", [
+        {
+          type: "tool_result",
+          tool_use_id: "cursor-tool-shell-1",
+          content: "   Compiling beta v0.1.0 (/mock/projects/beta)\n    Finished dev [unoptimized + debuginfo] target(s) in 2.35s\nexit code: 0",
+          is_error: false,
+          structured_result: {
+            type: "shell_exec",
+            exitCode: 0,
+            stdout: "   Compiling beta v0.1.0 (/mock/projects/beta)\n    Finished dev [unoptimized + debuginfo] target(s) in 2.35s",
+            stderr: "",
+          } as ToolResultDataShellExec,
+        },
+        { type: "text", text: "编译成功！" },
+      ]),
     ],
   },
   "mock-session-gamma-1": {

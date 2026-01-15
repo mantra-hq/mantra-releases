@@ -24,7 +24,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::models::{sources, normalize_tool, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, UnknownFormatEntry};
+use crate::models::{sources, normalize_tool, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, StandardTool, ToolResultData, UnknownFormatEntry};
 use crate::parsers::ParseError;
 
 /// Cursor Parser version for compatibility tracking (Story 8.15)
@@ -492,15 +492,23 @@ impl CursorParser {
                 .unwrap_or_else(|| serde_json::json!({}));
 
             // Call normalize_tool() to get standardized tool type (AC2)
-            let standard_tool = Some(normalize_tool(name, &input));
+            let standard_tool = normalize_tool(name, &input);
 
-            // Add ToolUse block
+            // Story 8.19: Parse structured result from StandardTool before moving it
+            let structured_result = if let Some(result_str) = &tfd.result {
+                let cleaned_result = crate::parsers::strip_system_reminders(result_str);
+                parse_cursor_tool_result(&standard_tool, &cleaned_result)
+            } else {
+                None
+            };
+
+            // Add ToolUse block (standard_tool is cloned here)
             content_blocks.push(ContentBlock::ToolUse {
                 id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
                 name: name.clone(),
                 input,
                 correlation_id: correlation_id.clone(),
-                standard_tool,
+                standard_tool: Some(standard_tool),
                 display_name: None,
                 description: None,
             });
@@ -509,12 +517,13 @@ impl CursorParser {
             if let Some(result_str) = &tfd.result {
                 // Strip system reminder tags from tool result content
                 let cleaned_result = crate::parsers::strip_system_reminders(result_str);
+
                 content_blocks.push(ContentBlock::ToolResult {
                     tool_use_id: tfd.tool_call_id.clone().unwrap_or_else(|| format!("{}-{}", name, tfd.tool_index.unwrap_or(0))),
                     content: cleaned_result,
                     is_error: tfd.status.as_deref() == Some("failed"),
                     correlation_id,
-                    structured_result: None,
+                    structured_result,
                     display_content: None,
                     render_as_markdown: None,
                     // Extract user_decision from toolFormerData (AC1, AC4: defaults to None if missing)
@@ -525,6 +534,97 @@ impl CursorParser {
 
         (content_blocks, unknown_formats)
     }
+}
+
+/// Parse Cursor tool result into structured ToolResultData (Story 8.19)
+///
+/// Converts StandardTool and result string into ToolResultData for frontend display.
+/// This enables displaying structured summaries like "读取 main.rs L10-L50" instead of raw JSON.
+///
+/// # Arguments
+/// * `standard_tool` - The normalized StandardTool enum
+/// * `result` - The raw result string from toolFormerData.result
+///
+/// # Returns
+/// * `Some(ToolResultData)` - Structured result data for known tool types
+/// * `None` - For unknown tools or parsing failures (backward compatible)
+fn parse_cursor_tool_result(standard_tool: &StandardTool, result: &str) -> Option<ToolResultData> {
+    match standard_tool {
+        // AC1: FileRead 结构化结果
+        StandardTool::FileRead { path, start_line, end_line: _ } => {
+            // Calculate num_lines from result content
+            let num_lines = if !result.is_empty() {
+                Some(result.lines().count() as u32)
+            } else {
+                None
+            };
+
+            Some(ToolResultData::FileRead {
+                file_path: path.clone(),
+                start_line: start_line.map(|v| v),
+                num_lines,
+                total_lines: None, // Cursor doesn't provide total_lines in result
+            })
+        }
+
+        // AC2: FileWrite 结构化结果
+        StandardTool::FileWrite { path, .. } => {
+            Some(ToolResultData::FileWrite {
+                file_path: path.clone(),
+            })
+        }
+
+        // AC3: FileEdit 结构化结果
+        StandardTool::FileEdit { path, old_string, new_string } => {
+            Some(ToolResultData::FileEdit {
+                file_path: path.clone(),
+                old_string: old_string.clone(),
+                new_string: new_string.clone(),
+            })
+        }
+
+        // AC4: ShellExec 结构化结果
+        StandardTool::ShellExec { .. } => {
+            // Try to extract exit code from result if present
+            // Common patterns: "exit code: 0", "Exit code: 1", etc.
+            let exit_code = extract_exit_code_from_result(result);
+
+            Some(ToolResultData::ShellExec {
+                exit_code,
+                stdout: if !result.is_empty() { Some(result.to_string()) } else { None },
+                stderr: None, // Cursor doesn't separate stdout/stderr
+            })
+        }
+
+        // AC5: 向后兼容 - Unknown and other tools return None
+        _ => None,
+    }
+}
+
+/// Extract exit code from shell command result string
+///
+/// Tries to find patterns like "exit code: 0", "Exit Code: 1", "exited with 0", etc.
+fn extract_exit_code_from_result(result: &str) -> Option<i32> {
+    // Common patterns for exit code in terminal output
+    let patterns = [
+        r"(?i)exit\s*code[:\s]+(\d+)",
+        r"(?i)exited\s+with\s+(\d+)",
+        r"(?i)returned\s+(\d+)",
+    ];
+
+    for pattern in &patterns {
+        if let Ok(re) = regex::Regex::new(pattern) {
+            if let Some(caps) = re.captures(result) {
+                if let Some(code_str) = caps.get(1) {
+                    if let Ok(code) = code_str.as_str().parse::<i32>() {
+                        return Some(code);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Convert epoch milliseconds to DateTime<Utc>
@@ -1807,6 +1907,305 @@ mod tests {
     fn test_supported_content_types_includes_thinking() {
         // Verify SUPPORTED_CONTENT_TYPES includes all_thinking_blocks
         assert!(SUPPORTED_CONTENT_TYPES.contains(&"all_thinking_blocks"));
+    }
+
+    // ========== Story 8.19: structured_result 解析测试 ==========
+
+    #[test]
+    fn test_parse_cursor_tool_result_file_read() {
+        // AC1: FileRead 结构化结果
+        let standard_tool = crate::models::StandardTool::FileRead {
+            path: "/src/main.rs".to_string(),
+            start_line: Some(10),
+            end_line: Some(50),
+        };
+        let result = "fn main() {\n    println!(\"Hello\");\n}\n";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::FileRead { file_path, start_line, num_lines, total_lines } => {
+                assert_eq!(file_path, "/src/main.rs");
+                assert_eq!(start_line, Some(10));
+                assert_eq!(num_lines, Some(3)); // 3 lines: "fn main() {", "    println!", "}"
+                assert!(total_lines.is_none()); // Cursor doesn't provide total_lines
+            }
+            _ => panic!("Expected ToolResultData::FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_file_read_v2() {
+        // AC1: read_file_v2 版本后缀处理 (通过 normalize_tool 已处理)
+        let input = serde_json::json!({"file_path": "/src/lib.rs", "start_line": 1, "end_line": 100});
+        let standard_tool = normalize_tool("read_file_v2", &input);
+        let result = "pub mod tests;\n";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::FileRead { file_path, .. } => {
+                assert_eq!(file_path, "/src/lib.rs");
+            }
+            _ => panic!("Expected ToolResultData::FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_file_read_empty_result() {
+        // AC1: Empty result should have num_lines = None
+        let standard_tool = crate::models::StandardTool::FileRead {
+            path: "/empty.txt".to_string(),
+            start_line: None,
+            end_line: None,
+        };
+
+        let structured = parse_cursor_tool_result(&standard_tool, "");
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::FileRead { num_lines, .. } => {
+                assert!(num_lines.is_none());
+            }
+            _ => panic!("Expected ToolResultData::FileRead"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_file_write() {
+        // AC2: FileWrite 结构化结果
+        let standard_tool = crate::models::StandardTool::FileWrite {
+            path: "/src/new_file.rs".to_string(),
+            content: "fn new() {}".to_string(),
+        };
+        let result = "File written successfully";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::FileWrite { file_path } => {
+                assert_eq!(file_path, "/src/new_file.rs");
+            }
+            _ => panic!("Expected ToolResultData::FileWrite"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_file_edit() {
+        // AC3: FileEdit 结构化结果
+        let standard_tool = crate::models::StandardTool::FileEdit {
+            path: "/src/lib.rs".to_string(),
+            old_string: Some("fn old()".to_string()),
+            new_string: Some("fn new()".to_string()),
+        };
+        let result = "Edit applied successfully";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::FileEdit { file_path, old_string, new_string } => {
+                assert_eq!(file_path, "/src/lib.rs");
+                assert_eq!(old_string, Some("fn old()".to_string()));
+                assert_eq!(new_string, Some("fn new()".to_string()));
+            }
+            _ => panic!("Expected ToolResultData::FileEdit"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_shell_exec() {
+        // AC4: ShellExec 结构化结果
+        let standard_tool = crate::models::StandardTool::ShellExec {
+            command: "cargo build".to_string(),
+            cwd: Some("/project".to_string()),
+        };
+        let result = "Compiling project v0.1.0\nFinished dev target(s)\nexit code: 0";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::ShellExec { exit_code, stdout, stderr } => {
+                assert_eq!(exit_code, Some(0));
+                assert!(stdout.is_some());
+                assert!(stdout.unwrap().contains("Compiling"));
+                assert!(stderr.is_none());
+            }
+            _ => panic!("Expected ToolResultData::ShellExec"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_shell_exec_no_exit_code() {
+        // AC4: ShellExec without exit code pattern
+        let standard_tool = crate::models::StandardTool::ShellExec {
+            command: "echo hello".to_string(),
+            cwd: None,
+        };
+        let result = "hello";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_some());
+
+        match structured.unwrap() {
+            ToolResultData::ShellExec { exit_code, stdout, .. } => {
+                assert!(exit_code.is_none());
+                assert_eq!(stdout, Some("hello".to_string()));
+            }
+            _ => panic!("Expected ToolResultData::ShellExec"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_unknown_tool() {
+        // AC5: Unknown tool returns None
+        let standard_tool = crate::models::StandardTool::Unknown {
+            name: "custom_tool".to_string(),
+            input: serde_json::json!({}),
+        };
+        let result = "some result";
+
+        let structured = parse_cursor_tool_result(&standard_tool, result);
+        assert!(structured.is_none());
+    }
+
+    #[test]
+    fn test_parse_cursor_tool_result_other_standard_tools() {
+        // AC5: Other StandardTool variants return None (backward compatible)
+        let tools = vec![
+            crate::models::StandardTool::FileSearch {
+                pattern: "*.rs".to_string(),
+                path: None,
+            },
+            crate::models::StandardTool::ContentSearch {
+                pattern: "TODO".to_string(),
+                path: None,
+            },
+            crate::models::StandardTool::WebSearch {
+                query: "test".to_string(),
+            },
+        ];
+
+        for tool in tools {
+            let structured = parse_cursor_tool_result(&tool, "result");
+            assert!(structured.is_none(), "Expected None for {:?}", tool);
+        }
+    }
+
+    #[test]
+    fn test_extract_exit_code_patterns() {
+        // Test various exit code patterns
+        assert_eq!(extract_exit_code_from_result("exit code: 0"), Some(0));
+        assert_eq!(extract_exit_code_from_result("Exit Code: 1"), Some(1));
+        assert_eq!(extract_exit_code_from_result("exited with 127"), Some(127));
+        assert_eq!(extract_exit_code_from_result("returned 255"), Some(255));
+        assert_eq!(extract_exit_code_from_result("no exit code here"), None);
+    }
+
+    #[test]
+    fn test_e2e_process_tool_former_data_with_structured_result() {
+        // End-to-end test: Verify process_tool_former_data sets structured_result
+        let parser = CursorParser::new();
+        let tfd = ToolFormerData {
+            tool: Some(1),
+            tool_index: Some(0),
+            tool_call_id: Some("call-e2e-struct".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("read_file".to_string()),
+            raw_args: Some(r#"{"file_path": "/src/test.rs", "start_line": 1, "end_line": 10}"#.to_string()),
+            params: None,
+            result: Some("fn test() {}\nfn test2() {}".to_string()),
+            additional_data: None,
+            user_decision: None,
+        };
+
+        let (content_blocks, _) = parser.process_tool_former_data(&tfd);
+
+        // Find ToolResult and verify structured_result
+        let tool_result = content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(tool_result.is_some(), "ToolResult block should exist");
+
+        if let Some(ContentBlock::ToolResult { structured_result, .. }) = tool_result {
+            assert!(structured_result.is_some(), "structured_result should be Some");
+
+            match structured_result.as_ref().unwrap() {
+                ToolResultData::FileRead { file_path, start_line, num_lines, .. } => {
+                    assert_eq!(file_path, "/src/test.rs");
+                    assert_eq!(*start_line, Some(1));
+                    assert_eq!(*num_lines, Some(2)); // 2 lines in result
+                }
+                _ => panic!("Expected ToolResultData::FileRead"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_e2e_process_tool_former_data_shell_exec_structured_result() {
+        // End-to-end test: ShellExec structured_result
+        let parser = CursorParser::new();
+        let tfd = ToolFormerData {
+            tool: Some(10),
+            tool_index: Some(0),
+            tool_call_id: Some("call-shell".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("run_terminal_cmd".to_string()),
+            raw_args: Some(r#"{"command": "cargo test"}"#.to_string()),
+            params: None,
+            result: Some("running 5 tests\ntest result: ok. 5 passed\nexit code: 0".to_string()),
+            additional_data: None,
+            user_decision: Some("approved".to_string()),
+        };
+
+        let (content_blocks, _) = parser.process_tool_former_data(&tfd);
+
+        let tool_result = content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(tool_result.is_some());
+
+        if let Some(ContentBlock::ToolResult { structured_result, .. }) = tool_result {
+            assert!(structured_result.is_some());
+
+            match structured_result.as_ref().unwrap() {
+                ToolResultData::ShellExec { exit_code, stdout, .. } => {
+                    assert_eq!(*exit_code, Some(0));
+                    assert!(stdout.is_some());
+                }
+                _ => panic!("Expected ToolResultData::ShellExec"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_e2e_process_tool_former_data_unknown_tool_no_structured_result() {
+        // End-to-end test: Unknown tool should have structured_result = None
+        let parser = CursorParser::new();
+        let tfd = ToolFormerData {
+            tool: Some(999),
+            tool_index: Some(0),
+            tool_call_id: Some("call-unknown".to_string()),
+            model_call_id: None,
+            status: Some("completed".to_string()),
+            name: Some("custom_cursor_tool".to_string()),
+            raw_args: Some(r#"{"custom": "value"}"#.to_string()),
+            params: None,
+            result: Some("custom result".to_string()),
+            additional_data: None,
+            user_decision: None,
+        };
+
+        let (content_blocks, _) = parser.process_tool_former_data(&tfd);
+
+        let tool_result = content_blocks.iter().find(|b| matches!(b, ContentBlock::ToolResult { .. }));
+        assert!(tool_result.is_some());
+
+        if let Some(ContentBlock::ToolResult { structured_result, .. }) = tool_result {
+            assert!(structured_result.is_none(), "Unknown tool should have structured_result = None");
+        }
     }
 
     // ========== Story 8.17 Code Review Fix: True Integration Test ==========
