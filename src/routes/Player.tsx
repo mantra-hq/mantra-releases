@@ -6,6 +6,7 @@
  * Story 2.12: Task 2 (Smart File Selection Logic)
  * Story 2.17: TopBar 面包屑导航
  * Story 2.18: ProjectDrawer 项目抽屉
+ * Story 2.32: Git 提交标记集成到时间轴
  *
  * 封装 DualStreamLayout，用于播放会话内容
  *
@@ -22,7 +23,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@/lib/ipc-adapter";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
 import { convertSessionToMessages, type MantraSession } from "@/lib/session-utils";
-import { getProjectByCwd, getRepresentativeFile, detectGitRepo, syncProject } from "@/lib/project-ipc";
+import { getProjectByCwd, getRepresentativeFile, detectGitRepo, syncProject, getCommitsInRange, type CommitInfo } from "@/lib/project-ipc";
 import type { NarrativeMessage } from "@/types/message";
 import {
   messagesToTimelineEvents,
@@ -252,6 +253,57 @@ export default function Player() {
     };
   }, [sessionId]);
 
+  // Story 2.32: 加载 Git 提交并合并到时间轴事件
+  React.useEffect(() => {
+    // 只有当有 repoPath 和有效的时间范围时才加载
+    if (!repoPath || timelineRange.startTime >= timelineRange.endTime) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadGitCommits() {
+      try {
+        // 将毫秒转换为秒
+        const startSec = Math.floor(timelineRange.startTime / 1000);
+        const endSec = Math.ceil(timelineRange.endTime / 1000);
+
+        const commits = await getCommitsInRange(repoPath!, startSec, endSec);
+
+        if (cancelled) return;
+
+        if (commits.length > 0) {
+          // 将 commits 转换为 TimelineEvent
+          const commitEvents: TimelineEvent[] = commits.map((commit: CommitInfo) => ({
+            timestamp: new Date(commit.committed_at).getTime(),
+            type: 'git-commit' as const,
+            commitHash: commit.commit_hash,
+            label: commit.message.split('\n')[0], // 取首行作为标签
+          }));
+
+          // 从消息生成的事件（不包含 git-commit）
+          const messageEventsOnly = messagesToTimelineEvents(messages);
+
+          // 合并消息事件和 Git 事件，按时间排序
+          const allEvents = [...messageEventsOnly, ...commitEvents]
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+          setTimelineEvents(allEvents);
+          console.log(`[Player] 加载了 ${commits.length} 个 Git 提交到时间轴`);
+        }
+      } catch (err) {
+        // 静默失败，仅显示消息事件 (AC3: 无 Git 仓库优雅降级)
+        console.warn("[Player] 加载 Git 提交失败:", err);
+      }
+    }
+
+    loadGitCommits();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [repoPath, timelineRange.startTime, timelineRange.endTime, messages]);
+
   // 处理从全局搜索跳转的消息定位 (Story 2.10: Task 6)
   const addRecentSession = useSearchStore((state) => state.addRecentSession);
 
@@ -475,7 +527,7 @@ export default function Player() {
     [messages, jumpToMessage, repoPath, fetchSnapshot, openTab, setActiveRightTab]
   );
 
-  // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002, Story 2.12)
+  // 时间轴 Seek 回调 (Story 2.6, 2.7, FR-GIT-002, Story 2.12, Story 2.32)
   // 统一标签管理：时间轴拖动时打开历史版本标签
   const handleTimelineSeek = React.useCallback(
     async (timestamp: number) => {
@@ -483,27 +535,40 @@ export default function Player() {
       // 更新时间旅行状态 (Story 2.7 AC #2)
       setStoreCurrentTime(timestamp);
 
-      // 找到最近的消息并选中
-      const nearestEvent = timelineEvents.reduce<TimelineEvent | null>((nearest, event) => {
-        if (!nearest) return event;
-        const currentDiff = Math.abs(event.timestamp - timestamp);
-        const nearestDiff = Math.abs(nearest.timestamp - timestamp);
-        return currentDiff < nearestDiff ? event : nearest;
-      }, null);
+      // Story 2.32: 找到该时间点之前（或最近的）消息事件
+      // Git 提交点击时也应该联动到最近的消息
+      const messageEvents = timelineEvents.filter(e => e.messageIndex !== undefined);
+      let nearestMessageEvent: TimelineEvent | null = null;
+      
+      // 优先找时间点之前或等于的最近消息
+      const eventsBeforeOrAt = messageEvents.filter(e => e.timestamp <= timestamp);
+      if (eventsBeforeOrAt.length > 0) {
+        nearestMessageEvent = eventsBeforeOrAt.reduce((nearest, event) => {
+          return event.timestamp > nearest.timestamp ? event : nearest;
+        });
+      } else {
+        // 如果没有之前的消息，找之后最近的
+        const eventsAfter = messageEvents.filter(e => e.timestamp > timestamp);
+        if (eventsAfter.length > 0) {
+          nearestMessageEvent = eventsAfter.reduce((nearest, event) => {
+            return event.timestamp < nearest.timestamp ? event : nearest;
+          });
+        }
+      }
 
-      if (nearestEvent && nearestEvent.messageIndex !== undefined) {
-        const msg = messages[nearestEvent.messageIndex];
+      if (nearestMessageEvent && nearestMessageEvent.messageIndex !== undefined) {
+        const msg = messages[nearestMessageEvent.messageIndex];
         if (msg) {
           setSelectedMessageId(msg.id);
           layoutRef.current?.scrollToMessage(msg.id);
           // 更新时间旅行状态 (Story 2.7 AC #7)
-          jumpToMessage(nearestEvent.messageIndex, msg.id, timestamp);
+          jumpToMessage(nearestMessageEvent.messageIndex, msg.id, timestamp);
 
           // Story 2.12: 增强的文件路径提取
           if (repoPath) {
             const fileResult = findRecentFilePathEnhanced(
               messages,
-              nearestEvent.messageIndex
+              nearestMessageEvent.messageIndex!
             );
 
             // 只有当文件直接来自当前消息时才切换（非 history 来源）

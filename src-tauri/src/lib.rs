@@ -36,6 +36,8 @@ use commands::{
     search_sessions,
     // Platform-specific default paths
     get_default_paths,
+    // Story 2.32: Git commits in time range
+    get_commits_in_range,
 };
 
 use storage::Database;
@@ -127,7 +129,9 @@ pub fn run() {
             // Story 2.10: Global search
             search_sessions,
             // Platform-specific default paths
-            get_default_paths
+            get_default_paths,
+            // Story 2.32: Git commits in time range
+            get_commits_in_range
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -50,6 +50,8 @@ export const TimberLine = React.memo(function TimberLine({
     const [isDragging, setIsDragging] = React.useState(false);
     const [hoverPosition, setHoverPosition] = React.useState<number | null>(null);
     const [showKnobTooltip, setShowKnobTooltip] = React.useState(false);
+    // Story 2.32: 追踪是否悬停在 TickMark 上，避免与轨道悬停 Tooltip 重叠
+    const [isHoveringTick, setIsHoveringTick] = React.useState(false);
 
     // 计算当前位置百分比
     const currentPosition = React.useMemo(
@@ -258,6 +260,8 @@ export const TimberLine = React.memo(function TimberLine({
 
     const handleTickHover = React.useCallback(
         (event: TimelineEvent | null) => {
+            // Story 2.32: 记录是否悬停在 TickMark 上
+            setIsHoveringTick(event !== null);
             onHover?.(event?.timestamp ?? null);
         },
         [onHover]
@@ -339,8 +343,8 @@ export const TimberLine = React.memo(function TimberLine({
                     />
                 </div>
 
-                {/* 悬停指示器 */}
-                {hoverPosition !== null && !isDragging && hoverTimestamp !== null && (
+                {/* 悬停指示器 - Story 2.32: 悬停在 TickMark 时不显示，避免 Tooltip 重叠 */}
+                {hoverPosition !== null && !isDragging && !isHoveringTick && hoverTimestamp !== null && (
                     <div
                         className="absolute top-0 bottom-0 w-px bg-muted-foreground/50 pointer-events-none"
                         style={{ left: `${hoverPosition}%` }}

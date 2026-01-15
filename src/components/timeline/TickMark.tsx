@@ -116,11 +116,13 @@ function TickMarkComponent({
                 aria-label={eventLabel}
             />
 
-            {/* Tooltip */}
+            {/* Tooltip - Story 2.32: 传递 commitHash 和 position 实现智能定位 */}
             <TimeTooltip
                 timestamp={event.timestamp}
                 visible={showTooltip}
                 label={eventLabel}
+                commitHash={event.commitHash}
+                position={position}
             />
         </div>
     );

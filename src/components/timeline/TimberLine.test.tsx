@@ -152,9 +152,9 @@ describe("TimberLine", () => {
             // 悬停时应显示 Tooltip
             fireEvent.mouseEnter(knob!);
 
-            // Tooltip 内会包含时间格式，由于 currentTime=5000 是 1970-01-01 时间，检查是否有 Tooltip 渲染
-            // 由于 date-fns 会格式化时间，我们检查是否有 font-mono 的 tooltip 元素出现
-            const tooltip = slider.querySelector(".font-mono");
+            // Tooltip 使用 bg-zinc-900 样式，检查是否有 Tooltip 渲染
+            // Story 2.32: TimeTooltip 结构变更，普通事件不再使用 font-mono
+            const tooltip = slider.querySelector(".bg-zinc-900");
             expect(tooltip).toBeInTheDocument();
         });
 
@@ -168,7 +168,8 @@ describe("TimberLine", () => {
             fireEvent.mouseDown(track);
 
             // 拖拽时 tooltip 应该显示
-            const tooltip = slider.querySelector(".font-mono");
+            // Story 2.32: TimeTooltip 结构变更，使用 bg-zinc-900 选择器
+            const tooltip = slider.querySelector(".bg-zinc-900");
             expect(tooltip).toBeInTheDocument();
         });
     });

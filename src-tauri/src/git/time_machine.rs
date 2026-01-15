@@ -182,6 +182,64 @@ impl GitTimeMachine {
         Ok(content.to_string())
     }
 
+    /// 获取指定时间范围内的所有 Commits
+    ///
+    /// 遍历 Git 历史，返回在 [start_timestamp, end_timestamp] 范围内的所有 Commit。
+    /// 结果按时间升序排列（从旧到新）。
+    ///
+    /// # Arguments
+    /// * `start_timestamp` - 开始时间 (Unix seconds)
+    /// * `end_timestamp` - 结束时间 (Unix seconds)
+    ///
+    /// # Returns
+    /// 返回符合时间范围的 CommitInfo 列表，如果没有匹配返回空 Vec
+    pub fn get_commits_in_range(
+        &self,
+        start_timestamp: i64,
+        end_timestamp: i64,
+    ) -> Result<Vec<CommitInfo>, GitError> {
+        let mut commits = Vec::new();
+
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.push_head()?;
+        revwalk.set_sorting(Sort::TIME)?;
+
+        for oid_result in revwalk {
+            let oid = oid_result?;
+            let commit = self.repo.find_commit(oid)?;
+            let commit_time = commit.time().seconds();
+
+            // 跳过比 end_timestamp 更新的 commits
+            if commit_time > end_timestamp {
+                continue;
+            }
+
+            // 如果 commit 时间早于 start_timestamp，停止遍历（因为是按时间降序遍历）
+            if commit_time < start_timestamp {
+                break;
+            }
+
+            // commit 在范围内，收集信息
+            let author = commit.author();
+            let committed_at = Utc
+                .timestamp_opt(commit_time, 0)
+                .single()
+                .unwrap_or_else(Utc::now);
+
+            commits.push(CommitInfo {
+                commit_hash: oid.to_string(),
+                message: commit.message().unwrap_or("").to_string(),
+                author: author.name().unwrap_or("Unknown").to_string(),
+                author_email: author.email().unwrap_or("").to_string(),
+                committed_at,
+            });
+        }
+
+        // 反转为时间升序（从旧到新）
+        commits.reverse();
+        Ok(commits)
+    }
+
     /// 获取指定时间戳的文件快照
     ///
     /// 组合 find_commit_at_time 和 get_file_at_commit，
@@ -457,5 +515,96 @@ mod tests {
             .expect("Failed to get mtime");
 
         assert_eq!(original_mtime, new_mtime, "File should not be modified");
+    }
+
+    // =========================================================================
+    // Story 2.32: get_commits_in_range 测试
+    // =========================================================================
+
+    #[test]
+    fn test_get_commits_in_range_finds_commits() {
+        let temp_dir = create_test_repo();
+        let tm = GitTimeMachine::new(temp_dir.path()).expect("Failed to create GitTimeMachine");
+
+        // 测试仓库有两个 commit:
+        // - 2020-01-01: Initial commit
+        // - 2020-06-01: Update test file
+        // 使用一个包含这两个时间点的范围
+        let start = Utc.with_ymd_and_hms(2019, 12, 1, 0, 0, 0).unwrap().timestamp();
+        let end = Utc.with_ymd_and_hms(2020, 12, 31, 23, 59, 59).unwrap().timestamp();
+
+        let commits = tm.get_commits_in_range(start, end)
+            .expect("Failed to get commits in range");
+
+        assert_eq!(commits.len(), 2, "Should find 2 commits in range");
+        // 验证按时间升序排列（旧的在前）
+        assert!(commits[0].message.contains("Initial"), "First commit should be initial");
+        assert!(commits[1].message.contains("Update"), "Second commit should be update");
+    }
+
+    #[test]
+    fn test_get_commits_in_range_partial_range() {
+        let temp_dir = create_test_repo();
+        let tm = GitTimeMachine::new(temp_dir.path()).expect("Failed to create GitTimeMachine");
+
+        // 只包含第一个 commit 的范围 (2020-01-01)
+        let start = Utc.with_ymd_and_hms(2019, 12, 1, 0, 0, 0).unwrap().timestamp();
+        let end = Utc.with_ymd_and_hms(2020, 3, 1, 0, 0, 0).unwrap().timestamp();
+
+        let commits = tm.get_commits_in_range(start, end)
+            .expect("Failed to get commits in range");
+
+        assert_eq!(commits.len(), 1, "Should find 1 commit in partial range");
+        assert!(commits[0].message.contains("Initial"), "Should be initial commit");
+    }
+
+    #[test]
+    fn test_get_commits_in_range_empty_range() {
+        let temp_dir = create_test_repo();
+        let tm = GitTimeMachine::new(temp_dir.path()).expect("Failed to create GitTimeMachine");
+
+        // 在两个 commit 之间的空白范围 (2020-02 到 2020-04)
+        let start = Utc.with_ymd_and_hms(2020, 2, 1, 0, 0, 0).unwrap().timestamp();
+        let end = Utc.with_ymd_and_hms(2020, 4, 1, 0, 0, 0).unwrap().timestamp();
+
+        let commits = tm.get_commits_in_range(start, end)
+            .expect("Failed to get commits in range");
+
+        assert!(commits.is_empty(), "Should find no commits in empty range");
+    }
+
+    #[test]
+    fn test_get_commits_in_range_before_all_commits() {
+        let temp_dir = create_test_repo();
+        let tm = GitTimeMachine::new(temp_dir.path()).expect("Failed to create GitTimeMachine");
+
+        // 所有 commit 之前的范围
+        let start = Utc.with_ymd_and_hms(2018, 1, 1, 0, 0, 0).unwrap().timestamp();
+        let end = Utc.with_ymd_and_hms(2019, 1, 1, 0, 0, 0).unwrap().timestamp();
+
+        let commits = tm.get_commits_in_range(start, end)
+            .expect("Failed to get commits in range");
+
+        assert!(commits.is_empty(), "Should find no commits before all commits");
+    }
+
+    #[test]
+    fn test_get_commits_in_range_commit_info_fields() {
+        let temp_dir = create_test_repo();
+        let tm = GitTimeMachine::new(temp_dir.path()).expect("Failed to create GitTimeMachine");
+
+        let start = Utc.with_ymd_and_hms(2019, 12, 1, 0, 0, 0).unwrap().timestamp();
+        let end = Utc.with_ymd_and_hms(2020, 12, 31, 23, 59, 59).unwrap().timestamp();
+
+        let commits = tm.get_commits_in_range(start, end)
+            .expect("Failed to get commits in range");
+
+        assert!(!commits.is_empty(), "Should have at least one commit");
+
+        let commit = &commits[0];
+        assert!(!commit.commit_hash.is_empty(), "commit_hash should not be empty");
+        assert!(!commit.message.is_empty(), "message should not be empty");
+        assert!(!commit.author.is_empty(), "author should not be empty");
+        assert!(!commit.author_email.is_empty(), "author_email should not be empty");
     }
 }

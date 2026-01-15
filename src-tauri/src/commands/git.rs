@@ -218,6 +218,35 @@ pub async fn get_commit_info(
     .map_err(AppError::from)
 }
 
+/// 获取指定时间范围内的所有 Commits (Story 2.32)
+///
+/// 返回在 [start_timestamp, end_timestamp] 范围内的所有 Commit 信息。
+/// 用于在时间轴上显示 Git 提交标记。
+///
+/// # Arguments
+/// * `repo_path` - Git 仓库路径
+/// * `start_timestamp` - 开始时间 (Unix seconds)
+/// * `end_timestamp` - 结束时间 (Unix seconds)
+///
+/// # Returns
+/// 返回 CommitInfo 列表，按时间升序排列
+#[tauri::command]
+pub async fn get_commits_in_range(
+    repo_path: String,
+    start_timestamp: i64,
+    end_timestamp: i64,
+) -> Result<Vec<crate::git::CommitInfo>, AppError> {
+    let repo_path = PathBuf::from(repo_path);
+
+    spawn_blocking(move || {
+        let tm = GitTimeMachine::new(&repo_path)?;
+        tm.get_commits_in_range(start_timestamp, end_timestamp)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("Task join error: {}", e)))?
+    .map_err(AppError::from)
+}
+
 /// 获取 HEAD 版本的文件内容
 ///
 /// 读取 Git 仓库 HEAD 指向的最新版本的文件内容。
@@ -481,6 +510,55 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, AppError::Git(_)));
+    }
+
+    // =========================================================================
+    // Story 2.32: get_commits_in_range 命令测试
+    // =========================================================================
+
+    /// 测试 get_commits_in_range 无效仓库路径
+    #[tokio::test]
+    async fn test_get_commits_in_range_invalid_repo() {
+        let result = get_commits_in_range(
+            "/nonexistent/path".to_string(),
+            0,
+            i64::MAX,
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AppError::Git(_)));
+    }
+
+    /// 测试 get_commits_in_range 正常返回
+    #[tokio::test]
+    async fn test_get_commits_in_range_returns_commits() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let repo_path = std::path::PathBuf::from(manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| manifest_dir.to_string());
+
+        // 使用一个很大的时间范围，应该能找到一些 commit
+        let now = Utc::now().timestamp();
+        let one_year_ago = now - 365 * 24 * 60 * 60;
+
+        let result = get_commits_in_range(
+            repo_path,
+            one_year_ago,
+            now,
+        )
+        .await;
+
+        // 应该成功执行，可能有也可能没有 commits（取决于项目历史）
+        assert!(result.is_ok(), "get_commits_in_range should succeed on valid repo");
+
+        let commits = result.unwrap();
+        // 验证返回的是 Vec，即使为空也是有效的
+        println!("Found {} commits in the last year", commits.len());
     }
 
     /// 查找包含子模块的父仓库根目录

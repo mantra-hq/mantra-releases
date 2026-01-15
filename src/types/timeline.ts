@@ -72,8 +72,12 @@ export interface TimeTooltipProps {
   visible: boolean;
   /** 附加标签 */
   label?: string;
+  /** Git Commit Hash (Story 2.32: AC2) */
+  commitHash?: string;
   /** 位置样式 */
   style?: React.CSSProperties;
+  /** 在时间轴上的位置百分比 (0-100)，用于边界智能定位 */
+  position?: number;
 }
 
 // ============================================

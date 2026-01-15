@@ -9,8 +9,6 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import {
   MOCK_PROJECTS,
-  MOCK_SESSION_SUMMARIES,
-  MOCK_SESSIONS,
   MOCK_SNAPSHOT,
   MOCK_DART_CODE,
   MOCK_BUILTIN_RULES,

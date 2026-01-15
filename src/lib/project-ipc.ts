@@ -231,3 +231,47 @@ export async function getImportedSessionIds(): Promise<string[]> {
 export async function updateProjectCwd(projectId: string, newCwd: string): Promise<Project> {
   return invoke<Project>("update_project_cwd", { projectId, newCwd });
 }
+
+// =============================================================================
+// Story 2.32: Git Commits in Time Range
+// =============================================================================
+
+/**
+ * Git Commit 信息 (与 Rust CommitInfo 对齐)
+ * Story 2.32: Task 3.2
+ */
+export interface CommitInfo {
+  /** Commit SHA */
+  commit_hash: string;
+  /** Commit 消息 */
+  message: string;
+  /** 作者名 */
+  author: string;
+  /** 作者邮箱 */
+  author_email: string;
+  /** Commit 时间 (ISO 8601 字符串) */
+  committed_at: string;
+}
+
+/**
+ * 获取指定时间范围内的所有 Git Commits
+ * Story 2.32: Task 3.1
+ *
+ * 用于在时间轴上显示 Git 提交标记
+ *
+ * @param repoPath - Git 仓库路径
+ * @param startTimestamp - 开始时间 (Unix seconds)
+ * @param endTimestamp - 结束时间 (Unix seconds)
+ * @returns CommitInfo 列表，按时间升序排列
+ */
+export async function getCommitsInRange(
+  repoPath: string,
+  startTimestamp: number,
+  endTimestamp: number
+): Promise<CommitInfo[]> {
+  return invoke<CommitInfo[]>("get_commits_in_range", {
+    repoPath,
+    startTimestamp,
+    endTimestamp,
+  });
+}
