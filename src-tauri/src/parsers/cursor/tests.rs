@@ -1478,6 +1478,46 @@ fn test_extract_display_content_priority_order() {
 }
 
 #[test]
+fn test_extract_display_content_from_json_stdout() {
+    // Test "stdout" field (Cursor shell format)
+    let json = r#"{"stdout": "build successful\nall tests passed", "exitCode": 0}"#;
+    let result = extract_display_content_from_result(json);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), "build successful\nall tests passed");
+}
+
+#[test]
+fn test_extract_display_content_from_cursor_shell_metadata() {
+    // Test Cursor shell metadata JSON - should generate friendly message
+    let json = r#"{"rejected":false,"isRunningInBackground":true,"notInterrupted":true,"effectiveSandboxPolicy":{"type":"TYPE_INSECURE_NONE"},"terminalInstancePath":"/home/user/.cursor/terminals/1.txt"}"#;
+    let result = extract_display_content_from_result(json);
+    assert!(result.is_some());
+    let content = result.unwrap();
+    // Should contain friendly message about background execution
+    assert!(content.contains("后台"), "Should mention background execution: {}", content);
+    assert!(content.contains("1.txt"), "Should include terminal name: {}", content);
+}
+
+#[test]
+fn test_extract_display_content_from_cursor_shell_metadata_rejected() {
+    // Test rejected shell command metadata
+    let json = r#"{"rejected":true,"isRunningInBackground":true,"notInterrupted":false,"effectiveSandboxPolicy":{"type":"TYPE_INSECURE_NONE"}}"#;
+    let result = extract_display_content_from_result(json);
+    assert!(result.is_some());
+    let content = result.unwrap();
+    assert!(content.contains("拒绝"), "Should mention rejection: {}", content);
+}
+
+#[test]
+fn test_extract_display_content_from_json_terminal_output() {
+    // Test "terminalOutput" field
+    let json = r#"{"terminalOutput": "$ cargo build\nCompiling...\nFinished", "status": "completed"}"#;
+    let result = extract_display_content_from_result(json);
+    assert!(result.is_some());
+    assert!(result.unwrap().contains("cargo build"));
+}
+
+#[test]
 fn test_e2e_process_tool_former_data_with_structured_result() {
     // End-to-end test: Verify process_tool_former_data sets structured_result
     let parser = CursorParser::new();

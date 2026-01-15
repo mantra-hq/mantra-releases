@@ -639,13 +639,17 @@ fn extract_exit_code_from_result(result: &str) -> Option<i32> {
 /// - {"text": "file content..."}
 /// - {"value": "file content..."}
 ///
+/// For shell commands, Cursor may return metadata JSON:
+/// - {"rejected": false, "isRunningInBackground": true, "stdout": "actual output", ...}
+///
 /// This function tries multiple common field names to extract the actual content.
 fn extract_display_content_from_result(result: &str) -> Option<String> {
     // Try to parse as JSON
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(result) {
         // Try multiple common field names for content extraction
         // Order: most specific to most generic
-        let content_fields = ["contents", "content", "text", "value", "output", "data"];
+        // Added "stdout", "stderr", "terminalOutput" for shell command support
+        let content_fields = ["contents", "content", "text", "value", "output", "data", "stdout", "terminalOutput"];
         
         for field in content_fields {
             if let Some(content) = json.get(field).and_then(|v| v.as_str()) {
@@ -654,9 +658,45 @@ fn extract_display_content_from_result(result: &str) -> Option<String> {
                 }
             }
         }
+        
+        // Special handling for Cursor shell metadata JSON
+        // When isRunningInBackground is true, generate a friendly message
+        if json.get("isRunningInBackground").and_then(|v| v.as_bool()) == Some(true) {
+            return Some(format_shell_metadata_message(&json));
+        }
     }
     // Not JSON or no extractable content - return None (use original content)
     None
+}
+
+/// Format a friendly message from Cursor shell metadata JSON
+///
+/// When Cursor returns metadata JSON for background shell commands,
+/// this generates a human-readable summary instead of showing raw JSON.
+fn format_shell_metadata_message(json: &serde_json::Value) -> String {
+    let mut parts = Vec::new();
+    
+    // Check if rejected
+    if json.get("rejected").and_then(|v| v.as_bool()) == Some(true) {
+        parts.push("命令被拒绝".to_string());
+    } else {
+        parts.push("命令已在后台执行".to_string());
+    }
+    
+    // Add terminal path info if available
+    if let Some(path) = json.get("terminalInstancePath").and_then(|v| v.as_str()) {
+        // Extract just the terminal name/id from the full path
+        if let Some(terminal_name) = path.rsplit('/').next() {
+            parts.push(format!("终端: {}", terminal_name));
+        }
+    }
+    
+    // Note about background execution
+    if json.get("notInterrupted").and_then(|v| v.as_bool()) == Some(true) {
+        parts.push("执行未中断".to_string());
+    }
+    
+    parts.join("\n")
 }
 
 /// Process tool result content - unified logic for both toolFormerData and legacy paths
