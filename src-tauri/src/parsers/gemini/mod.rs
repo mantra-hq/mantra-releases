@@ -21,7 +21,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 
 use super::{LogParser, ParseError};
-use crate::models::{normalize_tool, sources, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, TokensBreakdown, UnknownFormatEntry};
+use crate::models::{normalize_tool, sources, ContentBlock, MantraSession, Message, ParserInfo, SessionMetadata, TokensBreakdown, ToolResultData, UnknownFormatEntry};
 
 pub use path::{get_gemini_dir, get_gemini_tmp_dir, GeminiPaths, GeminiSessionFile};
 pub use types::*;
@@ -347,9 +347,32 @@ impl GeminiParser {
                     for result_wrapper in results {
                         let response = &result_wrapper.function_response;
                         let is_error = tool_call.status == "error";
-                        let raw_content = response.response.as_content();
-                        // Strip system reminder tags from tool result content
-                        let content = crate::parsers::strip_system_reminders(&raw_content);
+
+                        // Try to parse shell result format (Gemini CLI multi-line format)
+                        let (content, structured_result, display_content) = if let Some(parsed) = response.response.parse_shell_result() {
+                            // Shell result format detected: extract actual output
+                            let shell_output = parsed.output.clone()
+                                .or_else(|| parsed.stderr.clone())
+                                .unwrap_or_default();
+
+                            // Create structured result for shell command
+                            let structured = Some(ToolResultData::ShellExec {
+                                exit_code: parsed.exit_code,
+                                stdout: parsed.output,
+                                stderr: parsed.stderr,
+                            });
+
+                            // Use Gemini's resultDisplay if available, otherwise use extracted output
+                            let display = tool_call.result_display.clone()
+                                .or_else(|| if shell_output.is_empty() { None } else { Some(shell_output.clone()) });
+
+                            (shell_output, structured, display)
+                        } else {
+                            // Not shell format: use original content
+                            let raw_content = response.response.as_content();
+                            let cleaned = crate::parsers::strip_system_reminders(&raw_content);
+                            (cleaned, None, tool_call.result_display.clone())
+                        };
 
                         // Add ToolResult with display metadata (AC2)
                         tool_blocks.push(ContentBlock::ToolResult {
@@ -357,8 +380,8 @@ impl GeminiParser {
                             content,
                             is_error,
                             correlation_id: correlation_id.clone(),
-                            structured_result: None,
-                            display_content: tool_call.result_display.clone(),
+                            structured_result,
+                            display_content,
                             render_as_markdown: tool_call.render_output_as_markdown,
                             user_decision: None,
                         });

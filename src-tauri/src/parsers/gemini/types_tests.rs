@@ -241,3 +241,116 @@ fn test_deserialize_info_message() {
     assert_eq!(msg.msg_type, GeminiMessageType::Info);
     assert!(!msg.msg_type.should_include());
 }
+
+// ========== Shell Result Format Parsing Tests ==========
+
+#[test]
+fn test_is_shell_result_format_positive() {
+    let response = GeminiToolResponse {
+        output: Some("Command: ls -la\nDirectory: /home/user\nOutput: file1.txt\nfile2.txt\nError: (none)\nExit Code: 0\nSignal: (none)\nBackground PIDs: (none)\nProcess Group PGID: 12345".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+    assert!(response.is_shell_result_format());
+}
+
+#[test]
+fn test_is_shell_result_format_negative() {
+    // Simple output without shell format
+    let response = GeminiToolResponse {
+        output: Some("file1.txt\nfile2.txt".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+    assert!(!response.is_shell_result_format());
+}
+
+#[test]
+fn test_parse_shell_result_basic() {
+    let response = GeminiToolResponse {
+        output: Some("Command: ls -la\nDirectory: /home/user\nOutput: file1.txt\nfile2.txt\nError: (none)\nExit Code: 0\nSignal: (none)\nBackground PIDs: (none)\nProcess Group PGID: 12345".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    let parsed = response.parse_shell_result().unwrap();
+    assert_eq!(parsed.command, Some("ls -la".to_string()));
+    assert_eq!(parsed.directory, Some("/home/user".to_string()));
+    assert_eq!(parsed.output, Some("file1.txt\nfile2.txt".to_string()));
+    assert_eq!(parsed.error, None); // (none) should be parsed as None
+    assert_eq!(parsed.exit_code, Some(0));
+    assert_eq!(parsed.signal, None); // (none) should be parsed as None
+}
+
+#[test]
+fn test_parse_shell_result_empty_output() {
+    let response = GeminiToolResponse {
+        output: Some("Command: grep -r \"test\" /src\nDirectory: (root)\nOutput: (empty)\nError: (none)\nExit Code: 1\nSignal: (none)\nBackground PIDs: (none)\nProcess Group PGID: 54321".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    let parsed = response.parse_shell_result().unwrap();
+    assert_eq!(parsed.command, Some("grep -r \"test\" /src".to_string()));
+    assert_eq!(parsed.directory, None); // (root) should be parsed as None
+    assert_eq!(parsed.output, None); // (empty) should be parsed as None
+    assert_eq!(parsed.exit_code, Some(1));
+}
+
+#[test]
+fn test_parse_shell_result_with_error() {
+    let response = GeminiToolResponse {
+        output: Some("Command: cat nonexistent.txt\nDirectory: /tmp\nOutput: (empty)\nError: No such file or directory\nExit Code: 1\nSignal: (none)\nBackground PIDs: (none)\nProcess Group PGID: 99999".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    let parsed = response.parse_shell_result().unwrap();
+    assert_eq!(parsed.command, Some("cat nonexistent.txt".to_string()));
+    assert_eq!(parsed.error, Some("No such file or directory".to_string()));
+    assert_eq!(parsed.exit_code, Some(1));
+}
+
+#[test]
+fn test_parse_shell_result_multiline_output() {
+    // Test multi-line output that spans multiple lines before the next field
+    let response = GeminiToolResponse {
+        output: Some("Command: ls -la\nDirectory: /home\nOutput: drwxr-xr-x  2 user user  4096 Jan  1 00:00 .\ndrwxr-xr-x 10 user user  4096 Jan  1 00:00 ..\n-rw-r--r--  1 user user   100 Jan  1 00:00 test.txt\nError: (none)\nExit Code: 0\nSignal: (none)\nBackground PIDs: (none)\nProcess Group PGID: 11111".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    let parsed = response.parse_shell_result().unwrap();
+    assert_eq!(parsed.command, Some("ls -la".to_string()));
+    // The output should contain all three lines
+    let output = parsed.output.unwrap();
+    assert!(output.contains("drwxr-xr-x  2 user user"));
+    assert!(output.contains("drwxr-xr-x 10 user user"));
+    assert!(output.contains("-rw-r--r--  1 user user"));
+    assert_eq!(parsed.exit_code, Some(0));
+}
+
+#[test]
+fn test_parse_shell_result_returns_none_for_non_shell_format() {
+    // Should return None for content that doesn't match shell format
+    let response = GeminiToolResponse {
+        output: Some("Just some regular output\nwithout shell format markers".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    assert!(response.parse_shell_result().is_none());
+}
+
+#[test]
+fn test_parse_shell_result_signal_terminated() {
+    let response = GeminiToolResponse {
+        output: Some("Command: sleep 100\nDirectory: /tmp\nOutput: (empty)\nError: (none)\nExit Code: (none)\nSignal: 9\nBackground PIDs: (none)\nProcess Group PGID: 77777".to_string()),
+        error: None,
+        extra: serde_json::Map::new(),
+    };
+
+    let parsed = response.parse_shell_result().unwrap();
+    assert_eq!(parsed.exit_code, None); // (none) should be None
+    assert_eq!(parsed.signal, Some(9));
+}

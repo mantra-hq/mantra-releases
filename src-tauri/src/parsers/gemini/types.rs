@@ -300,6 +300,25 @@ pub struct GeminiToolResponse {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// Parsed shell result from Gemini CLI's multi-line format
+#[derive(Debug, Clone, Default)]
+pub struct ParsedShellResult {
+    /// The actual command output (from "Output:" or "Stdout:" field)
+    pub output: Option<String>,
+    /// Error output (from "Stderr:" field)
+    pub stderr: Option<String>,
+    /// Error message (from "Error:" field)
+    pub error: Option<String>,
+    /// Exit code
+    pub exit_code: Option<i32>,
+    /// Signal number
+    pub signal: Option<i32>,
+    /// The executed command
+    pub command: Option<String>,
+    /// Working directory
+    pub directory: Option<String>,
+}
+
 impl GeminiToolResponse {
     /// Get the output or error as a string
     pub fn as_content(&self) -> String {
@@ -310,6 +329,99 @@ impl GeminiToolResponse {
         } else {
             String::new()
         }
+    }
+
+    /// Check if the output is in Gemini CLI's multi-line shell result format
+    ///
+    /// Gemini CLI stores shell results in this format:
+    /// ```text
+    /// Command: <command>
+    /// Directory: <dir or (root)>
+    /// Output: <output or (empty)>
+    /// Error: <error or (none)>
+    /// Exit Code: <code or (none)>
+    /// Signal: <signal or (none)>
+    /// Background PIDs: <pids or (none)>
+    /// Process Group PGID: <pgid or (none)>
+    /// ```
+    pub fn is_shell_result_format(&self) -> bool {
+        if let Some(output) = &self.output {
+            // Check for characteristic shell result patterns
+            output.starts_with("Command:") && output.contains("\nOutput:")
+        } else {
+            false
+        }
+    }
+
+    /// Parse Gemini CLI's multi-line shell result format
+    ///
+    /// Returns parsed components if the output matches the shell result format,
+    /// otherwise returns None.
+    pub fn parse_shell_result(&self) -> Option<ParsedShellResult> {
+        let output = self.output.as_ref()?;
+
+        // Quick check: must have "Command:" and "Output:" markers
+        if !output.starts_with("Command:") || !output.contains("\nOutput:") {
+            return None;
+        }
+
+        let mut result = ParsedShellResult::default();
+        let mut current_field: Option<&str> = None;
+        let mut current_value = String::new();
+
+        // Helper to save the current field value
+        let mut save_field = |field: Option<&str>, value: &str| {
+            if let Some(f) = field {
+                let trimmed = value.trim();
+                let is_empty = trimmed.is_empty() || trimmed == "(empty)" || trimmed == "(none)";
+
+                match f {
+                    "Command" => result.command = if is_empty { None } else { Some(trimmed.to_string()) },
+                    "Directory" => result.directory = if trimmed == "(root)" || is_empty { None } else { Some(trimmed.to_string()) },
+                    "Output" | "Stdout" => result.output = if is_empty { None } else { Some(trimmed.to_string()) },
+                    "Stderr" => result.stderr = if is_empty { None } else { Some(trimmed.to_string()) },
+                    "Error" => result.error = if is_empty { None } else { Some(trimmed.to_string()) },
+                    "Exit Code" => result.exit_code = trimmed.parse().ok(),
+                    "Signal" => result.signal = trimmed.parse().ok(),
+                    _ => {} // Ignore other fields like "Background PIDs", "Process Group PGID"
+                }
+            }
+        };
+
+        // Parse line by line
+        for line in output.lines() {
+            // Check if this line starts a new field
+            let field_markers = [
+                "Command:", "Directory:", "Output:", "Stdout:", "Stderr:",
+                "Error:", "Exit Code:", "Signal:", "Background PIDs:", "Process Group PGID:",
+            ];
+
+            let mut found_new_field = false;
+            for marker in field_markers {
+                if line.starts_with(marker) {
+                    // Save previous field
+                    save_field(current_field, &current_value);
+
+                    // Start new field
+                    let field_name = marker.trim_end_matches(':');
+                    current_field = Some(field_name);
+                    current_value = line[marker.len()..].to_string();
+                    found_new_field = true;
+                    break;
+                }
+            }
+
+            // If not a new field, append to current value (multi-line output)
+            if !found_new_field && current_field.is_some() {
+                current_value.push('\n');
+                current_value.push_str(line);
+            }
+        }
+
+        // Save the last field
+        save_field(current_field, &current_value);
+
+        Some(result)
     }
 }
 
