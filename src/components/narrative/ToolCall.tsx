@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { ChevronRight, Wrench, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isFileTool, isFileEditTool, getToolPath, getToolContent } from "@/lib/tool-utils";
+import { isFileTool, isFileEditTool, isTerminalTool, getToolPath, getToolContent, getToolCommand } from "@/lib/tool-utils";
 import type { StandardTool } from "@/types/message";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";
@@ -189,12 +189,24 @@ export function ToolCall({
             )}
           >
             {/* Story 8.11 Task 9: FileEdit 类型显示 diff 视图 */}
+            {/* 使用 standardTool 规范化数据来渲染，而非原始 input */}
             {isFileEditTool(standardTool) ? (
               <FileEditDiff
                 filePath={standardTool.path}
                 oldString={standardTool.old_string}
                 newString={standardTool.new_string}
               />
+            ) : isTerminalTool(standardTool) ? (
+              // Shell 命令：显示规范化后的命令，而非原始数组格式
+              <pre
+                className={cn(
+                  "font-mono text-xs",
+                  "whitespace-pre-wrap break-all",
+                  "text-muted-foreground"
+                )}
+              >
+                $ {getToolCommand(standardTool)}
+              </pre>
             ) : (
               <pre
                 className={cn(
