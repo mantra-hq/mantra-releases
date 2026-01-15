@@ -9,6 +9,7 @@
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Image as ImageIcon, ExternalLink, Maximize2 } from "lucide-react";
 
@@ -47,6 +48,14 @@ export function ImageBlock({
   const [isLoading, setIsLoading] = React.useState(true);
   const [hasError, setHasError] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const modalRef = React.useRef<HTMLDivElement>(null);
+
+  // 放大视图打开时自动聚焦，确保 ESC 键能正常工作
+  React.useEffect(() => {
+    if (isExpanded && modalRef.current) {
+      modalRef.current.focus();
+    }
+  }, [isExpanded]);
 
   // 构建图片 src
   const imageSrc = React.useMemo(() => {
@@ -169,34 +178,36 @@ export function ImageBlock({
         )}
       </div>
 
-      {/* 放大视图 (Modal) */}
-      {isExpanded && (
-        <div
-          className={cn(
-            "fixed inset-0 z-50 flex items-center justify-center",
-            "bg-black/80 backdrop-blur-sm",
-            "cursor-zoom-out"
-          )}
-          onClick={handleClose}
-          onKeyDown={handleKeyDown}
-          role="dialog"
-          aria-modal="true"
-          aria-label="图片预览"
-          tabIndex={0}
-        >
-          <img
-            src={imageSrc}
-            alt={altText || "用户上传的图片"}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+      {/* 放大视图 (Portal to body for true fullscreen) */}
+      {isExpanded &&
+        createPortal(
+          <div
+            ref={modalRef}
+            className={cn(
+              "fixed inset-0 z-[9999] flex items-center justify-center",
+              "bg-black/80 backdrop-blur-sm",
+              "cursor-zoom-out"
+            )}
+            onClick={handleClose}
+            onKeyDown={handleKeyDown}
+            role="dialog"
+            aria-modal="true"
+            aria-label="图片预览"
+            tabIndex={0}
+          >
+            <img
+              src={imageSrc}
+              alt={altText || "用户上传的图片"}
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            />
 
-          {/* 关闭提示 */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
-            按 ESC 或点击空白处关闭
-          </div>
-        </div>
-      )}
+            {/* 关闭提示 */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
+              按 ESC 或点击任意位置关闭
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }
