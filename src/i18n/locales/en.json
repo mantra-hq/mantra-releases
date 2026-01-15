@@ -440,7 +440,17 @@
     "shareSuccess": "Shared successfully",
     "shareSuccessWithSanitize": "Sanitized {{count}} sensitive items and shared successfully",
     "shareFailed": "Share failed",
-    "noSessionSelected": "No session selected"
+    "noSessionSelected": "No session selected",
+    "copyToClipboard": "Copy to Clipboard",
+    "exportToFile": "Export to File",
+    "copiedWithSanitize": "Sanitized {{count}} sensitive items and copied to clipboard",
+    "noContentToCopy": "No content to copy",
+    "noContentToExport": "No content to export",
+    "exportSanitizedSession": "Export Sanitized Session",
+    "textFile": "Text File",
+    "exportedWithSanitize": "Sanitized {{count}} sensitive items and exported successfully",
+    "exportSuccess": "Export successful",
+    "exportFailed": "Export failed"
   },
   "diff": {
     "original": "Original",

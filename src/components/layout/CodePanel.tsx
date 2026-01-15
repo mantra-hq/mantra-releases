@@ -136,6 +136,8 @@ export function CodePanel({
     const sanitizeMatches = useSanitizePreviewStore((state) => state.sensitiveMatches);
     const exitPreviewMode = useSanitizePreviewStore((state) => state.exitPreviewMode);
     const confirmShare = useSanitizePreviewStore((state) => state.confirmShare);
+    const copyToClipboard = useSanitizePreviewStore((state) => state.copyToClipboard);
+    const exportToFile = useSanitizePreviewStore((state) => state.exportToFile);
 
     // 是否处于脱敏预览模式
     const isInSanitizePreview = sanitizeMode === 'preview';
@@ -598,6 +600,8 @@ export function CodePanel({
                         error={sanitizeError}
                         onCancel={exitPreviewMode}
                         onConfirm={confirmShare}
+                        onCopyToClipboard={copyToClipboard}
+                        onExportToFile={exportToFile}
                         onJumpToLine={handleJumpToLine}
                     />
                 )}

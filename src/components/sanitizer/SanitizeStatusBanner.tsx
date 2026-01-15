@@ -6,13 +6,19 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { ShieldCheck, ShieldAlert, Info, Loader2 } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Info, Loader2, Copy, Download, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import type { SanitizeStatusBannerProps, SensitiveType } from './types';
 import { SENSITIVE_TYPE_LABELS } from './types';
@@ -31,9 +37,16 @@ export function SanitizeStatusBanner({
     isLoading = false,
     error,
     onCancel,
-    onConfirm: _onConfirm, // TODO: 启用分享功能后移除下划线
+    onConfirm,
+    onCopyToClipboard,
+    onExportToFile,
     onJumpToLine,
-}: SanitizeStatusBannerProps) {
+}: SanitizeStatusBannerProps & {
+    /** 复制到剪贴板回调 */
+    onCopyToClipboard?: () => void;
+    /** 导出为文件回调 */
+    onExportToFile?: () => void;
+}) {
     const { t } = useTranslation();
 
     const hasSensitiveInfo = stats.total > 0;
@@ -126,22 +139,41 @@ export function SanitizeStatusBanner({
                     >
                         {t('common.cancel', '取消')}
                     </Button>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span>
-                                <Button
-                                    size="sm"
-                                    disabled
-                                    data-testid="confirm-button"
-                                >
-                                    {t('sanitizer.confirmShare', '确认分享')}
-                                </Button>
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{t('common.comingSoon', '即将上线')}</p>
-                        </TooltipContent>
-                    </Tooltip>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                size="sm"
+                                data-testid="share-button"
+                                className="gap-1.5"
+                            >
+                                {t('sanitizer.confirmShare', '确认分享')}
+                                <ChevronDown className="h-3 w-3" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onCopyToClipboard?.();
+                                    onConfirm();
+                                }}
+                                className="gap-2"
+                                data-testid="copy-to-clipboard"
+                            >
+                                <Copy className="h-4 w-4" />
+                                {t('sanitizer.copyToClipboard', '复制到剪贴板')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onExportToFile?.();
+                                }}
+                                className="gap-2"
+                                data-testid="export-to-file"
+                            >
+                                <Download className="h-4 w-4" />
+                                {t('sanitizer.exportToFile', '导出为文件')}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 

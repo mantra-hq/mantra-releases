@@ -440,7 +440,17 @@
     "shareSuccess": "分享成功",
     "shareSuccessWithSanitize": "已脱敏 {{count}} 处敏感信息并分享成功",
     "shareFailed": "分享失败",
-    "noSessionSelected": "没有选中的会话"
+    "noSessionSelected": "没有选中的会话",
+    "copyToClipboard": "复制到剪贴板",
+    "exportToFile": "导出为文件",
+    "copiedWithSanitize": "已脱敏 {{count}} 处敏感信息并复制到剪贴板",
+    "noContentToCopy": "没有可复制的内容",
+    "noContentToExport": "没有可导出的内容",
+    "exportSanitizedSession": "导出脱敏会话",
+    "textFile": "文本文件",
+    "exportedWithSanitize": "已脱敏 {{count}} 处敏感信息并导出成功",
+    "exportSuccess": "导出成功",
+    "exportFailed": "导出失败"
   },
   "diff": {
     "original": "原始",

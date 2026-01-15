@@ -101,7 +101,7 @@ describe('SanitizeStatusBanner', () => {
             );
 
             expect(screen.getByTestId('cancel-button')).toBeInTheDocument();
-            expect(screen.getByTestId('confirm-button')).toBeInTheDocument();
+            expect(screen.getByTestId('share-button')).toBeInTheDocument();
         });
 
         it('应该使用警告色背景 (amber)', () => {
@@ -218,19 +218,78 @@ describe('SanitizeStatusBanner', () => {
             expect(onCancel).toHaveBeenCalled();
         });
 
-        it('点击确认分享按钮应该禁用（即将上线功能）', async () => {
+        it('点击分享按钮应该显示下拉菜单', async () => {
+            const user = userEvent.setup();
+            const onCopyToClipboard = vi.fn();
+            const onExportToFile = vi.fn();
+            const onConfirm = vi.fn();
+
+            renderWithProviders(
+                <SanitizeStatusBanner
+                    stats={mockStatsWithSensitive}
+                    sensitiveMatches={mockMatches}
+                    onCancel={vi.fn()}
+                    onConfirm={onConfirm}
+                    onCopyToClipboard={onCopyToClipboard}
+                    onExportToFile={onExportToFile}
+                />
+            );
+
+            // 点击分享按钮打开下拉菜单
+            const shareButton = screen.getByTestId('share-button');
+            await user.click(shareButton);
+
+            // 应该显示下拉菜单选项
+            expect(screen.getByTestId('copy-to-clipboard')).toBeInTheDocument();
+            expect(screen.getByTestId('export-to-file')).toBeInTheDocument();
+        });
+
+        it('点击复制到剪贴板选项应该触发回调', async () => {
+            const user = userEvent.setup();
+            const onCopyToClipboard = vi.fn();
+            const onConfirm = vi.fn();
+
+            renderWithProviders(
+                <SanitizeStatusBanner
+                    stats={mockStatsWithSensitive}
+                    sensitiveMatches={mockMatches}
+                    onCancel={vi.fn()}
+                    onConfirm={onConfirm}
+                    onCopyToClipboard={onCopyToClipboard}
+                />
+            );
+
+            // 点击分享按钮打开下拉菜单
+            await user.click(screen.getByTestId('share-button'));
+
+            // 点击复制到剪贴板
+            await user.click(screen.getByTestId('copy-to-clipboard'));
+
+            expect(onCopyToClipboard).toHaveBeenCalled();
+            expect(onConfirm).toHaveBeenCalled();
+        });
+
+        it('点击导出为文件选项应该触发回调', async () => {
+            const user = userEvent.setup();
+            const onExportToFile = vi.fn();
+
             renderWithProviders(
                 <SanitizeStatusBanner
                     stats={mockStatsWithSensitive}
                     sensitiveMatches={mockMatches}
                     onCancel={vi.fn()}
                     onConfirm={vi.fn()}
+                    onExportToFile={onExportToFile}
                 />
             );
 
-            // 确认按钮应该禁用
-            const confirmButton = screen.getByTestId('confirm-button');
-            expect(confirmButton).toBeDisabled();
+            // 点击分享按钮打开下拉菜单
+            await user.click(screen.getByTestId('share-button'));
+
+            // 点击导出为文件
+            await user.click(screen.getByTestId('export-to-file'));
+
+            expect(onExportToFile).toHaveBeenCalled();
         });
     });
 

@@ -8,6 +8,8 @@
 
 import { create } from 'zustand';
 import { invoke } from '@/lib/ipc-adapter';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { sanitizeSession } from '@/lib/ipc/sanitizer-ipc';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { useDetailPanelStore } from '@/stores/useDetailPanelStore';
@@ -50,6 +52,10 @@ interface SanitizePreviewActions {
     exitPreviewMode: () => void;
     /** 确认分享 (AC6) */
     confirmShare: () => Promise<void>;
+    /** 复制脱敏内容到剪贴板 */
+    copyToClipboard: () => Promise<boolean>;
+    /** 导出脱敏内容为文件 */
+    exportToFile: () => Promise<boolean>;
     /** 根据类型获取第一个匹配的行号 */
     getFirstLineByType: (type: SensitiveType) => number | null;
     /** 重置状态 */
@@ -253,6 +259,114 @@ export const useSanitizePreviewStore = create<SanitizePreviewStore>((set, get) =
             const errorMessage = err instanceof Error ? err.message : i18n.t('sanitizer.shareFailed', '分享失败');
             console.error('[SanitizePreview] Share error:', err);
             feedback.error(i18n.t('sanitizer.confirmShare'), errorMessage);
+        }
+    },
+
+    copyToClipboard: async () => {
+        const { sanitizedText, stats } = get();
+
+        if (!sanitizedText) {
+            feedback.error(
+                i18n.t('common.copy'),
+                i18n.t('sanitizer.noContentToCopy', '没有可复制的内容')
+            );
+            return false;
+        }
+
+        try {
+            // 优先使用现代 Clipboard API
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(sanitizedText);
+            } else {
+                // 降级方案：使用 execCommand
+                const textArea = document.createElement('textarea');
+                textArea.value = sanitizedText;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    const success = document.execCommand('copy');
+                    if (!success) {
+                        throw new Error('execCommand copy failed');
+                    }
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            }
+
+            // 显示成功反馈
+            feedback.copied(
+                stats.total > 0
+                    ? i18n.t('sanitizer.copiedWithSanitize', '已脱敏 {{count}} 处敏感信息并复制到剪贴板', { count: stats.total })
+                    : i18n.t('feedback.copiedToClipboard', '已复制到剪贴板')
+            );
+
+            // 退出预览模式
+            get().exitPreviewMode();
+            return true;
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : i18n.t('feedback.copyFailed', '复制失败');
+            console.error('[SanitizePreview] Copy error:', err);
+            feedback.error(i18n.t('common.copy'), errorMessage);
+            return false;
+        }
+    },
+
+    exportToFile: async () => {
+        const { sanitizedText, sessionId, stats } = get();
+
+        if (!sanitizedText) {
+            feedback.error(
+                i18n.t('settings.export'),
+                i18n.t('sanitizer.noContentToExport', '没有可导出的内容')
+            );
+            return false;
+        }
+
+        try {
+            // 生成默认文件名
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const defaultFileName = `session-${sessionId?.slice(0, 8) ?? 'unknown'}-${timestamp}.json`;
+
+            // 打开保存对话框
+            const filePath = await save({
+                title: i18n.t('sanitizer.exportSanitizedSession', '导出脱敏会话'),
+                defaultPath: defaultFileName,
+                filters: [
+                    { name: 'JSON', extensions: ['json'] },
+                    { name: i18n.t('sanitizer.textFile', '文本文件'), extensions: ['txt'] },
+                ],
+            });
+
+            if (!filePath) {
+                // 用户取消了保存
+                return false;
+            }
+
+            // 写入文件
+            await writeTextFile(filePath, sanitizedText);
+
+            // 显示成功反馈
+            const { toast } = await import('sonner');
+            toast.success(
+                i18n.t('feedback.exportComplete'),
+                {
+                    description: stats.total > 0
+                        ? i18n.t('sanitizer.exportedWithSanitize', '已脱敏 {{count}} 处敏感信息并导出成功', { count: stats.total })
+                        : i18n.t('sanitizer.exportSuccess', '导出成功'),
+                }
+            );
+
+            // 退出预览模式
+            get().exitPreviewMode();
+            return true;
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : i18n.t('sanitizer.exportFailed', '导出失败');
+            console.error('[SanitizePreview] Export error:', err);
+            feedback.error(i18n.t('settings.export'), errorMessage);
+            return false;
         }
     },
 
