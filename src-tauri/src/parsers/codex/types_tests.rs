@@ -327,13 +327,34 @@ fn test_function_call_output_extracts_json_output() {
 }
 
 #[test]
-fn test_function_call_output_returns_raw_for_plain_text() {
-    // Plain text format: Exit code: 0\nWall time: ...\nOutput:\nactual content
+fn test_function_call_output_extracts_structured_text() {
+    // Structured text format: Exit code: N\nWall time: ...\nOutput:\n<content>
     let payload = FunctionCallOutputPayload {
         output: Some("Exit code: 0\nWall time: 0.1 seconds\nOutput:\nfile1.txt\nfile2.txt".to_string()),
         success: Some(true),
     };
-    assert_eq!(payload.get_output(), "Exit code: 0\nWall time: 0.1 seconds\nOutput:\nfile1.txt\nfile2.txt");
+    // Should extract only the actual output content
+    assert_eq!(payload.get_output(), "file1.txt\nfile2.txt");
+}
+
+#[test]
+fn test_function_call_output_structured_text_with_total_lines() {
+    // Structured text with Total output lines marker
+    let payload = FunctionCallOutputPayload {
+        output: Some("Exit code: 0\nWall time: 1.234 seconds\nTotal output lines: 100\nOutput:\nline1\nline2\nline3".to_string()),
+        success: Some(true),
+    };
+    assert_eq!(payload.get_output(), "line1\nline2\nline3");
+}
+
+#[test]
+fn test_function_call_output_structured_text_empty_output() {
+    // Structured text with empty output
+    let payload = FunctionCallOutputPayload {
+        output: Some("Exit code: 1\nWall time: 0.05 seconds\nOutput:\n".to_string()),
+        success: Some(false),
+    };
+    assert_eq!(payload.get_output(), "");
 }
 
 #[test]
@@ -347,10 +368,53 @@ fn test_function_call_output_returns_raw_for_non_shell_json() {
 }
 
 #[test]
+fn test_function_call_output_returns_raw_for_plain_text() {
+    // Plain text without structured format markers
+    let payload = FunctionCallOutputPayload {
+        output: Some("Just some plain output".to_string()),
+        success: Some(true),
+    };
+    assert_eq!(payload.get_output(), "Just some plain output");
+}
+
+#[test]
 fn test_function_call_output_handles_empty() {
     let payload = FunctionCallOutputPayload {
         output: None,
         success: None,
     };
     assert_eq!(payload.get_output(), "");
+}
+
+#[test]
+fn test_parse_exit_code_from_structured_text() {
+    let payload = FunctionCallOutputPayload {
+        output: Some("Exit code: 0\nWall time: 0.1 seconds\nOutput:\nok".to_string()),
+        success: Some(true),
+    };
+    assert_eq!(payload.parse_exit_code(), Some(0));
+
+    let payload_error = FunctionCallOutputPayload {
+        output: Some("Exit code: 1\nWall time: 0.05 seconds\nOutput:\nerror".to_string()),
+        success: Some(false),
+    };
+    assert_eq!(payload_error.parse_exit_code(), Some(1));
+}
+
+#[test]
+fn test_parse_exit_code_from_json() {
+    let payload = FunctionCallOutputPayload {
+        output: Some(r#"{"exit_code": 0, "output": "ok"}"#.to_string()),
+        success: Some(true),
+    };
+    assert_eq!(payload.parse_exit_code(), Some(0));
+}
+
+#[test]
+fn test_parse_exit_code_not_found() {
+    let payload = FunctionCallOutputPayload {
+        output: Some("Just plain output without exit code".to_string()),
+        success: Some(true),
+    };
+    assert_eq!(payload.parse_exit_code(), None);
 }

@@ -328,13 +328,14 @@ pub struct FunctionCallOutputPayload {
 }
 
 impl FunctionCallOutputPayload {
-    /// Get the output string, extracting from JSON wrapper if present.
+    /// Get the output string, extracting from JSON wrapper or structured text if present.
     ///
-    /// Codex shell output can be in two formats:
-    /// 1. JSON format: `{"metadata": {...}, "output": "actual content"}`
-    /// 2. Structured text: `Exit code: 0\nWall time: ...\nOutput:\nactual content`
+    /// Codex shell output can be in multiple formats:
+    /// 1. Plain text: Direct output content
+    /// 2. JSON format: `{"metadata": {...}, "output": "actual content"}`
+    /// 3. Structured text: `Exit code: 0\nWall time: ...\nOutput:\nactual content`
     ///
-    /// This method extracts the actual output content from either format.
+    /// This method extracts the actual output content from any format.
     pub fn get_output(&self) -> String {
         let raw = self.output.clone().unwrap_or_default();
 
@@ -345,7 +346,72 @@ impl FunctionCallOutputPayload {
             }
         }
 
+        // Try to parse structured text format from Codex CLI
+        // Format: "Exit code: N\nWall time: X.XXX seconds\n[Total output lines: N\n]Output:\n<content>"
+        if let Some(parsed) = Self::parse_structured_output(&raw) {
+            return parsed;
+        }
+
         raw
+    }
+
+    /// Parse Codex CLI's structured output format.
+    ///
+    /// Returns the actual output content if the format matches, otherwise None.
+    fn parse_structured_output(raw: &str) -> Option<String> {
+        // Quick check: must contain "Output:" marker (case-sensitive as per Codex format)
+        if !raw.contains("Output:") {
+            return None;
+        }
+
+        // Additional validation: should start with "Exit code:" for structured format
+        if !raw.starts_with("Exit code:") {
+            return None;
+        }
+
+        // Find "Output:" marker and extract everything after it
+        if let Some(idx) = raw.find("\nOutput:\n") {
+            let content = &raw[idx + "\nOutput:\n".len()..];
+            if !content.is_empty() {
+                return Some(content.to_string());
+            }
+            // Output is empty, return empty string (not None)
+            return Some(String::new());
+        }
+
+        // Alternative format: "Output:" at end of line (empty output)
+        if raw.ends_with("\nOutput:") || raw.ends_with("Output:") {
+            return Some(String::new());
+        }
+
+        None
+    }
+
+    /// Parse exit code from raw output.
+    ///
+    /// Returns the exit code if found in either:
+    /// - Structured format: "Exit code: N"
+    /// - JSON format: {"exit_code": N}
+    pub fn parse_exit_code(&self) -> Option<i32> {
+        let raw = self.output.as_ref()?;
+
+        // Try JSON format first
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(raw) {
+            if let Some(code) = parsed.get("exit_code").and_then(|v| v.as_i64()) {
+                return Some(code as i32);
+            }
+        }
+
+        // Try structured text format: "Exit code: N"
+        for line in raw.lines() {
+            if let Some(rest) = line.strip_prefix("Exit code:") {
+                if let Ok(code) = rest.trim().parse::<i32>() {
+                    return Some(code);
+                }
+            }
+        }
+
+        None
     }
 }
 
