@@ -2,6 +2,7 @@
  * GlobalSearch - 全局搜索 Modal 组件
  * Story 2.10: Task 1
  * Story 2.26: 国际化支持
+ * Story 2.33: Task 8 (集成筛选器、分组结果、搜索历史)
  *
  * Command Palette 风格的全局搜索框
  * 支持键盘快捷键、实时搜索、键盘导航
@@ -13,9 +14,11 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Search, X, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore, type SearchResult, type RecentSession } from "@/stores/useSearchStore";
-import { SearchResultList } from "./SearchResultList";
+import { GroupedSearchResultList } from "./GroupedSearchResultList";
 import { EmptySearchState } from "./EmptySearchState";
 import { RecentSessions } from "./RecentSessions";
+import { FilterBar } from "./FilterBar";
+import { SearchHistory } from "./SearchHistory";
 import { createDebouncedSearch } from "@/lib/search-ipc";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +45,9 @@ export function GlobalSearch() {
     const isLoading = useSearchStore((state) => state.isLoading);
     const selectedIndex = useSearchStore((state) => state.selectedIndex);
     const recentSessions = useSearchStore((state) => state.recentSessions);
+    // Story 2.33: 新增状态
+    const filters = useSearchStore((state) => state.filters);
+    const recentQueries = useSearchStore((state) => state.recentQueries);
 
     // Store actions
     const close = useSearchStore((state) => state.close);
@@ -52,6 +58,11 @@ export function GlobalSearch() {
     const selectPrev = useSearchStore((state) => state.selectPrev);
     const confirm = useSearchStore((state) => state.confirm);
     const addRecentSession = useSearchStore((state) => state.addRecentSession);
+    // Story 2.33: 新增 actions
+    const setFilters = useSearchStore((state) => state.setFilters);
+    const addRecentQuery = useSearchStore((state) => state.addRecentQuery);
+    const removeRecentQuery = useSearchStore((state) => state.removeRecentQuery);
+    const clearRecentQueries = useSearchStore((state) => state.clearRecentQueries);
 
     // 创建防抖搜索函数
     const debouncedSearchRef = React.useRef(createDebouncedSearch(300));
@@ -67,15 +78,15 @@ export function GlobalSearch() {
         }
     }, [isOpen]);
 
-    // 搜索处理
+    // 搜索处理 (Story 2.33: 包含 filters)
     React.useEffect(() => {
         const { debouncedSearch, cancel } = debouncedSearchRef.current;
-        debouncedSearch(query, setResults, setLoading);
+        debouncedSearch(query, setResults, setLoading, filters);
 
         return () => {
             cancel();
         };
-    }, [query, setResults, setLoading]);
+    }, [query, filters, setResults, setLoading]);
 
     // 输入变化处理
     const handleInputChange = React.useCallback(
@@ -88,6 +99,10 @@ export function GlobalSearch() {
     // 跳转到会话
     const navigateToSession = React.useCallback(
         (sessionId: string, messageId?: string) => {
+            // AC5: 添加搜索词到历史
+            if (query.trim()) {
+                addRecentQuery(query.trim());
+            }
             close();
             // 添加到最近会话 (如果有结果信息)
             const targetResult = results.find((r) => r.sessionId === sessionId);
@@ -106,7 +121,7 @@ export function GlobalSearch() {
                 : `/session/${sessionId}`;
             navigate(url);
         },
-        [close, navigate, results, addRecentSession]
+        [close, navigate, results, addRecentSession, addRecentQuery, query]
     );
 
     // 选择搜索结果
@@ -130,6 +145,14 @@ export function GlobalSearch() {
         [close, navigate, addRecentSession]
     );
 
+    // 选择搜索历史 (Story 2.33: AC5)
+    const handleSelectHistory = React.useCallback(
+        (historyQuery: string) => {
+            setQuery(historyQuery);
+        },
+        [setQuery]
+    );
+
     // 更新 hover 索引 (搜索结果)
     const handleResultHover = React.useCallback(
         (index: number) => {
@@ -142,7 +165,12 @@ export function GlobalSearch() {
     const handleKeyDown = React.useCallback(
         (e: React.KeyboardEvent) => {
             const hasQuery = query.trim().length > 0;
-            const itemCount = hasQuery ? results.length : recentSessions.length;
+            const hasHistory = recentQueries.length > 0;
+            const itemCount = hasQuery
+                ? results.length
+                : hasHistory
+                  ? recentQueries.length
+                  : recentSessions.length;
 
             switch (e.key) {
                 case "ArrowDown":
@@ -162,6 +190,9 @@ export function GlobalSearch() {
                         if (result) {
                             navigateToSession(result.sessionId, result.messageId);
                         }
+                    } else if (!hasQuery && hasHistory && recentQueries[selectedIndex]) {
+                        // 选择搜索历史
+                        handleSelectHistory(recentQueries[selectedIndex]);
                     } else if (recentSessions[selectedIndex]) {
                         handleSelectRecent(recentSessions[selectedIndex]);
                     }
@@ -176,21 +207,25 @@ export function GlobalSearch() {
             query,
             results.length,
             recentSessions,
+            recentQueries,
             selectedIndex,
             selectNext,
             selectPrev,
             confirm,
             navigateToSession,
             handleSelectRecent,
+            handleSelectHistory,
             close,
         ]
     );
 
     // 决定显示内容
     const hasQuery = query.trim().length > 0;
+    const hasHistory = recentQueries.length > 0;
     const showResults = hasQuery && results.length > 0;
     const showEmpty = hasQuery && !isLoading && results.length === 0;
-    const showRecent = !hasQuery;
+    const showHistory = !hasQuery && hasHistory;
+    const showRecent = !hasQuery && !hasHistory;
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -211,8 +246,8 @@ export function GlobalSearch() {
                     aria-label={t("search.globalSearch")}
                     onKeyDown={handleKeyDown}
                     className={cn(
-                        "fixed left-1/2 top-[15%] z-50 -translate-x-1/2",
-                        "w-[640px] max-w-[90vw] max-h-[70vh]",
+                        "fixed left-1/2 top-[12%] z-50 -translate-x-1/2",
+                        "w-[90vw] sm:w-[580px] md:w-[680px] lg:w-[800px] xl:w-[880px] 2xl:w-[960px] max-h-[80vh]",
                         "bg-background border border-border rounded-xl shadow-2xl",
                         "overflow-hidden flex flex-col",
                         "data-[state=open]:animate-in data-[state=closed]:animate-out",
@@ -266,6 +301,9 @@ export function GlobalSearch() {
                         </Dialog.Close>
                     </div>
 
+                    {/* Story 2.33: Filter Bar (AC1-AC3) */}
+                    <FilterBar filters={filters} onFiltersChange={setFilters} />
+
                     {/* Results Area */}
                     <div data-testid="search-results" className="flex-1 overflow-hidden">
                         {/* Loading skeleton */}
@@ -280,9 +318,9 @@ export function GlobalSearch() {
                             </div>
                         )}
 
-                        {/* Search Results */}
+                        {/* Story 2.33: Grouped Search Results (AC4) */}
                         {showResults && (
-                            <SearchResultList
+                            <GroupedSearchResultList
                                 results={results}
                                 selectedIndex={selectedIndex}
                                 onSelect={handleSelectResult}
@@ -290,10 +328,22 @@ export function GlobalSearch() {
                             />
                         )}
 
-                        {/* Empty State */}
-                        {showEmpty && <EmptySearchState query={query} />}
+                        {/* Story 2.33: Empty State with Filters (AC7) */}
+                        {showEmpty && <EmptySearchState query={query} filters={filters} />}
 
-                        {/* Recent Sessions */}
+                        {/* Story 2.33: Search History (AC5) */}
+                        {showHistory && (
+                            <SearchHistory
+                                queries={recentQueries}
+                                selectedIndex={selectedIndex}
+                                onSelect={handleSelectHistory}
+                                onRemove={removeRecentQuery}
+                                onClear={clearRecentQueries}
+                                onHover={handleResultHover}
+                            />
+                        )}
+
+                        {/* Recent Sessions (when no search history) */}
                         {showRecent && (
                             <RecentSessions
                                 sessions={recentSessions}

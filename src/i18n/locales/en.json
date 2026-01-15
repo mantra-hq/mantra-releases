@@ -270,7 +270,25 @@
     "noRecentSessions": "No recent sessions",
     "recentSessionsHint": "Sessions you visit will appear here",
     "noResultsFor": "No results found for \"{{query}}\"",
-    "tryDifferentKeywords": "Try different keywords or check your spelling"
+    "tryDifferentKeywords": "Try different keywords or check your spelling",
+    "tryRelaxFilters": "Try relaxing the filter criteria",
+    "filters": {
+      "all": "All",
+      "code": "Code",
+      "conversation": "Chat",
+      "allProjects": "All Projects",
+      "noProjects": "No projects",
+      "specificProject": "Specific Project",
+      "allTime": "All Time",
+      "today": "Today",
+      "thisWeek": "This Week",
+      "thisMonth": "This Month"
+    },
+    "history": {
+      "title": "Search History",
+      "clearAll": "Clear All",
+      "remove": "Remove"
+    }
   },
   "timeline": {
     "sessionTimeline": "Session Timeline",

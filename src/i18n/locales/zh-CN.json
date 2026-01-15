@@ -270,7 +270,25 @@
     "noRecentSessions": "暂无最近访问的会话",
     "recentSessionsHint": "访问会话后将在此显示",
     "noResultsFor": "未找到包含 \"{{query}}\" 的结果",
-    "tryDifferentKeywords": "尝试使用不同的关键词或检查拼写"
+    "tryDifferentKeywords": "尝试使用不同的关键词或检查拼写",
+    "tryRelaxFilters": "尝试放宽筛选条件",
+    "filters": {
+      "all": "全部",
+      "code": "代码",
+      "conversation": "对话",
+      "allProjects": "全部项目",
+      "noProjects": "暂无项目",
+      "specificProject": "指定项目",
+      "allTime": "全部时间",
+      "today": "今天",
+      "thisWeek": "本周",
+      "thisMonth": "本月"
+    },
+    "history": {
+      "title": "搜索历史",
+      "clearAll": "清空历史",
+      "remove": "删除"
+    }
   },
   "timeline": {
     "sessionTimeline": "会话时间轴",

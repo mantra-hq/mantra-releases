@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::database::Database;
@@ -35,6 +35,59 @@ pub struct SearchResult {
     pub match_positions: Vec<(usize, usize)>,
     /// Timestamp
     pub timestamp: i64,
+    /// Content type (code, conversation, or all)
+    /// Story 2.33: AC1 - 内容类型标识
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<ContentType>,
+}
+
+// ============================================================================
+// Story 2.33: Search Filters
+// ============================================================================
+
+/// Content type filter for search
+/// AC1: 内容类型筛选
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ContentType {
+    /// All content types (default)
+    #[default]
+    All,
+    /// Code blocks (markdown code fences)
+    Code,
+    /// Conversation (user messages and AI text replies)
+    Conversation,
+}
+
+/// Time range preset for search
+/// AC3: 时间范围筛选
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TimePreset {
+    /// All time (no time filter)
+    All,
+    /// Today only
+    Today,
+    /// This week
+    Week,
+    /// This month
+    Month,
+}
+
+/// Search filters for enhanced search functionality
+/// Story 2.33: AC1-AC3
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchFilters {
+    /// Content type filter (all, code, conversation)
+    #[serde(default)]
+    pub content_type: ContentType,
+    /// Project ID filter (None = all projects)
+    #[serde(default)]
+    pub project_id: Option<String>,
+    /// Time range preset
+    #[serde(default)]
+    pub time_preset: Option<TimePreset>,
 }
 
 impl Database {
@@ -986,24 +1039,76 @@ impl Database {
         query: &str,
         limit: usize,
     ) -> Result<Vec<SearchResult>, StorageError> {
+        self.search_sessions_with_filters(query, limit, &SearchFilters::default())
+    }
+
+    /// Search sessions by content with filters
+    ///
+    /// Story 2.33: Enhanced search with filters support
+    ///
+    /// # Arguments
+    /// * `query` - The search query (case-insensitive)
+    /// * `limit` - Maximum number of results to return
+    /// * `filters` - Search filters (content type, project, time range)
+    pub fn search_sessions_with_filters(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: &SearchFilters,
+    ) -> Result<Vec<SearchResult>, StorageError> {
         let query_lower = query.to_lowercase();
         let mut results: Vec<SearchResult> = Vec::new();
 
-        // Query sessions with project info where raw_data contains the query
-        let mut stmt = self.connection().prepare(
+        // Build SQL query with filters
+        let mut sql = String::from(
             "SELECT s.id, s.project_id, s.raw_data, s.updated_at,
                     p.name as project_name,
                     json_extract(s.raw_data, '$.metadata.title') as session_title
              FROM sessions s
              JOIN projects p ON s.project_id = p.id
-             WHERE s.raw_data LIKE ?1
-             ORDER BY s.updated_at DESC",
-        )?;
+             WHERE s.raw_data LIKE ?1"
+        );
 
-        let search_pattern = format!("%{}%", query);
-        eprintln!("[search_sessions] SQL pattern: {}", search_pattern);
+        let mut param_index = 2;
+        let mut params_vec: Vec<String> = vec![format!("%{}%", query)];
 
-        let rows = stmt.query_map(params![search_pattern], |row| {
+        // AC2: Project filter
+        #[allow(unused_assignments)]
+        if let Some(ref project_id) = filters.project_id {
+            sql.push_str(&format!(" AND s.project_id = ?{}", param_index));
+            params_vec.push(project_id.clone());
+            param_index += 1; // Keep for future extensibility
+        }
+
+        // AC3: Time range filter
+        if let Some(time_preset) = filters.time_preset {
+            let time_filter = match time_preset {
+                TimePreset::All => None,
+                TimePreset::Today => Some("datetime('now', 'start of day')"),
+                TimePreset::Week => Some("datetime('now', 'weekday 0', '-7 days')"),
+                TimePreset::Month => Some("datetime('now', 'start of month')"),
+            };
+            if let Some(time_sql) = time_filter {
+                sql.push_str(&format!(" AND s.updated_at >= {}", time_sql));
+            }
+        }
+
+        sql.push_str(" ORDER BY s.updated_at DESC");
+
+        eprintln!(
+            "[search_sessions_with_filters] SQL: {}, params: {:?}",
+            sql, params_vec
+        );
+
+        let mut stmt = self.connection().prepare(&sql)?;
+
+        // Convert params to rusqlite format
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec
+            .iter()
+            .map(|s| s as &dyn rusqlite::ToSql)
+            .collect();
+
+        let rows = stmt.query_map(params_refs.as_slice(), |row| {
             Ok((
                 row.get::<_, String>(0)?,  // session_id
                 row.get::<_, String>(1)?,  // project_id
@@ -1024,13 +1129,14 @@ impl Database {
             let (session_id, project_id, raw_data, updated_at, project_name, session_title) =
                 row_result?;
 
-            eprintln!("[search_sessions] Processing session: {}", session_id);
-
             // Parse session JSON
             let session: MantraSession = match serde_json::from_str(&raw_data) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("[search_sessions] Failed to parse session {}: {}", session_id, e);
+                    eprintln!(
+                        "[search_sessions_with_filters] Failed to parse session {}: {}",
+                        session_id, e
+                    );
                     continue;
                 }
             };
@@ -1056,14 +1162,50 @@ impl Database {
                     break;
                 }
 
-                // Extract text content from content blocks
+                // Extract text content from content blocks with content type detection
                 for block in &message.content_blocks {
-                    let text = match block {
-                        ContentBlock::Text { text, .. } => text.clone(),
-                        ContentBlock::Thinking { thinking, .. } => thinking.clone(),
-                        ContentBlock::ToolResult { content, .. } => content.clone(),
+                    // AC1: Content type filtering
+                    let (text, detected_type) = match block {
+                        ContentBlock::Text { text, .. } => {
+                            // Check if text contains code blocks (markdown fences)
+                            let has_code_block = text.contains("```");
+                            if has_code_block {
+                                // This is mixed content - could contain both code and text
+                                (text.clone(), None) // None means "mixed"
+                            } else {
+                                (text.clone(), Some(ContentType::Conversation))
+                            }
+                        }
+                        ContentBlock::Thinking { thinking, .. } => {
+                            (thinking.clone(), Some(ContentType::Conversation))
+                        }
+                        ContentBlock::ToolResult { content, .. } => {
+                            // Tool results might contain code
+                            (content.clone(), Some(ContentType::Code))
+                        }
+                        ContentBlock::CodeSuggestion { code, .. } => {
+                            (code.clone(), Some(ContentType::Code))
+                        }
                         _ => continue,
                     };
+
+                    // Apply content type filter
+                    let passes_filter = match filters.content_type {
+                        ContentType::All => true,
+                        ContentType::Code => {
+                            // For Code filter: must be code content or contain code blocks
+                            detected_type == Some(ContentType::Code) || text.contains("```")
+                        }
+                        ContentType::Conversation => {
+                            // For Conversation filter: text without code blocks
+                            detected_type == Some(ContentType::Conversation)
+                                || (detected_type.is_none() && !text.contains("```"))
+                        }
+                    };
+
+                    if !passes_filter {
+                        continue;
+                    }
 
                     let text_lower = text.to_lowercase();
                     if let Some(start_pos) = text_lower.find(&query_lower) {
@@ -1076,15 +1218,22 @@ impl Database {
                         let query_char_len = query.chars().count();
 
                         let snippet_char_start = char_start_pos.saturating_sub(30);
-                        let snippet_char_end = (char_start_pos + query_char_len + 70).min(char_count);
+                        let snippet_char_end =
+                            (char_start_pos + query_char_len + 70).min(char_count);
 
-                        let snippet: String = chars[snippet_char_start..snippet_char_end].iter().collect();
+                        let snippet: String =
+                            chars[snippet_char_start..snippet_char_end].iter().collect();
 
                         // Adjust match position for snippet
                         let match_start_in_snippet = char_start_pos - snippet_char_start;
                         let match_end_in_snippet = match_start_in_snippet + query_char_len;
 
-                        eprintln!("[search_sessions] Found match in session {} message {}", session_id, msg_idx);
+                        // Determine final content type for result
+                        let result_content_type = if text.contains("```") {
+                            Some(ContentType::Code)
+                        } else {
+                            detected_type
+                        };
 
                         results.push(SearchResult {
                             id: format!("{}-{}", session_id, msg_idx),
@@ -1096,6 +1245,7 @@ impl Database {
                             content: snippet,
                             match_positions: vec![(match_start_in_snippet, match_end_in_snippet)],
                             timestamp,
+                            content_type: result_content_type,
                         });
 
                         // Only one result per message
@@ -1105,7 +1255,11 @@ impl Database {
             }
         }
 
-        eprintln!("[search_sessions] Processed {} sessions, found {} results", session_count, results.len());
+        eprintln!(
+            "[search_sessions_with_filters] Processed {} sessions, found {} results",
+            session_count,
+            results.len()
+        );
 
         Ok(results)
     }
@@ -1630,5 +1784,104 @@ mod tests {
         let projects = db.list_projects().unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].session_count, 2);
+    }
+
+    // ===== Story 2.33: Search Filters Tests =====
+
+    #[test]
+    fn test_search_filters_default() {
+        let filters = SearchFilters::default();
+        assert_eq!(filters.content_type, ContentType::All);
+        assert!(filters.project_id.is_none());
+        assert!(filters.time_preset.is_none());
+    }
+
+    #[test]
+    fn test_search_filters_serialization() {
+        let filters = SearchFilters {
+            content_type: ContentType::Code,
+            project_id: Some("proj_123".to_string()),
+            time_preset: Some(TimePreset::Today),
+        };
+
+        let json = serde_json::to_string(&filters).unwrap();
+        assert!(json.contains(r#""contentType":"code""#));
+        assert!(json.contains(r#""projectId":"proj_123""#));
+        assert!(json.contains(r#""timePreset":"today""#));
+
+        let deserialized: SearchFilters = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.content_type, ContentType::Code);
+        assert_eq!(deserialized.project_id, Some("proj_123".to_string()));
+        assert_eq!(deserialized.time_preset, Some(TimePreset::Today));
+    }
+
+    #[test]
+    fn test_content_type_enum() {
+        assert_eq!(ContentType::default(), ContentType::All);
+
+        let code_json = r#""code""#;
+        let code: ContentType = serde_json::from_str(code_json).unwrap();
+        assert_eq!(code, ContentType::Code);
+
+        let conv_json = r#""conversation""#;
+        let conv: ContentType = serde_json::from_str(conv_json).unwrap();
+        assert_eq!(conv, ContentType::Conversation);
+    }
+
+    #[test]
+    fn test_time_preset_enum() {
+        let all_json = r#""all""#;
+        let all: TimePreset = serde_json::from_str(all_json).unwrap();
+        assert_eq!(all, TimePreset::All);
+
+        let today_json = r#""today""#;
+        let today: TimePreset = serde_json::from_str(today_json).unwrap();
+        assert_eq!(today, TimePreset::Today);
+
+        let week_json = r#""week""#;
+        let week: TimePreset = serde_json::from_str(week_json).unwrap();
+        assert_eq!(week, TimePreset::Week);
+
+        let month_json = r#""month""#;
+        let month: TimePreset = serde_json::from_str(month_json).unwrap();
+        assert_eq!(month, TimePreset::Month);
+    }
+
+    #[test]
+    fn test_search_result_with_content_type() {
+        let result = SearchResult {
+            id: "sess_1-0".to_string(),
+            session_id: "sess_1".to_string(),
+            project_id: "proj_1".to_string(),
+            project_name: "test".to_string(),
+            session_name: "Test Session".to_string(),
+            message_id: "0".to_string(),
+            content: "Hello world".to_string(),
+            match_positions: vec![(0, 5)],
+            timestamp: 1234567890,
+            content_type: Some(ContentType::Conversation),
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains(r#""content_type":"conversation""#));
+    }
+
+    #[test]
+    fn test_search_result_content_type_omitted_when_none() {
+        let result = SearchResult {
+            id: "sess_1-0".to_string(),
+            session_id: "sess_1".to_string(),
+            project_id: "proj_1".to_string(),
+            project_name: "test".to_string(),
+            session_name: "Test Session".to_string(),
+            message_id: "0".to_string(),
+            content: "Hello world".to_string(),
+            match_positions: vec![(0, 5)],
+            timestamp: 1234567890,
+            content_type: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(!json.contains(r#""content_type""#));
     }
 }

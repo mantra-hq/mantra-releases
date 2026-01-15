@@ -16,7 +16,7 @@ use crate::error::AppError;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
 use crate::parsers::{ClaudeParser, CodexParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
-use crate::storage::{Database, SearchResult};
+use crate::storage::{Database, SearchFilters, SearchResult};
 
 /// Application state containing the database connection
 pub struct AppState {
@@ -1100,21 +1100,32 @@ pub async fn cancel_import() -> Result<(), AppError> {
 
 // ============================================================================
 // Story 2.10: Global Search Command
+// Story 2.33: Enhanced with filters support
 // ============================================================================
 
-/// Search sessions by content
+/// Search sessions by content with optional filters
 ///
 /// Searches through all session messages for the given query.
 /// Returns matching results with snippets and highlight positions.
+///
+/// Story 2.33: Added filters parameter for:
+/// - Content type filtering (code/conversation/all)
+/// - Project filtering
+/// - Time range filtering
 #[tauri::command]
 pub async fn search_sessions(
     state: State<'_, AppState>,
     query: String,
     limit: Option<usize>,
+    filters: Option<SearchFilters>,
 ) -> Result<Vec<SearchResult>, AppError> {
     let limit = limit.unwrap_or(50);
+    let filters = filters.unwrap_or_default();
 
-    eprintln!("[search_sessions] Query: '{}', limit: {}", query, limit);
+    eprintln!(
+        "[search_sessions] Query: '{}', limit: {}, filters: {:?}",
+        query, limit, filters
+    );
 
     if query.trim().is_empty() {
         eprintln!("[search_sessions] Empty query, returning empty results");
@@ -1122,7 +1133,7 @@ pub async fn search_sessions(
     }
 
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
-    let results = db.search_sessions(&query, limit)?;
+    let results = db.search_sessions_with_filters(&query, limit, &filters)?;
 
     eprintln!("[search_sessions] Found {} results", results.len());
 

@@ -76,7 +76,7 @@ export function SearchResultList({
             ref={parentRef}
             role="listbox"
             aria-label={t("search.searchResults")}
-            className={cn("overflow-y-auto max-h-[400px]", className)}
+            className={cn("overflow-y-auto max-h-[calc(80vh-180px)]", className)}
         >
             <div
                 style={{
