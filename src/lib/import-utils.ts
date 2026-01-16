@@ -81,26 +81,46 @@ export function filterGroups(
 
 /**
  * 获取项目选择状态
+ * - 使用 sessionCount 字段来计算准确的会话数（支持 Cursor 工作区）
  */
 export function getProjectSelectionState(
     group: ProjectGroup,
     selectedFiles: Set<string>
 ): ProjectSelectionState {
-    const totalSessions = group.sessions.length;
-    const selectedCount = group.sessions.filter((s) =>
-        selectedFiles.has(s.path)
-    ).length;
+    // 使用 sessionCount 累加计算总会话数和选中会话数
+    const totalSessionCount = group.sessions.reduce(
+        (sum, s) => sum + (s.sessionCount ?? 1),
+        0
+    );
+    const selectedCount = group.sessions
+        .filter((s) => selectedFiles.has(s.path))
+        .reduce((sum, s) => sum + (s.sessionCount ?? 1), 0);
 
     return {
-        isSelected: selectedCount === totalSessions && totalSessions > 0,
-        isPartiallySelected: selectedCount > 0 && selectedCount < totalSessions,
+        isSelected: selectedCount === totalSessionCount && totalSessionCount > 0,
+        isPartiallySelected: selectedCount > 0 && selectedCount < totalSessionCount,
         selectedCount,
     };
 }
 
 /**
  * 统计分组中的总会话数
+ * - 使用 sessionCount 字段（如果存在）来计算准确的会话数
+ * - Cursor 工作区可能包含多个会话，所以不能简单地计算文件数
  */
 export function getTotalSessionCount(groups: ProjectGroup[]): number {
-    return groups.reduce((sum, g) => sum + g.sessions.length, 0);
+    return groups.reduce((sum, g) => {
+        return sum + g.sessions.reduce((sessionSum, s) => {
+            // 使用 sessionCount 字段，默认为 1
+            return sessionSum + (s.sessionCount ?? 1);
+        }, 0);
+    }, 0);
+}
+
+/**
+ * 计算单个项目组的会话数
+ * - 使用 sessionCount 字段（如果存在）来计算准确的会话数
+ */
+export function getGroupSessionCount(group: ProjectGroup): number {
+    return group.sessions.reduce((sum, s) => sum + (s.sessionCount ?? 1), 0);
 }

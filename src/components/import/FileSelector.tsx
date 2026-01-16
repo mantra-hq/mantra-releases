@@ -35,6 +35,8 @@ export interface DiscoveredFile {
   projectPath: string;
   /** 会话 ID (用于识别已导入状态) */
   sessionId?: string;
+  /** 会话数量 (普通文件为1, Cursor工作区为实际会话数) */
+  sessionCount?: number;
 }
 
 /** FileSelector Props */
@@ -100,7 +102,7 @@ export function FileSelector({
     [projectGroups, debouncedQuery]
   );
 
-  // Story 2.20 改进: 计算已导入会话数量
+  // Story 2.20 改进: 计算已导入会话数量（使用 sessionCount 累加）
   const importedCount = React.useMemo(() => {
     if (!importedSessionIds) {
       return undefined;
@@ -108,16 +110,27 @@ export function FileSelector({
     let count = 0;
     for (const file of files) {
       if (file.sessionId && importedSessionIds.has(file.sessionId)) {
-        count++;
+        count += file.sessionCount ?? 1;
       }
     }
     return count;
   }, [files, importedSessionIds]);
 
-  // 统计数据
+  // 统计数据（使用 sessionCount 累加计算准确的会话数）
   const totalProjects = projectGroups.length;
-  const totalSessions = files.length;
+  const totalSessions = getTotalSessionCount(projectGroups);
   const filteredSessionCount = getTotalSessionCount(filteredGroups);
+
+  // 计算选中的会话数（使用 sessionCount 累加）
+  const selectedSessionCount = React.useMemo(() => {
+    let count = 0;
+    for (const file of files) {
+      if (selectedFiles.has(file.path)) {
+        count += file.sessionCount ?? 1;
+      }
+    }
+    return count;
+  }, [files, selectedFiles]);
 
   // Story 2.24 AC2: 计算已选项目数（至少有一个会话被选中的项目）
   const selectedProjectCount = React.useMemo(() => {
@@ -201,7 +214,7 @@ export function FileSelector({
           <SelectionStats
             totalProjects={totalProjects}
             totalSessions={totalSessions}
-            selectedCount={selectedFiles.size}
+            selectedCount={selectedSessionCount}
             selectedProjectCount={selectedProjectCount}
             importedCount={importedCount}
           />

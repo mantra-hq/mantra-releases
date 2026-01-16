@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { ProjectGroup, ProjectImportStatus, ProjectSelectionState } from "@/types/import";
 import { SessionListItem } from "./SessionListItem";
+import { getGroupSessionCount } from "@/lib/import-utils";
 
 /** 默认显示的会话数量 */
 const DEFAULT_VISIBLE_COUNT = 3;
@@ -63,6 +64,9 @@ export function ProjectGroupItem({
     const [showAll, setShowAll] = React.useState(false);
 
     const { isSelected, isPartiallySelected, selectedCount } = selectionState;
+
+    // 计算总会话数（Cursor 工作区可能包含多个会话）
+    const totalSessionCount = getGroupSessionCount(group);
 
     // Story 2.20: 导入状态判断
     const isImported = importStatus === "imported";
@@ -192,10 +196,10 @@ export function ProjectGroupItem({
 
                     {/* 会话统计 */}
                     <span className="text-xs text-muted-foreground shrink-0">
-                        {selectedCount > 0 && selectedCount < group.sessions.length
+                        {selectedCount > 0 && selectedCount < totalSessionCount
                             ? `${selectedCount}/`
                             : ""}
-                        {t("import.sessionCount", { count: group.sessions.length })}
+                        {t("import.sessionCount", { count: totalSessionCount })}
                     </span>
                 </div>
             </Collapsible.Trigger>

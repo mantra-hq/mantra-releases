@@ -119,10 +119,15 @@ export function SessionListItem({
                     )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">
-                        {formatFileSize(session.size)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">·</span>
+                    {/* 仅当 size > 0 时显示文件大小（Cursor 会话没有大小信息） */}
+                    {session.size > 0 && (
+                        <>
+                            <span className="text-xs text-muted-foreground">
+                                {formatFileSize(session.size)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">·</span>
+                        </>
+                    )}
                     <span className="text-xs text-muted-foreground">
                         {formatRelativeTime(session.modifiedAt, i18n.language, t)}
                     </span>

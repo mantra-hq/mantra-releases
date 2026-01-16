@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::parsers::{ClaudeParser, CodexParser, CursorParser, GeminiParser, LogParser};
 use crate::parsers::codex::CodexPaths;
-use crate::parsers::cursor::CursorPaths;
+use crate::parsers::cursor::{CursorDatabase, CursorPaths};
 use crate::parsers::gemini::GeminiPaths;
 
 /// Import source type
@@ -51,6 +51,10 @@ pub struct DiscoveredFile {
     /// Session ID (extracted from file content, used for import status detection)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// Number of sessions in this file/workspace (for accurate counting)
+    /// - For regular files: always 1
+    /// - For Cursor workspaces: actual number of sessions in the workspace
+    pub session_count: u32,
 }
 
 /// Single file import result
@@ -226,6 +230,7 @@ fn path_to_discovered_file(path: &PathBuf) -> Option<DiscoveredFile> {
         modified_at,
         project_path,
         session_id,
+        session_count: 1, // Regular files always contain 1 session
     })
 }
 
@@ -314,12 +319,14 @@ pub async fn scan_log_directory(source: ImportSource) -> Result<Vec<DiscoveredFi
     Ok(result)
 }
 
-/// Scan Cursor workspaces and return them as discoverable items
+/// Scan Cursor workspaces and return each composer as a discoverable item
 ///
-/// Each workspace is represented as a DiscoveredFile with:
-/// - path: The project path (used for import)
-/// - name: The project folder name
-/// - project_path: Same as path
+/// Each composer session is represented as a DiscoveredFile with:
+/// - path: The project path + composer_id (used for import identification)
+/// - name: The composer name or "Cursor 会话"
+/// - project_path: The project folder path (for grouping)
+/// - session_id: The composer_id (for detecting already-imported sessions)
+/// - session_count: Always 1 (each composer is one session)
 async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
     let result = tokio::task::spawn_blocking(|| {
         // Try to detect Cursor paths
@@ -334,41 +341,64 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
             Err(_) => return Vec::new(),
         };
 
-        // Convert workspaces to DiscoveredFile format
-        workspaces
-            .into_iter()
-            .map(|ws| {
-                let folder_path = ws.folder_path.to_string_lossy().to_string();
-                let name = ws.folder_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Unknown")
-                    .to_string();
+        let mut all_files = Vec::new();
 
-                // Get modified time from state.vscdb if it exists
-                let modified_at = fs::metadata(&ws.state_db_path)
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as u64)
+        // For each workspace, enumerate all composers
+        for ws in workspaces {
+            let folder_path = ws.folder_path.to_string_lossy().to_string();
+            let project_name = ws.folder_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            // Open workspace database to get composers
+            let composers = match CursorDatabase::open(&ws.state_db_path) {
+                Ok(db) => match db.list_composers() {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                },
+                Err(_) => continue,
+            };
+
+            // Skip workspaces with no sessions
+            if composers.is_empty() {
+                continue;
+            }
+
+            // Create a DiscoveredFile for each composer
+            for composer in composers {
+                // Use composer name or fallback to "Cursor 会话"
+                let display_name = composer.name
+                    .as_ref()
+                    .filter(|n| !n.is_empty())
+                    .map(|n| n.clone())
+                    .unwrap_or_else(|| "Cursor 会话".to_string());
+
+                // Get modified time from created_at
+                let modified_at = composer.created_at
+                    .map(|ts| ts as u64)
                     .unwrap_or(0);
 
-                // Get size of state.vscdb as a rough indicator
-                let size = fs::metadata(&ws.state_db_path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
+                // Use composer_id as part of path for uniqueness
+                let unique_path = format!("{}#{}", folder_path, composer.composer_id);
 
-                DiscoveredFile {
-                    path: folder_path.clone(),
-                    name: format!("{} (Cursor 工作区)", name),
-                    size,
+                all_files.push(DiscoveredFile {
+                    path: unique_path,
+                    name: format!("{} ({})", display_name, project_name),
+                    size: 0, // Size not applicable for Cursor composers
                     modified_at,
-                    project_path: folder_path,
-                    // Cursor workspaces contain multiple sessions, so no single session_id
-                    session_id: None,
-                }
-            })
-            .collect()
+                    project_path: folder_path.clone(),
+                    session_id: Some(composer.composer_id),
+                    session_count: 1, // Each composer is one session
+                });
+            }
+        }
+
+        // Sort by modified_at descending
+        all_files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+
+        all_files
     })
     .await
     .map_err(|e| AppError::internal(format!("Task join error: {}", e)))?;
@@ -418,6 +448,7 @@ async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
                     modified_at,
                     project_path: format!("gemini-project:{}", session_file.project_hash),
                     session_id,
+                    session_count: 1, // Gemini files always contain 1 session
                 })
             })
             .collect()
@@ -481,6 +512,7 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
                     modified_at,
                     project_path,
                     session_id,
+                    session_count: 1, // Codex files always contain 1 session
                 })
             })
             .collect()
@@ -606,38 +638,61 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
                 };
 
                 if let Ok(workspaces) = custom_paths.scan_workspaces() {
-                    return workspaces
-                        .into_iter()
-                        .map(|ws| {
-                            let folder_path = ws.folder_path.to_string_lossy().to_string();
-                            let name = ws.folder_path
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("Unknown")
-                                .to_string();
+                    let mut all_files = Vec::new();
 
-                            let modified_at = fs::metadata(&ws.state_db_path)
-                                .ok()
-                                .and_then(|m| m.modified().ok())
-                                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                                .map(|d| d.as_millis() as u64)
+                    // For each workspace, enumerate all composers
+                    for ws in workspaces {
+                        let folder_path = ws.folder_path.to_string_lossy().to_string();
+                        let project_name = ws.folder_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("Unknown")
+                            .to_string();
+
+                        // Open workspace database to get composers
+                        let composers = match CursorDatabase::open(&ws.state_db_path) {
+                            Ok(db) => match db.list_composers() {
+                                Ok(c) => c,
+                                Err(_) => continue,
+                            },
+                            Err(_) => continue,
+                        };
+
+                        // Skip workspaces with no sessions
+                        if composers.is_empty() {
+                            continue;
+                        }
+
+                        // Create a DiscoveredFile for each composer
+                        for composer in composers {
+                            let display_name = composer.name
+                                .as_ref()
+                                .filter(|n| !n.is_empty())
+                                .map(|n| n.clone())
+                                .unwrap_or_else(|| "Cursor 会话".to_string());
+
+                            let modified_at = composer.created_at
+                                .map(|ts| ts as u64)
                                 .unwrap_or(0);
 
-                            let size = fs::metadata(&ws.state_db_path)
-                                .map(|m| m.len())
-                                .unwrap_or(0);
+                            let unique_path = format!("{}#{}", folder_path, composer.composer_id);
 
-                            DiscoveredFile {
-                                path: folder_path.clone(),
-                                name: format!("{} (Cursor 工作区)", name),
-                                size,
+                            all_files.push(DiscoveredFile {
+                                path: unique_path,
+                                name: format!("{} ({})", display_name, project_name),
+                                size: 0,
                                 modified_at,
-                                project_path: folder_path,
-                                // Cursor workspaces contain multiple sessions, so no single session_id
-                                session_id: None,
-                            }
-                        })
-                        .collect();
+                                project_path: folder_path.clone(),
+                                session_id: Some(composer.composer_id),
+                                session_count: 1,
+                            });
+                        }
+                    }
+
+                    // Sort by modified_at descending
+                    all_files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+
+                    return all_files;
                 }
             }
         }
@@ -694,6 +749,39 @@ pub async fn parse_log_files(paths: Vec<String>) -> Result<Vec<FileImportResult>
         let mut results = Vec::with_capacity(paths.len());
 
         for path in paths {
+            // Check if this is a Cursor single composer (path contains #)
+            if let Some(hash_pos) = path.find('#') {
+                let project_path = &path[..hash_pos];
+                let composer_id = &path[hash_pos + 1..];
+                let path_buf = PathBuf::from(project_path);
+
+                // Cursor single composer: use parse_single_composer
+                match cursor_parser.parse_single_composer(&path_buf, composer_id) {
+                    Ok(session) => {
+                        results.push(FileImportResult {
+                            success: true,
+                            file_path: path,
+                            project_id: Some(generate_project_id(&session.cwd)),
+                            session_id: Some(session.id.clone()),
+                            error: None,
+                            skipped: None,
+                        });
+                    }
+                    Err(e) => {
+                        let is_skippable = e.is_skippable();
+                        results.push(FileImportResult {
+                            success: false,
+                            file_path: path,
+                            project_id: None,
+                            session_id: None,
+                            error: Some(e.to_string()),
+                            skipped: if is_skippable { Some(true) } else { None },
+                        });
+                    }
+                }
+                continue;
+            }
+
             let path_buf = PathBuf::from(&path);
 
             // 检测是 Cursor 工作区（目录）还是 Claude 日志文件

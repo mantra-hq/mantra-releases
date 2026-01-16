@@ -134,6 +134,49 @@ impl CursorParser {
         Ok(all_sessions)
     }
 
+    /// Parse a single composer by project path and composer ID
+    ///
+    /// This method is used when importing individual Cursor sessions
+    /// (as opposed to importing an entire workspace).
+    pub fn parse_single_composer(
+        &self,
+        project_path: &Path,
+        composer_id: &str,
+    ) -> Result<MantraSession, ParseError> {
+        // Step 1: Detect Cursor paths
+        let paths = CursorPaths::detect()?;
+
+        // Step 2: Find workspace for the project
+        let workspace = paths
+            .find_workspace_id(project_path)?
+            .ok_or_else(|| {
+                ParseError::invalid_format(format!(
+                    "Project not found in Cursor workspaces: {}",
+                    project_path.display()
+                ))
+            })?;
+
+        // Step 3: Get composer summary from workspace database
+        let workspace_db = CursorDatabase::open(&workspace.state_db_path)?;
+        let composers = workspace_db.list_composers()?;
+
+        let summary = composers
+            .into_iter()
+            .find(|c| c.composer_id == composer_id)
+            .ok_or_else(|| {
+                ParseError::invalid_format(format!(
+                    "Composer not found: {}",
+                    composer_id
+                ))
+            })?;
+
+        // Step 4: Open global database and parse the composer
+        let global_db_path = paths.global_state_db();
+        let global_db = CursorDatabase::open(&global_db_path)?;
+
+        self.parse_composer(&global_db, &summary, project_path)
+    }
+
     /// Parse a single composer conversation to MantraSession
     fn parse_composer(
         &self,
