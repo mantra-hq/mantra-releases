@@ -9,3 +9,5 @@ export { useSearchStore, type SearchState, type SearchResult, type RecentSession
 export { useEditorStore, type EditorState, type EditorTab } from "./useEditorStore";
 export { useLogStore, type LogState, type LogEntry, type LogLevel } from "./useLogStore";
 export { useNotificationStore, type NotificationState } from "./useNotificationStore";
+// Story 2.34: App mode store
+export { useAppModeStore, type AppModeState, type AppMode } from "./useAppModeStore";

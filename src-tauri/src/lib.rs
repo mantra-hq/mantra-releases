@@ -1,6 +1,7 @@
 // Mantra Client Library
 // Provides Tauri IPC commands for parsing AI conversation logs
 
+pub mod analytics;
 pub mod commands;
 pub mod error;
 pub mod git;
@@ -38,6 +39,8 @@ use commands::{
     get_default_paths,
     // Story 2.32: Git commits in time range
     get_commits_in_range,
+    // Story 2.34: Analytics commands
+    get_project_analytics, get_session_metrics, get_session_stats_view,
 };
 
 use storage::Database;
@@ -131,7 +134,11 @@ pub fn run() {
             // Platform-specific default paths
             get_default_paths,
             // Story 2.32: Git commits in time range
-            get_commits_in_range
+            get_commits_in_range,
+            // Story 2.34: Analytics
+            get_project_analytics,
+            get_session_metrics,
+            get_session_stats_view
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

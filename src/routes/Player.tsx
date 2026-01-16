@@ -57,6 +57,9 @@ import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 import { PlayerEmptyState } from "@/components/player";
 // Story 2.29 V2: 隐藏空会话设置
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
+// Story 2.34: 统计视图组件
+import { useAppModeStore } from "@/stores/useAppModeStore";
+import { ProjectStatsView, SessionStatsView, StatsLevelTabs, type StatsLevel } from "@/components/analytics";
 
 
 /**
@@ -182,6 +185,12 @@ export default function Player() {
 
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
+
+  // Story 2.34: 应用模式状态（回放/统计）
+  const appMode = useAppModeStore((state) => state.mode);
+
+  // Story 2.34: 统计视图层级状态（项目/会话）
+  const [statsLevel, setStatsLevel] = React.useState<StatsLevel>("session");
 
   // Bug Fix: 切换项目时重置右侧内容区域状态
   // 当 sessionId 变化时，清空所有关联的 store 状态，避免显示旧项目内容
@@ -713,6 +722,7 @@ export default function Player() {
   }, []);
 
   // 无效 sessionId 错误处理 → Story 2.21: 改为显示空状态 (AC #1, #4)
+  // Story 2.34: 统计模式下即使无 sessionId 也可显示项目统计
   if (!sessionId) {
     return (
       <div className="h-screen flex flex-col bg-background">
@@ -722,13 +732,23 @@ export default function Player() {
           onDrawerOpen={() => setDrawerOpen(true)}
           onImport={() => setImportOpen(true)}
         />
-        {/* Story 2.21 AC #4-9: Player 空状态 */}
+        {/* Story 2.34: 根据模式显示不同内容 */}
         <main className="flex-1 min-h-0">
-          <PlayerEmptyState
-            hasProjects={allProjects.length > 0}
-            onOpenDrawer={() => setDrawerOpen(true)}
-            onImport={() => setImportOpen(true)}
-          />
+          {appMode === "statistics" && allProjects.length > 0 ? (
+            /* 统计模式下显示第一个项目的统计（或提示选择项目） */
+            <ProjectStatsView
+              projectId={allProjects[0]?.id ?? ""}
+              projectName={allProjects[0]?.name}
+              onImport={() => setImportOpen(true)}
+            />
+          ) : (
+            /* 回放模式或无项目时显示空状态 */
+            <PlayerEmptyState
+              hasProjects={allProjects.length > 0}
+              onOpenDrawer={() => setDrawerOpen(true)}
+              onImport={() => setImportOpen(true)}
+            />
+          )}
         </main>
         {/* Import Wizard Modal */}
         <ImportWizard
@@ -823,37 +843,86 @@ export default function Player() {
         hideEmptySessions={hideEmptySessions}
       />
 
-      {/* Main Content - DualStreamLayout */}
+      {/* Main Content - Story 2.34: 根据模式切换显示 */}
       <main className="flex-1 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <DualStreamLayout
-            ref={layoutRef}
-            messages={messages}
-            selectedMessageId={selectedMessageId}
-            onMessageSelect={handleMessageSelect}
-            // TimberLine 时间轴 Props (Story 2.6)
-            showTimeline={false}
-            timelineStartTime={timelineRange.startTime}
-            timelineEndTime={timelineRange.endTime}
-            timelineCurrentTime={currentTime}
-            timelineEvents={timelineEvents}
-            onTimelineSeek={handleTimelineSeek}
-            // Story 2.11 AC6: 无 Git 仓库时显示警告
-            showNoGitWarning={hasNoGit}
-            projectPath={sessionCwd}
-            // Story 2.13: 文件浏览器
-            repoPath={repoPath ?? undefined}
-          />
-        </div>
-        {/* 直接在 Player 层渲染 TimberLine */}
-        {messages.length > 0 && (
-          <TimberLine
-            startTime={timelineRange.startTime}
-            endTime={timelineRange.endTime}
-            currentTime={currentTime}
-            events={timelineEvents}
-            onSeek={handleTimelineSeek}
-          />
+        {appMode === "statistics" ? (
+          /* 统计模式: 显示统计视图 */
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {/* Story 2.34: 统计层级切换 Tabs (仅当有 sessionId 和 project 时显示) */}
+            {sessionId && currentProject?.id && (
+              <div className="flex-shrink-0 px-6 pt-4">
+                <StatsLevelTabs
+                  value={statsLevel}
+                  onChange={setStatsLevel}
+                  projectName={currentProject.name}
+                  sessionName={projectSessions.find(s => s.id === sessionId)?.name}
+                />
+              </div>
+            )}
+
+            {/* 统计视图内容 */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {sessionId && currentProject?.id ? (
+                /* 有选中会话和项目时，根据 statsLevel 显示 */
+                statsLevel === "session" ? (
+                  <SessionStatsView sessionId={sessionId} />
+                ) : (
+                  <ProjectStatsView
+                    projectId={currentProject.id}
+                    projectName={currentProject.name}
+                    onImport={() => setImportOpen(true)}
+                  />
+                )
+              ) : currentProject?.id ? (
+                /* 仅选中项目时显示项目统计 (AC2) */
+                <ProjectStatsView
+                  projectId={currentProject.id}
+                  projectName={currentProject.name}
+                  onImport={() => setImportOpen(true)}
+                />
+              ) : (
+                /* 无选中时显示空状态 */
+                <ProjectStatsView
+                  projectId=""
+                  onImport={() => setImportOpen(true)}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          /* 回放模式: 显示 DualStreamLayout */
+          <>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <DualStreamLayout
+                ref={layoutRef}
+                messages={messages}
+                selectedMessageId={selectedMessageId}
+                onMessageSelect={handleMessageSelect}
+                // TimberLine 时间轴 Props (Story 2.6)
+                showTimeline={false}
+                timelineStartTime={timelineRange.startTime}
+                timelineEndTime={timelineRange.endTime}
+                timelineCurrentTime={currentTime}
+                timelineEvents={timelineEvents}
+                onTimelineSeek={handleTimelineSeek}
+                // Story 2.11 AC6: 无 Git 仓库时显示警告
+                showNoGitWarning={hasNoGit}
+                projectPath={sessionCwd}
+                // Story 2.13: 文件浏览器
+                repoPath={repoPath ?? undefined}
+              />
+            </div>
+            {/* 直接在 Player 层渲染 TimberLine */}
+            {messages.length > 0 && (
+              <TimberLine
+                startTime={timelineRange.startTime}
+                endTime={timelineRange.endTime}
+                currentTime={currentTime}
+                events={timelineEvents}
+                onSeek={handleTimelineSeek}
+              />
+            )}
+          </>
         )}
       </main>
 

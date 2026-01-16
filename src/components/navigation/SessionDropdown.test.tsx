@@ -61,14 +61,14 @@ describe("SessionDropdown", () => {
   describe("UI 展示", () => {
     it("应该显示当前会话名", () => {
       render(<SessionDropdown {...defaultProps} />);
-      expect(screen.getByTestId("session-dropdown-trigger")).toHaveTextContent(
+      expect(screen.getByTestId("session-dropdown")).toHaveTextContent(
         "Session abc12345"
       );
     });
 
     it("应该显示消息数", () => {
       render(<SessionDropdown {...defaultProps} />);
-      expect(screen.getByTestId("session-dropdown-trigger")).toHaveTextContent(
+      expect(screen.getByTestId("session-dropdown")).toHaveTextContent(
         "(10)"
       );
     });
@@ -76,7 +76,7 @@ describe("SessionDropdown", () => {
     it("应该显示展开图标", () => {
       render(<SessionDropdown {...defaultProps} />);
       // ChevronsUpDown icon should be present
-      const trigger = screen.getByTestId("session-dropdown-trigger");
+      const trigger = screen.getByTestId("session-dropdown");
       expect(trigger.querySelector("svg")).toBeInTheDocument();
     });
   });
@@ -86,7 +86,7 @@ describe("SessionDropdown", () => {
     // 复杂的 Popover 交互测试应在 E2E 测试中进行
     it("触发器应该有正确的 aria 属性", () => {
       render(<SessionDropdown {...defaultProps} />);
-      const trigger = screen.getByTestId("session-dropdown-trigger");
+      const trigger = screen.getByTestId("session-dropdown");
       expect(trigger).toHaveAttribute("aria-expanded", "false");
       expect(trigger).toHaveAttribute("role", "combobox");
     });
@@ -98,7 +98,7 @@ describe("SessionDropdown", () => {
     it("应该正确设置 onSessionSelect 回调", () => {
       render(<SessionDropdown {...defaultProps} />);
       // 验证组件渲染成功，回调在真实环境中会被调用
-      expect(screen.getByTestId("session-dropdown-trigger")).toBeInTheDocument();
+      expect(screen.getByTestId("session-dropdown")).toBeInTheDocument();
     });
   });
 });

@@ -540,5 +540,79 @@
       "invite": "Collaboration Invite",
       "review": "Review Result"
     }
+  },
+  "analytics": {
+    "title": "Analytics",
+    "modeSwitch": "Switch display mode",
+    "projectStats": "Project Statistics",
+    "sessionStats": "Session Statistics",
+    "mode": {
+      "playback": "Playback",
+      "playbackTooltip": "View session messages and code snapshots",
+      "statistics": "Statistics",
+      "statisticsTooltip": "View analytics and statistics"
+    },
+    "metrics": {
+      "sessions": "Sessions",
+      "duration": "Total Duration",
+      "avgDuration": "Avg Duration",
+      "activeDays": "Active Days",
+      "messages": "Messages",
+      "toolCalls": "Tool Calls",
+      "errors": "Errors",
+      "errorRate": "Error Rate"
+    },
+    "charts": {
+      "toolDistribution": "Tool Distribution",
+      "callDistribution": "Call Distribution",
+      "callRanking": "Call Ranking",
+      "callDetails": "Call Details",
+      "activityTrend": "Activity Trend",
+      "callTimeline": "Call Timeline"
+    },
+    "timeRange": {
+      "label": "Time Range",
+      "days7": "7 Days",
+      "days30": "30 Days",
+      "all": "All Time"
+    },
+    "empty": {
+      "noData": "No statistics data",
+      "importHint": "Import sessions to view statistics",
+      "noDataInRange": "No data in selected time range",
+      "tryLongerRange": "Try selecting a longer time range"
+    },
+    "source": {
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI",
+      "cursor": "Cursor",
+      "codex": "Codex"
+    },
+    "tools": {
+      "file_read": "Read File",
+      "file_write": "Write File",
+      "file_edit": "Edit File",
+      "file_delete": "Delete File",
+      "shell_exec": "Shell Command",
+      "file_search": "File Search",
+      "content_search": "Content Search",
+      "web_fetch": "Web Fetch",
+      "web_search": "Web Search",
+      "knowledge_query": "Knowledge Query",
+      "code_exec": "Code Execution",
+      "notebook_edit": "Notebook Edit",
+      "todo_manage": "Todo Management",
+      "sub_task": "Sub Task",
+      "user_prompt": "User Prompt",
+      "unknown": "Other"
+    },
+    "units": {
+      "seconds": "seconds",
+      "minutes": "minutes",
+      "hours": "hours",
+      "calls": "calls",
+      "sessions": "sessions",
+      "days": "days"
+    }
   }
 }

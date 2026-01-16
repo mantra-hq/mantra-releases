@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ModeSwitch } from "@/components/layout/ModeSwitch";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useSanitizePreviewStore } from "@/stores/useSanitizePreviewStore";
 import {
@@ -182,6 +183,9 @@ export function TopBarActions({
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+
+      {/* Story 2.34: 模式切换 */}
+      <ModeSwitch />
 
       {/* 主题切换 (AC12) */}
       <ThemeToggle />

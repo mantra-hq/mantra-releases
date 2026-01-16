@@ -540,5 +540,79 @@
       "invite": "邀请协作",
       "review": "审核结果"
     }
+  },
+  "analytics": {
+    "title": "统计",
+    "modeSwitch": "切换显示模式",
+    "projectStats": "项目统计",
+    "sessionStats": "会话统计",
+    "mode": {
+      "playback": "回放",
+      "playbackTooltip": "查看会话消息和代码快照",
+      "statistics": "统计",
+      "statisticsTooltip": "查看分析统计数据"
+    },
+    "metrics": {
+      "sessions": "会话数",
+      "duration": "总时长",
+      "avgDuration": "平均时长",
+      "activeDays": "活跃天数",
+      "messages": "消息数",
+      "toolCalls": "工具调用",
+      "errors": "错误数",
+      "errorRate": "错误率"
+    },
+    "charts": {
+      "toolDistribution": "工具分布",
+      "callDistribution": "调用分布",
+      "callRanking": "调用排行",
+      "callDetails": "调用详情",
+      "activityTrend": "活动趋势",
+      "callTimeline": "调用时间线"
+    },
+    "timeRange": {
+      "label": "时间范围",
+      "days7": "7 天",
+      "days30": "30 天",
+      "all": "全部"
+    },
+    "empty": {
+      "noData": "暂无统计数据",
+      "importHint": "导入会话后即可查看统计",
+      "noDataInRange": "所选时间范围内暂无数据",
+      "tryLongerRange": "试试选择更长的时间范围"
+    },
+    "source": {
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI",
+      "cursor": "Cursor",
+      "codex": "Codex"
+    },
+    "tools": {
+      "file_read": "读取文件",
+      "file_write": "写入文件",
+      "file_edit": "编辑文件",
+      "file_delete": "删除文件",
+      "shell_exec": "命令执行",
+      "file_search": "文件搜索",
+      "content_search": "内容搜索",
+      "web_fetch": "网页获取",
+      "web_search": "网页搜索",
+      "knowledge_query": "知识查询",
+      "code_exec": "代码执行",
+      "notebook_edit": "笔记本编辑",
+      "todo_manage": "任务管理",
+      "sub_task": "子任务",
+      "user_prompt": "用户提示",
+      "unknown": "其他"
+    },
+    "units": {
+      "seconds": "秒",
+      "minutes": "分钟",
+      "hours": "小时",
+      "calls": "次调用",
+      "sessions": "个会话",
+      "days": "天"
+    }
   }
 }

@@ -78,17 +78,17 @@ describe("TopBar", () => {
 
     it("应该显示会话名和消息数", () => {
       renderWithRouter(<TopBar {...defaultProps} />);
-      expect(screen.getByTestId("session-dropdown-trigger")).toHaveTextContent(
+      expect(screen.getByTestId("session-dropdown")).toHaveTextContent(
         "Session abc12345"
       );
-      expect(screen.getByTestId("session-dropdown-trigger")).toHaveTextContent(
+      expect(screen.getByTestId("session-dropdown")).toHaveTextContent(
         "(10)"
       );
     });
 
     it("应该显示汉堡菜单按钮", () => {
       renderWithRouter(<TopBar {...defaultProps} />);
-      expect(screen.getByTestId("topbar-menu-button")).toBeInTheDocument();
+      expect(screen.getByTestId("drawer-toggle")).toBeInTheDocument();
     });
 
     it("应该显示同步按钮", () => {
@@ -112,7 +112,7 @@ describe("TopBar", () => {
       const user = userEvent.setup();
       renderWithRouter(<TopBar {...defaultProps} />);
 
-      await user.click(screen.getByTestId("topbar-menu-button"));
+      await user.click(screen.getByTestId("drawer-toggle"));
       expect(defaultProps.onDrawerOpen).toHaveBeenCalledTimes(1);
     });
 
@@ -144,7 +144,7 @@ describe("TopBar", () => {
     // 复杂的 Popover 交互测试应在 E2E 测试中进行
     it("会话下拉按钮应该渲染", () => {
       renderWithRouter(<TopBar {...defaultProps} />);
-      expect(screen.getByTestId("session-dropdown-trigger")).toBeInTheDocument();
+      expect(screen.getByTestId("session-dropdown")).toBeInTheDocument();
     });
   });
 

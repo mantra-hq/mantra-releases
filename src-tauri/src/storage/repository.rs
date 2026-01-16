@@ -962,6 +962,41 @@ impl Database {
         Ok(ids)
     }
 
+    /// Get all full sessions for a project (Story 2.34: Analytics)
+    ///
+    /// Returns full MantraSession objects for analytics calculations.
+    ///
+    /// # Arguments
+    /// * `project_id` - The project ID to get sessions for
+    pub fn get_sessions_by_project(&self, project_id: &str) -> Result<Vec<MantraSession>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT raw_data FROM sessions WHERE project_id = ?1 ORDER BY updated_at DESC",
+        )?;
+
+        let sessions = stmt
+            .query_map(params![project_id], |row| {
+                let raw_data: String = row.get(0)?;
+                Ok(raw_data)
+            })?
+            .filter_map(|result| {
+                match result {
+                    Ok(raw_data) => {
+                        match serde_json::from_str::<MantraSession>(&raw_data) {
+                            Ok(session) => Some(Ok(session)),
+                            Err(e) => {
+                                eprintln!("[get_sessions_by_project] Failed to parse session: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => Some(Err(StorageError::from(e))),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(sessions)
+    }
+
     /// Get session message count for a specific session
     ///
     /// # Arguments
