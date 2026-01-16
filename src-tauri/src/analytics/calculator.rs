@@ -322,9 +322,10 @@ fn get_tool_description(tool: &StandardTool) -> Option<String> {
         StandardTool::FileEdit { path, .. } => Some(path.clone()),
         StandardTool::FileDelete { path } => Some(path.clone()),
         StandardTool::ShellExec { command, .. } => {
-            // Truncate long commands
-            let truncated = if command.len() > 50 {
-                format!("{}...", &command[..47])
+            // Truncate long commands (char-boundary safe)
+            let truncated = if command.chars().count() > 50 {
+                let end: String = command.chars().take(47).collect();
+                format!("{}...", end)
             } else {
                 command.clone()
             };
@@ -335,8 +336,10 @@ fn get_tool_description(tool: &StandardTool) -> Option<String> {
         StandardTool::WebFetch { url, .. } => Some(url.clone()),
         StandardTool::WebSearch { query } => Some(query.clone()),
         StandardTool::KnowledgeQuery { question, .. } => {
-            let truncated = if question.len() > 50 {
-                format!("{}...", &question[..47])
+            // Truncate long questions (char-boundary safe)
+            let truncated = if question.chars().count() > 50 {
+                let end: String = question.chars().take(47).collect();
+                format!("{}...", end)
             } else {
                 question.clone()
             };

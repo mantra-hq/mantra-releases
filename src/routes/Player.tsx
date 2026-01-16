@@ -861,7 +861,7 @@ export default function Player() {
             )}
 
             {/* 统计视图内容 */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-auto">
               {sessionId && currentProject?.id ? (
                 /* 有选中会话和项目时，根据 statsLevel 显示 */
                 statsLevel === "session" ? (

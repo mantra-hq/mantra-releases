@@ -63,7 +63,7 @@ export function ModeSwitch({ className }: ModeSwitchProps) {
               aria-controls="playback-panel"
               onClick={() => handleModeChange("playback")}
               className={cn(
-                "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-all",
+                "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-all cursor-pointer",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 mode === "playback"
                   ? "bg-background text-foreground shadow-sm"
@@ -92,7 +92,7 @@ export function ModeSwitch({ className }: ModeSwitchProps) {
               aria-controls="statistics-panel"
               onClick={() => handleModeChange("statistics")}
               className={cn(
-                "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-all",
+                "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-all cursor-pointer",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 mode === "statistics"
                   ? "bg-background text-foreground shadow-sm"

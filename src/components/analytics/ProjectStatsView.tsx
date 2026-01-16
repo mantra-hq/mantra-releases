@@ -99,7 +99,7 @@ export function ProjectStatsView({
   className,
 }: ProjectStatsViewProps) {
   const { t } = useTranslation();
-  const [timeRange, setTimeRange] = useState<TimeRange>("days30");
+  const [timeRange, setTimeRange] = useState<TimeRange>("days7");
   const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +195,7 @@ export function ProjectStatsView({
         <TimeRangeSelector
           value={timeRange}
           onChange={setTimeRange}
-          className="w-[120px]"
+          className="w-[140px] shrink-0"
         />
       </div>
 
