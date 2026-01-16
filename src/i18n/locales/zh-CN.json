@@ -129,7 +129,13 @@
     "skippedEmpty": "跳过空会话",
     "noFiles": "暂无文件",
     "emptyProjectsWarning": "以下项目的所有会话都是空的",
-    "emptyProjectsWillBeHidden": "这些项目在\"隐藏空会话\"开启时将不会显示"
+    "emptyProjectsWillBeHidden": "这些项目在\"隐藏空会话\"开启时将不会显示",
+    "newProject": "这是一个新创建的项目",
+    "newProjectTag": "新建",
+    "mergedToExisting": "会话已合并到已有项目（可能来自相同或不同的导入源）",
+    "mergedTag": "合并",
+    "createdNewProject": "创建新项目",
+    "mergedToProject": "合并到已有项目"
   },
   "project": {
     "myProjects": "我的项目",

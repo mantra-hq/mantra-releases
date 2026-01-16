@@ -145,6 +145,12 @@ export interface ImportFileDoneEvent {
   projectName?: string;
   /** Whether the file was skipped (e.g. empty session) */
   skipped?: boolean;
+  /** 
+   * Whether this session was imported to a newly created project
+   * - true: A new project was created for this session
+   * - false: Session was merged into an existing project (from same or different import source)
+   */
+  isNewProject?: boolean;
 }
 
 

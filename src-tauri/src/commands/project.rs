@@ -13,6 +13,7 @@ use tauri::async_runtime::spawn_blocking;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::error::AppError;
+use crate::git::get_git_remote_url;
 use crate::models::{ImportResult, MantraSession, Project, SessionSummary};
 use crate::parsers::{ClaudeParser, CodexParser, CursorParser, GeminiParser, LogParser};
 use crate::scanner::ProjectScanner;
@@ -102,6 +103,11 @@ pub struct ImportFileDoneEvent {
     /// Whether the file was skipped (empty session)
     #[serde(default)]
     pub skipped: bool,
+    /// Whether this session was imported to a newly created project
+    /// - true: A new project was created for this session
+    /// - false: Session was merged into an existing project
+    #[serde(default)]
+    pub is_new_project: bool,
 }
 
 /// Event sent when import is cancelled
@@ -202,6 +208,19 @@ pub async fn import_sessions(
 
     // Parse all files/directories
     for path in &paths {
+        // Check if this is a Cursor single composer (path contains #)
+        if let Some(hash_pos) = path.find('#') {
+            let project_path = &path[..hash_pos];
+            let composer_id = &path[hash_pos + 1..];
+            let path_buf = PathBuf::from(project_path);
+
+            match cursor_parser.parse_single_composer(&path_buf, composer_id) {
+                Ok(session) => all_sessions.push(session),
+                Err(e) => parse_errors.push(format!("{}: {}", path, e)),
+            }
+            continue;
+        }
+
         let path_buf = PathBuf::from(path);
 
         if path_buf.is_dir() {
@@ -748,12 +767,13 @@ pub async fn import_sessions_with_progress(
     let gemini_parser = GeminiParser::new();
     let codex_parser = CodexParser::new();
 
-    // Pre-scan: Build directory -> (cwd, project_id) mapping
+    // Pre-scan: Build directory -> (cwd, project_id, project_name, is_new) mapping
     // This ensures all files from the same directory belong to the same project
-    let mut dir_project_map: HashMap<String, (String, String, String)> = HashMap::new(); // dir -> (cwd, project_id, project_name)
+    let mut dir_project_map: HashMap<String, (String, String, String, bool)> = HashMap::new(); // dir -> (cwd, project_id, project_name, is_new)
 
-    // First pass: collect cwd from files that have it
-    let mut dir_cwd_map: HashMap<String, String> = HashMap::new();
+    // First pass: collect cwd and git_remote_url from files that have them
+    // Story: Use git_remote_url for cross-path project aggregation during import
+    let mut dir_cwd_map: HashMap<String, (String, Option<String>)> = HashMap::new(); // dir -> (cwd, git_remote_url)
     for path in &paths {
         let path_buf = PathBuf::from(path);
         if path_buf.is_file() {
@@ -779,7 +799,9 @@ pub async fn import_sessions_with_progress(
 
                     if let Ok(session) = parse_result {
                         if !session.cwd.is_empty() {
-                            dir_cwd_map.insert(dir_key, session.cwd);
+                            // Extract git_remote_url for cross-path project aggregation
+                            let git_url = get_git_remote_url(Path::new(&session.cwd)).ok().flatten();
+                            dir_cwd_map.insert(dir_key, (session.cwd, git_url));
                         }
                     }
                 }
@@ -787,15 +809,16 @@ pub async fn import_sessions_with_progress(
         }
     }
 
-    // Second pass: create/get projects for each directory
+    // Second pass: create/get projects for each directory using git_remote_url for cross-path aggregation
     {
         let db = state.db.lock().map_err(|_| AppError::LockError)?;
-        for (dir_key, cwd) in &dir_cwd_map {
-            let (project, is_new) = db.get_or_create_project(cwd)?;
+        for (dir_key, (cwd, git_url)) in &dir_cwd_map {
+            // Use find_or_create_project with git_url for proper cross-path project merging
+            let (project, is_new) = db.find_or_create_project(cwd, git_url.as_deref())?;
             if is_new {
                 total_new_projects += 1;
             }
-            dir_project_map.insert(dir_key.clone(), (cwd.clone(), project.id.clone(), project.name.clone()));
+            dir_project_map.insert(dir_key.clone(), (cwd.clone(), project.id.clone(), project.name.clone(), is_new));
         }
     }
 
@@ -827,8 +850,53 @@ pub async fn import_sessions_with_progress(
         let mut file_session_id: Option<String> = None;
         let mut file_project_name: Option<String> = None;
         let mut file_skipped = false;
+        let mut file_is_new_project = false; // Track if session is imported to a new vs existing project
 
-        if path_buf.is_dir() {
+        // Check if this is a Cursor single composer (path contains #)
+        if let Some(hash_pos) = path.find('#') {
+            let project_path = &path[..hash_pos];
+            let composer_id = &path[hash_pos + 1..];
+            let path_buf = PathBuf::from(project_path);
+
+            // Cursor single composer
+            match cursor_parser.parse_single_composer(&path_buf, composer_id) {
+                Ok(session) => {
+                    // Get or create project
+                    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+                    let git_url = get_git_remote_url(Path::new(&session.cwd)).ok().flatten();
+                    let (project, is_new) = db.find_or_create_project(&session.cwd, git_url.as_deref())?;
+                    if is_new {
+                        total_new_projects += 1;
+                    }
+
+                    // Check for duplicate
+                    match db.get_session(&session.id) {
+                        Ok(Some(_)) => {
+                            total_skipped += 1;
+                            file_skipped = true;
+                        }
+                        Ok(None) => {
+                            if let Ok(_) = db.insert_session(&session, &project.id) {
+                                total_imported += 1;
+                                let _ = db.update_project_last_activity(&project.id, session.updated_at);
+                            }
+                        }
+                        Err(_) => {}
+                    }
+
+                    file_success = true;
+                    file_project_id = Some(project.id.clone());
+                    file_project_name = Some(project.name.clone());
+                    file_session_id = Some(session.id.clone());
+                    file_is_new_project = is_new;
+                    affected_project_ids.insert(project.id);
+                }
+                Err(e) => {
+                    file_error = Some(e.to_string());
+                    all_errors.push(format!("{}: {}", path, e));
+                }
+            }
+        } else if PathBuf::from(path).is_dir() {
             // Cursor workspace (directory)
             match cursor_parser.parse_workspace(&path_buf) {
                 Ok(sessions) => {
@@ -854,8 +922,10 @@ pub async fn import_sessions_with_progress(
 
                             if let Some(cwd) = workspace_cwd {
                                 // Use unified logic: get/create project first, then import all sessions
+                                // Extract git_remote_url for cross-path project aggregation
+                                let git_url = get_git_remote_url(Path::new(&cwd)).ok().flatten();
                                 let db = state.db.lock().map_err(|_| AppError::LockError)?;
-                                let (project, is_new) = db.get_or_create_project(&cwd)?;
+                                let (project, is_new) = db.find_or_create_project(&cwd, git_url.as_deref())?;
                                 if is_new {
                                     total_new_projects += 1;
                                 }
@@ -879,6 +949,7 @@ pub async fn import_sessions_with_progress(
                                 file_success = true;
                                 file_project_id = Some(project.id.clone());
                                 file_project_name = Some(project.name.clone());
+                                file_is_new_project = is_new;
                                 if let Some(first_session) = sessions_to_import.first() {
                                     file_session_id = Some(first_session.id.clone());
                                 }
@@ -950,7 +1021,7 @@ pub async fn import_sessions_with_progress(
                             .map(|p| p.to_string_lossy().to_string())
                             .unwrap_or_default();
 
-                        if let Some((_, project_id, project_name)) = dir_project_map.get(&dir_key) {
+                        if let Some((_, project_id, project_name, is_new)) = dir_project_map.get(&dir_key) {
                             // Use pre-determined project_id - session data saved as-is
                             let db = state.db.lock().map_err(|_| AppError::LockError)?;
 
@@ -983,6 +1054,7 @@ pub async fn import_sessions_with_progress(
                             file_session_id = Some(session.id.clone());
                             file_project_id = Some(project_id.clone());
                             file_project_name = Some(project_name.clone());
+                            file_is_new_project = *is_new;
                         } else {
                             // Fallback: use import_sessions for files without pre-determined project
                             let mut db = state.db.lock().map_err(|_| AppError::LockError)?;
@@ -1012,7 +1084,7 @@ pub async fn import_sessions_with_progress(
                             .map(|p| p.to_string_lossy().to_string())
                             .unwrap_or_default();
 
-                        if let Some((_, project_id, project_name)) = dir_project_map.get(&dir_key) {
+                        if let Some((_, project_id, project_name, is_new)) = dir_project_map.get(&dir_key) {
                             // Create empty session from parser and import it
                             if let Ok(empty_session) = claude_parser.parse_file(path) {
                                 let db = state.db.lock().map_err(|_| AppError::LockError)?;
@@ -1030,6 +1102,7 @@ pub async fn import_sessions_with_progress(
                                 file_project_id = Some(project_id.clone());
                                 file_project_name = Some(project_name.clone());
                                 file_session_id = Some(empty_session.id.clone());
+                                file_is_new_project = *is_new;
                             }
                             file_success = true;
                         } else {
@@ -1062,6 +1135,7 @@ pub async fn import_sessions_with_progress(
             session_id: file_session_id,
             project_name: file_project_name,
             skipped: file_skipped,
+            is_new_project: file_is_new_project,
         });
 
         // Track affected project for is_empty update

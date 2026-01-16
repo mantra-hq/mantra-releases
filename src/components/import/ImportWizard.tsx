@@ -357,14 +357,16 @@ export function ImportWizard({
               path: event.filePath,
               success: event.success,
               error: event.error,
+              projectName: event.projectName,
+              isNewProject: event.isNewProject,
             };
             const updated = [newFile, ...prev].slice(0, 5);
             return updated;
           });
 
-          // Story 2.23: 收集导入成功的项目信息
+          // Story 2.23: 收集导入成功的项目信息（包含是否新建项目）
           if (event.success && event.projectId && event.sessionId && event.projectName) {
-            addImportedProject(event.projectId, event.sessionId, event.projectName);
+            addImportedProject(event.projectId, event.sessionId, event.projectName, event.isNewProject);
             // Story 2.28: 记录导入成功日志
             appLog.importFileSuccess(event.filePath, event.projectName);
           } else if (!event.success && event.error) {
@@ -506,9 +508,9 @@ export function ImportWizard({
       // 使用带进度事件的导入函数重试
       const retryResults = await importSessionsWithProgress(failedPaths, {
         onFileDone: (event) => {
-          // 收集重试成功的项目信息
+          // 收集重试成功的项目信息（包含是否新建项目）
           if (event.success && event.projectId && event.sessionId && event.projectName) {
-            addImportedProject(event.projectId, event.sessionId, event.projectName);
+            addImportedProject(event.projectId, event.sessionId, event.projectName, event.isNewProject);
           }
         },
       });

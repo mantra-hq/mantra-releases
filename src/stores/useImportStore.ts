@@ -37,6 +37,12 @@ export interface ImportedProject {
   isEmpty?: boolean;
   /** 第一个非空会话 ID (优先用于导航) Story 2.34 */
   firstNonEmptySessionId?: string;
+  /** 
+   * 是否为新创建的项目 
+   * - true: 本次导入新创建的项目
+   * - false: 会话被合并到已有项目（可能来自相同或不同的导入源）
+   */
+  isNewProject?: boolean;
 }
 
 /**
@@ -115,7 +121,7 @@ export interface ImportState {
   /** 全选新项目 (Story 2.20) */
   selectAllNew: () => void;
   /** 添加导入的项目 (Story 2.23) */
-  addImportedProject: (projectId: string, sessionId: string, projectName: string) => void;
+  addImportedProject: (projectId: string, sessionId: string, projectName: string, isNewProject?: boolean) => void;
   /** 清空导入的项目列表 (Story 2.23) */
   clearImportedProjects: () => void;
   /** 清空错误列表 (Story 2.23) */
@@ -355,12 +361,12 @@ export const useImportStore = create<ImportState>((set) => ({
     }),
 
   // Story 2.23: 添加导入的项目
-  addImportedProject: (projectId, sessionId, projectName) =>
+  addImportedProject: (projectId, sessionId, projectName, isNewProject) =>
     set((state) => {
-      // 检查项目是否已存在
+      // 检查项目是否已存在（在当前导入批次中）
       const existingProject = state.importedProjects.find((p) => p.id === projectId);
       if (existingProject) {
-        // 更新会话数量
+        // 更新会话数量，保持原有的 isNewProject 状态
         return {
           importedProjects: state.importedProjects.map((p) =>
             p.id === projectId
@@ -376,6 +382,7 @@ export const useImportStore = create<ImportState>((set) => ({
         name: projectName,
         sessionCount: 1,
         firstSessionId: sessionId,
+        isNewProject: isNewProject ?? false,
       };
 
       return {

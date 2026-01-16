@@ -129,7 +129,13 @@
     "skippedEmpty": "Skipped empty sessions",
     "noFiles": "No files found",
     "emptyProjectsWarning": "The following projects have all empty sessions",
-    "emptyProjectsWillBeHidden": "These projects will be hidden when \"Hide empty sessions\" is enabled"
+    "emptyProjectsWillBeHidden": "These projects will be hidden when \"Hide empty sessions\" is enabled",
+    "newProject": "This is a newly created project",
+    "newProjectTag": "New",
+    "mergedToExisting": "Session merged into existing project (from same or different import source)",
+    "mergedTag": "Merged",
+    "createdNewProject": "Created new project",
+    "mergedToProject": "Merged to existing project"
   },
   "project": {
     "myProjects": "My Projects",

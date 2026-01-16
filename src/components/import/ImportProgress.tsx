@@ -15,7 +15,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle, ChevronDown, ChevronRight, FileWarning, Loader2, StopCircle } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronDown, ChevronRight, FileWarning, Loader2, StopCircle, Plus, GitMerge, FolderKanban } from "lucide-react";
 import {
   Progress,
   Button,
@@ -62,6 +62,10 @@ export interface RecentFile {
   success: boolean;
   /** 错误信息 */
   error?: string;
+  /** 项目名称 */
+  projectName?: string;
+  /** 是否新建项目 */
+  isNewProject?: boolean;
 }
 
 /** ImportProgress Props */
@@ -189,27 +193,50 @@ export function ImportProgress({
               <div
                 key={file.path}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 text-sm",
+                  "px-3 py-2 text-sm",
                   index === 0 && "bg-muted/30"
                 )}
               >
-                {/* 状态图标 */}
-                {index === 0 && progress.current < progress.total ? (
-                  <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
-                ) : file.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                )}
-                {/* 文件名 */}
-                <span className="font-mono text-foreground truncate flex-1">
-                  {getFileName(file.path)}
-                </span>
-                {/* 错误信息 */}
-                {file.error && (
-                  <span className="text-xs text-red-400 truncate max-w-[150px]">
-                    {file.error}
+                {/* 第一行：状态图标 + 文件名 */}
+                <div className="flex items-center gap-2">
+                  {/* 状态图标 */}
+                  {index === 0 && progress.current < progress.total ? (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
+                  ) : file.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  )}
+                  {/* 文件名 */}
+                  <span className="font-mono text-foreground truncate flex-1">
+                    {getFileName(file.path)}
                   </span>
+                </div>
+                {/* 第二行：项目信息（成功时显示）*/}
+                {file.success && file.projectName && (
+                  <div className="flex items-center gap-1.5 mt-1.5 ml-6 text-xs">
+                    {file.isNewProject ? (
+                      <>
+                        <Plus className="w-3 h-3 text-emerald-500" />
+                        <span className="text-emerald-500">{t("import.createdNewProject")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <GitMerge className="w-3 h-3 text-blue-500" />
+                        <span className="text-blue-500">{t("import.mergedToProject")}</span>
+                      </>
+                    )}
+                    <FolderKanban className="w-3 h-3 text-muted-foreground ml-1" />
+                    <span className="text-muted-foreground font-medium truncate">
+                      {file.projectName}
+                    </span>
+                  </div>
+                )}
+                {/* 错误信息 */}
+                {file.error && !file.success && (
+                  <div className="mt-1 ml-6 text-xs text-red-400 truncate">
+                    {file.error}
+                  </div>
                 )}
               </div>
             ))}

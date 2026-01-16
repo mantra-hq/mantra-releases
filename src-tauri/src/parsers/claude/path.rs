@@ -247,6 +247,43 @@ pub fn extract_cwd_from_file_content(path: &str) -> Option<String> {
     None
 }
 
+/// Try to extract cwd from sibling session files in the same directory
+///
+/// When a session file doesn't contain cwd (e.g., only has system events),
+/// we try to find it from other session files in the same project directory.
+/// This is more reliable than `decode_claude_path` for project names with hyphens.
+pub fn extract_cwd_from_sibling_sessions(path: &str) -> Option<String> {
+    use std::path::Path;
+    
+    let path_buf = Path::new(path);
+    let parent = path_buf.parent()?;
+    let current_filename = path_buf.file_name()?.to_str()?;
+    
+    // Read directory entries
+    let entries = fs::read_dir(parent).ok()?;
+    
+    // Try to find cwd from other .jsonl files in the same directory
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        
+        // Skip current file and non-jsonl files
+        if let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) {
+            if name == current_filename || !name.ends_with(".jsonl") {
+                continue;
+            }
+        } else {
+            continue;
+        }
+        
+        // Try to extract cwd from this sibling file
+        if let Some(cwd) = extract_cwd_from_file_content(entry_path.to_str()?) {
+            return Some(cwd);
+        }
+    }
+    
+    None
+}
+
 
 #[cfg(test)]
 #[path = "path_tests.rs"]

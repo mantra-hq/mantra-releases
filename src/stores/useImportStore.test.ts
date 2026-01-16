@@ -379,4 +379,54 @@ describe("useImportStore", () => {
       expect(project?.sessionCount).toBe(1);
     });
   });
+
+  // Story: isNewProject tracking for import status display
+  describe("addImportedProject with isNewProject", () => {
+    beforeEach(() => {
+      act(() => {
+        useImportStore.getState().reset();
+      });
+    });
+
+    it("tracks isNewProject=true for new projects", () => {
+      act(() => {
+        useImportStore.getState().addImportedProject("proj-1", "sess-1", "New Project", true);
+      });
+
+      const project = useImportStore.getState().importedProjects.find(p => p.id === "proj-1");
+      expect(project?.isNewProject).toBe(true);
+    });
+
+    it("tracks isNewProject=false for merged projects", () => {
+      act(() => {
+        useImportStore.getState().addImportedProject("proj-2", "sess-2", "Existing Project", false);
+      });
+
+      const project = useImportStore.getState().importedProjects.find(p => p.id === "proj-2");
+      expect(project?.isNewProject).toBe(false);
+    });
+
+    it("defaults isNewProject to false when not provided", () => {
+      act(() => {
+        useImportStore.getState().addImportedProject("proj-3", "sess-3", "Default Project");
+      });
+
+      const project = useImportStore.getState().importedProjects.find(p => p.id === "proj-3");
+      expect(project?.isNewProject).toBe(false);
+    });
+
+    it("preserves isNewProject when adding more sessions to same project", () => {
+      act(() => {
+        // First session creates new project
+        useImportStore.getState().addImportedProject("proj-1", "sess-1", "Project 1", true);
+        // Second session merges into same project
+        useImportStore.getState().addImportedProject("proj-1", "sess-2", "Project 1", false);
+      });
+
+      const project = useImportStore.getState().importedProjects.find(p => p.id === "proj-1");
+      // Original isNewProject=true should be preserved
+      expect(project?.isNewProject).toBe(true);
+      expect(project?.sessionCount).toBe(2);
+    });
+  });
 });

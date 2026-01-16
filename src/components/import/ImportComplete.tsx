@@ -15,7 +15,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, FolderKanban, FileCheck, FileX, ChevronRight, MessageSquare, RefreshCw, ChevronDown, Loader2, Info, Plus, GitMerge } from "lucide-react";
 import { Button, ScrollArea } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { ImportedProject } from "@/stores/useImportStore";
@@ -206,31 +206,46 @@ export function ImportComplete({
             <h4 className="text-sm font-medium text-muted-foreground mb-2">
               {t("import.justImported")}
             </h4>
-            <ScrollArea className="max-h-[150px] overflow-hidden">
-              <div className="space-y-1">
+            <ScrollArea className="max-h-[180px] overflow-hidden">
+              <div className="space-y-1.5">
                 {importedProjects.map((project) => (
                   <button
                     key={project.id}
                     onClick={() => onNavigateToProject(project.firstNonEmptySessionId ?? project.firstSessionId)}
                     className={cn(
-                      "w-full flex items-center justify-between px-3 py-2 rounded-md",
+                      "w-full px-3 py-2.5 rounded-md",
                       "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",
                       "text-left group"
                     )}
                     data-testid={`project-${project.id}`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    {/* 第一行：项目图标 + 项目名 + 会话数 + 箭头 */}
+                    <div className="flex items-center gap-2">
                       <FolderKanban className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span className="text-sm text-foreground truncate">
+                      <span className="text-sm text-foreground truncate flex-1">
                         {project.name}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        <span className="text-xs">{project.sessionCount}</span>
+                      <div className="flex items-center gap-2 text-muted-foreground flex-shrink-0">
+                        <div className="flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" />
+                          <span className="text-xs">{project.sessionCount}</span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    {/* 第二行：新建/合并状态提示 */}
+                    <div className="flex items-center gap-1.5 mt-1.5 ml-6 text-xs">
+                      {project.isNewProject ? (
+                        <>
+                          <Plus className="w-3 h-3 text-emerald-500" />
+                          <span className="text-emerald-500">{t("import.createdNewProject")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <GitMerge className="w-3 h-3 text-blue-500" />
+                          <span className="text-blue-500">{t("import.mergedToProject")}</span>
+                        </>
+                      )}
                     </div>
                   </button>
                 ))}

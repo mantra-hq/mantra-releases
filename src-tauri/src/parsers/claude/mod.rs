@@ -8,7 +8,7 @@
 mod path;
 mod types;
 
-pub use path::{ClaudePaths, ClaudeSessionFile, decode_claude_path, extract_cwd_from_file_content, get_claude_dir, get_claude_projects_dir};
+pub use path::{ClaudePaths, ClaudeSessionFile, decode_claude_path, extract_cwd_from_file_content, extract_cwd_from_sibling_sessions, get_claude_dir, get_claude_projects_dir};
 pub use types::{ClaudeConversation, ClaudeMessage, ClaudeContent, ClaudeContentBlock, ClaudeToolResultContent};
 
 use std::fs;
@@ -91,9 +91,16 @@ impl ClaudeParser {
         // This handles the case where the file has some system events with cwd info
         let cwd = extract_cwd_from_file_content(path)
             .or_else(|| {
-                // Fallback: decode the parent directory name
+                // Try to get cwd from sibling session files in the same directory
+                // This is more reliable than decode_claude_path for project names with hyphens
+                // e.g., "mantra-landing" would be incorrectly decoded as "mantra/landing"
+                extract_cwd_from_sibling_sessions(path)
+            })
+            .or_else(|| {
+                // Last resort fallback: decode the parent directory name
                 // Claude stores sessions in ~/.claude/projects/<encoded-path>/<session-id>.jsonl
                 // The encoded path looks like: -mnt-disk0-project-foo -> /mnt/disk0/project/foo
+                // WARNING: This will fail for project names with hyphens (e.g., mantra-landing -> mantra/landing)
                 path_buf
                     .parent()
                     .and_then(|p| p.file_name())
