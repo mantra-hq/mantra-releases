@@ -211,7 +211,7 @@ export function ImportComplete({
                 {importedProjects.map((project) => (
                   <button
                     key={project.id}
-                    onClick={() => onNavigateToProject(project.firstSessionId)}
+                    onClick={() => onNavigateToProject(project.firstNonEmptySessionId ?? project.firstSessionId)}
                     className={cn(
                       "w-full flex items-center justify-between px-3 py-2 rounded-md",
                       "bg-muted/50 hover:bg-muted transition-colors cursor-pointer",

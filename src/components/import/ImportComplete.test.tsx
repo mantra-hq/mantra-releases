@@ -333,6 +333,58 @@ describe("ImportComplete", () => {
       expect(onNavigateToProject).toHaveBeenCalledWith("sess-1");
     });
 
+    // Story 2.34: 优先使用第一个非空会话ID导航
+    it("uses firstNonEmptySessionId when available for navigation", () => {
+      const onNavigateToProject = vi.fn();
+      const projectsWithNonEmpty: ImportedProject[] = [
+        {
+          id: "proj-1",
+          name: "project-1",
+          sessionCount: 2,
+          firstSessionId: "sess-empty",
+          firstNonEmptySessionId: "sess-non-empty"
+        },
+      ];
+      render(
+        <ImportComplete
+          results={mockResults}
+          importedProjects={projectsWithNonEmpty}
+          onViewProjects={vi.fn()}
+          onContinueImport={vi.fn()}
+          onNavigateToProject={onNavigateToProject}
+        />
+      );
+
+      fireEvent.click(screen.getByText("project-1"));
+      expect(onNavigateToProject).toHaveBeenCalledWith("sess-non-empty");
+    });
+
+    // Story 2.34: 当无非空会话时，回退到第一个会话
+    it("falls back to firstSessionId when firstNonEmptySessionId is not available", () => {
+      const onNavigateToProject = vi.fn();
+      const projectsWithoutNonEmpty: ImportedProject[] = [
+        {
+          id: "proj-1",
+          name: "project-1",
+          sessionCount: 2,
+          firstSessionId: "sess-first",
+          // firstNonEmptySessionId 未设置
+        },
+      ];
+      render(
+        <ImportComplete
+          results={mockResults}
+          importedProjects={projectsWithoutNonEmpty}
+          onViewProjects={vi.fn()}
+          onContinueImport={vi.fn()}
+          onNavigateToProject={onNavigateToProject}
+        />
+      );
+
+      fireEvent.click(screen.getByText("project-1"));
+      expect(onNavigateToProject).toHaveBeenCalledWith("sess-first");
+    });
+
     it("displays session count for each project", () => {
       render(
         <ImportComplete

@@ -327,4 +327,56 @@ describe("useImportStore", () => {
       expect(useImportStore.getState().errors).toContainEqual(error);
     });
   });
+
+  // Story 2.29 V2, Story 2.34: updateImportedProjectsIsEmpty
+  describe("updateImportedProjectsIsEmpty", () => {
+    beforeEach(() => {
+      act(() => {
+        useImportStore.getState().reset();
+        // Add some projects
+        useImportStore.getState().addImportedProject("proj-1", "sess-1", "Project 1");
+        useImportStore.getState().addImportedProject("proj-2", "sess-2", "Project 2");
+      });
+    });
+
+    it("updates isEmpty status for imported projects", () => {
+      act(() => {
+        useImportStore.getState().updateImportedProjectsIsEmpty({
+          "proj-1": true,
+          "proj-2": false,
+        });
+      });
+
+      const projects = useImportStore.getState().importedProjects;
+      expect(projects.find(p => p.id === "proj-1")?.isEmpty).toBe(true);
+      expect(projects.find(p => p.id === "proj-2")?.isEmpty).toBe(false);
+    });
+
+    it("updates firstNonEmptySessionId when provided", () => {
+      act(() => {
+        useImportStore.getState().updateImportedProjectsIsEmpty(
+          { "proj-1": false, "proj-2": true },
+          { "proj-1": "sess-non-empty-1" }
+        );
+      });
+
+      const projects = useImportStore.getState().importedProjects;
+      expect(projects.find(p => p.id === "proj-1")?.firstNonEmptySessionId).toBe("sess-non-empty-1");
+      expect(projects.find(p => p.id === "proj-2")?.firstNonEmptySessionId).toBeUndefined();
+    });
+
+    it("preserves other project properties when updating", () => {
+      act(() => {
+        useImportStore.getState().updateImportedProjectsIsEmpty(
+          { "proj-1": true },
+          { "proj-1": "sess-non-empty" }
+        );
+      });
+
+      const project = useImportStore.getState().importedProjects.find(p => p.id === "proj-1");
+      expect(project?.name).toBe("Project 1");
+      expect(project?.firstSessionId).toBe("sess-1");
+      expect(project?.sessionCount).toBe(1);
+    });
+  });
 });

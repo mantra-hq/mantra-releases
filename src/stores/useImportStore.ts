@@ -35,6 +35,8 @@ export interface ImportedProject {
   firstSessionId: string;
   /** 项目是否为空（所有会话都是空会话）Story 2.29 V2 */
   isEmpty?: boolean;
+  /** 第一个非空会话 ID (优先用于导航) Story 2.34 */
+  firstNonEmptySessionId?: string;
 }
 
 /**
@@ -126,8 +128,8 @@ export interface ImportState {
   clearDiscoveredFiles: () => void;
   /** 设置跳过空会话 (Story 2.29) */
   setSkipEmptySessions: (skip: boolean) => void;
-  /** 更新导入项目的 isEmpty 状态 (Story 2.29 V2) */
-  updateImportedProjectsIsEmpty: (projectIsEmptyMap: Record<string, boolean>) => void;
+  /** 更新导入项目的 isEmpty 状态和第一个非空会话ID (Story 2.29 V2, Story 2.34) */
+  updateImportedProjectsIsEmpty: (projectIsEmptyMap: Record<string, boolean>, firstNonEmptySessionMap?: Record<string, string>) => void;
 }
 
 /**
@@ -455,12 +457,13 @@ export const useImportStore = create<ImportState>((set) => ({
       skipEmptySessions: skip,
     }),
 
-  // Story 2.29 V2: 更新导入项目的 isEmpty 状态
-  updateImportedProjectsIsEmpty: (projectIsEmptyMap) =>
+  // Story 2.29 V2, Story 2.34: 更新导入项目的 isEmpty 状态和第一个非空会话ID
+  updateImportedProjectsIsEmpty: (projectIsEmptyMap, firstNonEmptySessionMap) =>
     set((state) => ({
       importedProjects: state.importedProjects.map((p) => ({
         ...p,
         isEmpty: projectIsEmptyMap[p.id] ?? false,
+        firstNonEmptySessionId: firstNonEmptySessionMap?.[p.id],
       })),
     })),
 }));

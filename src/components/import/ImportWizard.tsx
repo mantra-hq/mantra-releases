@@ -28,7 +28,7 @@ import { feedback } from "@/lib/feedback";
 import { appLog } from "@/lib/log-actions";
 import { useImportStore } from "@/stores";
 import { scanLogDirectory, selectLogFiles, importSessionsWithProgress, cancelImport } from "@/lib/import-ipc";
-import { getImportedSessionIds, getProject } from "@/lib/project-ipc";
+import { getImportedSessionIds, getProject, getProjectSessions } from "@/lib/project-ipc";
 import { SourceSelector, type ImportSource } from "./SourceSelector";
 import { FileSelector } from "./FileSelector";
 import { ImportProgress, type ImportProgressData, type RecentFile } from "./ImportProgress";
@@ -404,20 +404,32 @@ export function ImportWizard({
       // Story 2.28: 记录导入完成日志
       appLog.importComplete(finalProgress.successCount, finalProgress.failureCount);
 
-      // Story 2.29 V2: 获取导入项目的 is_empty 状态
+      // Story 2.29 V2, Story 2.34: 获取导入项目的 is_empty 状态和第一个非空会话ID
       // 在后台更新，不阻塞 UI
       const projectIds = Array.from(
         new Set(parseResults.filter(r => r.success && r.projectId).map(r => r.projectId!))
       );
-      Promise.all(projectIds.map(id => getProject(id)))
-        .then(projects => {
+      Promise.all(projectIds.map(async (id) => {
+        const [project, sessions] = await Promise.all([
+          getProject(id),
+          getProjectSessions(id),
+        ]);
+        return { project, sessions };
+      }))
+        .then(results => {
           const projectIsEmptyMap: Record<string, boolean> = {};
-          for (const project of projects) {
+          const firstNonEmptySessionMap: Record<string, string> = {};
+          for (const { project, sessions } of results) {
             if (project) {
               projectIsEmptyMap[project.id] = project.is_empty ?? false;
+              // Story 2.34: 找到第一个非空会话（按更新时间降序，已排好序）
+              const firstNonEmpty = sessions.find(s => !s.is_empty);
+              if (firstNonEmpty) {
+                firstNonEmptySessionMap[project.id] = firstNonEmpty.id;
+              }
             }
           }
-          updateImportedProjectsIsEmpty(projectIsEmptyMap);
+          updateImportedProjectsIsEmpty(projectIsEmptyMap, firstNonEmptySessionMap);
         })
         .catch(err => {
           console.error("Failed to fetch project is_empty status:", err);
