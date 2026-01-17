@@ -24,6 +24,8 @@ use commands::{
     parse_gemini_all, parse_gemini_project, parse_codex_log, parse_codex_log_string,
     parse_codex_all, parse_codex_project, parse_log_files,
     sanitize_session, sanitize_text, validate_regex, get_builtin_rules, scan_text_for_privacy,
+    // Story 3.10: Privacy rules management
+    get_privacy_rules, update_privacy_rules, validate_regex_v2,
     // Story 3.7: Interception records
     save_interception_record, get_interception_records, get_interception_stats, delete_interception_records,
     scan_custom_directory, scan_log_directory, AppState,
@@ -123,6 +125,10 @@ pub fn run() {
             get_builtin_rules,
             // Story 3-6: Privacy scanner
             scan_text_for_privacy,
+            // Story 3.10: Privacy rules management
+            get_privacy_rules,
+            update_privacy_rules,
+            validate_regex_v2,
             // Story 3.7: Interception records
             save_interception_record,
             get_interception_records,

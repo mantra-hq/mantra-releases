@@ -36,7 +36,10 @@
     "clear": "Clear",
     "clearSearch": "Clear Search",
     "learnMore": "Learn More",
-    "comingSoon": "Coming Soon"
+    "comingSoon": "Coming Soon",
+    "add": "Add",
+    "validating": "Validating...",
+    "saving": "Saving..."
   },
   "time": {
     "justNow": "Just now",
@@ -697,6 +700,39 @@
         "failed": "Delete failed"
       },
       "empty": "No interception records"
+    },
+    "rules": {
+      "title": "Privacy Detection Rules",
+      "add": "Add Rule",
+      "addTitle": "Add Custom Rule",
+      "addDescription": "Create custom regex rules to detect specific sensitive information patterns",
+      "custom": "Custom",
+      "customGroup": "Custom Rules",
+      "toggle": "Toggle rule {{name}}",
+      "delete": "Delete rule {{name}}",
+      "deleteConfirmTitle": "Confirm Delete Rule",
+      "deleteConfirmDesc": "Are you sure you want to delete rule \"{{name}}\"? This action cannot be undone.",
+      "empty": "No rules",
+      "name": "Rule Name",
+      "namePlaceholder": "e.g.: Company internal domain",
+      "pattern": "Regular Expression",
+      "patternPlaceholder": "e.g.: \\b\\w+@company\\.com\\b",
+      "severity": "Severity",
+      "errors": {
+        "loadFailed": "Failed to load rules",
+        "saveFailed": "Failed to save rules",
+        "emptyName": "Rule name cannot be empty",
+        "emptyPattern": "Regex pattern cannot be empty",
+        "invalidRegex": "Invalid regular expression",
+        "duplicateId": "Rule ID already exists",
+        "duplicateName": "Rule name already exists",
+        "validationFailed": "Validation failed"
+      }
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
     }
   }
 }

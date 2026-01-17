@@ -2,10 +2,13 @@
 //!
 //! 提供 Tauri IPC 接口用于文本和会话脱敏
 
+use tauri::{AppHandle, Manager};
+
 use crate::error::AppError;
 use crate::sanitizer::{
-    InterceptionRecord, InterceptionStats, PaginatedRecords, PrivacyScanner, SanitizationResult,
-    SanitizationRule, ScanResult, Sanitizer,
+    InterceptionRecord, InterceptionStats, PaginatedRecords, PrivacyRulesConfig, PrivacyScanner,
+    RegexValidationResult, SanitizationResult, SanitizationRule, ScanResult, Sanitizer,
+    validate_regex_with_details,
 };
 
 /// 对文本进行脱敏处理
@@ -131,6 +134,66 @@ pub async fn scan_text_for_privacy(text: String) -> Result<ScanResult, AppError>
     let scanner = PrivacyScanner::with_defaults()
         .map_err(|e| AppError::internal(e.to_string()))?;
     Ok(scanner.scan(&text))
+}
+
+// ============================================================================
+// Story 3.10: 自定义检测规则管理
+// ============================================================================
+
+/// 获取所有隐私规则 (内置 + 自定义)
+///
+/// 合并内置规则和用户自定义规则，应用启用/禁用状态
+///
+/// # Returns
+/// * `Result<Vec<SanitizationRule>, AppError>` - 合并后的规则列表
+#[tauri::command]
+pub async fn get_privacy_rules(
+    app_handle: AppHandle,
+) -> Result<Vec<SanitizationRule>, AppError> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+
+    let config = PrivacyRulesConfig::load(&app_data_dir)
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    Ok(config.get_merged_rules())
+}
+
+/// 更新隐私规则配置
+///
+/// 保存内置规则的启用状态和自定义规则列表
+///
+/// # Arguments
+/// * `config` - 规则配置
+///
+/// # Returns
+/// * `Result<(), AppError>` - 成功或错误
+#[tauri::command]
+pub async fn update_privacy_rules(
+    app_handle: AppHandle,
+    config: PrivacyRulesConfig,
+) -> Result<(), AppError> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+
+    config.save(&app_data_dir)
+        .map_err(|e| AppError::internal(e.to_string()))
+}
+
+/// 验证正则表达式 (增强版，含空值检查)
+///
+/// # Arguments
+/// * `pattern` - 正则表达式模式
+///
+/// # Returns
+/// * `Result<RegexValidationResult, AppError>` - 验证结果
+#[tauri::command]
+pub async fn validate_regex_v2(pattern: String) -> Result<RegexValidationResult, AppError> {
+    Ok(validate_regex_with_details(&pattern))
 }
 
 // ============================================================================

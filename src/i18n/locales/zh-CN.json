@@ -36,7 +36,10 @@
     "clear": "清除",
     "clearSearch": "清除搜索",
     "learnMore": "了解更多",
-    "comingSoon": "即将上线"
+    "comingSoon": "即将上线",
+    "add": "添加",
+    "validating": "验证中...",
+    "saving": "保存中..."
   },
   "time": {
     "justNow": "刚刚",
@@ -697,6 +700,39 @@
         "failed": "删除失败"
       },
       "empty": "暂无拦截记录"
+    },
+    "rules": {
+      "title": "隐私检测规则管理",
+      "add": "添加规则",
+      "addTitle": "添加自定义规则",
+      "addDescription": "创建自定义正则表达式规则来检测特定的敏感信息模式",
+      "custom": "自定义",
+      "customGroup": "自定义规则",
+      "toggle": "切换规则 {{name}} 的启用状态",
+      "delete": "删除规则 {{name}}",
+      "deleteConfirmTitle": "确认删除规则",
+      "deleteConfirmDesc": "确定要删除规则 \"{{name}}\" 吗？此操作无法撤销。",
+      "empty": "暂无规则",
+      "name": "规则名称",
+      "namePlaceholder": "例如：公司内部域名",
+      "pattern": "正则表达式",
+      "patternPlaceholder": "例如：\\b\\w+@company\\.com\\b",
+      "severity": "严重程度",
+      "errors": {
+        "loadFailed": "加载规则失败",
+        "saveFailed": "保存规则失败",
+        "emptyName": "规则名称不能为空",
+        "emptyPattern": "正则表达式不能为空",
+        "invalidRegex": "无效的正则表达式",
+        "duplicateId": "规则 ID 已存在",
+        "duplicateName": "规则名称已存在",
+        "validationFailed": "验证失败"
+      }
+    },
+    "severity": {
+      "critical": "高危",
+      "warning": "警告",
+      "info": "提示"
     }
   }
 }

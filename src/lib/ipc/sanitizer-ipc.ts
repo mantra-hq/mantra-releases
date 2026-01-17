@@ -12,6 +12,8 @@ import type {
     InterceptionRecord,
     InterceptionStats,
     PaginatedRecords,
+    PrivacyRulesConfig,
+    RegexValidationResult,
     SanitizationResult,
     SanitizationRule,
     ScanResult,
@@ -101,6 +103,37 @@ export async function getBuiltinRules(): Promise<SanitizationRule[]> {
  */
 export async function scanTextForPrivacy(text: string): Promise<ScanResult> {
     return invoke<ScanResult>('scan_text_for_privacy', { text });
+}
+
+// ============================================================
+// Story 3.10: 自定义检测规则管理 IPC
+// ============================================================
+
+/**
+ * 获取所有隐私规则 (内置 + 自定义)
+ * 合并内置规则和用户自定义规则，应用启用/禁用状态
+ * @returns 合并后的规则列表
+ */
+export async function getPrivacyRules(): Promise<SanitizationRule[]> {
+    return invoke<SanitizationRule[]>('get_privacy_rules');
+}
+
+/**
+ * 更新隐私规则配置
+ * 保存内置规则的启用状态和自定义规则列表
+ * @param config 规则配置
+ */
+export async function updatePrivacyRules(config: PrivacyRulesConfig): Promise<void> {
+    return invoke<void>('update_privacy_rules', { config });
+}
+
+/**
+ * 验证正则表达式 (增强版，含空值检查)
+ * @param pattern 正则表达式模式
+ * @returns 验证结果
+ */
+export async function validateRegexV2(pattern: string): Promise<RegexValidationResult> {
+    return invoke<RegexValidationResult>('validate_regex_v2', { pattern });
 }
 
 // ============================================================

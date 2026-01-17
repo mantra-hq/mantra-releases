@@ -336,3 +336,26 @@ export interface PaginatedRecords {
     /** 每页记录数 */
     per_page: number;
 }
+
+// ============================================================
+// Story 3.10: 自定义检测规则管理类型
+// ============================================================
+
+/**
+ * 隐私规则配置
+ * 存储用户对内置规则的启用/禁用状态，以及用户自定义规则列表
+ */
+export interface PrivacyRulesConfig {
+    /** 内置规则的启用状态 (rule_id -> enabled) */
+    builtin_enabled: Record<string, boolean>;
+    /** 用户自定义规则列表 */
+    custom_rules: SanitizationRule[];
+}
+
+/** 正则验证结果 (增强版) */
+export interface RegexValidationResult {
+    /** 是否有效 */
+    valid: boolean;
+    /** 错误信息 (如果无效) */
+    error?: string | null;
+}
