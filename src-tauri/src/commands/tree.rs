@@ -247,7 +247,7 @@ pub async fn list_files_at_commit(
         collect_files(&repo, &tree, "", &mut files)?;
 
         // 按路径排序
-        files.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        files.sort_by_key(|a| a.to_lowercase());
 
         Ok(files)
     })

@@ -365,7 +365,7 @@ impl CodexParser {
                 // Add summary text
                 for s in &summary {
                     if !reasoning_text.is_empty() {
-                        reasoning_text.push_str("\n");
+                        reasoning_text.push('\n');
                     }
                     reasoning_text.push_str(s.text());
                 }
@@ -374,7 +374,7 @@ impl CodexParser {
                 if let Some(contents) = content {
                     for c in contents {
                         if !reasoning_text.is_empty() {
-                            reasoning_text.push_str("\n");
+                            reasoning_text.push('\n');
                         }
                         reasoning_text.push_str(c.text());
                     }

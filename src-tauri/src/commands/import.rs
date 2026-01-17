@@ -371,8 +371,7 @@ async fn scan_cursor_workspaces() -> Result<Vec<DiscoveredFile>, AppError> {
                 // Use composer name or fallback to "Cursor 会话"
                 let display_name = composer.name
                     .as_ref()
-                    .filter(|n| !n.is_empty())
-                    .map(|n| n.clone())
+                    .filter(|n| !n.is_empty()).cloned()
                     .unwrap_or_else(|| "Cursor 会话".to_string());
 
                 // Get modified time from created_at
@@ -667,8 +666,7 @@ pub async fn scan_custom_directory(path: String) -> Result<Vec<DiscoveredFile>, 
                         for composer in composers {
                             let display_name = composer.name
                                 .as_ref()
-                                .filter(|n| !n.is_empty())
-                                .map(|n| n.clone())
+                                .filter(|n| !n.is_empty()).cloned()
                                 .unwrap_or_else(|| "Cursor 会话".to_string());
 
                             let modified_at = composer.created_at

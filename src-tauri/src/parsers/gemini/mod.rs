@@ -275,7 +275,7 @@ impl GeminiParser {
                     if part.has_unknown_fields() {
                         for field_name in part.unknown_field_names() {
                             let raw_value = part.unknown_fields.get(&field_name)
-                                .map(|v| truncate_raw_json(v))
+                                .map(truncate_raw_json)
                                 .unwrap_or_default();
 
                             unknown_formats.push(UnknownFormatEntry {

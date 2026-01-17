@@ -6,7 +6,7 @@ use super::*;
 fn test_module_exports() {
     // 验证公共 API 可访问
     let _type = SensitiveType::ApiKey;
-    let _rule = SanitizationRule::new("test", r"test", SensitiveType::Custom);
+    let _rule = SanitizationRule::new("test", "test", r"test", SensitiveType::Custom);
     let sanitizer = Sanitizer::with_defaults();
     assert!(sanitizer.is_ok());
 }

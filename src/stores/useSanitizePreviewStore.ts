@@ -187,10 +187,14 @@ export const useSanitizePreviewStore = create<SanitizePreviewStore>((set, get) =
             // 2. 获取自定义规则
             const getEnabledRules = useSanitizationRulesStore.getState().getEnabledRules;
             const enabledRules = getEnabledRules();
-            const customPatterns: SanitizationRule[] = enabledRules.map((rule) => ({
+            const customPatterns: SanitizationRule[] = enabledRules.map((rule, index) => ({
+                id: `custom_${index}`,
                 name: rule.name,
                 pattern: rule.pattern,
                 replacement: `[REDACTED:${rule.sensitiveType.toUpperCase()}]`,
+                sensitive_type: rule.sensitiveType as SensitiveType,
+                severity: 'warning' as const,
+                enabled: true,
             }));
 
             // 3. 调用脱敏 IPC

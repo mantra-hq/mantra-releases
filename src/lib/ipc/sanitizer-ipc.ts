@@ -1,6 +1,7 @@
 /**
  * Sanitizer IPC 封装 - Story 3-2 Task 8
  * Story 9.2: Task 5.4 (使用 IPC 适配器)
+ * Story 3-6: 隐私扫描器增强
  *
  * 前端调用 Rust sanitizer 的 IPC 接口
  */
@@ -9,6 +10,7 @@ import { invoke } from '@/lib/ipc-adapter';
 import type {
     SanitizationResult,
     SanitizationRule,
+    ScanResult,
 } from '@/components/sanitizer/types';
 
 /**
@@ -82,4 +84,17 @@ export async function validateRegex(pattern: string): Promise<ValidationResult> 
  */
 export async function getBuiltinRules(): Promise<SanitizationRule[]> {
     return invoke<SanitizationRule[]>('get_builtin_rules');
+}
+
+/**
+ * 扫描文本中的隐私信息
+ * Story 3-6: 隐私扫描器增强
+ *
+ * 不修改原文，只返回检测结果供用户决策。
+ *
+ * @param text 待扫描文本
+ * @returns 扫描结果，包含所有匹配项的详细信息（行号、列号、上下文等）
+ */
+export async function scanTextForPrivacy(text: string): Promise<ScanResult> {
+    return invoke<ScanResult>('scan_text_for_privacy', { text });
 }

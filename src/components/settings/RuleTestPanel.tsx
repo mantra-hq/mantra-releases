@@ -13,7 +13,7 @@ import { Play, Loader2 } from 'lucide-react';
 import { sanitizeText } from '@/lib/ipc/sanitizer-ipc';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { SanitizationSummary } from '@/components/sanitizer/SanitizationSummary';
-import type { SanitizationResult } from '@/components/sanitizer/types';
+import type { SanitizationResult, SanitizationRule, SensitiveType } from '@/components/sanitizer/types';
 
 export function RuleTestPanel() {
     const { t } = useTranslation();
@@ -32,10 +32,14 @@ export function RuleTestPanel() {
 
         try {
             const enabledRules = getEnabledRules();
-            const customPatterns = enabledRules.map((rule) => ({
+            const customPatterns: SanitizationRule[] = enabledRules.map((rule, index) => ({
+                id: `custom_test_${index}`,
                 name: rule.name,
                 pattern: rule.pattern,
                 replacement: `[REDACTED:${rule.sensitiveType.toUpperCase()}]`,
+                sensitive_type: rule.sensitiveType as SensitiveType,
+                severity: 'warning' as const,
+                enabled: true,
             }));
 
             const sanitizationResult = await sanitizeText(testText, customPatterns);

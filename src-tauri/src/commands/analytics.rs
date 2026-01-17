@@ -36,7 +36,7 @@ pub async fn get_project_analytics(
     // Calculate metrics for each session
     let session_metrics: Vec<SessionMetrics> = sessions
         .iter()
-        .map(|session| calculate_session_metrics(session))
+        .map(calculate_session_metrics)
         .collect();
 
     // Calculate project analytics

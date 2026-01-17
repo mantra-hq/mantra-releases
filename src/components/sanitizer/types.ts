@@ -16,6 +16,10 @@ export type SensitiveType =
     | 'jwt_token'
     | 'secret'
     | 'email'
+    | 'phone'
+    | 'id_card'
+    | 'private_key'
+    | 'password'
     | 'custom';
 
 /** 敏感信息类型的显示标签 */
@@ -30,7 +34,28 @@ export const SENSITIVE_TYPE_LABELS: Record<SensitiveType, string> = {
     jwt_token: 'JWT Token',
     secret: '密码/Secret',
     email: '邮箱地址',
+    phone: '电话号码',
+    id_card: '身份证号',
+    private_key: '私钥',
+    password: '密码赋值',
     custom: '自定义规则',
+};
+
+/** 严重程度 (Story 3-6) */
+export type Severity = 'critical' | 'warning' | 'info';
+
+/** 严重程度显示标签 */
+export const SEVERITY_LABELS: Record<Severity, string> = {
+    critical: '严重',
+    warning: '警告',
+    info: '提示',
+};
+
+/** 严重程度颜色 */
+export const SEVERITY_COLORS: Record<Severity, string> = {
+    critical: 'text-red-500',
+    warning: 'text-yellow-500',
+    info: 'text-blue-500',
 };
 
 /** 脱敏统计 */
@@ -41,11 +66,17 @@ export interface SanitizationStats {
 
 /** 自定义脱敏规则 */
 export interface SanitizationRule {
+    /** 规则 ID (必需，与 Rust 端一致) */
+    id: string;
     name: string;
     pattern: string;
-    replacement: string;
-    /** 敏感信息类型 (仅内置规则包含此字段) */
-    sensitive_type?: SensitiveType;
+    replacement?: string;
+    /** 敏感信息类型 */
+    sensitive_type: SensitiveType;
+    /** 严重程度 */
+    severity: Severity;
+    /** 是否启用 */
+    enabled: boolean;
 }
 
 /** 脱敏结果 (来自 Rust IPC) */
@@ -53,6 +84,58 @@ export interface SanitizationResult {
     sanitized_text: string;
     stats: SanitizationStats;
     has_matches: boolean;
+}
+
+// ============================================================
+// Story 3-6: 隐私扫描器类型
+// ============================================================
+
+/** 扫描匹配结果 */
+export interface ScanMatch {
+    /** 规则 ID */
+    rule_id: string;
+    /** 敏感信息类型 */
+    sensitive_type: SensitiveType;
+    /** 严重程度 */
+    severity: Severity;
+    /** 行号 (1-based) */
+    line: number;
+    /** 列号 (1-based) */
+    column: number;
+    /** 原始匹配文本 */
+    matched_text: string;
+    /** 脱敏显示文本 */
+    masked_text: string;
+    /** 上下文片段 */
+    context: string;
+}
+
+/** 扫描统计 */
+export interface ScanStats {
+    /** Critical 数量 */
+    critical_count: number;
+    /** Warning 数量 */
+    warning_count: number;
+    /** Info 数量 */
+    info_count: number;
+    /** 总匹配数 */
+    total: number;
+    /** 按类型统计 */
+    by_type: Record<string, number>;
+}
+
+/** 扫描结果 */
+export interface ScanResult {
+    /** 所有匹配项 */
+    matches: ScanMatch[];
+    /** 是否包含 Critical 级别匹配 */
+    has_critical: boolean;
+    /** 是否包含 Warning 级别匹配 */
+    has_warning: boolean;
+    /** 扫描耗时 (毫秒) */
+    scan_time_ms: number;
+    /** 统计信息 */
+    stats: ScanStats;
 }
 
 /** Diff 行类型 */

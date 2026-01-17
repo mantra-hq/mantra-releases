@@ -20,7 +20,7 @@ import {
     hasChanges,
     getBuiltinRules,
 } from './sanitizer-ipc';
-import type { SanitizationResult } from '@/components/sanitizer/types';
+import type { SanitizationResult, SanitizationRule } from '@/components/sanitizer/types';
 
 const mockResult: SanitizationResult = {
     sanitized_text: 'const key = "[REDACTED:API_KEY]";',
@@ -62,8 +62,16 @@ describe('sanitizer-ipc', () => {
             vi.mocked(invoke).mockResolvedValue(mockResult);
 
             const text = 'Phone: 123-456-7890';
-            const customPatterns = [
-                { name: 'Phone', pattern: '\\d{3}-\\d{3}-\\d{4}', replacement: '[PHONE]' },
+            const customPatterns: SanitizationRule[] = [
+                {
+                    id: 'custom_phone',
+                    name: 'Phone',
+                    pattern: '\\d{3}-\\d{3}-\\d{4}',
+                    replacement: '[PHONE]',
+                    sensitive_type: 'custom',
+                    severity: 'warning',
+                    enabled: true,
+                },
             ];
 
             await sanitizeText(text, customPatterns);
@@ -111,8 +119,16 @@ describe('sanitizer-ipc', () => {
             vi.mocked(invoke).mockResolvedValue(mockResult);
 
             const sessionId = 'session-456';
-            const customPatterns = [
-                { name: 'Secret', pattern: 'secret_\\w+', replacement: '[SECRET]' },
+            const customPatterns: SanitizationRule[] = [
+                {
+                    id: 'custom_secret',
+                    name: 'Secret',
+                    pattern: 'secret_\\w+',
+                    replacement: '[SECRET]',
+                    sensitive_type: 'secret',
+                    severity: 'critical',
+                    enabled: true,
+                },
             ];
 
             await sanitizeSession(sessionId, customPatterns);

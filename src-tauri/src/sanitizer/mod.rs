@@ -6,10 +6,12 @@
 mod engine;
 mod error;
 mod patterns;
+mod scanner;
 
 pub use engine::{Sanitizer, SanitizationResult, SanitizationStats};
 pub use error::SanitizerError;
-pub use patterns::{SanitizationRule, SensitiveType, BUILTIN_RULES};
+pub use patterns::{SanitizationRule, SensitiveType, Severity, BUILTIN_RULES};
+pub use scanner::{PrivacyScanner, ScanMatch, ScanResult, ScanStats};
 
 #[cfg(test)]
 mod tests;

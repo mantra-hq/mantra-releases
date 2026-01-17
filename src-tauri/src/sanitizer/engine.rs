@@ -390,7 +390,7 @@ mod engine_tests {
 
     #[test]
     fn test_custom_rule() {
-        let custom_rule = SanitizationRule::custom("Custom SSN", r"\d{3}-\d{2}-\d{4}");
+        let custom_rule = SanitizationRule::custom("custom_ssn", "Custom SSN", r"\d{3}-\d{2}-\d{4}");
         let sanitizer = Sanitizer::with_custom_rules(vec![custom_rule]).unwrap();
         let text = "SSN: 123-45-6789";
         let result = sanitizer.sanitize(text);

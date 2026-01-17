@@ -754,19 +754,31 @@ export const MOCK_DART_CODE = `class User {
 
 export const MOCK_BUILTIN_RULES: SanitizationRule[] = [
   {
+    id: "mock_api_key",
     name: "API Key",
     pattern: "\\b[A-Za-z0-9]{32,}\\b",
     replacement: "[REDACTED:API_KEY]",
+    sensitive_type: "api_key",
+    severity: "critical",
+    enabled: true,
   },
   {
+    id: "mock_email",
     name: "Email",
     pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b",
     replacement: "[REDACTED:EMAIL]",
+    sensitive_type: "email",
+    severity: "warning",
+    enabled: true,
   },
   {
+    id: "mock_ip_address",
     name: "IP Address",
     pattern: "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
     replacement: "[REDACTED:IP]",
+    sensitive_type: "ip_address",
+    severity: "info",
+    enabled: true,
   },
 ];
 

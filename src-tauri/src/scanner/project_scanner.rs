@@ -122,10 +122,7 @@ impl<'a> ProjectScanner<'a> {
     /// # Returns
     /// The normalized Git remote URL if the path is a Git repository
     fn extract_git_remote_url(cwd: &str) -> Option<String> {
-        match get_git_remote_url(Path::new(cwd)) {
-            Ok(url) => url,
-            Err(_) => None,
-        }
+        get_git_remote_url(Path::new(cwd)).unwrap_or_default()
     }
 }
 

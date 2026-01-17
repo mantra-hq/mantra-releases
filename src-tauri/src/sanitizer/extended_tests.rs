@@ -55,6 +55,7 @@ mod test_data {
     }
 }
 
+#[allow(dead_code)]
 mod edge_cases {
     /// 过短的 sk- 前缀 (不应匹配)
     pub fn short_sk() -> String {
@@ -555,7 +556,7 @@ mod p2_boundary_tests {
 
     #[test]
     fn test_p2_01_disabled_rule_not_matched() {
-        let mut rule = SanitizationRule::new("Test Rule", r"test-secret-\d+", SensitiveType::Custom);
+        let mut rule = SanitizationRule::new("test_rule", "Test Rule", r"test-secret-\d+", SensitiveType::Custom);
         rule.enabled = false;
 
         let sanitizer = Sanitizer::new(vec![rule]).unwrap();
@@ -572,7 +573,7 @@ mod p2_boundary_tests {
 
     #[test]
     fn test_p2_02_custom_rule_works() {
-        let rule = SanitizationRule::custom("SSN Pattern", r"\d{3}-\d{2}-\d{4}");
+        let rule = SanitizationRule::custom("ssn_pattern", "SSN Pattern", r"\d{3}-\d{2}-\d{4}");
         let sanitizer = Sanitizer::new(vec![rule]).unwrap();
 
         let text = "SSN: 123-45-6789";
@@ -585,8 +586,8 @@ mod p2_boundary_tests {
     #[test]
     fn test_p2_03_multiple_custom_rules() {
         let rules = vec![
-            SanitizationRule::custom("SSN", r"\d{3}-\d{2}-\d{4}"),
-            SanitizationRule::custom("Phone", r"\d{3}-\d{3}-\d{4}"),
+            SanitizationRule::custom("ssn", "SSN", r"\d{3}-\d{2}-\d{4}"),
+            SanitizationRule::custom("phone", "Phone", r"\d{3}-\d{3}-\d{4}"),
         ];
         let sanitizer = Sanitizer::new(rules).unwrap();
 

@@ -1178,7 +1178,7 @@ impl Database {
 
             // Format session name
             let session_name = session_title.unwrap_or_else(|| {
-                let parts: Vec<&str> = session_id.split(|c| c == '-' || c == '_').collect();
+                let parts: Vec<&str> = session_id.split(['-', '_']).collect();
                 if parts.len() > 1 {
                     parts.last().unwrap_or(&"").chars().take(8).collect()
                 } else {

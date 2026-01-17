@@ -8,20 +8,17 @@ use serde::{Deserialize, Serialize};
 /// Time range filter for project analytics
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TimeRange {
     /// Last 7 days
     Days7,
     /// Last 30 days (default)
+    #[default]
     Days30,
     /// All time (no filter)
     All,
 }
 
-impl Default for TimeRange {
-    fn default() -> Self {
-        TimeRange::Days30
-    }
-}
 
 impl TimeRange {
     /// Returns the number of seconds for this time range
@@ -41,6 +38,7 @@ impl TimeRange {
 /// Contains efficiency and usage statistics for a single session.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub struct SessionMetrics {
     /// Session identifier
     pub session_id: String,
@@ -74,22 +72,6 @@ pub struct SessionMetrics {
     pub tool_type_counts: HashMap<String, u32>,
 }
 
-impl Default for SessionMetrics {
-    fn default() -> Self {
-        Self {
-            session_id: String::new(),
-            tool_type: String::new(),
-            start_time: 0,
-            end_time: 0,
-            duration_seconds: 0,
-            message_count: 0,
-            tool_call_count: 0,
-            tool_error_count: 0,
-            tool_types_used: Vec::new(),
-            tool_type_counts: HashMap::new(),
-        }
-    }
-}
 
 /// Activity data point for trend charts
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -779,7 +779,7 @@ pub async fn import_sessions_with_progress(
         if path_buf.is_file() {
             if let Some(parent) = path_buf.parent() {
                 let dir_key = parent.to_string_lossy().to_string();
-                if !dir_cwd_map.contains_key(&dir_key) {
+                if let std::collections::hash_map::Entry::Vacant(e) = dir_cwd_map.entry(dir_key) {
                     // Try to extract cwd from this file using appropriate parser
                     let is_codex = path.contains("/.codex/") || path.contains("\\.codex\\");
                     let is_gemini = path.contains("/.gemini/") || path.contains("\\.gemini\\");
@@ -801,7 +801,7 @@ pub async fn import_sessions_with_progress(
                         if !session.cwd.is_empty() {
                             // Extract git_remote_url for cross-path project aggregation
                             let git_url = get_git_remote_url(Path::new(&session.cwd)).ok().flatten();
-                            dir_cwd_map.insert(dir_key, (session.cwd, git_url));
+                            e.insert((session.cwd, git_url));
                         }
                     }
                 }
