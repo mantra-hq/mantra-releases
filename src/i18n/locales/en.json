@@ -405,6 +405,7 @@
     "logsCopied": "Logs copied to clipboard",
     "builtinRules": "Built-in Rules",
     "builtinRulesCount": "{{count}} rules",
+    "privacyRecordsDesc": "View historical privacy interception records",
     "sensitiveTypes": {
       "api_key": "API Keys",
       "aws_key": "AWS Keys",
@@ -613,6 +614,65 @@
       "calls": "calls",
       "sessions": "sessions",
       "days": "days"
+    }
+  },
+  "privacy": {
+    "records": {
+      "title": "Privacy Records",
+      "stats": {
+        "total": "Total Interceptions",
+        "thisWeek": "This Week",
+        "redacted": "Redacted",
+        "ignored": "Ignored"
+      },
+      "filter": {
+        "source": "Source",
+        "type": "Type",
+        "time": "Time",
+        "all": "All",
+        "today": "Today",
+        "thisWeek": "This Week",
+        "thisMonth": "This Month",
+        "allTime": "All Time"
+      },
+      "source": {
+        "preUpload": "Pre-upload Check",
+        "claudeCodeHook": "Claude Code Hook",
+        "externalHook": "External Tool"
+      },
+      "action": {
+        "redacted": "Redacted",
+        "ignored": "Ignored",
+        "cancelled": "Cancelled",
+        "ruleDisabled": "Rule Disabled"
+      },
+      "list": {
+        "time": "Time",
+        "source": "Source",
+        "sensitiveType": "Sensitive Type",
+        "userAction": "User Action",
+        "project": "Project",
+        "noRecords": "No interception records",
+        "noRecordsHint": "Records will appear here when sensitive information is detected",
+        "expandDetails": "Expand details",
+        "collapseDetails": "Collapse details",
+        "detectedItems": "Detected {{count}} sensitive items",
+        "line": "Line {{line}}"
+      },
+      "pagination": {
+        "page": "Page {{page}}",
+        "totalPages": "of {{total}}",
+        "perPage": "Per page",
+        "items": "items"
+      },
+      "delete": {
+        "selected": "Delete Selected",
+        "confirm": "Confirm Delete",
+        "confirmDesc": "Are you sure you want to delete {{count}} selected records? This action cannot be undone.",
+        "success": "Deleted {{count}} records",
+        "failed": "Delete failed"
+      },
+      "empty": "No interception records"
     }
   }
 }

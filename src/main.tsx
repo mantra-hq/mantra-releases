@@ -5,6 +5,7 @@
  * Story 2.21: Task 5 (移除 Dashboard，首页即 Player)
  * Story 9.2: Task 2 (Playwright 测试环境注入)
  * Tech-Spec: 通知系统 Task 14
+ * Story 3-8: Task 1.2 (添加 /privacy-records 路由)
  *
  * 配置路由和全局 Providers
  */
@@ -12,7 +13,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Player } from "./routes";
+import { Player, PrivacyRecords } from "./routes";
 import { Settings } from "./routes/Settings";
 import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -105,6 +106,8 @@ async function startApp() {
               <Route path="/player/:sessionId" element={<Player />} />
               {/* Settings: 设置页面 (Story 3-3) */}
               <Route path="/settings" element={<Settings />} />
+              {/* PrivacyRecords: 隐私保护记录页面 (Story 3-8) */}
+              <Route path="/privacy-records" element={<PrivacyRecords />} />
               {/* 默认重定向到首页 */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

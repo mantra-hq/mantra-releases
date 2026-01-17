@@ -405,6 +405,7 @@
     "logsCopied": "日志已复制到剪贴板",
     "builtinRules": "系统预设规则",
     "builtinRulesCount": "{{count}} 条规则",
+    "privacyRecordsDesc": "查看历史隐私拦截记录",
     "sensitiveTypes": {
       "api_key": "API 密钥",
       "aws_key": "AWS 密钥",
@@ -613,6 +614,65 @@
       "calls": "次调用",
       "sessions": "个会话",
       "days": "天"
+    }
+  },
+  "privacy": {
+    "records": {
+      "title": "隐私保护记录",
+      "stats": {
+        "total": "总拦截数",
+        "thisWeek": "本周拦截",
+        "redacted": "已脱敏",
+        "ignored": "已忽略"
+      },
+      "filter": {
+        "source": "来源",
+        "type": "类型",
+        "time": "时间",
+        "all": "全部",
+        "today": "今天",
+        "thisWeek": "本周",
+        "thisMonth": "本月",
+        "allTime": "全部时间"
+      },
+      "source": {
+        "preUpload": "上传前检查",
+        "claudeCodeHook": "Claude Code Hook",
+        "externalHook": "外部工具"
+      },
+      "action": {
+        "redacted": "已脱敏",
+        "ignored": "已忽略",
+        "cancelled": "已取消",
+        "ruleDisabled": "禁用规则"
+      },
+      "list": {
+        "time": "时间",
+        "source": "来源",
+        "sensitiveType": "敏感类型",
+        "userAction": "用户操作",
+        "project": "项目",
+        "noRecords": "暂无拦截记录",
+        "noRecordsHint": "当检测到敏感信息时，记录将显示在这里",
+        "expandDetails": "展开详情",
+        "collapseDetails": "收起详情",
+        "detectedItems": "检测到 {{count}} 项敏感信息",
+        "line": "行 {{line}}"
+      },
+      "pagination": {
+        "page": "第 {{page}} 页",
+        "totalPages": "共 {{total}} 页",
+        "perPage": "每页",
+        "items": "条"
+      },
+      "delete": {
+        "selected": "删除选中",
+        "confirm": "确认删除",
+        "confirmDesc": "确定要删除选中的 {{count}} 条记录吗？此操作无法撤销。",
+        "success": "已删除 {{count}} 条记录",
+        "failed": "删除失败"
+      },
+      "empty": "暂无拦截记录"
     }
   }
 }

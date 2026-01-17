@@ -2,6 +2,7 @@
  * Settings Page - 设置页面
  * Story 3-3: Task 5 - AC #1
  * Story 2-26: i18n 国际化
+ * Story 3-8: Task 6 - 添加隐私记录入口
  */
 
 import { useState, useCallback } from 'react';
@@ -9,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2, Globe, BookOpen } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2, Globe, BookOpen, Shield, ChevronRight } from 'lucide-react';
 import { RuleList } from '@/components/settings/RuleList';
 import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
@@ -184,6 +185,30 @@ export function Settings() {
                     {/* Story 3-5: 系统预设规则 (AC #1, #2, #3) */}
                     <section className="rounded-lg border bg-card p-4">
                         <SystemRuleList />
+                    </section>
+
+                    {/* Story 3-8: 隐私保护记录入口 (Task 6) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <button
+                            onClick={() => navigate('/privacy-records')}
+                            className="w-full flex items-center justify-between hover:bg-accent/50 -m-4 p-4 rounded-lg transition-colors"
+                            data-testid="privacy-records-link"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-md bg-emerald-500/10">
+                                    <Shield className="h-5 w-5 text-emerald-500" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-medium">
+                                        {t("privacy.records.title")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("settings.privacyRecordsDesc")}
+                                    </p>
+                                </div>
+                            </div>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        </button>
                     </section>
 
                     {/* 规则列表 */}
