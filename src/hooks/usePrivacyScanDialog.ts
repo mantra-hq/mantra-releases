@@ -134,6 +134,10 @@ export function usePrivacyScanDialog(): UsePrivacyScanDialogReturn {
                 projectName,
                 showReport
             );
+            // 如果无敏感信息（userAction 为 undefined），扫描直接通过，关闭扫描状态弹窗
+            if (!result.userAction) {
+                setIsOpen(false);
+            }
             return result;
         } catch (error) {
             // 发生错误时重置所有状态

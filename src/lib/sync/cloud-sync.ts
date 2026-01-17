@@ -112,11 +112,13 @@ export async function uploadSession(options: UploadSessionOptions): Promise<Uplo
 
         // 占位：模拟上传成功
         onProgress?.(100);
-        console.info('[CloudSync] Session upload simulated (Epic 4 pending)', {
-            sessionId,
-            contentLength: finalContent.length,
-            wasRedacted: privacyResult.userAction === 'redacted',
-        });
+        if (import.meta.env.DEV) {
+            console.info('[CloudSync] Session upload simulated (Epic 4 pending)', {
+                sessionId,
+                contentLength: finalContent.length,
+                wasRedacted: privacyResult.userAction === 'redacted',
+            });
+        }
 
         return {
             success: true,

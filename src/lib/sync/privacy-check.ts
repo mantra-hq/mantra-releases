@@ -62,7 +62,7 @@ export async function performPreUploadScan(
         source,
         matches: scanResult.matches,
         user_action: action,
-        original_text_hash: '', // 哈希由后端计算
+        // original_text_hash 由后端根据需要计算，前端不传
         project_name: projectName,
     });
 
