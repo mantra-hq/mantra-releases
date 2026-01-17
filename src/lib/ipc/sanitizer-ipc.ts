@@ -109,9 +109,9 @@ export async function scanTextForPrivacy(text: string): Promise<ScanResult> {
 
 /**
  * 保存拦截记录
- * @param record 拦截记录
+ * @param record 拦截记录 (不含 id，由后端生成)
  */
-export async function saveInterceptionRecord(record: InterceptionRecord): Promise<void> {
+export async function saveInterceptionRecord(record: Omit<InterceptionRecord, 'id'>): Promise<void> {
     return invoke<void>('save_interception_record', { record });
 }
 

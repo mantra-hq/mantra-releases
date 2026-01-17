@@ -617,6 +617,30 @@
     }
   },
   "privacy": {
+    "scan": {
+      "title": "隐私检查发现敏感信息",
+      "summary": "扫描摘要",
+      "detected": "检测到的敏感信息",
+      "items": "{{count}} 项",
+      "original": "原始",
+      "masked": "脱敏",
+      "context": "上下文",
+      "line": "行",
+      "criticalWarning": "包含 {{count}} 个高危敏感信息，建议进行脱敏处理",
+      "warningOnly": "包含 {{count}} 个警告级敏感信息，请确认是否继续",
+      "noIssues": "未发现敏感信息",
+      "scanning": "正在扫描...",
+      "actions": {
+        "cancel": "取消",
+        "ignore": "忽略并继续",
+        "redact": "一键脱敏"
+      },
+      "severity": {
+        "critical": "高危",
+        "warning": "警告",
+        "info": "提示"
+      }
+    },
     "records": {
       "title": "隐私保护记录",
       "stats": {

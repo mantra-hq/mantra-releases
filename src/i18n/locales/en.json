@@ -617,6 +617,30 @@
     }
   },
   "privacy": {
+    "scan": {
+      "title": "Privacy Check Found Sensitive Information",
+      "summary": "Scan Summary",
+      "detected": "Detected Sensitive Information",
+      "items": "{{count}} items",
+      "original": "Original",
+      "masked": "Masked",
+      "context": "Context",
+      "line": "Line",
+      "criticalWarning": "Contains {{count}} critical sensitive items, redaction recommended",
+      "warningOnly": "Contains {{count}} warning-level sensitive items, please confirm to proceed",
+      "noIssues": "No sensitive information found",
+      "scanning": "Scanning...",
+      "actions": {
+        "cancel": "Cancel",
+        "ignore": "Ignore & Continue",
+        "redact": "Redact All"
+      },
+      "severity": {
+        "critical": "Critical",
+        "warning": "Warning",
+        "info": "Info"
+      }
+    },
     "records": {
       "title": "Privacy Records",
       "stats": {
