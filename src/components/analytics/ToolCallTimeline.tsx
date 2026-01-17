@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
-import { CheckCircle, XCircle, Circle } from "lucide-react";
+import { XCircle, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ToolCallDetail } from "@/types/analytics";
 import { ScrollArea } from "@/components/ui/scroll-area";

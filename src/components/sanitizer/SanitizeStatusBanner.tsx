@@ -9,11 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { ShieldCheck, ShieldAlert, Info, Loader2, Copy, Download, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,

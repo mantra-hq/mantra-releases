@@ -43,10 +43,9 @@ interface CustomTooltipProps {
     color: string;
   }>;
   label?: string;
-  locale?: Locale;
 }
 
-function CustomTooltip({ active, payload, locale }: CustomTooltipProps) {
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const { t, i18n } = useTranslation();
 
   if (active && payload && payload.length > 0) {

@@ -94,8 +94,8 @@ describe("ToolOutput", () => {
 
   // Story 8.12: 防御性检查测试
   it("handles structuredResult with undefined filePath gracefully", () => {
-    // 模拟不完整的数据：type 为 file_read 但 filePath 为 undefined
-    const incompleteResult = { type: "file_read" as const } as { type: "file_read"; filePath: string };
+    // 模拟不完整的数据：type 为 file_read 但 file_path 为 undefined
+    const incompleteResult = { type: "file_read" as const } as { type: "file_read"; file_path: string };
     
     // 不应崩溃
     expect(() => {

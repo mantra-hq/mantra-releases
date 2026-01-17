@@ -8,7 +8,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { BarChart2, Calendar, FolderOpen, Rocket } from "lucide-react";
+import { Calendar, FolderOpen, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

@@ -44,8 +44,8 @@ describe("tool-utils", () => {
   const fileReadTool: StandardTool = {
     type: "file_read",
     path: "/src/index.ts",
-    startLine: 1,
-    endLine: 10,
+    start_line: 1,
+    end_line: 10,
   };
 
   const fileWriteTool: StandardTool = {
@@ -57,8 +57,8 @@ describe("tool-utils", () => {
   const fileEditTool: StandardTool = {
     type: "file_edit",
     path: "/src/edit.ts",
-    oldString: "old",
-    newString: "new",
+    old_string: "old",
+    new_string: "new",
   };
 
   const shellExecTool: StandardTool = {
@@ -122,9 +122,9 @@ describe("tool-utils", () => {
 
   const notebookEditTool: StandardTool = {
     type: "notebook_edit",
-    notebookPath: "/notebook.ipynb",
-    cellId: "cell-1",
-    newSource: "print('hello')",
+    notebook_path: "/notebook.ipynb",
+    cell_id: "cell-1",
+    new_source: "print('hello')",
   };
 
   const todoManageTool: StandardTool = {
@@ -135,7 +135,7 @@ describe("tool-utils", () => {
   const subTaskTool: StandardTool = {
     type: "sub_task",
     prompt: "explore the codebase",
-    agentType: "Explore",
+    agent_type: "Explore",
   };
 
   const userPromptTool: StandardTool = {

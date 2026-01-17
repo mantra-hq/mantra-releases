@@ -126,7 +126,7 @@ describe("getMessageCopyContent", () => {
     });
 
     it("Edit 工具应该复制文件路径", () => {
-      const standardTool: StandardTool = { type: "file_edit", path: "/src/edit.ts", oldString: "a", newString: "b" };
+      const standardTool: StandardTool = { type: "file_edit", path: "/src/edit.ts", old_string: "a", new_string: "b" };
       const message: NarrativeMessage = {
         id: "1",
         role: "assistant",

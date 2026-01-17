@@ -3,7 +3,7 @@
  * Story 2.34: Task 6.1
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ModeSwitch } from "./ModeSwitch";
 import { useAppModeStore } from "@/stores/useAppModeStore";
