@@ -138,6 +138,49 @@ impl Database {
             )?;
         }
 
+        // Migration: Add interception_records table (Story 3.7)
+        Self::run_interception_records_migration(conn)?;
+
+        Ok(())
+    }
+
+    /// Migration for interception_records table (Story 3.7)
+    fn run_interception_records_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if table already exists
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='interception_records'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            conn.execute_batch(
+                r#"
+                -- 拦截记录表 (Story 3.7)
+                CREATE TABLE IF NOT EXISTS interception_records (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    source_type TEXT NOT NULL,          -- 'pre_upload' | 'claude_code_hook' | 'external_hook'
+                    source_context TEXT,                -- JSON: session_id, tool_name 等
+                    matches TEXT NOT NULL,              -- JSON: ScanMatch[]
+                    user_action TEXT NOT NULL,          -- 'redacted' | 'ignored' | 'cancelled' | 'rule_disabled'
+                    original_text_hash TEXT,
+                    project_name TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                -- 时间戳索引 (按时间倒序查询)
+                CREATE INDEX IF NOT EXISTS idx_records_timestamp ON interception_records(timestamp DESC);
+                -- 来源类型索引 (按来源筛选)
+                CREATE INDEX IF NOT EXISTS idx_records_source ON interception_records(source_type);
+                -- 项目名索引 (按项目筛选)
+                CREATE INDEX IF NOT EXISTS idx_records_project ON interception_records(project_name);
+                "#,
+            )?;
+        }
+
         Ok(())
     }
 
@@ -215,5 +258,57 @@ mod tests {
             .unwrap();
 
         assert_eq!(fk_enabled, 1, "Foreign keys should be enabled");
+    }
+
+    #[test]
+    fn test_interception_records_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify interception_records table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM interception_records LIMIT 1",
+            [],
+        );
+        // Table exists but is empty, so query should succeed
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(interception_records)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"id".to_string()));
+        assert!(columns.contains(&"timestamp".to_string()));
+        assert!(columns.contains(&"source_type".to_string()));
+        assert!(columns.contains(&"source_context".to_string()));
+        assert!(columns.contains(&"matches".to_string()));
+        assert!(columns.contains(&"user_action".to_string()));
+        assert!(columns.contains(&"original_text_hash".to_string()));
+        assert!(columns.contains(&"project_name".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+    }
+
+    #[test]
+    fn test_interception_records_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify indexes exist
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='interception_records'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_records_timestamp".to_string()));
+        assert!(indexes.contains(&"idx_records_source".to_string()));
+        assert!(indexes.contains(&"idx_records_project".to_string()));
     }
 }

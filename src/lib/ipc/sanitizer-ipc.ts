@@ -2,12 +2,16 @@
  * Sanitizer IPC 封装 - Story 3-2 Task 8
  * Story 9.2: Task 5.4 (使用 IPC 适配器)
  * Story 3-6: 隐私扫描器增强
+ * Story 3.7: 拦截记录存储
  *
  * 前端调用 Rust sanitizer 的 IPC 接口
  */
 
 import { invoke } from '@/lib/ipc-adapter';
 import type {
+    InterceptionRecord,
+    InterceptionStats,
+    PaginatedRecords,
     SanitizationResult,
     SanitizationRule,
     ScanResult,
@@ -97,4 +101,52 @@ export async function getBuiltinRules(): Promise<SanitizationRule[]> {
  */
 export async function scanTextForPrivacy(text: string): Promise<ScanResult> {
     return invoke<ScanResult>('scan_text_for_privacy', { text });
+}
+
+// ============================================================
+// Story 3.7: 拦截记录存储 IPC
+// ============================================================
+
+/**
+ * 保存拦截记录
+ * @param record 拦截记录
+ */
+export async function saveInterceptionRecord(record: InterceptionRecord): Promise<void> {
+    return invoke<void>('save_interception_record', { record });
+}
+
+/**
+ * 获取拦截记录 (分页)
+ * @param page 页码 (1-based)
+ * @param perPage 每页记录数
+ * @param sourceFilter 可选的来源类型筛选
+ * @returns 分页结果
+ */
+export async function getInterceptionRecords(
+    page: number,
+    perPage: number,
+    sourceFilter?: string
+): Promise<PaginatedRecords> {
+    return invoke<PaginatedRecords>('get_interception_records', {
+        page,
+        per_page: perPage,
+        source_filter: sourceFilter,
+    });
+}
+
+/**
+ * 获取拦截统计
+ * @returns 统计数据
+ */
+export async function getInterceptionStats(): Promise<InterceptionStats> {
+    return invoke<InterceptionStats>('get_interception_stats');
+}
+
+/**
+ * 删除拦截记录
+ * @param ids 要删除的记录 ID 列表
+ * @returns 删除的记录数
+ */
+export async function deleteInterceptionRecords(ids: string[]): Promise<number> {
+    return invoke<number>('delete_interception_records', { ids });
 }

@@ -98,9 +98,16 @@ export interface ScanMatch {
     sensitive_type: SensitiveType;
     /** 严重程度 */
     severity: Severity;
-    /** 行号 (1-based) */
+    /**
+     * 行号 (1-based)
+     * @remarks Rust 端类型为 usize，JS 端使用 number。
+     * 在极端情况下 (>2^53-1) 可能有精度损失，但行号不会达到此范围。
+     */
     line: number;
-    /** 列号 (1-based) */
+    /**
+     * 列号 (1-based)
+     * @remarks 同 line 字段说明
+     */
     column: number;
     /** 原始匹配文本 */
     matched_text: string;
@@ -259,4 +266,73 @@ export interface ShareConfirmationProps {
     onCancel: () => void;
     onConfirm: () => void;
     isLoading?: boolean;
+}
+
+// ============================================================
+// Story 3.7: 拦截记录存储类型
+// ============================================================
+
+/** 用户操作类型 */
+export type UserAction = 'redacted' | 'ignored' | 'cancelled' | 'rule_disabled';
+
+/** 用户操作显示标签 */
+export const USER_ACTION_LABELS: Record<UserAction, string> = {
+    redacted: '已脱敏',
+    ignored: '已忽略',
+    cancelled: '已取消',
+    rule_disabled: '禁用规则',
+};
+
+/** 拦截来源类型 */
+export type InterceptionSourceType = 'pre_upload' | 'claude_code_hook' | 'external_hook';
+
+/** 拦截来源 */
+export interface InterceptionSource {
+    type: InterceptionSourceType;
+    session_id?: string;
+    tool_name?: string;
+}
+
+/** 拦截记录 */
+export interface InterceptionRecord {
+    /** 记录 ID (UUID) */
+    id: string;
+    /** 时间戳 (ISO 8601) */
+    timestamp: string;
+    /** 拦截来源 */
+    source: InterceptionSource;
+    /** 匹配结果列表 */
+    matches: ScanMatch[];
+    /** 用户操作 */
+    user_action: UserAction;
+    /** 原文哈希 */
+    original_text_hash: string;
+    /** 项目名称 (可选) */
+    project_name?: string;
+}
+
+/** 拦截统计 */
+export interface InterceptionStats {
+    /** 总拦截数 */
+    total_interceptions: number;
+    /** 按敏感类型分组统计 */
+    by_type: Record<string, number>;
+    /** 按严重程度分组统计 */
+    by_severity: Record<string, number>;
+    /** 按用户操作分组统计 */
+    by_action: Record<string, number>;
+    /** 最近 7 天拦截数 */
+    recent_7_days: number;
+}
+
+/** 分页记录结果 */
+export interface PaginatedRecords {
+    /** 记录列表 */
+    records: InterceptionRecord[];
+    /** 总记录数 */
+    total: number;
+    /** 当前页码 (1-based) */
+    page: number;
+    /** 每页记录数 */
+    per_page: number;
 }

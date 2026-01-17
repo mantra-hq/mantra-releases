@@ -23,7 +23,10 @@ use commands::{
     parse_cursor_log, parse_cursor_all, parse_gemini_log, parse_gemini_log_string,
     parse_gemini_all, parse_gemini_project, parse_codex_log, parse_codex_log_string,
     parse_codex_all, parse_codex_project, parse_log_files,
-    sanitize_session, sanitize_text, validate_regex, get_builtin_rules, scan_text_for_privacy, scan_custom_directory, scan_log_directory, AppState,
+    sanitize_session, sanitize_text, validate_regex, get_builtin_rules, scan_text_for_privacy,
+    // Story 3.7: Interception records
+    save_interception_record, get_interception_records, get_interception_stats, delete_interception_records,
+    scan_custom_directory, scan_log_directory, AppState,
     list_tree_at_commit, list_files_at_commit,
     // Story 2.19: Project management commands
     sync_project, remove_project, rename_project,
@@ -120,6 +123,11 @@ pub fn run() {
             get_builtin_rules,
             // Story 3-6: Privacy scanner
             scan_text_for_privacy,
+            // Story 3.7: Interception records
+            save_interception_record,
+            get_interception_records,
+            get_interception_stats,
+            delete_interception_records,
             // Story 2.19: Project management
             sync_project,
             remove_project,

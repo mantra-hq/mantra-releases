@@ -3,7 +3,10 @@
 //! 提供 Tauri IPC 接口用于文本和会话脱敏
 
 use crate::error::AppError;
-use crate::sanitizer::{PrivacyScanner, SanitizationResult, SanitizationRule, ScanResult, Sanitizer};
+use crate::sanitizer::{
+    InterceptionRecord, InterceptionStats, PaginatedRecords, PrivacyScanner, SanitizationResult,
+    SanitizationRule, ScanResult, Sanitizer,
+};
 
 /// 对文本进行脱敏处理
 ///
@@ -128,6 +131,78 @@ pub async fn scan_text_for_privacy(text: String) -> Result<ScanResult, AppError>
     let scanner = PrivacyScanner::with_defaults()
         .map_err(|e| AppError::internal(e.to_string()))?;
     Ok(scanner.scan(&text))
+}
+
+// ============================================================================
+// Story 3.7: 拦截记录存储命令
+// ============================================================================
+
+/// 保存拦截记录
+///
+/// # Arguments
+/// * `record` - 拦截记录
+///
+/// # Returns
+/// * `Result<(), AppError>` - 成功或错误
+#[tauri::command]
+pub async fn save_interception_record(
+    record: InterceptionRecord,
+    state: tauri::State<'_, crate::commands::AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.save_interception_record(&record)?;
+    Ok(())
+}
+
+/// 获取拦截记录 (分页)
+///
+/// # Arguments
+/// * `page` - 页码 (1-based)
+/// * `per_page` - 每页记录数
+/// * `source_filter` - 可选的来源类型筛选 ('pre_upload', 'claude_code_hook', 'external_hook')
+///
+/// # Returns
+/// * `Result<PaginatedRecords, AppError>` - 分页结果
+#[tauri::command]
+pub async fn get_interception_records(
+    page: u32,
+    per_page: u32,
+    source_filter: Option<String>,
+    state: tauri::State<'_, crate::commands::AppState>,
+) -> Result<PaginatedRecords, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let result = db.get_interception_records(page, per_page, source_filter.as_deref())?;
+    Ok(result)
+}
+
+/// 获取拦截统计
+///
+/// # Returns
+/// * `Result<InterceptionStats, AppError>` - 统计数据
+#[tauri::command]
+pub async fn get_interception_stats(
+    state: tauri::State<'_, crate::commands::AppState>,
+) -> Result<InterceptionStats, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let stats = db.get_interception_stats()?;
+    Ok(stats)
+}
+
+/// 删除拦截记录
+///
+/// # Arguments
+/// * `ids` - 要删除的记录 ID 列表
+///
+/// # Returns
+/// * `Result<usize, AppError>` - 删除的记录数
+#[tauri::command]
+pub async fn delete_interception_records(
+    ids: Vec<String>,
+    state: tauri::State<'_, crate::commands::AppState>,
+) -> Result<usize, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let deleted = db.delete_interception_records(&ids)?;
+    Ok(deleted)
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@
 
 mod database;
 mod error;
+mod interception;
 mod repository;
 
 pub use database::Database;

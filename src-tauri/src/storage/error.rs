@@ -30,4 +30,8 @@ pub enum StorageError {
     /// Lock error when accessing database
     #[error("数据库锁错误")]
     LockError,
+
+    /// Invalid input parameters
+    #[error("无效输入: {0}")]
+    InvalidInput(String),
 }
