@@ -31,7 +31,7 @@ export async function sanitizeText(
 ): Promise<SanitizationResult> {
     return invoke<SanitizationResult>('sanitize_text', {
         text,
-        custom_patterns: customPatterns ?? [],
+        customPatterns: customPatterns ?? [],
     });
 }
 
@@ -47,7 +47,7 @@ export async function sanitizeSession(
 ): Promise<SanitizationResult> {
     return invoke<SanitizationResult>('sanitize_session', {
         sessionId,
-        custom_patterns: customPatterns ?? [],
+        customPatterns: customPatterns ?? [],
     });
 }
 
@@ -162,8 +162,8 @@ export async function getInterceptionRecords(
 ): Promise<PaginatedRecords> {
     return invoke<PaginatedRecords>('get_interception_records', {
         page,
-        per_page: perPage,
-        source_filter: sourceFilter,
+        perPage,
+        sourceFilter,
     });
 }
 

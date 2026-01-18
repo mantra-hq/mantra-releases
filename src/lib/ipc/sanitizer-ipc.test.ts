@@ -54,7 +54,7 @@ describe('sanitizer-ipc', () => {
 
             expect(invoke).toHaveBeenCalledWith('sanitize_text', {
                 text,
-                custom_patterns: [],
+                customPatterns: [],
             });
         });
 
@@ -78,7 +78,7 @@ describe('sanitizer-ipc', () => {
 
             expect(invoke).toHaveBeenCalledWith('sanitize_text', {
                 text,
-                custom_patterns: customPatterns,
+                customPatterns: customPatterns,
             });
         });
 
@@ -111,7 +111,7 @@ describe('sanitizer-ipc', () => {
 
             expect(invoke).toHaveBeenCalledWith('sanitize_session', {
                 sessionId,
-                custom_patterns: [],
+                customPatterns: [],
             });
         });
 
@@ -135,7 +135,7 @@ describe('sanitizer-ipc', () => {
 
             expect(invoke).toHaveBeenCalledWith('sanitize_session', {
                 sessionId,
-                custom_patterns: customPatterns,
+                customPatterns: customPatterns,
             });
         });
     });
