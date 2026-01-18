@@ -27,7 +27,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { InterceptionRecordItem } from './InterceptionRecordItem';
-import type { InterceptionRecord, PaginatedRecords } from '@/components/sanitizer/types';
+import type { PaginatedRecords } from '@/components/sanitizer/types';
 
 export interface InterceptionRecordListProps {
     /** 分页记录数据 */
@@ -112,7 +112,6 @@ export function InterceptionRecordList({
     }
 
     const allSelected = records.length > 0 && selectedIds.size === records.length;
-    const someSelected = selectedIds.size > 0 && selectedIds.size < records.length;
 
     return (
         <div className="space-y-4" data-testid="record-list">

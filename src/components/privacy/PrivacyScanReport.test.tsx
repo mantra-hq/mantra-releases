@@ -4,10 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PrivacyScanReport, type PrivacyScanReportProps } from './PrivacyScanReport';
-import type { ScanResult, ScanMatch, UserAction } from '@/components/sanitizer/types';
+import type { ScanResult, ScanMatch } from '@/components/sanitizer/types';
 
 // Mock i18n
 vi.mock('react-i18next', () => ({

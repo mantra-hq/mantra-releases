@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Shield, ShieldCheck, ShieldAlert, ShieldX, Calendar } from 'lucide-react';
+import { Shield, ShieldCheck, ShieldX, Calendar } from 'lucide-react';
 import { getInterceptionStats } from '@/lib/ipc/sanitizer-ipc';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { InterceptionStats as IInterceptionStats } from '@/components/sanitizer/types';
