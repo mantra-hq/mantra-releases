@@ -409,6 +409,19 @@
     "builtinRules": "Built-in Rules",
     "builtinRulesCount": "{{count}} rules",
     "privacyRecordsDesc": "View historical privacy interception records",
+    "localServer": {
+      "title": "Local API Server",
+      "description": "Local service for Claude Code Hook and other tools",
+      "running": "Running (port {{port}})",
+      "stopped": "Stopped",
+      "portLabel": "API Port",
+      "portHint": "Port must be between 1024-65535",
+      "resetToDefault": "Reset to default port",
+      "invalidPort": "Invalid port (must be between 1024-65535)",
+      "loadError": "Failed to load server status",
+      "saveSuccess": "Port configuration updated",
+      "saveError": "Failed to update port configuration"
+    },
     "sensitiveTypes": {
       "api_key": "API Keys",
       "aws_key": "AWS Keys",

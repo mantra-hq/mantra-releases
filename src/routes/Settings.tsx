@@ -4,6 +4,7 @@
  * Story 2-26: i18n 国际化
  * Story 3-8: Task 6 - 添加隐私记录入口
  * Story 3.10: 合并内置规则展示（默认折叠）
+ * Story 3.11: Task 4.5 - 本地 API 端口配置
  */
 
 import { useState, useCallback } from 'react';
@@ -16,6 +17,7 @@ import { RuleList } from '@/components/settings/RuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { SystemRuleList } from '@/components/settings/SystemRuleList';
+import { LocalServerConfig } from '@/components/settings/LocalServerConfig';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
 import { feedback } from '@/lib/feedback';
@@ -104,6 +106,11 @@ export function Settings() {
                     {/* Story 2-26: 语言设置 (AC #1) */}
                     <section className="rounded-lg border bg-card p-4">
                         <LanguageSwitcher />
+                    </section>
+
+                    {/* Story 3.11: 本地 API Server 端口配置 (AC #7) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <LocalServerConfig />
                     </section>
 
                     {/* Story 2.28: 帮助 - 复制运行日志 (AC #1, AC #3) */}

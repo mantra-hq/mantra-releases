@@ -5,15 +5,17 @@ pub mod analytics;
 pub mod commands;
 pub mod error;
 pub mod git;
+pub mod local_server;
 pub mod models;
 pub mod parsers;
 pub mod sanitizer;
 pub mod scanner;
 pub mod storage;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
+use tokio::sync::Mutex as TokioMutex;
 
 use commands::{
     detect_git_repo, find_commit_at_time, get_commit_info, get_file_at_head, get_file_snapshot,
@@ -46,12 +48,21 @@ use commands::{
     get_commits_in_range,
     // Story 2.34: Analytics commands
     get_project_analytics, get_session_metrics, get_session_stats_view,
+    // Story 3.11: Local API Server commands
+    get_local_server_status, get_local_server_config, update_local_server_port,
+    start_local_server, stop_local_server,
 };
 
 use storage::Database;
+use local_server::ServerManager;
 
 /// Database file name
 const DATABASE_FILENAME: &str = "mantra.db";
+
+/// Local API Server state
+pub struct LocalServerState {
+    pub manager: TokioMutex<ServerManager>,
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -79,7 +90,29 @@ pub fn run() {
             let db = Database::new(&db_path).expect("Failed to initialize database");
 
             // Store database in app state
-            app.manage(AppState { db: Mutex::new(db) });
+            let db_arc = Arc::new(Mutex::new(db));
+            app.manage(AppState { db: Mutex::new(Database::new(&db_path).expect("Failed to create second db connection")) });
+
+            // Story 3.11: 启动本地 API Server（共享数据库连接）
+            let server_manager = ServerManager::with_database(app_data_dir.clone(), db_arc);
+            app.manage(LocalServerState {
+                manager: TokioMutex::new(server_manager),
+            });
+
+            // 在后台启动 Server（不阻塞 setup）
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state: tauri::State<'_, LocalServerState> = app_handle.state();
+                let mut manager = state.manager.lock().await;
+                match manager.start().await {
+                    Ok(_) => {
+                        println!("[Mantra] Local API Server started on port {}", manager.current_port());
+                    }
+                    Err(e) => {
+                        eprintln!("[Mantra] Failed to start Local API Server: {}", e);
+                    }
+                }
+            });
 
             Ok(())
         })
@@ -154,7 +187,13 @@ pub fn run() {
             // Story 2.34: Analytics
             get_project_analytics,
             get_session_metrics,
-            get_session_stats_view
+            get_session_stats_view,
+            // Story 3.11: Local API Server
+            get_local_server_status,
+            get_local_server_config,
+            update_local_server_port,
+            start_local_server,
+            stop_local_server
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -111,6 +111,17 @@ impl PrivacyScanner {
         Self::new(BUILTIN_RULES.clone())
     }
 
+    /// 使用配置目录中的规则创建扫描器
+    ///
+    /// 从配置目录加载规则配置，合并内置规则和自定义规则
+    pub fn with_config(config_dir: &std::path::Path) -> Result<Self, SanitizerError> {
+        use super::config::PrivacyRulesConfig;
+
+        let config = PrivacyRulesConfig::load(config_dir)?;
+        let rules = config.get_merged_rules();
+        Self::new(rules)
+    }
+
     /// 扫描文本内容
     pub fn scan(&self, text: &str) -> ScanResult {
         let start = Instant::now();

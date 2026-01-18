@@ -409,6 +409,19 @@
     "builtinRules": "系统预设规则",
     "builtinRulesCount": "{{count}} 条规则",
     "privacyRecordsDesc": "查看历史隐私拦截记录",
+    "localServer": {
+      "title": "本地 API 服务",
+      "description": "供 Claude Code Hook 等工具连接的本地服务",
+      "running": "运行中 (端口 {{port}})",
+      "stopped": "已停止",
+      "portLabel": "API 端口",
+      "portHint": "端口号需在 1024-65535 范围内",
+      "resetToDefault": "重置为默认端口",
+      "invalidPort": "端口号无效（需在 1024-65535 范围内）",
+      "loadError": "加载服务状态失败",
+      "saveSuccess": "端口配置已更新",
+      "saveError": "更新端口配置失败"
+    },
     "sensitiveTypes": {
       "api_key": "API 密钥",
       "aws_key": "AWS 密钥",
