@@ -176,6 +176,7 @@ pub async fn health_check() -> impl IntoResponse {
 }
 
 /// 处理无效 JSON 请求
+#[allow(dead_code)] // 预留用于自定义错误处理
 pub async fn handle_json_error(
     err: axum::extract::rejection::JsonRejection,
 ) -> impl IntoResponse {
