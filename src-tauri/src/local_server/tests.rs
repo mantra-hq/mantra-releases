@@ -238,4 +238,244 @@ mod integration_tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(LocalServer::check_port_available(19951).await);
     }
+
+    // Story 3.12: PreToolUse Hook 支持测试
+
+    #[tokio::test]
+    async fn test_pretooluse_webfetch_allow() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19960)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse WebFetch 请求（无敏感信息）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19960/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "WebFetch",
+                "tool_input": {
+                    "url": "https://example.com/api",
+                    "prompt": "Analyze this API documentation"
+                },
+                "context": {
+                    "tool": "claude-code"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "allow");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_webfetch_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19961)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse WebFetch 请求（包含 API Key）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19961/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "WebFetch",
+                "tool_input": {
+                    "url": "https://example.com/api",
+                    "prompt": "Use this API key: sk-1234567890abcdefghij1234"
+                },
+                "context": {
+                    "tool": "claude-code"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+        assert!(body["matches"].is_array());
+        assert!(body["message"].as_str().unwrap().contains("PreToolUse"));
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_websearch_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19962)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse WebSearch 请求（包含敏感信息）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19962/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "WebSearch",
+                "tool_input": {
+                    "query": "how to use API key sk-1234567890abcdefghij1234"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_bash_network_command_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19963)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse Bash 网络命令（包含敏感信息）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19963/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "curl -H 'Authorization: Bearer sk-1234567890abcdefghij1234' https://api.example.com"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_bash_local_command_allow() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19964)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse Bash 本地命令（即使包含敏感信息也应该放行）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19964/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "echo 'API_KEY=sk-1234567890abcdefghij1234' > .env"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        // 本地命令不检测，直接放行
+        assert_eq!(body["action"], "allow");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_task_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19965)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse Task 请求（包含敏感信息）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19965/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "Task",
+                "tool_input": {
+                    "prompt": "Analyze this code with API key sk-1234567890abcdefghij1234",
+                    "description": "Code analysis"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_pretooluse_mcp_tool_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19966)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 PreToolUse MCP 工具请求（包含敏感信息）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19966/api/privacy/check")
+            .json(&serde_json::json!({
+                "hook_event": "PreToolUse",
+                "tool_name": "mcp__github__create_issue",
+                "tool_input": {
+                    "title": "Bug report",
+                    "body": "Found issue with API key sk-1234567890abcdefghij1234",
+                    "repo": "owner/repo"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
