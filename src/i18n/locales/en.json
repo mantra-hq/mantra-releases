@@ -702,7 +702,7 @@
       "empty": "No interception records"
     },
     "rules": {
-      "title": "Privacy Detection Rules",
+      "title": "Built-in Rules",
       "add": "Add Rule",
       "addTitle": "Add Custom Rule",
       "addDescription": "Create custom regex rules to detect specific sensitive information patterns",

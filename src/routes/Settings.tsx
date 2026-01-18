@@ -3,7 +3,7 @@
  * Story 3-3: Task 5 - AC #1
  * Story 2-26: i18n 国际化
  * Story 3-8: Task 6 - 添加隐私记录入口
- * Story 3.10: Task 5 - 隐私规则管理
+ * Story 3.10: 合并内置规则展示（默认折叠）
  */
 
 import { useState, useCallback } from 'react';
@@ -13,14 +13,13 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Settings as SettingsIcon, ClipboardCopy, Loader2, Globe, BookOpen, Shield, ChevronRight } from 'lucide-react';
 import { RuleList } from '@/components/settings/RuleList';
-import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
+import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
 import { feedback } from '@/lib/feedback';
 import { useLogStore } from '@/stores';
-import { PrivacySettingsPanel } from '@/components/privacy';
 
 export function Settings() {
     const { t } = useTranslation();
@@ -184,14 +183,22 @@ export function Settings() {
                         </div>
                     </section>
 
-                    {/* Story 3-5: 系统预设规则 (AC #1, #2, #3) */}
+                    {/* Story 3-5: 系统预设规则 (默认折叠) */}
                     <section className="rounded-lg border bg-card p-4">
-                        <SystemRuleList />
+                        <SystemRuleList defaultCollapsed={true} />
                     </section>
 
-                    {/* Story 3.10: 隐私规则管理 (AC #2) */}
-                    <section className="rounded-lg border bg-card p-4">
-                        <PrivacySettingsPanel />
+                    {/* Story 3-3: 自定义规则列表 */}
+                    <section>
+                        <RuleList
+                            onImport={isImporting ? undefined : handleImport}
+                            onExport={isExporting ? undefined : handleExport}
+                        />
+                    </section>
+
+                    {/* Story 3-3: 规则测试 */}
+                    <section>
+                        <RuleTestPanel />
                     </section>
 
                     {/* Story 3-8: 隐私保护记录入口 (Task 6) */}
@@ -216,19 +223,6 @@ export function Settings() {
                             </div>
                             <ChevronRight className="h-5 w-5 text-muted-foreground" />
                         </button>
-                    </section>
-
-                    {/* 规则列表 */}
-                    <section>
-                        <RuleList
-                            onImport={isImporting ? undefined : handleImport}
-                            onExport={isExporting ? undefined : handleExport}
-                        />
-                    </section>
-
-                    {/* 规则测试 */}
-                    <section>
-                        <RuleTestPanel />
                     </section>
                 </div>
             </main>
