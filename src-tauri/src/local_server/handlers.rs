@@ -1,6 +1,7 @@
 //! HTTP 路由处理器
 //!
 //! 实现 /api/privacy/check 等 API 端点
+//! Story 3.11: 新增 /api/privacy/check-files 端点，用于 PreToolUse 文件内容检测
 //! Story 3.12: 支持 PreToolUse Hook 格式
 
 use axum::{
@@ -14,6 +15,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
+use std::path::Path;
 
 use crate::sanitizer::{InterceptionRecord, InterceptionSource, PrivacyScanner, ScanMatch, Severity, UserAction};
 use crate::storage::Database;
@@ -323,6 +325,293 @@ fn compute_hash(text: &str) -> String {
     let mut hasher = DefaultHasher::new();
     text.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+// ============================================================================
+// Story 3.11: /api/privacy/check-files 端点
+// PreToolUse Hook 文件内容检测 - "抢先一步"策略
+// ============================================================================
+
+/// 文件检查请求 (Story 3.11 AC5)
+#[derive(Debug, Clone, Deserialize)]
+pub struct CheckFilesRequest {
+    /// 要检测的文件路径列表
+    pub file_paths: Vec<String>,
+    /// 触发的工具名 (Read/Grep/Bash/Edit)
+    pub tool_name: String,
+    /// 可选的上下文信息
+    #[serde(default)]
+    #[allow(dead_code)] // API 预留字段
+    pub context: Option<CheckFilesContext>,
+}
+
+/// 文件检查上下文
+#[derive(Debug, Clone, Deserialize, Default)]
+#[allow(dead_code)] // API 预留字段，用于后续功能扩展
+pub struct CheckFilesContext {
+    /// 会话 ID
+    pub session_id: Option<String>,
+    /// 当前工作目录
+    pub cwd: Option<String>,
+}
+
+/// 文件检查响应 (Story 3.11 AC9)
+#[derive(Debug, Clone, Serialize)]
+pub struct CheckFilesResponse {
+    /// 动作：allow 或 block
+    pub action: String,
+    /// 检测到的敏感信息列表
+    pub findings: Vec<Finding>,
+    /// 提示消息
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// 单个敏感信息发现 (Story 3.11 AC9)
+#[derive(Debug, Clone, Serialize)]
+pub struct Finding {
+    /// 文件路径
+    pub file_path: String,
+    /// 行号 (1-based)
+    pub line_number: usize,
+    /// 规则 ID
+    pub rule_id: String,
+    /// 脱敏后的匹配预览
+    pub preview: String,
+    /// 严重程度
+    pub severity: String,
+}
+
+impl Finding {
+    /// 从 ScanMatch 和文件路径创建 Finding
+    fn from_scan_match(scan_match: &ScanMatch, file_path: &str) -> Self {
+        // 生成脱敏预览：显示前4个和后4个字符（与 MatchInfo 格式保持一致）
+        let preview = if scan_match.matched_text.len() <= 8 {
+            "*".repeat(scan_match.matched_text.len())
+        } else {
+            let start = &scan_match.matched_text[..4];
+            let end = &scan_match.matched_text[scan_match.matched_text.len()-4..];
+            format!("{}****{}", start, end)  // 统一使用 4 个星号
+        };
+
+        Self {
+            file_path: file_path.to_string(),
+            line_number: scan_match.line,
+            rule_id: scan_match.rule_id.clone(),
+            preview,
+            severity: match scan_match.severity {
+                Severity::Critical => "critical".to_string(),
+                Severity::Warning => "warning".to_string(),
+                Severity::Info => "info".to_string(),
+            },
+        }
+    }
+}
+
+/// 单个文件最大大小限制 (10MB)
+/// Story 3.11 Task A2.3: 防止读取超大文件
+const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
+
+/// 文件读取错误类型
+#[derive(Debug)]
+enum FileReadError {
+    NotFound,
+    TooLarge(u64),
+    PermissionDenied,
+    IsDirectory,
+    Other(String),
+}
+
+/// 安全读取文件内容
+/// Story 3.11 Task A2: 文件读取与安全检查
+fn read_file_safe(path: &Path) -> Result<String, FileReadError> {
+    use std::fs;
+    use std::io::Read;
+    
+    // 检查文件是否存在
+    if !path.exists() {
+        return Err(FileReadError::NotFound);
+    }
+    
+    // 检查是否为目录
+    if path.is_dir() {
+        return Err(FileReadError::IsDirectory);
+    }
+    
+    // 获取文件元数据
+    let metadata = match fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                return Err(FileReadError::PermissionDenied);
+            }
+            return Err(FileReadError::Other(e.to_string()));
+        }
+    };
+    
+    // 检查文件大小
+    let file_size = metadata.len();
+    if file_size > MAX_FILE_SIZE {
+        return Err(FileReadError::TooLarge(file_size));
+    }
+    
+    // 读取文件内容
+    let mut file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                return Err(FileReadError::PermissionDenied);
+            }
+            return Err(FileReadError::Other(e.to_string()));
+        }
+    };
+    
+    let mut content = String::new();
+    match file.read_to_string(&mut content) {
+        Ok(_) => Ok(content),
+        Err(e) => {
+            // 可能是二进制文件，跳过
+            if e.kind() == std::io::ErrorKind::InvalidData {
+                // 返回空字符串，让扫描器正常处理
+                Ok(String::new())
+            } else {
+                Err(FileReadError::Other(e.to_string()))
+            }
+        }
+    }
+}
+
+/// POST /api/privacy/check-files
+///
+/// Story 3.11: PreToolUse Hook 文件内容检测
+/// 在 AI 助理读取文件前，自动检测目标文件内容中的敏感数据
+pub async fn check_files(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<CheckFilesRequest>,
+) -> impl IntoResponse {
+    // 如果没有文件路径，直接放行
+    if request.file_paths.is_empty() {
+        return (StatusCode::OK, Json(CheckFilesResponse {
+            action: "allow".to_string(),
+            findings: vec![],
+            message: None,
+        }));
+    }
+    
+    let mut all_findings: Vec<Finding> = Vec::new();
+    
+    // 逐个文件读取并检测
+    for file_path_str in &request.file_paths {
+        let file_path = Path::new(file_path_str);
+        
+        // 安全读取文件
+        match read_file_safe(file_path) {
+            Ok(content) => {
+                if content.is_empty() {
+                    continue;
+                }
+                
+                // 使用扫描器检测敏感数据
+                let scan_result = state.scanner.scan(&content);
+                
+                // 转换为 Finding
+                for scan_match in &scan_result.matches {
+                    all_findings.push(Finding::from_scan_match(scan_match, file_path_str));
+                }
+            }
+            Err(e) => {
+                // 记录跳过原因，但不阻止操作
+                match e {
+                    FileReadError::NotFound => {
+                        eprintln!("[Mantra] File not found, skipping: {}", file_path_str);
+                    }
+                    FileReadError::TooLarge(size) => {
+                        eprintln!("[Mantra] File too large ({} bytes), skipping: {}", size, file_path_str);
+                    }
+                    FileReadError::PermissionDenied => {
+                        eprintln!("[Mantra] Permission denied, skipping: {}", file_path_str);
+                    }
+                    FileReadError::IsDirectory => {
+                        eprintln!("[Mantra] Path is directory, skipping: {}", file_path_str);
+                    }
+                    FileReadError::Other(msg) => {
+                        eprintln!("[Mantra] Error reading file {}: {}", file_path_str, msg);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 判断是否需要阻止
+    if all_findings.is_empty() {
+        return (StatusCode::OK, Json(CheckFilesResponse {
+            action: "allow".to_string(),
+            findings: vec![],
+            message: None,
+        }));
+    }
+    
+    // 有敏感数据，需要阻止
+    let critical_count = all_findings.iter().filter(|f| f.severity == "critical").count();
+    let warning_count = all_findings.iter().filter(|f| f.severity == "warning").count();
+    let total_count = all_findings.len();
+    
+    let message = format!(
+        "检测到 {} 处敏感数据 ({} Critical, {} Warning)",
+        total_count, critical_count, warning_count
+    );
+    
+    // Story 3.11 Task A3: 记录拦截事件到数据库
+    if let Some(db) = &state.db {
+        // 创建 ScanMatch 列表用于记录
+        // 注意: 由于 Finding 结构只保留脱敏后的 preview，无法获取原始 matched_text
+        // 因此 matched_text 和 masked_text 都使用 preview 值
+        // 这是设计权衡：保护隐私 vs 完整记录
+        let scan_matches: Vec<ScanMatch> = all_findings.iter().map(|f| {
+            ScanMatch {
+                rule_id: f.rule_id.clone(),
+                sensitive_type: crate::sanitizer::SensitiveType::ApiKey, // 简化处理
+                severity: match f.severity.as_str() {
+                    "critical" => Severity::Critical,
+                    "warning" => Severity::Warning,
+                    _ => Severity::Info,
+                },
+                line: f.line_number,
+                column: 1,
+                matched_text: format!("[REDACTED:{}]", f.rule_id), // 不记录原始敏感数据
+                masked_text: f.preview.clone(),
+                context: format!("File: {}", f.file_path),
+            }
+        }).collect();
+        
+        // 确定来源类型
+        let source = InterceptionSource::PreToolUseFileCheck {
+            tool_name: request.tool_name.clone(),
+            file_paths: request.file_paths.clone(),
+        };
+        
+        // 创建拦截记录
+        let record = InterceptionRecord::new(
+            source,
+            scan_matches,
+            UserAction::Cancelled,
+            compute_hash(&request.file_paths.join(",")),
+            None,
+        );
+        
+        // 保存到数据库
+        if let Ok(db_guard) = db.lock() {
+            if let Err(e) = db_guard.save_interception_record(&record) {
+                eprintln!("[Mantra] Failed to save interception record: {}", e);
+            }
+        }
+    }
+    
+    (StatusCode::OK, Json(CheckFilesResponse {
+        action: "block".to_string(),
+        findings: all_findings,
+        message: Some(message),
+    }))
 }
 
 /// GET /api/health

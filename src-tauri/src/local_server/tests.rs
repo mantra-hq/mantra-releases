@@ -478,4 +478,319 @@ mod integration_tests {
         handle.shutdown();
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+
+    // Story 3.11: /api/privacy/check-files 端点测试
+
+    #[tokio::test]
+    async fn test_check_files_empty_list() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19970)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试空文件列表应直接放行
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19970/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [],
+                "tool_name": "Read"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "allow");
+        assert!(body["findings"].as_array().unwrap().is_empty());
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_safe_file_allow() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建一个安全的测试文件
+        let test_file = dir.path().join("safe.txt");
+        std::fs::write(&test_file, "Hello, World! This is safe content.").unwrap();
+
+        let handle = server.start(Some(19971)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19971/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [test_file.to_str().unwrap()],
+                "tool_name": "Read"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "allow");
+        assert!(body["findings"].as_array().unwrap().is_empty());
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_sensitive_env_block() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建一个包含敏感数据的 .env 文件
+        let env_file = dir.path().join(".env");
+        std::fs::write(&env_file, "OPENAI_API_KEY=sk-1234567890abcdefghij1234\nDATABASE_URL=postgres://user:pass@localhost/db").unwrap();
+
+        let handle = server.start(Some(19972)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19972/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [env_file.to_str().unwrap()],
+                "tool_name": "Read"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+        assert!(!body["findings"].as_array().unwrap().is_empty());
+        assert!(body["message"].is_string());
+
+        // 检查 findings 包含文件路径信息
+        let findings = body["findings"].as_array().unwrap();
+        assert!(findings.iter().any(|f| f["file_path"].as_str().unwrap().contains(".env")));
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_multiple_files() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建多个测试文件
+        let safe_file = dir.path().join("safe.txt");
+        std::fs::write(&safe_file, "This is safe content.").unwrap();
+
+        let env_file = dir.path().join(".env");
+        std::fs::write(&env_file, "SECRET_KEY=sk-aaaaaaaaaaaaaaaaaaaaaaaa").unwrap();
+
+        let config_file = dir.path().join("config.json");
+        std::fs::write(&config_file, r#"{"api_key": "sk-bbbbbbbbbbbbbbbbbbbbbbbb"}"#).unwrap();
+
+        let handle = server.start(Some(19973)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19973/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [
+                    safe_file.to_str().unwrap(),
+                    env_file.to_str().unwrap(),
+                    config_file.to_str().unwrap()
+                ],
+                "tool_name": "Grep"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        // 应该检测到多个敏感数据
+        let findings = body["findings"].as_array().unwrap();
+        assert!(findings.len() >= 2);
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_nonexistent_file() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19974)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试不存在的文件应被跳过（不阻止操作）
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19974/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": ["/nonexistent/path/file.txt"],
+                "tool_name": "Read"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "allow");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_directory_skipped() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        let handle = server.start(Some(19975)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试目录路径应被跳过
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19975/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [dir.path().to_str().unwrap()],
+                "tool_name": "Grep"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "allow");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_finding_includes_line_number() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建包含多行内容的文件，敏感数据在第3行
+        let env_file = dir.path().join(".env");
+        std::fs::write(&env_file, "# Comment\nNAME=test\nAPI_KEY=sk-1234567890abcdefghij1234\nOTHER=value").unwrap();
+
+        let handle = server.start(Some(19976)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19976/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [env_file.to_str().unwrap()],
+                "tool_name": "Read"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        // 检查 finding 包含行号
+        let findings = body["findings"].as_array().unwrap();
+        assert!(!findings.is_empty());
+        
+        let finding = &findings[0];
+        assert!(finding["line_number"].as_u64().unwrap() > 0);
+        assert!(finding["rule_id"].is_string());
+        assert!(finding["severity"].is_string());
+        assert!(finding["preview"].is_string());
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_with_bash_tool() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建敏感文件
+        let env_file = dir.path().join(".env");
+        std::fs::write(&env_file, "TOKEN=sk-1234567890abcdefghij1234").unwrap();
+
+        let handle = server.start(Some(19977)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 Bash 工具名
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19977/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [env_file.to_str().unwrap()],
+                "tool_name": "Bash"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_check_files_with_edit_tool() {
+        let dir = tempdir().unwrap();
+        let server = LocalServer::new(dir.path().to_path_buf());
+
+        // 创建敏感文件
+        let env_file = dir.path().join("secrets.json");
+        std::fs::write(&env_file, r#"{"key": "sk-1234567890abcdefghij1234"}"#).unwrap();
+
+        let handle = server.start(Some(19978)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // 测试 Edit 工具名
+        let client = reqwest::Client::new();
+        let response = client
+            .post("http://127.0.0.1:19978/api/privacy/check-files")
+            .json(&serde_json::json!({
+                "file_paths": [env_file.to_str().unwrap()],
+                "tool_name": "Edit"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["action"], "block");
+
+        handle.shutdown();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }

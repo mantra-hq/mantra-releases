@@ -18,6 +18,13 @@ pub enum InterceptionSource {
     ClaudeCodeHook { session_id: Option<String> },
     /// 其他 AI 工具 Hook
     ExternalHook { tool_name: String },
+    /// PreToolUse 文件内容检测 (Story 3.11)
+    PreToolUseFileCheck {
+        /// 触发的工具名 (Read/Grep/Bash/Edit)
+        tool_name: String,
+        /// 被检测的文件路径列表
+        file_paths: Vec<String>,
+    },
 }
 
 impl InterceptionSource {
@@ -27,6 +34,7 @@ impl InterceptionSource {
             Self::PreUpload { .. } => "pre_upload",
             Self::ClaudeCodeHook { .. } => "claude_code_hook",
             Self::ExternalHook { .. } => "external_hook",
+            Self::PreToolUseFileCheck { .. } => "pre_tool_use_file_check",
         }
     }
 
@@ -68,6 +76,25 @@ impl InterceptionSource {
                         .to_string(),
                 })
             }
+            "pre_tool_use_file_check" => {
+                let ctx: serde_json::Value = context
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default();
+                Some(Self::PreToolUseFileCheck {
+                    tool_name: ctx
+                        .get("tool_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    file_paths: ctx
+                        .get("file_paths")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect())
+                        .unwrap_or_default(),
+                })
+            }
             _ => None,
         }
     }
@@ -83,6 +110,12 @@ impl InterceptionSource {
             }
             Self::ExternalHook { tool_name } => {
                 serde_json::json!({ "tool_name": tool_name }).to_string()
+            }
+            Self::PreToolUseFileCheck { tool_name, file_paths } => {
+                serde_json::json!({
+                    "tool_name": tool_name,
+                    "file_paths": file_paths
+                }).to_string()
             }
         }
     }

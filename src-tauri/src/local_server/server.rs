@@ -96,6 +96,7 @@ impl LocalServer {
         // 创建路由
         let app = Router::new()
             .route("/api/privacy/check", post(handlers::privacy_check))
+            .route("/api/privacy/check-files", post(handlers::check_files))  // Story 3.11
             .route("/api/health", get(handlers::health_check))
             .layer(
                 CorsLayer::new()
