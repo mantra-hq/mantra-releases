@@ -9,6 +9,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -107,27 +109,46 @@ impl From<&ScanMatch> for MatchInfo {
     }
 }
 
-/// 需要检测的网络命令前缀
+/// 网络命令正则表达式模式
 /// Story 3.12 AC3: Bash 命令过滤
-const NETWORK_COMMANDS: &[&str] = &[
-    "curl", "wget", "http", "httpie",
-    "git push", "git remote",
-    "ssh", "scp", "rsync",
-    "docker push", "docker login",
-    "npm publish", "pnpm publish", "yarn publish",
-    "gh api", "gh pr", "gh issue",
-];
+///
+/// ⚠️ 同步维护提醒：此列表需要与 TypeScript 端保持一致
+/// 参见: packages/privacy-hook/src/hook-handler.ts - NETWORK_COMMAND_PATTERNS
+static NETWORK_COMMAND_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        // HTTP 客户端
+        Regex::new(r"^curl\b").unwrap(),
+        Regex::new(r"^wget\b").unwrap(),
+        Regex::new(r"^http\b").unwrap(),
+        Regex::new(r"^httpie\b").unwrap(),
+        // Git 网络操作
+        Regex::new(r"^git\s+push\b").unwrap(),
+        Regex::new(r"^git\s+remote\b").unwrap(),
+        // SSH 相关
+        Regex::new(r"^ssh\b").unwrap(),
+        Regex::new(r"^scp\b").unwrap(),
+        Regex::new(r"^rsync\b").unwrap(),
+        // Docker 网络操作
+        Regex::new(r"^docker\s+push\b").unwrap(),
+        Regex::new(r"^docker\s+login\b").unwrap(),
+        // 包发布
+        Regex::new(r"^npm\s+publish\b").unwrap(),
+        Regex::new(r"^pnpm\s+publish\b").unwrap(),
+        Regex::new(r"^yarn\s+publish\b").unwrap(),
+        // GitHub CLI
+        Regex::new(r"^gh\s+api\b").unwrap(),
+        Regex::new(r"^gh\s+pr\b").unwrap(),
+        Regex::new(r"^gh\s+issue\b").unwrap(),
+    ]
+});
 
 /// 检查 Bash 命令是否为网络相关命令
 /// Story 3.12 AC3
+///
+/// 使用正则表达式精确匹配命令开头，与 TypeScript 端实现保持一致
 fn is_network_command(command: &str) -> bool {
     let trimmed = command.trim();
-    NETWORK_COMMANDS.iter().any(|prefix| {
-        trimmed.starts_with(prefix) ||
-        trimmed.contains(&format!(" {} ", prefix)) ||
-        trimmed.contains(&format!("&& {}", prefix)) ||
-        trimmed.contains(&format!("; {}", prefix))
-    })
+    NETWORK_COMMAND_PATTERNS.iter().any(|pattern| pattern.is_match(trimmed))
 }
 
 /// 从 PreToolUse 工具调用中提取检测目标
