@@ -503,6 +503,23 @@
     "noMessages": "暂无消息",
     "messagesWillAppear": "对话消息将在这里显示"
   },
+  "compress": {
+    "originalList": {
+      "title": "原始消息",
+      "empty": "暂无消息",
+      "emptyHint": "导入会话后即可查看消息"
+    },
+    "messageCard": {
+      "expand": "展开全部",
+      "collapse": "收起",
+      "tokens": "tokens",
+      "toolCall": "工具调用",
+      "toolResult": "工具结果",
+      "system": "系统",
+      "user": "用户",
+      "assistant": "助手"
+    }
+  },
   "player": {
     "selectSessionToPlay": "选择一个会话开始回放",
     "selectFromList": "从左侧项目列表中选择，或导入新的 AI 编程会话",

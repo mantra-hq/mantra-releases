@@ -503,6 +503,23 @@
     "noMessages": "No messages",
     "messagesWillAppear": "Messages will appear here"
   },
+  "compress": {
+    "originalList": {
+      "title": "Original Messages",
+      "empty": "No messages to display",
+      "emptyHint": "Import a session to view messages"
+    },
+    "messageCard": {
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "tokens": "tokens",
+      "toolCall": "Tool Call",
+      "toolResult": "Tool Result",
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    }
+  },
   "player": {
     "selectSessionToPlay": "Select a session to start playback",
     "selectFromList": "Choose from the project list on the left, or import new AI coding sessions",

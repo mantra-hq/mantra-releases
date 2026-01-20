@@ -55,6 +55,8 @@ import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 import { PlayerEmptyState, ModeSwitch, CompressGuideDialog } from "@/components/player";
+// Story 10.2: 压缩模式原始消息列表
+import { OriginalMessageList } from "@/components/compress";
 // Story 2.29 V2: 隐藏空会话设置
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 // Story 2.34: 统计视图组件
@@ -953,12 +955,9 @@ export default function Player() {
               <div className="flex-1 min-h-0 overflow-hidden">
                 <DualStreamLayout
                   ref={layoutRef}
-                  // Story 10.1 AC #3: 精简模式自定义左右面板内容
+                  // Story 10.2: 精简模式左侧显示原始消息列表
                   narrativeContent={
-                    <RefinePlaceholderPanel
-                      title={t("player.compressPlaceholder.originalList")}
-                      hint={t("player.compressPlaceholder.originalListHint")}
-                    />
+                    <OriginalMessageList messages={messages} />
                   }
                   codeContent={
                     <RefinePlaceholderPanel
