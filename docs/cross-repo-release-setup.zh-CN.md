@@ -26,7 +26,7 @@
 
 ### 1. 创建公开发布仓库
 
-1. 在 GitHub 上创建新仓库，例如 `gonewx/mantra-releases`
+1. 在 GitHub 上创建新仓库，例如 `mantra-hq/mantra-releases`
 2. 设置为 **Public**
 3. 添加 README.md（可使用 `.github/PUBLIC_RELEASE_REPO_README.md` 模板）
 4. 可选：添加 LICENSE 文件
@@ -42,10 +42,11 @@
 5. 配置：
    - **Token name**: `mantra-release-publisher`
    - **Expiration**: 根据需要设置（建议 90 天，并设置提醒更新）
-   - **Repository access**: 选择 "Only select repositories"，然后选择公开发布仓库 `gonewx/mantra-releases`
+   - **Repository access**: 选择 "Only select repositories"，然后选择公开发布仓库 `mantra-hq/mantra-releases`
    - **Permissions**（在 Repository permissions 下）:
-     - **Contents**: Read and write（用于创建 Release）
+     - **Contents**: Read and write（用于创建 Release 和推送 Tag）
      - **Metadata**: Read-only（必需）
+     - **Workflows**: Read and write（如果公开仓库包含 `.github/workflows/` 文件则必需）
 6. 点击 **Generate token** 并复制 Token
 
 💡 **快捷链接**: https://github.com/settings/tokens?type=beta
@@ -66,7 +67,7 @@
 
 | Variable 名称 | 值示例 | 说明 |
 |--------------|--------|------|
-| `PUBLIC_RELEASE_REPO` | `gonewx/mantra-releases` | 公开仓库的 owner/repo 格式 |
+| `PUBLIC_RELEASE_REPO` | `mantra-hq/mantra-releases` | 公开仓库的 owner/repo 格式 |
 
 ### 4. 生成 Tauri 签名密钥（可选但推荐）
 
@@ -117,6 +118,12 @@ git push origin v1.0.0
 错误信息：`Resource not accessible by integration`
 
 解决：确保 PAT 对公开仓库有 Contents 的 Read and write 权限。
+
+### Workflow 权限被拒绝
+
+错误信息：`refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`
+
+解决：如果推送的 Tag 包含 `.github/workflows/` 目录下的文件，需要给 PAT 添加 **Workflows** 的 Read and write 权限。
 
 ### 仓库不存在
 

@@ -26,7 +26,7 @@ This guide explains how to configure GitHub Actions in a private repository to p
 
 ### 1. Create Public Release Repository
 
-1. Create a new repository on GitHub, e.g., `gonewx/mantra-releases`
+1. Create a new repository on GitHub, e.g., `mantra-hq/mantra-releases`
 2. Set it to **Public**
 3. Add README.md (use `docs/PUBLIC_RELEASE_REPO_README.md` template)
 4. Optional: Add LICENSE file
@@ -42,10 +42,11 @@ This guide explains how to configure GitHub Actions in a private repository to p
 5. Configure:
    - **Token name**: `mantra-release-publisher`
    - **Expiration**: Set as needed (recommend 90 days with reminder)
-   - **Repository access**: Select "Only select repositories", then choose the public release repo `gonewx/mantra-releases`
+   - **Repository access**: Select "Only select repositories", then choose the public release repo `mantra-hq/mantra-releases`
    - **Permissions** (under Repository permissions):
-     - **Contents**: Read and write (for creating releases)
+     - **Contents**: Read and write (for creating releases and pushing tags)
      - **Metadata**: Read-only (required)
+     - **Workflows**: Read and write (required if public repo contains `.github/workflows/` files)
 6. Click **Generate token** and copy the token
 
 💡 **Quick link**: https://github.com/settings/tokens?type=beta
@@ -66,7 +67,7 @@ In private repository Settings → Secrets and variables → Actions:
 
 | Variable Name | Example Value | Description |
 |---------------|---------------|-------------|
-| `PUBLIC_RELEASE_REPO` | `gonewx/mantra-releases` | Public repo in owner/repo format |
+| `PUBLIC_RELEASE_REPO` | `mantra-hq/mantra-releases` | Public repo in owner/repo format |
 
 ### 4. Generate Tauri Signing Key (Optional but Recommended)
 
@@ -117,6 +118,12 @@ The workflow automatically determines pre-release status based on version number
 Error: `Resource not accessible by integration`
 
 Solution: Ensure PAT has Contents Read and write permission for the public repo.
+
+### Workflow Permission Denied
+
+Error: `refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`
+
+Solution: If the tag being pushed contains files under `.github/workflows/`, you need to add **Workflows** Read and write permission to the PAT.
 
 ### Repository Not Found
 

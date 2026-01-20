@@ -1,28 +1,30 @@
 name: Publish to Public Repository
 
-# 此工作流用于将已发布的版本同步到公开仓库，无需重新构建
-# 使用场景：
-# 1. 私有仓库已有 Release，但公开仓库发布失败
-# 2. 手动选择同步某个版本到公开仓库
-
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., v0.1.0-alpha.1)'
+        description: 'Version to publish (e.g., v0.3.0)'
         required: true
         type: string
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # 确保变量已在组织或仓库设置中定义
     if: vars.PUBLIC_RELEASE_REPO != ''
 
     steps:
+      - name: Checkout Private Repo
+        uses: actions/checkout@v4
+        with:
+          # 必须获取 tag 历史
+          fetch-depth: 0
+
       - name: Validate version format
         run: |
           if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "Error: Version must start with 'v' followed by semver (e.g., v0.1.0)"
+            echo "Error: Version must start with 'v' (e.g., v0.3.0)"
             exit 1
           fi
 
@@ -31,20 +33,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p release-files
-          
-          # 获取 Release 信息
-          RELEASE_INFO=$(gh release view ${{ inputs.version }} --repo ${{ github.repository }} --json assets)
-          
-          if [ -z "$RELEASE_INFO" ]; then
-            echo "Error: Release ${{ inputs.version }} not found in private repo"
-            exit 1
-          fi
-          
-          # 下载所有资产
+          # 下载私有仓库中对应 tag 的所有附件
           gh release download ${{ inputs.version }} --repo ${{ github.repository }} --dir release-files --pattern '*'
-          
           echo "Downloaded files:"
           ls -la release-files/
+
+      # 【关键修复步】将 Tag 推送到公开仓库，否则创建 Release 会报 404
+      - name: Push Tag to Public Repo
+        env:
+          PUBLIC_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          # 将变量通过 env 传入，避免在 run 中直接使用 {{ }}
+          TARGET_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+        run: |
+          # 移除 checkout action 配置的凭据（它会覆盖 URL 中的 token）
+          git config --unset-all http.https://github.com/.extraheader || true
+          
+          # 添加公开仓库作为 remote
+          git remote add public "https://x-access-token:${PUBLIC_TOKEN}@github.com/${TARGET_REPO}.git"
+          
+          echo "Pushing tag ${{ inputs.version }} to ${TARGET_REPO}..."
+          git push public "${{ inputs.version }}"
 
       - name: Create Release in Public Repository
         uses: softprops/action-gh-release@v2
@@ -56,6 +64,8 @@ jobs:
           files: release-files/*
           draft: false
           prerelease: ${{ contains(inputs.version, '-') }}
+          # 2026 建议增加此参数，如果 tag 已存在则不报错
+          make_latest: true
           body: |
             ## Mantra ${{ inputs.version }}
             
