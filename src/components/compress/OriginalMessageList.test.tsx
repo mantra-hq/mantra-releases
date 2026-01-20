@@ -1,13 +1,16 @@
 /**
  * OriginalMessageList Component Tests
  * Story 10.2: Task 7.1
+ * Story 10.4: Task 5 - 更新测试以包含 CompressStateProvider
  *
  * 测试原始消息列表组件的虚拟化渲染和空状态
  */
 
+import * as React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { OriginalMessageList } from "./OriginalMessageList";
+import { CompressStateProvider } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 
 // Mock i18n
@@ -23,6 +26,13 @@ vi.mock("react-i18next", () => ({
         "compress.messageCard.tokens": "tokens",
         "compress.messageCard.user": "User",
         "compress.messageCard.assistant": "Assistant",
+        "compress.actions.keep": "Keep",
+        "compress.actions.keepTooltip": "Keep (K)",
+        "compress.actions.delete": "Delete",
+        "compress.actions.deleteTooltip": "Delete (D)",
+        "compress.actions.edit": "Edit",
+        "compress.actions.editTooltip": "Edit (E)",
+        "compress.actions.edited": "Edited",
       };
       return translations[key] || key;
     },
@@ -32,6 +42,7 @@ vi.mock("react-i18next", () => ({
 // Mock token-counter
 vi.mock("@/lib/token-counter", () => ({
   estimateTokenCount: vi.fn(() => 10),
+  formatTokenCount: vi.fn((count: number) => count.toString()),
 }));
 
 // Mock @tanstack/react-virtual
@@ -42,6 +53,18 @@ vi.mock("@tanstack/react-virtual", () => ({
     measureElement: vi.fn(),
   })),
 }));
+
+// Mock Tooltip to simplify testing
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// Wrapper component with CompressStateProvider
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+  <CompressStateProvider>{children}</CompressStateProvider>
+);
 
 describe("OriginalMessageList", () => {
   const createMessages = (count: number): NarrativeMessage[] =>
@@ -54,7 +77,7 @@ describe("OriginalMessageList", () => {
 
   describe("空状态 (AC #1)", () => {
     it("无消息时应显示空状态", () => {
-      render(<OriginalMessageList messages={[]} />);
+      render(<OriginalMessageList messages={[]} />, { wrapper: Wrapper });
 
       expect(screen.getByText("No messages to display")).toBeInTheDocument();
       expect(
@@ -63,7 +86,7 @@ describe("OriginalMessageList", () => {
     });
 
     it("空状态应显示图标", () => {
-      const { container } = render(<OriginalMessageList messages={[]} />);
+      const { container } = render(<OriginalMessageList messages={[]} />, { wrapper: Wrapper });
 
       // MessageSquare icon 应该存在
       expect(container.querySelector("svg")).toBeInTheDocument();
@@ -73,7 +96,7 @@ describe("OriginalMessageList", () => {
   describe("data-testid", () => {
     it("有消息时应有 original-message-list testid", () => {
       const messages = createMessages(1);
-      render(<OriginalMessageList messages={messages} />);
+      render(<OriginalMessageList messages={messages} />, { wrapper: Wrapper });
 
       expect(screen.getByTestId("original-message-list")).toBeInTheDocument();
     });
@@ -84,7 +107,7 @@ describe("OriginalMessageList", () => {
       const { useVirtualizer } = await import("@tanstack/react-virtual");
       const messages = createMessages(5);
 
-      render(<OriginalMessageList messages={messages} />);
+      render(<OriginalMessageList messages={messages} />, { wrapper: Wrapper });
 
       expect(useVirtualizer).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -98,7 +121,8 @@ describe("OriginalMessageList", () => {
   describe("className 传递", () => {
     it("应接受自定义 className", () => {
       render(
-        <OriginalMessageList messages={[]} className="custom-class" />
+        <OriginalMessageList messages={[]} className="custom-class" />,
+        { wrapper: Wrapper }
       );
 
       const container = document.querySelector(".custom-class");

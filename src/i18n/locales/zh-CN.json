@@ -533,6 +533,24 @@
       "inserted": "已新增",
       "savedTokens": "已节省",
       "tokenDelta": "tokens"
+    },
+    "actions": {
+      "keep": "保留",
+      "keepTooltip": "保留此消息 (K)",
+      "delete": "删除",
+      "deleteTooltip": "标记为删除 (D)",
+      "edit": "修改",
+      "editTooltip": "编辑消息内容 (E)",
+      "edited": "已修改"
+    },
+    "editDialog": {
+      "title": "编辑消息",
+      "original": "原始内容",
+      "modified": "修改内容",
+      "placeholder": "输入修改后的内容...",
+      "cancel": "取消",
+      "confirm": "确认修改",
+      "tokenChange": "Token 变化"
     }
   },
   "player": {

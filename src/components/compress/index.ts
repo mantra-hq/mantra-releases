@@ -18,3 +18,10 @@ export type { PreviewMessageCardProps } from "./PreviewMessageCard";
 
 export { DeletedPlaceholder } from "./DeletedPlaceholder";
 export type { DeletedPlaceholderProps } from "./DeletedPlaceholder";
+
+// Story 10.4: 消息操作组件
+export { MessageActionButtons } from "./MessageActionButtons";
+export type { MessageActionButtonsProps } from "./MessageActionButtons";
+
+export { EditMessageDialog } from "./EditMessageDialog";
+export type { EditMessageDialogProps } from "./EditMessageDialog";

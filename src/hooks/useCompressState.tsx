@@ -73,6 +73,10 @@ export interface CompressStateContextValue {
   addInsertion: (afterIndex: number, message: NarrativeMessage) => void;
   /** 移除插入操作 */
   removeInsertion: (afterIndex: number) => void;
+  /** Story 10.4: 获取指定消息的操作 */
+  getOperationForMessage: (messageId: string) => CompressOperation | undefined;
+  /** Story 10.4: 获取指定消息的操作类型 (默认 keep) */
+  getOperationType: (messageId: string) => OperationType;
 }
 
 // ===== Context 创建 =====
@@ -298,6 +302,23 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
     return { deleted, modified, inserted };
   }, [operations, insertions]);
 
+  // Story 10.4: 获取指定消息的操作
+  const getOperationForMessage = React.useCallback(
+    (messageId: string): CompressOperation | undefined => {
+      return operations.get(messageId);
+    },
+    [operations]
+  );
+
+  // Story 10.4: 获取指定消息的操作类型 (默认 keep)
+  const getOperationType = React.useCallback(
+    (messageId: string): OperationType => {
+      const operation = operations.get(messageId);
+      return operation?.type ?? "keep";
+    },
+    [operations]
+  );
+
   // Context 值
   const contextValue = React.useMemo<CompressStateContextValue>(
     () => ({
@@ -310,6 +331,8 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       insertions,
       addInsertion,
       removeInsertion,
+      getOperationForMessage,
+      getOperationType,
     }),
     [
       operations,
@@ -321,6 +344,8 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       insertions,
       addInsertion,
       removeInsertion,
+      getOperationForMessage,
+      getOperationType,
     ]
   );
 

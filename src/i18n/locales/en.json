@@ -533,6 +533,24 @@
       "inserted": "Inserted",
       "savedTokens": "saved",
       "tokenDelta": "tokens"
+    },
+    "actions": {
+      "keep": "Keep",
+      "keepTooltip": "Keep this message (K)",
+      "delete": "Delete",
+      "deleteTooltip": "Mark for deletion (D)",
+      "edit": "Edit",
+      "editTooltip": "Edit message content (E)",
+      "edited": "Edited"
+    },
+    "editDialog": {
+      "title": "Edit Message",
+      "original": "Original Content",
+      "modified": "Modified Content",
+      "placeholder": "Enter modified content...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Edit",
+      "tokenChange": "Token change"
     }
   },
   "player": {

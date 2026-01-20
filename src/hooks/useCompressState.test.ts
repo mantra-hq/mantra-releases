@@ -338,4 +338,64 @@ describe("useCompressState", () => {
       expect(duration).toBeLessThan(100); // 应在 100ms 内完成
     });
   });
+
+  // Story 10.4: Task 4 新增方法测试
+  describe("getOperationForMessage (Story 10.4)", () => {
+    it("应返回指定消息的操作", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+      const message = createTestMessage("msg-1", "user", "Hello");
+
+      act(() => {
+        result.current.setOperation("msg-1", {
+          type: "delete",
+          originalMessage: message,
+        });
+      });
+
+      const operation = result.current.getOperationForMessage("msg-1");
+      expect(operation).toBeDefined();
+      expect(operation?.type).toBe("delete");
+    });
+
+    it("不存在的操作应返回 undefined", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+
+      const operation = result.current.getOperationForMessage("non-existent");
+      expect(operation).toBeUndefined();
+    });
+  });
+
+  describe("getOperationType (Story 10.4)", () => {
+    it("有操作时应返回操作类型", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+
+      act(() => {
+        result.current.setOperation("msg-1", { type: "delete" });
+        result.current.setOperation("msg-2", { type: "modify", modifiedContent: "X" });
+      });
+
+      expect(result.current.getOperationType("msg-1")).toBe("delete");
+      expect(result.current.getOperationType("msg-2")).toBe("modify");
+    });
+
+    it("无操作时应返回 keep", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+
+      expect(result.current.getOperationType("msg-1")).toBe("keep");
+    });
+
+    it("移除操作后应返回 keep", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+
+      act(() => {
+        result.current.setOperation("msg-1", { type: "delete" });
+      });
+
+      act(() => {
+        result.current.removeOperation("msg-1");
+      });
+
+      expect(result.current.getOperationType("msg-1")).toBe("keep");
+    });
+  });
 });

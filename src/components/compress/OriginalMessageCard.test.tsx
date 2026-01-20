@@ -23,6 +23,7 @@ vi.mock("react-i18next", () => ({
         "compress.messageCard.system": "System",
         "compress.messageCard.user": "User",
         "compress.messageCard.assistant": "Assistant",
+        "compress.actions.edited": "Edited",
       };
       return translations[key] || key;
     },
@@ -33,6 +34,17 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/lib/token-counter", () => ({
   estimateTokenCount: vi.fn(() => 42),
   formatTokenCount: vi.fn((count: number) => count.toString()),
+}));
+
+// Mock MessageActionButtons for simpler testing
+vi.mock("./MessageActionButtons", () => ({
+  MessageActionButtons: ({ messageId, onKeepClick, onDeleteClick, onEditClick }: any) => (
+    <div data-testid="mock-action-buttons" data-message-id={messageId}>
+      <button data-testid="mock-keep" onClick={onKeepClick}>Keep</button>
+      <button data-testid="mock-delete" onClick={onDeleteClick}>Delete</button>
+      <button data-testid="mock-edit" onClick={onEditClick}>Edit</button>
+    </div>
+  ),
 }));
 
 describe("OriginalMessageCard", () => {
@@ -175,6 +187,105 @@ describe("OriginalMessageCard", () => {
 
       const card = screen.getByTestId("original-message-card");
       expect(card).toHaveAttribute("data-index", "5");
+    });
+  });
+
+  // Story 10.4: 操作按钮和状态样式测试
+  describe("操作按钮集成 (Story 10.4 AC #1)", () => {
+    it("showActionButtons=true 时应显示操作按钮", () => {
+      const onKeepClick = vi.fn();
+      const onDeleteClick = vi.fn();
+      const onEditClick = vi.fn();
+
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          showActionButtons={true}
+          currentOperation="keep"
+          onKeepClick={onKeepClick}
+          onDeleteClick={onDeleteClick}
+          onEditClick={onEditClick}
+        />
+      );
+
+      expect(screen.getByTestId("mock-action-buttons")).toBeInTheDocument();
+    });
+
+    it("showActionButtons=false 时不应显示操作按钮", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          showActionButtons={false}
+        />
+      );
+
+      expect(screen.queryByTestId("mock-action-buttons")).not.toBeInTheDocument();
+    });
+
+    it("点击删除按钮应触发 onDeleteClick", () => {
+      const onDeleteClick = vi.fn();
+
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          showActionButtons={true}
+          currentOperation="keep"
+          onKeepClick={vi.fn()}
+          onDeleteClick={onDeleteClick}
+          onEditClick={vi.fn()}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId("mock-delete"));
+      expect(onDeleteClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("删除状态样式 (Story 10.4 AC #2)", () => {
+    it("删除状态应设置 data-operation 属性", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          currentOperation="delete"
+        />
+      );
+
+      const card = screen.getByTestId("original-message-card");
+      expect(card).toHaveAttribute("data-operation", "delete");
+    });
+  });
+
+  describe("修改状态样式 (Story 10.4 AC #4)", () => {
+    it("修改状态应设置 data-operation 属性", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          currentOperation="modify"
+        />
+      );
+
+      const card = screen.getByTestId("original-message-card");
+      expect(card).toHaveAttribute("data-operation", "modify");
+    });
+
+    it("修改状态应显示 Edited 标识", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("user", "Hello")}
+          currentOperation="modify"
+        />
+      );
+
+      expect(screen.getByText("Edited")).toBeInTheDocument();
+    });
+  });
+
+  describe("保留状态 (Story 10.4 AC #5)", () => {
+    it("默认应为 keep 状态", () => {
+      render(<OriginalMessageCard message={createMessage("user", "Hello")} />);
+
+      const card = screen.getByTestId("original-message-card");
+      expect(card).toHaveAttribute("data-operation", "keep");
     });
   });
 });
