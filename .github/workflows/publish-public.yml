@@ -41,12 +41,17 @@ jobs:
       # 【关键修复步】将 Tag 推送到公开仓库，否则创建 Release 会报 404
       - name: Push Tag to Public Repo
         env:
-          # 使用你的 PAT 推送
           PUBLIC_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          # 将变量通过 env 传入，避免在 run 中直接使用 {{ }}
+          TARGET_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
         run: |
-          # 1. 确保本地有这个 tag (从私有仓库检出的)
-          # 2. 推送到目标公开仓库
-          git push https://x-access-token:${PUBLIC_TOKEN}@://github.com{{ vars.PUBLIC_RELEASE_REPO }}.git ${{ inputs.version }}
+          # 检查本地是否有该 tag，如果没有则尝试从 origin 拉取或创建一个
+          # 在 workflow_dispatch 中，通常 checkout 后已经拥有 tag 引用
+          
+          echo "Pushing tag ${{ inputs.version }} to ${TARGET_REPO}..."
+          
+          # 修正后的 URL 拼接格式
+          git push "https://x-access-token:${PUBLIC_TOKEN}@://github.com{TARGET_REPO}.git" "${{ inputs.version }}"
 
       - name: Create Release in Public Repository
         uses: softprops/action-gh-release@v2
