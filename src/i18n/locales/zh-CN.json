@@ -510,7 +510,30 @@
     "importProject": "导入项目",
     "noProjectsYet": "还没有导入任何项目",
     "importPrompt": "导入你的 AI 编程会话，开始探索和回放心法",
-    "supportedLabel": "支持:"
+    "supportedLabel": "支持:",
+    "modeSwitch": "模式切换",
+    "playbackMode": "回放",
+    "compressMode": "压缩",
+    "compressGuide": {
+      "title": "压缩模式",
+      "description": "压缩模式允许你优化会话上下文，对抗自动截断：",
+      "feature1": "标记不需要的消息为删除",
+      "feature2": "修改消息内容",
+      "feature3": "插入新的上下文信息",
+      "feature4": "实时预览压缩后的 Token 统计",
+      "benefitsTitle": "这可以帮助你：",
+      "benefit1": "减少 Token 使用成本",
+      "benefit2": "提高 AI 响应准确率",
+      "benefit3": "降低上下文被自动压缩的风险",
+      "dontShowAgain": "知道了，不再提示",
+      "getStarted": "开始使用"
+    },
+    "compressPlaceholder": {
+      "originalList": "原始消息",
+      "originalListHint": "原始会话消息将在此显示",
+      "previewList": "压缩预览",
+      "previewListHint": "压缩后的消息预览将在此显示"
+    }
   },
   "feedback": {
     "saved": "已保存",

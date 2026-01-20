@@ -1,0 +1,150 @@
+/**
+ * CompressGuideDialog - 压缩模式首次使用引导弹窗
+ * Story 10.1: AC #2
+ *
+ * 首次切换到压缩模式时显示引导提示
+ * - 说明功能用途
+ * - 提供"知道了，不再提示"选项
+ */
+
+import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { Minimize2, Trash2, Edit3, PlusCircle, BarChart3 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+
+export interface CompressGuideDialogProps {
+  /** 是否打开弹窗 */
+  open: boolean;
+  /** 关闭弹窗回调（临时隐藏，下次还会显示） */
+  onClose: () => void;
+  /** 关闭并不再提示回调 */
+  onDismissForever: () => void;
+}
+
+/**
+ * CompressGuideDialog 组件
+ * 显示压缩模式功能引导
+ */
+export function CompressGuideDialog({
+  open,
+  onClose,
+  onDismissForever,
+}: CompressGuideDialogProps) {
+  const { t } = useTranslation();
+  const [dontShowAgain, setDontShowAgain] = React.useState(false);
+
+  const handleClose = React.useCallback(() => {
+    if (dontShowAgain) {
+      onDismissForever();
+    } else {
+      onClose();
+    }
+  }, [dontShowAgain, onClose, onDismissForever]);
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Minimize2 className="h-5 w-5 text-primary" />
+            {t("player.compressGuide.title")}
+          </DialogTitle>
+          <DialogDescription>
+            {t("player.compressGuide.description")}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* 功能说明列表 */}
+        <div className="space-y-3 py-4">
+          <FeatureItem
+            icon={<Trash2 className="h-4 w-4" />}
+            text={t("player.compressGuide.feature1")}
+          />
+          <FeatureItem
+            icon={<Edit3 className="h-4 w-4" />}
+            text={t("player.compressGuide.feature2")}
+          />
+          <FeatureItem
+            icon={<PlusCircle className="h-4 w-4" />}
+            text={t("player.compressGuide.feature3")}
+          />
+          <FeatureItem
+            icon={<BarChart3 className="h-4 w-4" />}
+            text={t("player.compressGuide.feature4")}
+          />
+        </div>
+
+        {/* 好处说明 */}
+        <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground mb-1">
+            {t("player.compressGuide.benefitsTitle")}
+          </p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>{t("player.compressGuide.benefit1")}</li>
+            <li>{t("player.compressGuide.benefit2")}</li>
+            <li>{t("player.compressGuide.benefit3")}</li>
+          </ul>
+        </div>
+
+        <DialogFooter className="flex-col sm:flex-row gap-3 sm:gap-0">
+          {/* 不再提示选项 */}
+          <div className="flex items-center space-x-2 mr-auto">
+            <Checkbox
+              id="dont-show-again"
+              checked={dontShowAgain}
+              onCheckedChange={(checked) =>
+                setDontShowAgain(checked === true)
+              }
+            />
+            <Label
+              htmlFor="dont-show-again"
+              className="text-sm text-muted-foreground cursor-pointer"
+            >
+              {t("player.compressGuide.dontShowAgain")}
+            </Label>
+          </div>
+
+          {/* 开始使用按钮 */}
+          <Button onClick={handleClose}>
+            {t("player.compressGuide.getStarted")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * 功能项组件
+ */
+interface FeatureItemProps {
+  icon: React.ReactNode;
+  text: string;
+}
+
+function FeatureItem({ icon, text }: FeatureItemProps) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex-shrink-0 mt-0.5 text-primary">{icon}</div>
+      <span className="text-sm text-foreground">{text}</span>
+    </div>
+  );
+}
+
+CompressGuideDialog.displayName = "CompressGuideDialog";
+
+// 向后兼容的别名
+export const RefineGuideDialog = CompressGuideDialog;
+export type RefineGuideDialogProps = CompressGuideDialogProps;
+
+export default CompressGuideDialog;

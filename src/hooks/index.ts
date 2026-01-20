@@ -43,3 +43,13 @@ export {
 
 // 通知系统初始化 hook
 export { useNotificationInit } from "./useNotificationInit";
+
+// Story 10.1: 压缩模式状态管理 hook
+export {
+    useCompressMode,
+    useRefineMode, // 向后兼容别名
+    type UseCompressModeOptions,
+    type UseCompressModeReturn,
+    type UseRefineModeOptions,
+    type UseRefineModeReturn,
+} from "./use-compress-mode";

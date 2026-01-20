@@ -54,12 +54,15 @@ import { ProjectDrawer } from "@/components/sidebar";
 import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
-import { PlayerEmptyState } from "@/components/player";
+import { PlayerEmptyState, ModeSwitch, CompressGuideDialog } from "@/components/player";
 // Story 2.29 V2: 隐藏空会话设置
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 // Story 2.34: 统计视图组件
 import { useAppModeStore } from "@/stores/useAppModeStore";
 import { ProjectStatsView, SessionStatsView, StatsLevelTabs, type StatsLevel } from "@/components/analytics";
+// Story 10.1: 压缩模式 hook
+import { useCompressMode } from "@/hooks";
+import { useTranslation } from "react-i18next";
 
 
 /**
@@ -191,6 +194,16 @@ export default function Player() {
 
   // Story 2.34: 统计视图层级状态（项目/会话）
   const [statsLevel, setStatsLevel] = React.useState<StatsLevel>("session");
+
+  // Story 10.1: 压缩模式状态管理
+  const { t } = useTranslation();
+  const {
+    mode: playerMode,
+    setMode: setPlayerMode,
+    isFirstTimeCompress,
+    hideGuide,
+    dismissGuide,
+  } = useCompressMode({ sessionId: sessionId ?? "" });
 
   // Bug Fix: 切换项目时重置右侧内容区域状态
   // 当 sessionId 变化时，清空所有关联的 store 状态，避免显示旧项目内容
@@ -734,7 +747,7 @@ export default function Player() {
         />
         {/* Story 2.34: 根据模式显示不同内容 */}
         <main className="flex-1 min-h-0">
-          {appMode === "statistics" && allProjects.length > 0 ? (
+          {appMode === "analytics" && allProjects.length > 0 ? (
             /* 统计模式下显示第一个项目的统计（或提示选择项目） */
             <ProjectStatsView
               projectId={allProjects[0]?.id ?? ""}
@@ -845,7 +858,7 @@ export default function Player() {
 
       {/* Main Content - Story 2.34: 根据模式切换显示 */}
       <main className="flex-1 min-h-0 flex flex-col">
-        {appMode === "statistics" ? (
+        {appMode === "analytics" ? (
           /* 统计模式: 显示统计视图 */
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Story 2.34: 统计层级切换 Tabs (仅当有 sessionId 和 project 时显示) */}
@@ -890,38 +903,82 @@ export default function Player() {
             </div>
           </div>
         ) : (
-          /* 回放模式: 显示 DualStreamLayout */
+          /* 回放/精简模式: 显示 DualStreamLayout 或精简模式布局 */
           <>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <DualStreamLayout
-                ref={layoutRef}
-                messages={messages}
-                selectedMessageId={selectedMessageId}
-                onMessageSelect={handleMessageSelect}
-                // TimberLine 时间轴 Props (Story 2.6)
-                showTimeline={false}
-                timelineStartTime={timelineRange.startTime}
-                timelineEndTime={timelineRange.endTime}
-                timelineCurrentTime={currentTime}
-                timelineEvents={timelineEvents}
-                onTimelineSeek={handleTimelineSeek}
-                // Story 2.11 AC6: 无 Git 仓库时显示警告
-                showNoGitWarning={hasNoGit}
-                projectPath={sessionCwd}
-                // Story 2.13: 文件浏览器
-                repoPath={repoPath ?? undefined}
+            {/* Story 10.1: 模式切换 Tab (AC #1) */}
+            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <ModeSwitch
+                mode={playerMode}
+                onModeChange={setPlayerMode}
               />
             </div>
-            {/* 直接在 Player 层渲染 TimberLine */}
-            {messages.length > 0 && (
-              <TimberLine
-                startTime={timelineRange.startTime}
-                endTime={timelineRange.endTime}
-                currentTime={currentTime}
-                events={timelineEvents}
-                onSeek={handleTimelineSeek}
-              />
+
+            {/* 内容区域 - 根据模式切换 */}
+            {playerMode === "playback" ? (
+              /* 回放模式: 显示 DualStreamLayout */
+              <>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <DualStreamLayout
+                    ref={layoutRef}
+                    messages={messages}
+                    selectedMessageId={selectedMessageId}
+                    onMessageSelect={handleMessageSelect}
+                    // TimberLine 时间轴 Props (Story 2.6)
+                    showTimeline={false}
+                    timelineStartTime={timelineRange.startTime}
+                    timelineEndTime={timelineRange.endTime}
+                    timelineCurrentTime={currentTime}
+                    timelineEvents={timelineEvents}
+                    onTimelineSeek={handleTimelineSeek}
+                    // Story 2.11 AC6: 无 Git 仓库时显示警告
+                    showNoGitWarning={hasNoGit}
+                    projectPath={sessionCwd}
+                    // Story 2.13: 文件浏览器
+                    repoPath={repoPath ?? undefined}
+                  />
+                </div>
+                {/* 直接在 Player 层渲染 TimberLine (AC #5: 回放模式显示时间轴) */}
+                {messages.length > 0 && (
+                  <TimberLine
+                    startTime={timelineRange.startTime}
+                    endTime={timelineRange.endTime}
+                    currentTime={currentTime}
+                    events={timelineEvents}
+                    onSeek={handleTimelineSeek}
+                  />
+                )}
+              </>
+            ) : (
+              /* 精简模式: 显示占位布局 (AC #3) */
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <DualStreamLayout
+                  ref={layoutRef}
+                  // Story 10.1 AC #3: 精简模式自定义左右面板内容
+                  narrativeContent={
+                    <RefinePlaceholderPanel
+                      title={t("player.compressPlaceholder.originalList")}
+                      hint={t("player.compressPlaceholder.originalListHint")}
+                    />
+                  }
+                  codeContent={
+                    <RefinePlaceholderPanel
+                      title={t("player.compressPlaceholder.previewList")}
+                      hint={t("player.compressPlaceholder.previewListHint")}
+                    />
+                  }
+                  // Story 10.1 AC #5: 精简模式隐藏时间轴
+                  showTimeline={false}
+                />
+              </div>
+              /* AC #5: 精简模式不显示 TimberLine */
             )}
+
+            {/* Story 10.1 AC #2: 首次使用引导弹窗 */}
+            <CompressGuideDialog
+              open={isFirstTimeCompress}
+              onClose={hideGuide} // 临时隐藏弹窗，下次还会显示
+              onDismissForever={dismissGuide}
+            />
           </>
         )}
       </main>
@@ -951,6 +1008,24 @@ export default function Player() {
         }}
         onCurrentProjectRemoved={() => navigate("/player")}
       />
+    </div>
+  );
+}
+
+/**
+ * 精简模式占位面板组件
+ * Story 10.1 AC #3: 精简模式左右面板占位
+ */
+interface RefinePlaceholderPanelProps {
+  title: string;
+  hint: string;
+}
+
+function RefinePlaceholderPanel({ title, hint }: RefinePlaceholderPanelProps) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+      <h3 className="text-lg font-medium text-foreground mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground max-w-xs">{hint}</p>
     </div>
   );
 }

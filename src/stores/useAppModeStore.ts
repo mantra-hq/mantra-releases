@@ -4,7 +4,7 @@
  *
  * 管理应用的显示模式:
  * - playback: 回放模式（默认）
- * - statistics: 统计模式
+ * - analytics: 分析模式
  */
 
 import { create } from "zustand";
@@ -13,9 +13,9 @@ import { persist } from "zustand/middleware";
 /**
  * 应用显示模式
  * - playback: 回放模式（查看会话消息和代码快照）
- * - statistics: 统计模式（查看分析统计数据）
+ * - analytics: 分析模式（查看分析统计数据）
  */
-export type AppMode = "playback" | "statistics";
+export type AppMode = "playback" | "analytics";
 
 /**
  * 应用模式状态接口
@@ -30,8 +30,8 @@ export interface AppModeState {
   setMode: (mode: AppMode) => void;
   /** 切换模式 */
   toggleMode: () => void;
-  /** 是否为统计模式 */
-  isStatisticsMode: () => boolean;
+  /** 是否为分析模式 */
+  isAnalyticsMode: () => boolean;
 }
 
 /**
@@ -48,10 +48,10 @@ export const useAppModeStore = create<AppModeState>()(
 
       toggleMode: () =>
         set((state) => ({
-          mode: state.mode === "playback" ? "statistics" : "playback",
+          mode: state.mode === "playback" ? "analytics" : "playback",
         })),
 
-      isStatisticsMode: () => get().mode === "statistics",
+      isAnalyticsMode: () => get().mode === "analytics",
     }),
     {
       name: "mantra-app-mode",

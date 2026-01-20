@@ -510,7 +510,30 @@
     "importProject": "Import Project",
     "noProjectsYet": "No projects imported yet",
     "importPrompt": "Import your AI coding sessions to start exploring and playback",
-    "supportedLabel": "Supported:"
+    "supportedLabel": "Supported:",
+    "modeSwitch": "Mode Switch",
+    "playbackMode": "Playback",
+    "compressMode": "Compress",
+    "compressGuide": {
+      "title": "Compress Mode",
+      "description": "Compress mode allows you to optimize session context and fight auto-truncation:",
+      "feature1": "Mark unwanted messages for deletion",
+      "feature2": "Edit message content",
+      "feature3": "Insert new context information",
+      "feature4": "Real-time preview of compressed token statistics",
+      "benefitsTitle": "This helps you:",
+      "benefit1": "Reduce token usage costs",
+      "benefit2": "Improve AI response accuracy",
+      "benefit3": "Reduce risk of automatic context compression",
+      "dontShowAgain": "Don't show this again",
+      "getStarted": "Get Started"
+    },
+    "compressPlaceholder": {
+      "originalList": "Original Messages",
+      "originalListHint": "Original session messages will be displayed here",
+      "previewList": "Compressed Preview",
+      "previewListHint": "Compressed message preview will be displayed here"
+    }
   },
   "feedback": {
     "saved": "Saved",
