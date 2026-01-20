@@ -50,8 +50,7 @@ jobs:
           
           echo "Pushing tag ${{ inputs.version }} to ${TARGET_REPO}..."
           
-          # 修正后的 URL 拼接格式
-          git push "https://x-access-token:${PUBLIC_TOKEN}@://github.com{TARGET_REPO}.git" "${{ inputs.version }}"
+          git push "https://x-access-token:${PUBLIC_TOKEN}@github.com/${TARGET_REPO}.git" "${{ inputs.version }}"
 
       - name: Create Release in Public Repository
         uses: softprops/action-gh-release@v2
