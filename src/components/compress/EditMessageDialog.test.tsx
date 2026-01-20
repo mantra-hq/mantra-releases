@@ -197,4 +197,80 @@ describe("EditMessageDialog", () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
   });
+
+  describe("键盘快捷键 (Code Review Enhancement)", () => {
+    it("Ctrl+Enter 有变更时应触发确认", async () => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          onConfirm={onConfirm}
+          onOpenChange={onOpenChange}
+        />
+      );
+
+      const textarea = screen.getByTestId("modified-content-input");
+      await user.type(textarea, " modified");
+
+      // 模拟 Ctrl+Enter
+      fireEvent.keyDown(screen.getByTestId("edit-message-dialog"), {
+        key: "Enter",
+        ctrlKey: true,
+      });
+
+      expect(onConfirm).toHaveBeenCalledWith("Original message content modified");
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("Ctrl+Enter 无变更时不应触发确认", () => {
+      const onConfirm = vi.fn();
+      render(<EditMessageDialog {...defaultProps} onConfirm={onConfirm} />);
+
+      // 模拟 Ctrl+Enter (内容未变更)
+      fireEvent.keyDown(screen.getByTestId("edit-message-dialog"), {
+        key: "Enter",
+        ctrlKey: true,
+      });
+
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it("Escape 应触发取消", () => {
+      const onOpenChange = vi.fn();
+      render(<EditMessageDialog {...defaultProps} onOpenChange={onOpenChange} />);
+
+      // 模拟 Escape
+      fireEvent.keyDown(screen.getByTestId("edit-message-dialog"), {
+        key: "Escape",
+      });
+
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("Meta+Enter (Mac) 有变更时应触发确认", async () => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          onConfirm={onConfirm}
+          onOpenChange={onOpenChange}
+        />
+      );
+
+      const textarea = screen.getByTestId("modified-content-input");
+      await user.type(textarea, " modified");
+
+      // 模拟 Meta+Enter (Mac Cmd+Enter)
+      fireEvent.keyDown(screen.getByTestId("edit-message-dialog"), {
+        key: "Enter",
+        metaKey: true,
+      });
+
+      expect(onConfirm).toHaveBeenCalledWith("Original message content modified");
+    });
+  });
 });

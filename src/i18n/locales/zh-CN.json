@@ -545,6 +545,7 @@
     },
     "editDialog": {
       "title": "编辑消息",
+      "description": "编辑消息内容。原始内容显示在上方供参考。",
       "original": "原始内容",
       "modified": "修改内容",
       "placeholder": "输入修改后的内容...",

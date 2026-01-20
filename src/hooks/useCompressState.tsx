@@ -7,8 +7,9 @@
  */
 
 import * as React from "react";
-import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";
+import { getMessageTextContent } from "@/lib/message-utils";
 
 // ===== 类型定义 =====
 
@@ -98,16 +99,6 @@ export function useCompressState(): CompressStateContextValue {
 }
 
 // ===== 工具函数 =====
-
-/**
- * 获取消息的文本内容
- */
-function getMessageTextContent(content: ContentBlock[]): string {
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => block.content)
-    .join("\n");
-}
 
 /**
  * 计算消息的 token 数

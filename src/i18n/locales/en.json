@@ -545,6 +545,7 @@
     },
     "editDialog": {
       "title": "Edit Message",
+      "description": "Edit message content. Original content is shown above for reference.",
       "original": "Original Content",
       "modified": "Modified Content",
       "placeholder": "Enter modified content...",

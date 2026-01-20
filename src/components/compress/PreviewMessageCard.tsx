@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import type { PreviewMessage } from "@/hooks/useCompressState";
 import type { ContentBlock } from "@/types/message";
 import { estimateTokenCount, formatTokenCount } from "@/lib/token-counter";
+import { getMessageTextContent } from "@/lib/message-utils";
 
 // ===== Props =====
 
@@ -45,16 +46,6 @@ const MAX_COLLAPSED_LINES = 3;
 const MAX_COLLAPSED_CHARS = 200;
 
 // ===== 工具函数 =====
-
-/**
- * 获取消息的文本内容
- */
-function getMessageTextContent(content: ContentBlock[]): string {
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => block.content)
-    .join("\n");
-}
 
 /**
  * 判断是否需要折叠

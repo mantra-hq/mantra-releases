@@ -23,8 +23,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount, formatTokenCount } from "@/lib/token-counter";
+import { getMessageTextContent } from "@/lib/message-utils";
 import { MessageActionButtons } from "./MessageActionButtons";
 import type { OperationType } from "@/hooks/useCompressState";
 
@@ -55,16 +56,6 @@ export interface OriginalMessageCardProps {
 // 折叠配置常量
 const MAX_COLLAPSED_LINES = 3;
 const MAX_COLLAPSED_CHARS = 200;
-
-/**
- * 获取消息的文本内容
- */
-function getMessageTextContent(content: ContentBlock[]): string {
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => block.content)
-    .join("\n");
-}
 
 /**
  * 判断是否需要折叠

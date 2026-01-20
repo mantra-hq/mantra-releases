@@ -13,13 +13,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { NarrativeMessage, ContentBlock } from "@/types/message";
+import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";
+import { getMessageTextContent } from "@/lib/message-utils";
 
 /**
  * EditMessageDialog 组件 Props
@@ -33,16 +35,6 @@ export interface EditMessageDialogProps {
   message: NarrativeMessage | null;
   /** 确认修改回调 */
   onConfirm: (modifiedContent: string) => void;
-}
-
-/**
- * 获取消息的文本内容
- */
-function getMessageTextContent(content: ContentBlock[]): string {
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => block.content)
-    .join("\n");
 }
 
 /**
@@ -74,6 +66,7 @@ export function EditMessageDialog({
   // Token 计数状态
   const [originalTokens, setOriginalTokens] = React.useState(0);
   const [modifiedTokens, setModifiedTokens] = React.useState(0);
+  const [isCalculatingTokens, setIsCalculatingTokens] = React.useState(false);
 
   // 当消息变化时重置状态
   React.useEffect(() => {
@@ -86,11 +79,13 @@ export function EditMessageDialog({
     }
   }, [message, open]);
 
-  // 使用 useEffect + setTimeout 实现 debounce Token 计算 (300ms 延迟)
+  // 使用 useEffect + setTimeout 实现 debounce Token 计算 (150ms 延迟)
   React.useEffect(() => {
+    setIsCalculatingTokens(true);
     const timer = setTimeout(() => {
       setModifiedTokens(estimateTokenCount(modifiedContent));
-    }, 300);
+      setIsCalculatingTokens(false);
+    }, 150);
     return () => clearTimeout(timer);
   }, [modifiedContent]);
 
@@ -149,6 +144,9 @@ export function EditMessageDialog({
       >
         <DialogHeader>
           <DialogTitle>{t("compress.editDialog.title")}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {t("compress.editDialog.description")}
+          </DialogDescription>
         </DialogHeader>
 
         {/* 原始内容 - 只读 */}
@@ -173,8 +171,12 @@ export function EditMessageDialog({
               {t("compress.editDialog.modified")}
             </span>
             <span className="text-xs text-muted-foreground" data-testid="token-display">
-              {originalTokens} → {modifiedTokens} tokens
-              {tokenDelta !== 0 && (
+              {originalTokens} →{" "}
+              <span className={isCalculatingTokens ? "opacity-50" : ""}>
+                {modifiedTokens}
+              </span>{" "}
+              tokens
+              {tokenDelta !== 0 && !isCalculatingTokens && (
                 <span
                   className={tokenDelta < 0 ? "text-green-500 ml-1" : "text-red-500 ml-1"}
                   data-testid="token-delta"
