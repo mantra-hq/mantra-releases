@@ -518,6 +518,21 @@
       "system": "System",
       "user": "User",
       "assistant": "Assistant"
+    },
+    "previewList": {
+      "title": "Compressed Preview",
+      "empty": "No changes yet",
+      "emptyHint": "Mark messages as delete/modify on the left panel",
+      "modeFull": "Full",
+      "modeChanges": "Changes Only",
+      "modeHideDeleted": "Hide Deleted"
+    },
+    "previewCard": {
+      "deleted": "Deleted",
+      "modified": "Modified",
+      "inserted": "Inserted",
+      "savedTokens": "saved",
+      "tokenDelta": "tokens"
     }
   },
   "player": {

@@ -518,6 +518,21 @@
       "system": "系统",
       "user": "用户",
       "assistant": "助手"
+    },
+    "previewList": {
+      "title": "压缩预览",
+      "empty": "暂无变更",
+      "emptyHint": "在左侧面板标记消息为删除/修改",
+      "modeFull": "完整",
+      "modeChanges": "仅变更",
+      "modeHideDeleted": "隐藏删除"
+    },
+    "previewCard": {
+      "deleted": "已删除",
+      "modified": "已修改",
+      "inserted": "已新增",
+      "savedTokens": "已节省",
+      "tokenDelta": "tokens"
     }
   },
   "player": {

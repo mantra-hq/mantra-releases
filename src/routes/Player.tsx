@@ -55,8 +55,10 @@ import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 import { PlayerEmptyState, ModeSwitch, CompressGuideDialog } from "@/components/player";
-// Story 10.2: 压缩模式原始消息列表
-import { OriginalMessageList } from "@/components/compress";
+// Story 10.2/10.3: 压缩模式组件
+import { OriginalMessageList, CompressPreviewList } from "@/components/compress";
+// Story 10.3: 压缩状态 Provider
+import { CompressStateProvider } from "@/hooks/useCompressState";
 // Story 2.29 V2: 隐藏空会话设置
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 // Story 2.34: 统计视图组件
@@ -64,7 +66,6 @@ import { useAppModeStore } from "@/stores/useAppModeStore";
 import { ProjectStatsView, SessionStatsView, StatsLevelTabs, type StatsLevel } from "@/components/analytics";
 // Story 10.1: 压缩模式 hook
 import { useCompressMode } from "@/hooks";
-import { useTranslation } from "react-i18next";
 
 
 /**
@@ -198,7 +199,6 @@ export default function Player() {
   const [statsLevel, setStatsLevel] = React.useState<StatsLevel>("session");
 
   // Story 10.1: 压缩模式状态管理
-  const { t } = useTranslation();
   const {
     mode: playerMode,
     setMode: setPlayerMode,
@@ -951,24 +951,25 @@ export default function Player() {
                 )}
               </>
             ) : (
-              /* 精简模式: 显示占位布局 (AC #3) */
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <DualStreamLayout
-                  ref={layoutRef}
-                  // Story 10.2: 精简模式左侧显示原始消息列表
-                  narrativeContent={
-                    <OriginalMessageList messages={messages} />
-                  }
-                  codeContent={
-                    <RefinePlaceholderPanel
-                      title={t("player.compressPlaceholder.previewList")}
-                      hint={t("player.compressPlaceholder.previewListHint")}
-                    />
-                  }
-                  // Story 10.1 AC #5: 精简模式隐藏时间轴
-                  showTimeline={false}
-                />
-              </div>
+              /* 精简模式: 显示原始消息列表 + 压缩预览 (AC #3) */
+              /* Story 10.3: 使用 CompressStateProvider 包裹实现左右面板状态共享 */
+              <CompressStateProvider>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <DualStreamLayout
+                    ref={layoutRef}
+                    // Story 10.2: 精简模式左侧显示原始消息列表
+                    narrativeContent={
+                      <OriginalMessageList messages={messages} />
+                    }
+                    // Story 10.3: 右侧显示压缩预览列表
+                    codeContent={
+                      <CompressPreviewList messages={messages} />
+                    }
+                    // Story 10.1 AC #5: 精简模式隐藏时间轴
+                    showTimeline={false}
+                  />
+                </div>
+              </CompressStateProvider>
               /* AC #5: 精简模式不显示 TimberLine */
             )}
 
@@ -1011,20 +1012,3 @@ export default function Player() {
   );
 }
 
-/**
- * 精简模式占位面板组件
- * Story 10.1 AC #3: 精简模式左右面板占位
- */
-interface RefinePlaceholderPanelProps {
-  title: string;
-  hint: string;
-}
-
-function RefinePlaceholderPanel({ title, hint }: RefinePlaceholderPanelProps) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center p-8">
-      <h3 className="text-lg font-medium text-foreground mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground max-w-xs">{hint}</p>
-    </div>
-  );
-}

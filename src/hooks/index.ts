@@ -53,3 +53,15 @@ export {
     type UseRefineModeOptions,
     type UseRefineModeReturn,
 } from "./use-compress-mode";
+
+// Story 10.3: 压缩操作状态管理 hook
+export {
+    useCompressState,
+    CompressStateProvider,
+    type OperationType,
+    type CompressOperation,
+    type PreviewMessage,
+    type ChangeStats,
+    type CompressStateContextValue,
+    type CompressStateProviderProps,
+} from "./useCompressState";
