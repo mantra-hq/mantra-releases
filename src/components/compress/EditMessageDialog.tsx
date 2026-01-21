@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";
-import { getMessageTextContent } from "@/lib/message-utils";
+import { getMessageDisplayContent } from "@/lib/message-utils";
 
 /**
  * EditMessageDialog 组件 Props
@@ -54,10 +54,10 @@ export function EditMessageDialog({
 }: EditMessageDialogProps) {
   const { t } = useTranslation();
 
-  // 获取原始内容
+  // 获取原始内容 (Story 10.6 Fix: 使用 getMessageDisplayContent 支持所有内容类型)
   const originalContent = React.useMemo(() => {
     if (!message) return "";
-    return getMessageTextContent(message.content);
+    return getMessageDisplayContent(message.content);
   }, [message]);
 
   // 修改后的内容状态
@@ -68,10 +68,10 @@ export function EditMessageDialog({
   const [modifiedTokens, setModifiedTokens] = React.useState(0);
   const [isCalculatingTokens, setIsCalculatingTokens] = React.useState(false);
 
-  // 当消息变化时重置状态
+  // 当消息变化时重置状态 (Story 10.6 Fix: 使用 getMessageDisplayContent 支持所有内容类型)
   React.useEffect(() => {
     if (message && open) {
-      const content = getMessageTextContent(message.content);
+      const content = getMessageDisplayContent(message.content);
       setModifiedContent(content);
       const tokens = estimateTokenCount(content);
       setOriginalTokens(tokens);

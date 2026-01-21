@@ -273,4 +273,113 @@ describe("EditMessageDialog", () => {
       expect(onConfirm).toHaveBeenCalledWith("Original message content modified");
     });
   });
+
+  describe("非文本类型消息支持 (Story 10.6 Fix)", () => {
+    const createThinkingMessage = (content: string): NarrativeMessage => ({
+      id: "msg-thinking",
+      role: "assistant",
+      timestamp: "2024-01-01T00:00:00Z",
+      content: [{ type: "thinking", content }],
+    });
+
+    const createToolUseMessage = (
+      toolName: string,
+      toolInput: Record<string, unknown>
+    ): NarrativeMessage => ({
+      id: "msg-tool-use",
+      role: "assistant",
+      timestamp: "2024-01-01T00:00:00Z",
+      content: [
+        {
+          type: "tool_use",
+          toolName,
+          toolInput,
+          content: "",
+        },
+      ],
+    });
+
+    const createToolResultMessage = (
+      content: string
+    ): NarrativeMessage => ({
+      id: "msg-tool-result",
+      role: "user",
+      timestamp: "2024-01-01T00:00:00Z",
+      content: [{ type: "tool_result", content }],
+    });
+
+    it("应正确显示 thinking 类型消息内容", () => {
+      const thinkingMessage = createThinkingMessage("This is my thinking process");
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          message={thinkingMessage}
+        />
+      );
+
+      // 原始内容应显示 thinking 内容
+      expect(screen.getByTestId("original-content")).toHaveTextContent(
+        "This is my thinking process"
+      );
+      // 修改输入框也应有该内容
+      expect(screen.getByTestId("modified-content-input")).toHaveValue(
+        "This is my thinking process"
+      );
+    });
+
+    it("应正确显示 tool_use 类型消息内容", () => {
+      const toolUseMessage = createToolUseMessage("read_file", {
+        path: "/src/app.ts",
+      });
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          message={toolUseMessage}
+        />
+      );
+
+      // 原始内容应显示工具名称和参数
+      expect(screen.getByTestId("original-content")).toHaveTextContent("read_file");
+      expect(screen.getByTestId("original-content")).toHaveTextContent("/src/app.ts");
+    });
+
+    it("应正确显示 tool_result 类型消息内容", () => {
+      const toolResultMessage = createToolResultMessage("File content: export default App;");
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          message={toolResultMessage}
+        />
+      );
+
+      // 原始内容应显示工具结果
+      expect(screen.getByTestId("original-content")).toHaveTextContent(
+        "File content: export default App;"
+      );
+      expect(screen.getByTestId("modified-content-input")).toHaveValue(
+        "File content: export default App;"
+      );
+    });
+
+    it("应能编辑 thinking 类型消息内容", async () => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const thinkingMessage = createThinkingMessage("Original thinking");
+      render(
+        <EditMessageDialog
+          {...defaultProps}
+          message={thinkingMessage}
+          onConfirm={onConfirm}
+        />
+      );
+
+      const textarea = screen.getByTestId("modified-content-input");
+      await user.clear(textarea);
+      await user.type(textarea, "Modified thinking");
+
+      fireEvent.click(screen.getByTestId("confirm-button"));
+
+      expect(onConfirm).toHaveBeenCalledWith("Modified thinking");
+    });
+  });
 });
