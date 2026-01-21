@@ -199,12 +199,23 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
     (messages: NarrativeMessage[]): PreviewMessage[] => {
       const result: PreviewMessage[] = [];
 
+      // [Fix #1] 检查列表开头的插入 (index=-1，在第一条消息之前)
+      const firstInsertOp = insertions.get(-1);
+      if (firstInsertOp?.insertedMessage) {
+        result.push({
+          id: `insert--1`,
+          operation: "insert",
+          message: firstInsertOp.insertedMessage,
+        });
+      }
+
       for (let i = 0; i < messages.length; i++) {
         const message = messages[i];
         const operation = operations.get(message.id);
 
         // 检查是否有在当前位置之前的插入
         // 插入位置是 "在 afterIndex 之后"，所以 afterIndex = i-1 的插入应该在当前消息之前
+        // 注意: index=-1 的插入已在循环前处理
         if (i > 0) {
           const insertOp = insertions.get(i - 1);
           if (insertOp?.insertedMessage) {

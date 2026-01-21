@@ -272,6 +272,52 @@ describe("useCompressState", () => {
       expect(preview[1].operation).toBe("insert");
       expect(preview[2].id).toBe("msg-2");
     });
+
+    // [Fix #1] 测试 index=-1 的插入 (列表开头)
+    it("getPreviewMessages 应在列表开头包含 index=-1 的插入消息", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+      const messages = [
+        createTestMessage("msg-1", "user", "First"),
+        createTestMessage("msg-2", "assistant", "Second"),
+      ];
+      const insertedMessage = createTestMessage("new-1", "user", "Inserted at start");
+
+      act(() => {
+        result.current.addInsertion(-1, insertedMessage); // 在第一条消息之前插入
+      });
+
+      const preview = result.current.getPreviewMessages(messages);
+
+      expect(preview).toHaveLength(3);
+      expect(preview[0].id).toBe("insert--1"); // 插入的消息应该在最前面
+      expect(preview[0].operation).toBe("insert");
+      expect(preview[0].message.content[0].content).toBe("Inserted at start");
+      expect(preview[1].id).toBe("msg-1");
+      expect(preview[2].id).toBe("msg-2");
+    });
+
+    it("getPreviewMessages 应同时处理 index=-1 和其他位置的插入", () => {
+      const { result } = renderHook(() => useCompressState(), { wrapper });
+      const messages = [
+        createTestMessage("msg-1", "user", "First"),
+        createTestMessage("msg-2", "assistant", "Second"),
+      ];
+      const insertedAtStart = createTestMessage("new-start", "user", "At start");
+      const insertedAfterFirst = createTestMessage("new-middle", "assistant", "After first");
+
+      act(() => {
+        result.current.addInsertion(-1, insertedAtStart); // 在列表开头
+        result.current.addInsertion(0, insertedAfterFirst); // 在 msg-1 之后
+      });
+
+      const preview = result.current.getPreviewMessages(messages);
+
+      expect(preview).toHaveLength(4);
+      expect(preview[0].id).toBe("insert--1");
+      expect(preview[1].id).toBe("msg-1");
+      expect(preview[2].id).toBe("insert-0");
+      expect(preview[3].id).toBe("msg-2");
+    });
   });
 
   describe("getChangeStats", () => {

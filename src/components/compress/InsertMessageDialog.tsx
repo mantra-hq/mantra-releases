@@ -77,10 +77,11 @@ export function InsertMessageDialog({
   const [isCalculatingTokens, setIsCalculatingTokens] = React.useState(false);
 
   // 解析 afterIndex 从 insertPosition
+  // [Fix #2] 直接使用 parseInt 支持负数索引
   const afterIndex = React.useMemo(() => {
     if (!insertPosition) return 0;
-    const match = insertPosition.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 0;
+    const parsed = parseInt(insertPosition, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }, [insertPosition]);
 
   // 对话框打开时重置状态

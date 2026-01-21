@@ -145,6 +145,14 @@ export function OriginalMessageList({
     overscan: 5, // 预渲染 5 条消息优化滚动体验
   });
 
+  // [Fix #5] 当插入状态变化时，通知虚拟化器重新测量
+  React.useEffect(() => {
+    // measure() 方法可能在某些版本或 mock 中不存在，安全调用
+    if (typeof virtualizer.measure === "function") {
+      virtualizer.measure();
+    }
+  }, [insertions, virtualizer]);
+
   // Story 10.4: 操作回调生成器
   const createOperationHandlers = React.useCallback(
     (message: NarrativeMessage) => ({
@@ -234,27 +242,19 @@ export function OriginalMessageList({
           }}
         >
           {/* Story 10.5: 列表开头的插入触发器 (索引 -1) */}
+          {/* [Fix #3] 修复 UI 重复问题：显示 InsertedMessageCard 后，触发器保持正常状态允许继续插入 */}
           <div className="px-3 mb-1">
-            {insertions.get(-1) ? (
-              <>
-                <InsertedMessageCard
-                  message={insertions.get(-1)!.insertedMessage!}
-                  onRemove={() => handleRemoveInsertion(-1)}
-                />
-                <InsertMessageTrigger
-                  afterIndex={-1}
-                  hasInsertion={true}
-                  onClick={() => handleOpenInsertDialog(-1)}
-                  onRemoveInsertion={() => handleRemoveInsertion(-1)}
-                />
-              </>
-            ) : (
-              <InsertMessageTrigger
-                afterIndex={-1}
-                hasInsertion={false}
-                onClick={() => handleOpenInsertDialog(-1)}
+            {insertions.get(-1) && (
+              <InsertedMessageCard
+                message={insertions.get(-1)!.insertedMessage!}
+                onRemove={() => handleRemoveInsertion(-1)}
               />
             )}
+            <InsertMessageTrigger
+              afterIndex={-1}
+              hasInsertion={false}
+              onClick={() => handleOpenInsertDialog(-1)}
+            />
           </div>
 
           {/* 渲染可见的虚拟项 */}
@@ -285,6 +285,7 @@ export function OriginalMessageList({
                 />
 
                 {/* Story 10.5: 已插入的消息卡片 */}
+                {/* [Fix #3] 修复 UI 重复问题：显示 InsertedMessageCard 后，触发器保持正常状态 */}
                 {insertion?.insertedMessage && (
                   <InsertedMessageCard
                     message={insertion.insertedMessage}
@@ -295,9 +296,8 @@ export function OriginalMessageList({
                 {/* Story 10.5: 插入触发器 */}
                 <InsertMessageTrigger
                   afterIndex={virtualItem.index}
-                  hasInsertion={!!insertion}
+                  hasInsertion={false}
                   onClick={() => handleOpenInsertDialog(virtualItem.index)}
-                  onRemoveInsertion={() => handleRemoveInsertion(virtualItem.index)}
                 />
               </div>
             );
