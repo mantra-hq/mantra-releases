@@ -4,9 +4,10 @@
  * Story 2.21: Task 4.2-4.4 (添加全局搜索按钮、设置按钮)
  * Story 2-26: i18n 国际化
  * Story 3.4: 脱敏预览主视图原生模式
+ * Story 10.11: 三态模式切换集成
  * Tech-Spec: 通知系统 Task 13
  *
- * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 通知 → 设置 → 主题切换
+ * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 通知 → 设置 → 模式切换 → 主题切换
  */
 
 import { useEffect } from "react";
@@ -184,8 +185,9 @@ export function TopBarActions({
         </Tooltip>
       </TooltipProvider>
 
-      {/* Story 2.34: 模式切换 */}
-      <ModeSwitch />
+      {/* Story 2.34 + 10.11: 三态模式切换 */}
+      {/* AC6: 无 sessionId 时禁用压缩模式 */}
+      <ModeSwitch disableCompress={!sessionId} />
 
       {/* 主题切换 (AC12) */}
       <ThemeToggle />

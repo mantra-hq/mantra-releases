@@ -54,7 +54,8 @@ import { ProjectDrawer } from "@/components/sidebar";
 import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
-import { PlayerEmptyState, ModeSwitch, CompressGuideDialog } from "@/components/player";
+// Story 10.11: 移除 ModeSwitch (已集成到 TopBar)
+import { PlayerEmptyState, CompressGuideDialog } from "@/components/player";
 // Story 10.2/10.3/10.6: 压缩模式组件
 import { CompressModeContent } from "@/components/compress";
 // Story 10.3: 压缩状态 Provider
@@ -192,20 +193,45 @@ export default function Player() {
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
 
-  // Story 2.34: 应用模式状态（回放/统计）
+  // Story 2.34 + 10.11: 统一应用模式状态（回放/统计/压缩）
   const appMode = useAppModeStore((state) => state.mode);
+  const setAppMode = useAppModeStore((state) => state.setMode);
 
   // Story 2.34: 统计视图层级状态（项目/会话）
   const [statsLevel, setStatsLevel] = React.useState<StatsLevel>("session");
 
-  // Story 10.1: 压缩模式状态管理
+  // Story 10.1 + 10.11: 压缩模式引导弹窗状态（保留首次引导逻辑）
   const {
-    mode: playerMode,
-    setMode: setPlayerMode,
     isFirstTimeCompress,
     hideGuide,
     dismissGuide,
   } = useCompressMode({ sessionId: sessionId ?? "" });
+
+  // Story 10.11 AC4: URL 参数同步 - 初始化时读取 mode 参数
+  // 用于支持 deep link：/player/123?mode=compress
+  React.useEffect(() => {
+    const modeParam = searchParams.get("mode");
+    if (modeParam && ["playback", "analytics", "compress"].includes(modeParam)) {
+      // 无 sessionId 时不允许进入压缩模式
+      if (modeParam === "compress" && !sessionId) {
+        setAppMode("playback");
+      } else {
+        setAppMode(modeParam as "playback" | "analytics" | "compress");
+      }
+    }
+    // 只在首次加载时执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Story 10.11 AC4: URL 参数同步 - 模式变化时更新 URL
+  React.useEffect(() => {
+    const currentModeParam = searchParams.get("mode");
+    if (currentModeParam !== appMode) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set("mode", appMode);
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [appMode, searchParams, setSearchParams]);
 
   // Bug Fix: 切换项目时重置右侧内容区域状态
   // 当 sessionId 变化时，清空所有关联的 store 状态，避免显示旧项目内容
@@ -905,18 +931,10 @@ export default function Player() {
             </div>
           </div>
         ) : (
-          /* 回放/精简模式: 显示 DualStreamLayout 或精简模式布局 */
+          /* Story 10.11: 回放/压缩模式 - ModeSwitch 已移至 TopBar */
+          /* 内容区域 - 根据统一的 appMode 切换 */
           <>
-            {/* Story 10.1: 模式切换 Tab (AC #1) */}
-            <div className="flex-shrink-0 px-4 py-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              <ModeSwitch
-                mode={playerMode}
-                onModeChange={setPlayerMode}
-              />
-            </div>
-
-            {/* 内容区域 - 根据模式切换 */}
-            {playerMode === "playback" ? (
+            {appMode === "playback" ? (
               /* 回放模式: 显示 DualStreamLayout */
               <>
                 <div className="flex-1 min-h-0 overflow-hidden">
@@ -950,8 +968,8 @@ export default function Player() {
                   />
                 )}
               </>
-            ) : (
-              /* 精简模式: 显示原始消息列表 + 压缩预览 (AC #3) */
+            ) : appMode === "compress" ? (
+              /* Story 10.11: 压缩模式 - 显示原始消息列表 + 压缩预览 */
               /* Story 10.3: 使用 CompressStateProvider 包裹实现左右面板状态共享 */
               /* Story 10.9: 使用 CompressModeContent 处理持久化和 beforeunload */
               <CompressStateProvider>
@@ -961,8 +979,8 @@ export default function Player() {
                   sessionId={sessionId}
                 />
               </CompressStateProvider>
-              /* AC #5: 精简模式不显示 TimberLine */
-            )}
+              /* 压缩模式不显示 TimberLine */
+            ) : null}
 
             {/* Story 10.1 AC #2: 首次使用引导弹窗 */}
             <CompressGuideDialog

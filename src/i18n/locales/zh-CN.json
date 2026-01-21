@@ -726,8 +726,12 @@
     "projectStats": "项目统计",
     "sessionStats": "会话统计",
     "mode": {
+      "analytics": "分析",
+      "analyticsTooltip": "查看统计数据和洞察",
       "playback": "回放",
       "playbackTooltip": "查看会话消息和代码快照",
+      "compress": "压缩",
+      "compressTooltip": "优化会话上下文，提升 AI 准确率",
       "statistics": "统计",
       "statisticsTooltip": "查看分析统计数据"
     },

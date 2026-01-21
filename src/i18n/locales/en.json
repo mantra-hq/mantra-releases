@@ -726,8 +726,12 @@
     "projectStats": "Project Statistics",
     "sessionStats": "Session Statistics",
     "mode": {
+      "analytics": "Analytics",
+      "analyticsTooltip": "View statistics and insights",
       "playback": "Playback",
       "playbackTooltip": "View session messages and code snapshots",
+      "compress": "Compress",
+      "compressTooltip": "Optimize session context for AI",
       "statistics": "Statistics",
       "statisticsTooltip": "View analytics and statistics"
     },
