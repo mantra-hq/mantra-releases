@@ -56,7 +56,7 @@ import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 import { PlayerEmptyState, ModeSwitch, CompressGuideDialog } from "@/components/player";
 // Story 10.2/10.3/10.6: 压缩模式组件
-import { OriginalMessageList, CompressPreviewList, TokenStatistics } from "@/components/compress";
+import { CompressModeContent } from "@/components/compress";
 // Story 10.3: 压缩状态 Provider
 import { CompressStateProvider } from "@/hooks/useCompressState";
 // Story 2.29 V2: 隐藏空会话设置
@@ -953,27 +953,13 @@ export default function Player() {
             ) : (
               /* 精简模式: 显示原始消息列表 + 压缩预览 (AC #3) */
               /* Story 10.3: 使用 CompressStateProvider 包裹实现左右面板状态共享 */
+              /* Story 10.9: 使用 CompressModeContent 处理持久化和 beforeunload */
               <CompressStateProvider>
-                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                  {/* Story 10.6 AC #1: 主内容区域添加 padding-bottom 避免被统计栏遮挡 */}
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <DualStreamLayout
-                      ref={layoutRef}
-                      // Story 10.2: 精简模式左侧显示原始消息列表
-                      narrativeContent={
-                        <OriginalMessageList messages={messages} />
-                      }
-                      // Story 10.3: 右侧显示压缩预览列表
-                      codeContent={
-                        <CompressPreviewList messages={messages} />
-                      }
-                      // Story 10.1 AC #5: 精简模式隐藏时间轴
-                      showTimeline={false}
-                    />
-                  </div>
-                  {/* Story 10.6: Token 统计栏 (AC #1: 固定在底部) */}
-                  <TokenStatistics messages={messages} />
-                </div>
+                <CompressModeContent
+                  layoutRef={layoutRef}
+                  messages={messages}
+                  sessionId={sessionId}
+                />
               </CompressStateProvider>
               /* AC #5: 精简模式不显示 TimberLine */
             )}

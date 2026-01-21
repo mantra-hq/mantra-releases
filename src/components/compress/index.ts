@@ -53,3 +53,10 @@ export type { OperationToolbarProps } from "./OperationToolbar";
 
 export { ResetConfirmDialog } from "./ResetConfirmDialog";
 export type { ResetConfirmDialogProps } from "./ResetConfirmDialog";
+
+// Story 10.9: 压缩模式内容组件
+export { CompressModeContent } from "./CompressModeContent";
+
+// Story 10.9: 未保存更改对话框
+export { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+export type { UnsavedChangesDialogProps } from "./UnsavedChangesDialog";

@@ -614,6 +614,13 @@
       "exportSuccess": "Export successful",
       "exportFailed": "Export failed",
       "saveDialogTitle": "Export Compressed Session"
+    },
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "description": "You have unsaved edits. These changes will be lost if you leave.",
+      "cancel": "Cancel",
+      "discard": "Don't Save",
+      "exportAndLeave": "Export & Leave"
     }
   },
   "player": {

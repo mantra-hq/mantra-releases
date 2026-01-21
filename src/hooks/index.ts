@@ -64,4 +64,15 @@ export {
     type ChangeStats,
     type CompressStateContextValue,
     type CompressStateProviderProps,
+    type StateSnapshot,
 } from "./useCompressState";
+
+// Story 10.9: 压缩状态持久化 hook
+export { useCompressPersistence } from "./useCompressPersistence";
+
+// Story 10.9: 导航拦截 hook
+export {
+    useNavigationGuard,
+    type UseNavigationGuardOptions,
+    type UseNavigationGuardResult,
+} from "./useNavigationGuard";

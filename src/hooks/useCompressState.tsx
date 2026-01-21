@@ -117,6 +117,10 @@ export interface CompressStateContextValue {
   canRedo: boolean;
   /** Story 10.8: 是否有任何变更 */
   hasAnyChanges: boolean;
+  /** Story 10.9: 从快照初始化状态 */
+  initializeFromSnapshot: (snapshot: StateSnapshot) => void;
+  /** Story 10.9: 导出当前状态快照 */
+  exportSnapshot: () => StateSnapshot;
 }
 
 // ===== Context 创建 =====
@@ -526,6 +530,24 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
     [operations, insertions, getChangeStats]
   );
 
+  // Story 10.9: 从快照初始化状态
+  const initializeFromSnapshot = React.useCallback((snapshot: StateSnapshot) => {
+    // 直接设置状态，不推入历史栈（这是初始化，不是用户操作）
+    setOperations(cloneMap(snapshot.operations));
+    setInsertions(cloneMap(snapshot.insertions));
+    // 清空历史栈，因为这是新的起点
+    setUndoStack([]);
+    setRedoStack([]);
+  }, []);
+
+  // Story 10.9: 导出当前状态快照
+  const exportSnapshot = React.useCallback((): StateSnapshot => {
+    return {
+      operations: cloneMap(operations),
+      insertions: cloneMap(insertions),
+    };
+  }, [operations, insertions]);
+
   // Context 值
   const contextValue = React.useMemo<CompressStateContextValue>(
     () => ({
@@ -547,6 +569,9 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       canUndo,
       canRedo,
       hasAnyChanges,
+      // Story 10.9: snapshot
+      initializeFromSnapshot,
+      exportSnapshot,
     }),
     [
       operations,
@@ -567,6 +592,9 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       canUndo,
       canRedo,
       hasAnyChanges,
+      // Story 10.9: snapshot
+      initializeFromSnapshot,
+      exportSnapshot,
     ]
   );
 

@@ -614,6 +614,13 @@
       "exportSuccess": "导出成功",
       "exportFailed": "导出失败",
       "saveDialogTitle": "导出压缩会话"
+    },
+    "unsavedChanges": {
+      "title": "有未保存的编辑",
+      "description": "您对消息的编辑尚未导出。离开后这些更改将会丢失。",
+      "cancel": "取消",
+      "discard": "不保存",
+      "exportAndLeave": "导出并离开"
     }
   },
   "player": {
