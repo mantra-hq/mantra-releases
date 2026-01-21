@@ -36,6 +36,8 @@ export interface InsertMessageDialogProps {
   onConfirm: (message: NarrativeMessage) => void;
   /** 插入位置描述 (用于显示) */
   insertPosition?: string;
+  /** 初始消息 (用于编辑模式) */
+  initialMessage?: NarrativeMessage | null;
 }
 
 /**
@@ -65,6 +67,7 @@ export function InsertMessageDialog({
   onOpenChange,
   onConfirm,
   insertPosition,
+  initialMessage,
 }: InsertMessageDialogProps) {
   const { t } = useTranslation();
 
@@ -76,6 +79,9 @@ export function InsertMessageDialog({
   const [tokenCount, setTokenCount] = React.useState(0);
   const [isCalculatingTokens, setIsCalculatingTokens] = React.useState(false);
 
+  // 是否为编辑模式
+  const isEditMode = !!initialMessage;
+
   // 解析 afterIndex 从 insertPosition
   // [Fix #2] 直接使用 parseInt 支持负数索引
   const afterIndex = React.useMemo(() => {
@@ -84,14 +90,30 @@ export function InsertMessageDialog({
     return Number.isNaN(parsed) ? 0 : parsed;
   }, [insertPosition]);
 
-  // 对话框打开时重置状态
+  // 获取初始消息的文本内容
+  const getInitialContent = React.useCallback((msg: NarrativeMessage | null | undefined): string => {
+    if (!msg?.content) return "";
+    return msg.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.content)
+      .join("\n");
+  }, []);
+
+  // 对话框打开时设置初始状态 (支持新建和编辑)
   React.useEffect(() => {
     if (open) {
-      setRole("user");
-      setContent("");
+      if (initialMessage) {
+        // 编辑模式：使用现有消息的内容
+        setRole(initialMessage.role as "user" | "assistant");
+        setContent(getInitialContent(initialMessage));
+      } else {
+        // 新建模式：重置为默认值
+        setRole("user");
+        setContent("");
+      }
       setTokenCount(0);
     }
-  }, [open]);
+  }, [open, initialMessage, getInitialContent]);
 
   // 使用 debounce 计算 Token (150ms)
   React.useEffect(() => {
@@ -159,9 +181,15 @@ export function InsertMessageDialog({
         onKeyDown={handleKeyDown}
       >
         <DialogHeader>
-          <DialogTitle>{t("compress.insertDialog.title")}</DialogTitle>
+          <DialogTitle>
+            {isEditMode
+              ? t("compress.insertDialog.titleEdit")
+              : t("compress.insertDialog.title")}
+          </DialogTitle>
           <DialogDescription>
-            {t("compress.insertDialog.description")}
+            {isEditMode
+              ? t("compress.insertDialog.descriptionEdit")
+              : t("compress.insertDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -237,7 +265,9 @@ export function InsertMessageDialog({
             disabled={isConfirmDisabled}
             data-testid="confirm-button"
           >
-            {t("compress.insertDialog.confirm")}
+            {isEditMode
+              ? t("compress.insertDialog.confirmEdit")
+              : t("compress.insertDialog.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

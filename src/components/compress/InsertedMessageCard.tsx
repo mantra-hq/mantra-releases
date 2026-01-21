@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles, X, User, Bot, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles, X, Pencil, User, Bot, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ export interface InsertedMessageCardProps {
   message: NarrativeMessage;
   /** 删除回调 */
   onRemove: () => void;
+  /** 编辑回调 (可选) */
+  onEdit?: () => void;
   /** 自定义 className */
   className?: string;
 }
@@ -66,6 +68,7 @@ function getCollapsedContent(content: string): string {
 export function InsertedMessageCard({
   message,
   onRemove,
+  onEdit,
   className,
 }: InsertedMessageCardProps) {
   const { t } = useTranslation();
@@ -150,6 +153,26 @@ export function InsertedMessageCard({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 编辑按钮 */}
+          {onEdit && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 text-muted-foreground hover:text-yellow-500"
+                  onClick={onEdit}
+                  data-testid="edit-inserted-button"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {t("compress.insertedCard.editTooltip")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           {/* 删除按钮 */}
           <Tooltip>
             <TooltipTrigger asChild>

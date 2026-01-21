@@ -69,6 +69,7 @@ describe("InsertMessageTrigger", () => {
       render(<InsertMessageTrigger {...defaultProps} />);
 
       const trigger = screen.getByTestId("insert-message-trigger");
+      // AC1: 默认状态透明占位，高度约 8px (h-2)
       expect(trigger).toHaveClass("h-2");
     });
   });
@@ -112,6 +113,7 @@ describe("InsertMessageTrigger", () => {
       await user.hover(trigger);
       await user.unhover(trigger);
 
+      // AC1: 恢复默认状态 h-2
       expect(trigger).toHaveClass("h-2");
     });
   });

@@ -560,7 +560,9 @@
     },
     "insertDialog": {
       "title": "Insert Message",
+      "titleEdit": "Edit Inserted Message",
       "description": "Add a new message to the conversation context.",
+      "descriptionEdit": "Modify the content of this inserted message.",
       "roleLabel": "Role",
       "roleUser": "User",
       "roleAssistant": "Assistant",
@@ -568,10 +570,12 @@
       "placeholder": "Enter message content...",
       "tokens": "tokens",
       "cancel": "Cancel",
-      "confirm": "Insert"
+      "confirm": "Insert",
+      "confirmEdit": "Save"
     },
     "insertedCard": {
       "inserted": "Inserted",
+      "editTooltip": "Edit this inserted message",
       "removeTooltip": "Remove this inserted message"
     }
   },

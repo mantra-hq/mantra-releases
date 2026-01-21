@@ -88,6 +88,7 @@ export function InsertMessageTrigger({
   }
 
   // 默认/悬停状态
+  // AC1: 默认状态透明占位，悬停时才显示虚线边框和图标
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -109,15 +110,15 @@ export function InsertMessageTrigger({
           onFocus={() => setIsHovered(true)}
           onBlur={() => setIsHovered(false)}
           className={cn(
-            // 默认状态: 透明低高度占位
-            "w-full cursor-pointer",
+            // 基础样式
+            "w-full cursor-pointer rounded",
             "transition-all duration-150",
-            // 默认高度
+            // 默认状态: 透明占位 (高度约 8px)
             !isHovered && "h-2",
-            // 悬停状态: 扩展高度 + 虚线边框
+            // 悬停状态: 扩展为 24px，显示虚线边框 + 背景色变化
             isHovered && [
-              "h-6 border-2 border-dashed border-muted-foreground/30",
-              "bg-muted/30 rounded",
+              "h-6 border-2 border-dashed border-muted-foreground/40",
+              "bg-muted/30",
               "flex items-center justify-center gap-1",
               "text-muted-foreground text-xs",
             ],

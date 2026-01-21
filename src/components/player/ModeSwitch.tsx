@@ -50,6 +50,7 @@ export function ModeSwitch({
         aria-selected={mode === "playback"}
         aria-controls="playback-panel"
         onClick={() => onModeChange("playback")}
+        data-testid="mode-playback"
         className={cn(
           "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md",
           "transition-all duration-150",
@@ -70,6 +71,7 @@ export function ModeSwitch({
         aria-selected={mode === "compress"}
         aria-controls="compress-panel"
         onClick={() => onModeChange("compress")}
+        data-testid="mode-compress"
         className={cn(
           "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md",
           "transition-all duration-150",

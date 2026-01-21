@@ -61,14 +61,7 @@ vi.mock("@/lib/token-counter", () => ({
   formatTokenCount: vi.fn((count: number) => count.toString()),
 }));
 
-// Mock @tanstack/react-virtual
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: vi.fn(() => ({
-    getVirtualItems: () => [],
-    getTotalSize: () => 0,
-    measureElement: vi.fn(),
-  })),
-}));
+// Note: 不再使用虚拟化，移除 @tanstack/react-virtual mock
 
 // Mock Tooltip to simplify testing
 vi.mock("@/components/ui/tooltip", () => ({
@@ -118,21 +111,7 @@ describe("OriginalMessageList", () => {
     });
   });
 
-  describe("虚拟化配置 (AC #4)", () => {
-    it("应使用 useVirtualizer hook", async () => {
-      const { useVirtualizer } = await import("@tanstack/react-virtual");
-      const messages = createMessages(5);
-
-      render(<OriginalMessageList messages={messages} />, { wrapper: Wrapper });
-
-      expect(useVirtualizer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          count: 5,
-          overscan: 5,
-        })
-      );
-    });
-  });
+  // Note: 虚拟化测试已移除 - 使用普通布局以解决重叠问题
 
   describe("className 传递", () => {
     it("应接受自定义 className", () => {

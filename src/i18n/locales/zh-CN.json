@@ -560,7 +560,9 @@
     },
     "insertDialog": {
       "title": "插入消息",
+      "titleEdit": "编辑已插入消息",
       "description": "向会话上下文中添加一条新消息。",
+      "descriptionEdit": "修改此插入消息的内容。",
       "roleLabel": "角色",
       "roleUser": "用户",
       "roleAssistant": "助手",
@@ -568,10 +570,12 @@
       "placeholder": "输入消息内容...",
       "tokens": "tokens",
       "cancel": "取消",
-      "confirm": "插入"
+      "confirm": "插入",
+      "confirmEdit": "保存"
     },
     "insertedCard": {
       "inserted": "已插入",
+      "editTooltip": "编辑此插入的消息",
       "removeTooltip": "移除此插入的消息"
     }
   },
