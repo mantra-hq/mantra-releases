@@ -621,6 +621,25 @@
       "cancel": "Cancel",
       "discard": "Don't Save",
       "exportAndLeave": "Export & Leave"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "categories": {
+        "messageOps": "Message Operations",
+        "navigation": "Navigation",
+        "global": "Global"
+      },
+      "keep": "Keep message",
+      "delete": "Delete message",
+      "edit": "Edit message",
+      "insert": "Insert message after",
+      "prevMessage": "Previous message",
+      "nextMessage": "Next message",
+      "undo": "Undo",
+      "redo": "Redo",
+      "export": "Open export menu",
+      "help": "Show keyboard shortcuts",
+      "closeHint": "Press Esc or ? to close"
     }
   },
   "player": {

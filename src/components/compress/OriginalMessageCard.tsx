@@ -60,6 +60,10 @@ export interface OriginalMessageCardProps {
   onEditClick?: () => void;
   /** Story 10.4: 是否显示操作按钮 (压缩模式下显示) */
   showActionButtons?: boolean;
+  /** Story 10.10: 是否获得键盘焦点 (AC3) */
+  isFocused?: boolean;
+  /** Story 10.10: 点击卡片回调 (用于设置焦点) */
+  onClick?: () => void;
 }
 
 // 折叠配置常量
@@ -220,6 +224,8 @@ export const OriginalMessageCard = React.forwardRef<
   onDeleteClick,
   onEditClick,
   showActionButtons = false,
+  isFocused = false,
+  onClick,
 }, ref) => {
   const { t } = useTranslation();
 
@@ -298,10 +304,24 @@ export const OriginalMessageCard = React.forwardRef<
       data-testid="original-message-card"
       data-index={index}
       data-operation={currentOperation}
+      data-focused={isFocused}
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        // 阻止 Enter/Space 触发点击，让全局快捷键处理
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+        }
+      }}
       className={cn(
         // 基础卡片样式
         "border rounded-lg p-3 mb-2",
         "bg-card hover:bg-accent/50 transition-colors",
+        // Story 10.10: 焦点状态样式 (AC3) - 键盘焦点高亮
+        isFocused && [
+          "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          "bg-accent/30",
+        ],
         // Story 10.4: 删除状态样式 (AC2)
         currentOperation === "delete" && [
           "border-2 border-red-500/50",
@@ -312,6 +332,10 @@ export const OriginalMessageCard = React.forwardRef<
           "border-2 border-yellow-500",
           "bg-yellow-500/5",
         ],
+        // Story 10.10: 可点击样式
+        "cursor-pointer",
+        // 焦点轮廓 (原生 focus 样式移除，使用自定义)
+        "outline-none focus:outline-none",
         className
       )}
     >

@@ -60,3 +60,7 @@ export { CompressModeContent } from "./CompressModeContent";
 // Story 10.9: 未保存更改对话框
 export { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 export type { UnsavedChangesDialogProps } from "./UnsavedChangesDialog";
+
+// Story 10.10: 快捷键帮助面板
+export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
+export type { KeyboardShortcutsHelpProps } from "./KeyboardShortcutsHelp";

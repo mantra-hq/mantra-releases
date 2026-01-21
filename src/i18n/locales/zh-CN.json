@@ -621,6 +621,25 @@
       "cancel": "取消",
       "discard": "不保存",
       "exportAndLeave": "导出并离开"
+    },
+    "shortcuts": {
+      "title": "快捷键",
+      "categories": {
+        "messageOps": "消息操作",
+        "navigation": "导航",
+        "global": "全局"
+      },
+      "keep": "保留消息",
+      "delete": "删除消息",
+      "edit": "编辑消息",
+      "insert": "在此后插入消息",
+      "prevMessage": "上一条消息",
+      "nextMessage": "下一条消息",
+      "undo": "撤销",
+      "redo": "重做",
+      "export": "打开导出菜单",
+      "help": "显示快捷键帮助",
+      "closeHint": "按 Esc 或 ? 关闭"
     }
   },
   "player": {

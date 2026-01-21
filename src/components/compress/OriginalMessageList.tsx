@@ -3,6 +3,7 @@
  * Story 10.2: Task 1
  * Story 10.4: Task 5 - 集成操作按钮和编辑对话框
  * Story 10.5: Task 4 - 集成消息插入功能
+ * Story 10.10: Task 5 - 集成焦点管理
  *
  * 使用 @tanstack/react-virtual 实现大量消息的高性能虚拟化渲染
  * 在压缩模式下显示完整的原始会话消息
@@ -19,6 +20,7 @@ import { InsertMessageDialog } from "./InsertMessageDialog";
 import { InsertedMessageCard } from "./InsertedMessageCard";
 import type { NarrativeMessage } from "@/types/message";
 import { useCompressState } from "@/hooks/useCompressState";
+import type { UseMessageFocusReturn } from "@/hooks/useMessageFocus";
 
 /**
  * OriginalMessageList 组件 Props
@@ -28,6 +30,10 @@ export interface OriginalMessageListProps {
   messages: NarrativeMessage[];
   /** 自定义 className */
   className?: string;
+  /** Story 10.10: 焦点管理 (可选，由父组件传入) */
+  focus?: UseMessageFocusReturn;
+  /** Story 10.10: 容器 ref (用于 scrollIntoView) */
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -65,6 +71,8 @@ function EmptyState() {
 export function OriginalMessageList({
   messages,
   className,
+  focus,
+  containerRef,
 }: OriginalMessageListProps) {
   // Story 10.4: 压缩状态管理
   const {
@@ -186,6 +194,7 @@ export function OriginalMessageList({
     <>
       <div
         data-testid="original-message-list"
+        ref={containerRef}
         className={cn(
           "h-full overflow-y-auto",
           // 自定义滚动条样式
@@ -225,6 +234,8 @@ export function OriginalMessageList({
                   onKeepClick={handlers.onKeepClick}
                   onDeleteClick={handlers.onDeleteClick}
                   onEditClick={handlers.onEditClick}
+                  isFocused={focus?.focusedIndex === index}
+                  onClick={() => focus?.setFocusedIndex(index)}
                 />
 
                 {/* Story 10.5: 已插入的消息卡片 */}

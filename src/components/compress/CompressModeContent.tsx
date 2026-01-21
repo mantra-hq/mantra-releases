@@ -1,18 +1,22 @@
 /**
  * CompressModeContent - 压缩模式内容包装组件
  * Story 10.9: Task 3
+ * Story 10.10: Task 6 - 集成快捷键支持
  *
  * 在 CompressStateProvider 内部使用，处理：
  * - 状态持久化逻辑
  * - beforeunload 事件监听
  * - 导航拦截 (AC3, AC4)
+ * - 键盘快捷键 (Story 10.10)
  */
 
 import * as React from "react";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog } from "@/components/compress";
+import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp } from "@/components/compress";
 import { useCompressState } from "@/hooks/useCompressState";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
+import { useMessageFocus } from "@/hooks/useMessageFocus";
+import { useCompressHotkeys } from "@/hooks/useCompressHotkeys";
 import { useCompressPersistStore } from "@/stores";
 import type { NarrativeMessage } from "@/types/message";
 
@@ -37,11 +41,77 @@ export function CompressModeContent({
   sessionId,
   onExportRequest,
 }: CompressModeContentProps) {
-  const { hasAnyChanges, exportSnapshot, resetAll, initializeFromSnapshot } = useCompressState();
+  const { hasAnyChanges, exportSnapshot, resetAll, initializeFromSnapshot, setOperation, removeOperation } = useCompressState();
   const persistStore = useCompressPersistStore();
 
   // Story 10.9 AC3: 未保存更改对话框状态
   const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
+
+  // Story 10.10: 快捷键帮助面板状态
+  const [showHelpDialog, setShowHelpDialog] = React.useState(false);
+
+  // Story 10.10: 消息列表容器 ref (用于 scrollIntoView)
+  const messageListContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Story 10.10: 焦点管理
+  const focus = useMessageFocus({
+    messageCount: messages.length,
+    containerRef: messageListContainerRef,
+  });
+
+  // Story 10.10: 快捷键回调
+  const handleKeep = React.useCallback(
+    (messageId: string) => {
+      removeOperation(messageId);
+    },
+    [removeOperation]
+  );
+
+  const handleDelete = React.useCallback(
+    (messageId: string) => {
+      const message = messages.find((m) => m.id === messageId);
+      if (message) {
+        setOperation(messageId, {
+          type: "delete",
+          originalMessage: message,
+        });
+      }
+    },
+    [messages, setOperation]
+  );
+
+  const handleEdit = React.useCallback(
+    (_messageId: string) => {
+      // 编辑通过 OriginalMessageList 内部的 EditMessageDialog 触发
+      // 这里可以用于将来扩展，例如显示 toast 提示
+    },
+    []
+  );
+
+  const handleInsert = React.useCallback(
+    (_afterIndex: number) => {
+      // 插入通过 OriginalMessageList 内部的 InsertMessageDialog 触发
+      // 这里可以用于将来扩展
+    },
+    []
+  );
+
+  const handleToggleHelp = React.useCallback(() => {
+    setShowHelpDialog((prev) => !prev);
+  }, []);
+
+  // Story 10.10: 集成快捷键
+  useCompressHotkeys({
+    enabled: true,
+    focus,
+    messages,
+    onKeep: handleKeep,
+    onDelete: handleDelete,
+    onEdit: handleEdit,
+    onInsert: handleInsert,
+    onOpenExport: onExportRequest,
+    onToggleHelp: handleToggleHelp,
+  });
 
   // 使用 ref 存储最新值，避免 cleanup 函数中的闭包问题
   const hasAnyChangesRef = React.useRef(hasAnyChanges);
@@ -138,7 +208,11 @@ export function CompressModeContent({
           ref={layoutRef}
           // Story 10.2: 精简模式左侧显示原始消息列表
           narrativeContent={
-            <OriginalMessageList messages={messages} />
+            <OriginalMessageList
+              messages={messages}
+              focus={focus}
+              containerRef={messageListContainerRef}
+            />
           }
           // Story 10.3: 右侧显示压缩预览列表
           codeContent={
@@ -158,6 +232,12 @@ export function CompressModeContent({
         onExportAndLeave={handleExportAndLeave}
         onDiscardAndLeave={handleDiscardAndLeave}
         onCancel={handleCancel}
+      />
+
+      {/* Story 10.10 AC4: 快捷键帮助面板 */}
+      <KeyboardShortcutsHelp
+        open={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
       />
     </div>
   );

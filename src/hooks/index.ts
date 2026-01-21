@@ -76,3 +76,25 @@ export {
     type UseNavigationGuardOptions,
     type UseNavigationGuardResult,
 } from "./useNavigationGuard";
+
+// Story 10.10: 消息焦点管理 hook
+export {
+    useMessageFocus,
+    type UseMessageFocusOptions,
+    type UseMessageFocusReturn,
+} from "./useMessageFocus";
+
+// Story 10.10: 压缩模式快捷键 hook
+export {
+    useCompressHotkeys,
+    type UseCompressHotkeysOptions,
+} from "./useCompressHotkeys";
+
+// Story 10.8: 平台检测 hook
+export {
+    usePlatform,
+    getModifierKey,
+    getShiftKey,
+    type Platform,
+} from "./usePlatform";
+
