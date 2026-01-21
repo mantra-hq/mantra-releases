@@ -1,6 +1,7 @@
 /**
  * TokenStatistics - Token 统计栏组件
  * Story 10.6: Task 1
+ * Story 10.7: Task 4 - 集成导出下拉菜单
  *
  * 显示压缩模式下的 Token 统计信息
  * 包括原始/压缩后 Token 数、节省量、变更统计
@@ -20,6 +21,7 @@ import { estimateTokenCount, formatTokenCount } from "@/lib/token-counter";
 import { getMessageDisplayContent } from "@/lib/message-utils";
 import { useCompressState, type ChangeStats } from "@/hooks/useCompressState";
 import { TokenCompareBar } from "./TokenCompareBar";
+import { ExportDropdown } from "./ExportDropdown";
 
 /**
  * TokenStatistics 组件 Props
@@ -27,6 +29,8 @@ import { TokenCompareBar } from "./TokenCompareBar";
 export interface TokenStatisticsProps {
   /** 原始消息列表 */
   messages: NarrativeMessage[];
+  /** 会话名称 (用于导出文件名) */
+  sessionName?: string;
   /** 自定义 className */
   className?: string;
 }
@@ -67,10 +71,11 @@ function calculateOriginalTokens(messages: NarrativeMessage[]): number {
  */
 export function TokenStatistics({
   messages,
+  sessionName,
   className,
 }: TokenStatisticsProps) {
   const { t } = useTranslation();
-  const { operations, insertions, getChangeStats } = useCompressState();
+  const { operations, insertions, getChangeStats, getPreviewMessages } = useCompressState();
 
   // AC4: 使用 useMemo 缓存 Token 统计计算
   const stats = React.useMemo<TokenStats>(() => {
@@ -120,6 +125,12 @@ export function TokenStatistics({
       changeStats,
     };
   }, [messages, operations, insertions, getChangeStats]);
+
+  // Story 10.7: 获取预览消息列表用于导出
+  const previewMessages = React.useMemo(
+    () => getPreviewMessages(messages),
+    [getPreviewMessages, messages]
+  );
 
   return (
     <div
@@ -179,20 +190,31 @@ export function TokenStatistics({
         className="flex-1 max-w-xs hidden md:block"
       />
 
-      {/* 右侧: 操作计数 */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1" title={t("compress.tokenStats.deleted")}>
-          <Minus className="size-3 text-red-500" />
-          <span className="tabular-nums">{stats.changeStats.deleted}</span>
-        </span>
-        <span className="flex items-center gap-1" title={t("compress.tokenStats.modified")}>
-          <Pencil className="size-3 text-yellow-500" />
-          <span className="tabular-nums">{stats.changeStats.modified}</span>
-        </span>
-        <span className="flex items-center gap-1" title={t("compress.tokenStats.inserted")}>
-          <Plus className="size-3 text-green-500" />
-          <span className="tabular-nums">{stats.changeStats.inserted}</span>
-        </span>
+      {/* 右侧: 操作计数 + 导出按钮 */}
+      <div className="flex items-center gap-3">
+        {/* 操作计数 */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1" title={t("compress.tokenStats.deleted")}>
+            <Minus className="size-3 text-red-500" />
+            <span className="tabular-nums">{stats.changeStats.deleted}</span>
+          </span>
+          <span className="flex items-center gap-1" title={t("compress.tokenStats.modified")}>
+            <Pencil className="size-3 text-yellow-500" />
+            <span className="tabular-nums">{stats.changeStats.modified}</span>
+          </span>
+          <span className="flex items-center gap-1" title={t("compress.tokenStats.inserted")}>
+            <Plus className="size-3 text-green-500" />
+            <span className="tabular-nums">{stats.changeStats.inserted}</span>
+          </span>
+        </div>
+
+        {/* Story 10.7: 分隔线 + 导出按钮 */}
+        <div className="h-4 w-px bg-border" />
+        <ExportDropdown
+          previewMessages={previewMessages}
+          tokenStats={stats}
+          sessionName={sessionName}
+        />
       </div>
     </div>
   );

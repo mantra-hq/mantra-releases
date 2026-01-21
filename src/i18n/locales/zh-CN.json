@@ -590,6 +590,19 @@
       "deleted": "删",
       "modified": "改",
       "inserted": "增"
+    },
+    "export": {
+      "button": "导出",
+      "jsonl": "导出为 JSONL",
+      "jsonlDescription": "Claude Code 兼容格式",
+      "markdown": "导出为 Markdown",
+      "markdownDescription": "人类可读格式",
+      "copy": "复制内容",
+      "copyDescription": "复制压缩后的内容",
+      "copySuccess": "已复制到剪贴板",
+      "exportSuccess": "导出成功",
+      "exportFailed": "导出失败",
+      "saveDialogTitle": "导出压缩会话"
     }
   },
   "player": {

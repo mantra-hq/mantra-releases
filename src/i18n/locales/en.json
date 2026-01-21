@@ -590,6 +590,19 @@
       "deleted": "deleted",
       "modified": "modified",
       "inserted": "inserted"
+    },
+    "export": {
+      "button": "Export",
+      "jsonl": "Export as JSONL",
+      "jsonlDescription": "Claude Code compatible format",
+      "markdown": "Export as Markdown",
+      "markdownDescription": "Human-readable format",
+      "copy": "Copy to Clipboard",
+      "copyDescription": "Copy compressed content",
+      "copySuccess": "Copied to clipboard",
+      "exportSuccess": "Export successful",
+      "exportFailed": "Export failed",
+      "saveDialogTitle": "Export Compressed Session"
     }
   },
   "player": {

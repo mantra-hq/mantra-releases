@@ -42,3 +42,7 @@ export type { TokenStatisticsProps, TokenStats } from "./TokenStatistics";
 
 export { TokenCompareBar } from "./TokenCompareBar";
 export type { TokenCompareBarProps } from "./TokenCompareBar";
+
+// Story 10.7: 导出组件
+export { ExportDropdown } from "./ExportDropdown";
+export type { ExportDropdownProps } from "./ExportDropdown";
