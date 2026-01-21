@@ -20,6 +20,11 @@ vi.mock("react-i18next", () => ({
         "compress.messageCard.tokens": "tokens",
         "compress.messageCard.toolCall": "Tool Call",
         "compress.messageCard.toolResult": "Tool Result",
+        "compress.messageCard.thinking": "Thinking",
+        "compress.messageCard.codeDiff": "Code Diff",
+        "compress.messageCard.codeSuggestion": "Code Suggestion",
+        "compress.messageCard.image": "Image",
+        "compress.messageCard.reference": "Reference",
         "compress.messageCard.system": "System",
         "compress.messageCard.user": "User",
         "compress.messageCard.assistant": "Assistant",
@@ -51,18 +56,35 @@ describe("OriginalMessageCard", () => {
   const createMessage = (
     role: "user" | "assistant",
     content: string,
-    hasToolUse = false
-  ): NarrativeMessage => ({
-    id: "msg-1",
-    role,
-    timestamp: "2024-01-01T00:00:00Z",
-    content: hasToolUse
-      ? [
-          { type: "tool_use", content: "", toolName: "Read" },
-          { type: "text", content },
-        ]
-      : [{ type: "text", content }],
-  });
+    contentType: "text" | "tool_use" | "tool_result" | "thinking" | "code_diff" = "text"
+  ): NarrativeMessage => {
+    const contentBlocks: any[] = [];
+    
+    switch (contentType) {
+      case "tool_use":
+        contentBlocks.push({ type: "tool_use", content: "", toolName: "Read" });
+        if (content) contentBlocks.push({ type: "text", content });
+        break;
+      case "tool_result":
+        contentBlocks.push({ type: "tool_result", content: content || "Result" });
+        break;
+      case "thinking":
+        contentBlocks.push({ type: "thinking", content: content || "Thinking..." });
+        break;
+      case "code_diff":
+        contentBlocks.push({ type: "code_diff", content: "", diff: content || "diff" });
+        break;
+      default:
+        contentBlocks.push({ type: "text", content });
+    }
+    
+    return {
+      id: "msg-1",
+      role,
+      timestamp: "2024-01-01T00:00:00Z",
+      content: contentBlocks,
+    };
+  };
 
   describe("角色图标显示 (AC #2)", () => {
     it("用户消息应显示 User 标签", () => {
@@ -82,12 +104,43 @@ describe("OriginalMessageCard", () => {
     it("工具调用应显示 Tool Call 标签和工具名称", () => {
       render(
         <OriginalMessageCard
-          message={createMessage("assistant", "Reading file", true)}
+          message={createMessage("assistant", "Reading file", "tool_use")}
         />
       );
 
       expect(screen.getByText("Tool Call")).toBeInTheDocument();
       expect(screen.getByText("· Read")).toBeInTheDocument();
+    });
+
+    // Story 10.6/10-2 Fix: 新增消息类型测试
+    it("思考过程应显示 Thinking 标签", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("assistant", "Let me think...", "thinking")}
+        />
+      );
+
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
+    });
+
+    it("工具结果应显示 Tool Result 标签", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("assistant", "File content here", "tool_result")}
+        />
+      );
+
+      expect(screen.getByText("Tool Result")).toBeInTheDocument();
+    });
+
+    it("代码差异应显示 Code Diff 标签", () => {
+      render(
+        <OriginalMessageCard
+          message={createMessage("assistant", "+added\n-removed", "code_diff")}
+        />
+      );
+
+      expect(screen.getByText("Code Diff")).toBeInTheDocument();
     });
   });
 

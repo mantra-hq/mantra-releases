@@ -2,6 +2,7 @@
  * OriginalMessageCard - 原始消息卡片组件
  * Story 10.2: Task 2, Task 3
  * Story 10.4: Task 2 - 集成操作按钮和状态样式
+ * Story 10.6/10-2 Fix: 修复消息类型识别和内容显示
  *
  * 显示单条消息的卡片，包含角色图标、内容摘要、Token 数量
  * 支持长内容折叠/展开
@@ -19,13 +20,21 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Brain,
+  Code,
+  FileCode,
+  Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { NarrativeMessage } from "@/types/message";
+import type { NarrativeMessage, ContentBlock } from "@/types/message";
 import { estimateTokenCount, formatTokenCount } from "@/lib/token-counter";
-import { getMessageTextContent } from "@/lib/message-utils";
+import { 
+  getMessageDisplayContent, 
+  detectPrimaryContentType,
+  hasContentType,
+} from "@/lib/message-utils";
 import { MessageActionButtons } from "./MessageActionButtons";
 import type { OperationType } from "@/hooks/useCompressState";
 
@@ -78,29 +87,16 @@ function getCollapsedContent(content: string): string {
 }
 
 /**
- * 检测消息是否包含工具调用
- */
-function hasToolUseContent(content: ContentBlock[]): boolean {
-  return content.some((block) => block.type === "tool_use");
-}
-
-/**
- * 检测消息是否包含工具结果
- */
-function hasToolResultContent(content: ContentBlock[]): boolean {
-  return content.some((block) => block.type === "tool_result");
-}
-
-/**
  * 获取工具名称 (从 tool_use 块中提取)
  */
 function getToolName(content: ContentBlock[]): string | undefined {
   const toolUseBlock = content.find((block) => block.type === "tool_use");
-  return toolUseBlock?.toolName;
+  return toolUseBlock?.toolName || toolUseBlock?.displayName;
 }
 
 /**
  * 角色图标和样式配置
+ * Story 10.6/10-2 Fix: 扩展支持 thinking, code_diff, code_suggestion, image 类型
  */
 interface RoleConfig {
   icon: React.ComponentType<{ className?: string }>;
@@ -114,28 +110,69 @@ function getRoleConfig(
   content: ContentBlock[],
   t: (key: string) => string
 ): RoleConfig {
-  // 检查是否为工具调用或工具结果
-  const isToolUse = hasToolUseContent(content);
-  const isToolResult = hasToolResultContent(content);
+  // Story 10.6/10-2 Fix: 检测主要内容类型
+  const primaryType = detectPrimaryContentType(content);
 
-  if (isToolUse) {
-    return {
-      icon: Hammer,
-      label: t("compress.messageCard.toolCall"),
-      badgeClasses: "bg-amber-500/10 text-amber-500",
-      iconColor: "text-amber-500",
-    };
+  // 按优先级检查内容类型
+  switch (primaryType) {
+    case "tool_use":
+      return {
+        icon: Hammer,
+        label: t("compress.messageCard.toolCall"),
+        badgeClasses: "bg-amber-500/10 text-amber-500",
+        iconColor: "text-amber-500",
+      };
+
+    case "tool_result":
+      return {
+        icon: ClipboardList,
+        label: t("compress.messageCard.toolResult"),
+        badgeClasses: "bg-purple-500/10 text-purple-500",
+        iconColor: "text-purple-500",
+      };
+
+    case "thinking":
+      return {
+        icon: Brain,
+        label: t("compress.messageCard.thinking"),
+        badgeClasses: "bg-cyan-500/10 text-cyan-500",
+        iconColor: "text-cyan-500",
+      };
+
+    case "code_diff":
+      return {
+        icon: Code,
+        label: t("compress.messageCard.codeDiff"),
+        badgeClasses: "bg-orange-500/10 text-orange-500",
+        iconColor: "text-orange-500",
+      };
+
+    case "code_suggestion":
+      return {
+        icon: FileCode,
+        label: t("compress.messageCard.codeSuggestion"),
+        badgeClasses: "bg-teal-500/10 text-teal-500",
+        iconColor: "text-teal-500",
+      };
+
+    case "image":
+      return {
+        icon: ImageIcon,
+        label: t("compress.messageCard.image"),
+        badgeClasses: "bg-pink-500/10 text-pink-500",
+        iconColor: "text-pink-500",
+      };
+
+    case "reference":
+      return {
+        icon: FileCode,
+        label: t("compress.messageCard.reference"),
+        badgeClasses: "bg-indigo-500/10 text-indigo-500",
+        iconColor: "text-indigo-500",
+      };
   }
 
-  if (isToolResult) {
-    return {
-      icon: ClipboardList,
-      label: t("compress.messageCard.toolResult"),
-      badgeClasses: "bg-purple-500/10 text-purple-500",
-      iconColor: "text-purple-500",
-    };
-  }
-
+  // 默认按角色判断
   switch (role) {
     case "user":
       return {
@@ -189,9 +226,9 @@ export const OriginalMessageCard = React.forwardRef<
   // AC3: 折叠状态
   const [isExpanded, setIsExpanded] = React.useState(false);
 
-  // 获取消息文本内容
+  // Story 10.6/10-2 Fix: 获取消息显示内容 (支持所有内容类型)
   const textContent = React.useMemo(
-    () => getMessageTextContent(message.content),
+    () => getMessageDisplayContent(message.content),
     [message.content]
   );
 
@@ -220,7 +257,7 @@ export const OriginalMessageCard = React.forwardRef<
   const RoleIcon = roleConfig.icon;
 
   // 工具名称 (用于 tool_use 显示)
-  const toolName = hasToolUseContent(message.content)
+  const toolName = hasContentType(message.content, "tool_use")
     ? getToolName(message.content)
     : undefined;
 

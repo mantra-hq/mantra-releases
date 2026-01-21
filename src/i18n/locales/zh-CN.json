@@ -515,6 +515,11 @@
       "tokens": "tokens",
       "toolCall": "工具调用",
       "toolResult": "工具结果",
+      "thinking": "思考过程",
+      "codeDiff": "代码差异",
+      "codeSuggestion": "代码建议",
+      "image": "图片",
+      "reference": "代码引用",
       "system": "系统",
       "user": "用户",
       "assistant": "助手"
@@ -577,6 +582,14 @@
       "inserted": "已插入",
       "editTooltip": "编辑此插入的消息",
       "removeTooltip": "移除此插入的消息"
+    },
+    "tokenStats": {
+      "original": "原始",
+      "compressed": "压缩后",
+      "saved": "节省",
+      "deleted": "删",
+      "modified": "改",
+      "inserted": "增"
     }
   },
   "player": {

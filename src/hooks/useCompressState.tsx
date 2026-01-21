@@ -9,7 +9,7 @@
 import * as React from "react";
 import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";
-import { getMessageTextContent } from "@/lib/message-utils";
+import { getMessageDisplayContent } from "@/lib/message-utils";
 
 // ===== 类型定义 =====
 
@@ -54,6 +54,23 @@ export interface ChangeStats {
   inserted: number;
 }
 
+/** 
+ * Token 统计数据 
+ * Story 10.6: Task 3.3
+ */
+export interface TokenStats {
+  /** 原始 Token 总数 */
+  originalTotal: number;
+  /** 压缩后 Token 总数 */
+  compressedTotal: number;
+  /** 节省的 Token 数 */
+  savedTokens: number;
+  /** 节省百分比 (0-100) */
+  savedPercentage: number;
+  /** 变更统计 */
+  changeStats: ChangeStats;
+}
+
 /** 压缩状态 Context 值类型 */
 export interface CompressStateContextValue {
   /** 操作映射表 (messageId -> CompressOperation) */
@@ -78,6 +95,8 @@ export interface CompressStateContextValue {
   getOperationForMessage: (messageId: string) => CompressOperation | undefined;
   /** Story 10.4: 获取指定消息的操作类型 (默认 keep) */
   getOperationType: (messageId: string) => OperationType;
+  /** Story 10.6: 获取 Token 统计 */
+  getTokenStats: (messages: NarrativeMessage[]) => TokenStats;
 }
 
 // ===== Context 创建 =====
@@ -102,9 +121,10 @@ export function useCompressState(): CompressStateContextValue {
 
 /**
  * 计算消息的 token 数
+ * Story 10.6/10-2 Fix: 使用 getMessageDisplayContent 支持所有内容类型
  */
 function calculateMessageTokens(message: NarrativeMessage): number {
-  const textContent = getMessageTextContent(message.content);
+  const textContent = getMessageDisplayContent(message.content);
   return estimateTokenCount(textContent);
 }
 
@@ -321,6 +341,61 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
     [operations]
   );
 
+  // Story 10.6: 获取 Token 统计
+  const getTokenStats = React.useCallback(
+    (messages: NarrativeMessage[]): TokenStats => {
+      // 计算原始 Token 总数
+      const originalTotal = messages.reduce((total, message) => {
+        const textContent = getMessageDisplayContent(message.content);
+        return total + estimateTokenCount(textContent);
+      }, 0);
+
+      // 计算压缩后 Token 总数
+      let compressedTotal = 0;
+
+      // 遍历原始消息，考虑删除/修改操作
+      messages.forEach((message) => {
+        const operation = operations.get(message.id);
+
+        if (!operation || operation.type === "keep") {
+          // 保留: 计入原始 token
+          const textContent = getMessageDisplayContent(message.content);
+          compressedTotal += estimateTokenCount(textContent);
+        } else if (operation.type === "modify" && operation.modifiedContent) {
+          // 修改: 计入修改后的 token
+          compressedTotal += estimateTokenCount(operation.modifiedContent);
+        }
+        // delete: 不计入
+      });
+
+      // 添加插入的消息 token
+      insertions.forEach((insertion) => {
+        if (insertion.insertedMessage) {
+          const textContent = getMessageDisplayContent(insertion.insertedMessage.content);
+          compressedTotal += estimateTokenCount(textContent);
+        }
+      });
+
+      // 计算节省量
+      const savedTokens = originalTotal - compressedTotal;
+      const savedPercentage = originalTotal > 0
+        ? (savedTokens / originalTotal) * 100
+        : 0;
+
+      // 获取变更统计
+      const changeStats = getChangeStats();
+
+      return {
+        originalTotal,
+        compressedTotal,
+        savedTokens,
+        savedPercentage,
+        changeStats,
+      };
+    },
+    [operations, insertions, getChangeStats]
+  );
+
   // Context 值
   const contextValue = React.useMemo<CompressStateContextValue>(
     () => ({
@@ -335,6 +410,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       removeInsertion,
       getOperationForMessage,
       getOperationType,
+      getTokenStats,
     }),
     [
       operations,
@@ -348,6 +424,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       removeInsertion,
       getOperationForMessage,
       getOperationType,
+      getTokenStats,
     ]
   );
 

@@ -515,6 +515,11 @@
       "tokens": "tokens",
       "toolCall": "Tool Call",
       "toolResult": "Tool Result",
+      "thinking": "Thinking",
+      "codeDiff": "Code Diff",
+      "codeSuggestion": "Code Suggestion",
+      "image": "Image",
+      "reference": "Reference",
       "system": "System",
       "user": "User",
       "assistant": "Assistant"
@@ -577,6 +582,14 @@
       "inserted": "Inserted",
       "editTooltip": "Edit this inserted message",
       "removeTooltip": "Remove this inserted message"
+    },
+    "tokenStats": {
+      "original": "Original",
+      "compressed": "Compressed",
+      "saved": "Saved",
+      "deleted": "deleted",
+      "modified": "modified",
+      "inserted": "inserted"
     }
   },
   "player": {

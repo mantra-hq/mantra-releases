@@ -35,3 +35,10 @@ export type { InsertMessageDialogProps } from "./InsertMessageDialog";
 
 export { InsertedMessageCard } from "./InsertedMessageCard";
 export type { InsertedMessageCardProps } from "./InsertedMessageCard";
+
+// Story 10.6: Token 统计组件
+export { TokenStatistics } from "./TokenStatistics";
+export type { TokenStatisticsProps, TokenStats } from "./TokenStatistics";
+
+export { TokenCompareBar } from "./TokenCompareBar";
+export type { TokenCompareBarProps } from "./TokenCompareBar";
