@@ -552,6 +552,27 @@
       "cancel": "Cancel",
       "confirm": "Confirm Edit",
       "tokenChange": "Token change"
+    },
+    "insertTrigger": {
+      "tooltip": "Insert message here",
+      "hasInsertion": "Message inserted",
+      "removeTooltip": "Remove inserted message"
+    },
+    "insertDialog": {
+      "title": "Insert Message",
+      "description": "Add a new message to the conversation context.",
+      "roleLabel": "Role",
+      "roleUser": "User",
+      "roleAssistant": "Assistant",
+      "contentLabel": "Content",
+      "placeholder": "Enter message content...",
+      "tokens": "tokens",
+      "cancel": "Cancel",
+      "confirm": "Insert"
+    },
+    "insertedCard": {
+      "inserted": "Inserted",
+      "removeTooltip": "Remove this inserted message"
     }
   },
   "player": {

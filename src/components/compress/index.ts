@@ -25,3 +25,13 @@ export type { MessageActionButtonsProps } from "./MessageActionButtons";
 
 export { EditMessageDialog } from "./EditMessageDialog";
 export type { EditMessageDialogProps } from "./EditMessageDialog";
+
+// Story 10.5: 消息插入组件
+export { InsertMessageTrigger } from "./InsertMessageTrigger";
+export type { InsertMessageTriggerProps } from "./InsertMessageTrigger";
+
+export { InsertMessageDialog } from "./InsertMessageDialog";
+export type { InsertMessageDialogProps } from "./InsertMessageDialog";
+
+export { InsertedMessageCard } from "./InsertedMessageCard";
+export type { InsertedMessageCardProps } from "./InsertedMessageCard";

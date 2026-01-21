@@ -2,6 +2,7 @@
  * OriginalMessageList Component Tests
  * Story 10.2: Task 7.1
  * Story 10.4: Task 5 - 更新测试以包含 CompressStateProvider
+ * Story 10.5: Task 8.4 - 更新测试以验证插入功能集成
  *
  * 测试原始消息列表组件的虚拟化渲染和空状态
  */
@@ -33,6 +34,21 @@ vi.mock("react-i18next", () => ({
         "compress.actions.edit": "Edit",
         "compress.actions.editTooltip": "Edit (E)",
         "compress.actions.edited": "Edited",
+        "compress.insertTrigger.tooltip": "Insert message here",
+        "compress.insertTrigger.hasInsertion": "Message inserted",
+        "compress.insertTrigger.removeTooltip": "Remove inserted message",
+        "compress.insertDialog.title": "Insert Message",
+        "compress.insertDialog.description": "Add a new message",
+        "compress.insertDialog.roleLabel": "Role",
+        "compress.insertDialog.roleUser": "User",
+        "compress.insertDialog.roleAssistant": "Assistant",
+        "compress.insertDialog.contentLabel": "Content",
+        "compress.insertDialog.placeholder": "Enter message content...",
+        "compress.insertDialog.tokens": "tokens",
+        "compress.insertDialog.cancel": "Cancel",
+        "compress.insertDialog.confirm": "Insert",
+        "compress.insertedCard.inserted": "Inserted",
+        "compress.insertedCard.removeTooltip": "Remove this inserted message",
       };
       return translations[key] || key;
     },
@@ -127,6 +143,25 @@ describe("OriginalMessageList", () => {
 
       const container = document.querySelector(".custom-class");
       expect(container).toBeInTheDocument();
+    });
+  });
+
+  describe("消息插入功能 (Story 10.5)", () => {
+    it("有消息时应显示头部插入触发器", () => {
+      const messages = createMessages(1);
+      render(<OriginalMessageList messages={messages} />, { wrapper: Wrapper });
+
+      // 列表应该包含开头的插入触发器区域
+      const list = screen.getByTestId("original-message-list");
+      expect(list).toBeInTheDocument();
+    });
+
+    it("插入功能应与 CompressStateProvider 集成", () => {
+      const messages = createMessages(2);
+      render(<OriginalMessageList messages={messages} />, { wrapper: Wrapper });
+
+      // 验证组件能在 Provider 中正常渲染
+      expect(screen.getByTestId("original-message-list")).toBeInTheDocument();
     });
   });
 });

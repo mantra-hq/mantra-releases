@@ -552,6 +552,27 @@
       "cancel": "取消",
       "confirm": "确认修改",
       "tokenChange": "Token 变化"
+    },
+    "insertTrigger": {
+      "tooltip": "在此处插入消息",
+      "hasInsertion": "已插入消息",
+      "removeTooltip": "移除插入的消息"
+    },
+    "insertDialog": {
+      "title": "插入消息",
+      "description": "向会话上下文中添加一条新消息。",
+      "roleLabel": "角色",
+      "roleUser": "用户",
+      "roleAssistant": "助手",
+      "contentLabel": "内容",
+      "placeholder": "输入消息内容...",
+      "tokens": "tokens",
+      "cancel": "取消",
+      "confirm": "插入"
+    },
+    "insertedCard": {
+      "inserted": "已插入",
+      "removeTooltip": "移除此插入的消息"
     }
   },
   "player": {
