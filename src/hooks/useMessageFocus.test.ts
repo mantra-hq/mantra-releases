@@ -3,6 +3,7 @@
  * Story 10.10: Task 9.1
  */
 
+import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useMessageFocus } from "./useMessageFocus";
 

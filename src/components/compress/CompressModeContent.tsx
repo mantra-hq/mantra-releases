@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp } from "@/components/compress";
+import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp, EditMessageDialog, InsertMessageDialog } from "@/components/compress";
 import { useCompressState } from "@/hooks/useCompressState";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import { useMessageFocus } from "@/hooks/useMessageFocus";
@@ -41,7 +41,7 @@ export function CompressModeContent({
   sessionId,
   onExportRequest,
 }: CompressModeContentProps) {
-  const { hasAnyChanges, exportSnapshot, resetAll, initializeFromSnapshot, setOperation, removeOperation } = useCompressState();
+  const { hasAnyChanges, exportSnapshot, resetAll, initializeFromSnapshot, setOperation, removeOperation, addInsertion } = useCompressState();
   const persistStore = useCompressPersistStore();
 
   // Story 10.9 AC3: 未保存更改对话框状态
@@ -58,6 +58,14 @@ export function CompressModeContent({
     messageCount: messages.length,
     containerRef: messageListContainerRef,
   });
+
+  // Story 10.10: 编辑对话框状态 (用于快捷键触发)
+  const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+
+  // Story 10.10: 插入对话框状态 (用于快捷键触发)
+  const [insertAfterIndex, setInsertAfterIndex] = React.useState<number>(-1);
+  const [isInsertDialogOpen, setIsInsertDialogOpen] = React.useState(false);
 
   // Story 10.10: 快捷键回调
   const handleKeep = React.useCallback(
@@ -81,19 +89,56 @@ export function CompressModeContent({
   );
 
   const handleEdit = React.useCallback(
-    (_messageId: string) => {
-      // 编辑通过 OriginalMessageList 内部的 EditMessageDialog 触发
-      // 这里可以用于将来扩展，例如显示 toast 提示
+    (messageId: string) => {
+      // Story 10.10 AC1: E 键打开编辑对话框
+      setEditingMessageId(messageId);
+      setIsEditDialogOpen(true);
     },
     []
   );
 
   const handleInsert = React.useCallback(
-    (_afterIndex: number) => {
-      // 插入通过 OriginalMessageList 内部的 InsertMessageDialog 触发
-      // 这里可以用于将来扩展
+    (afterIndex: number) => {
+      // Story 10.10 AC1: I 键在当前位置后插入
+      setInsertAfterIndex(afterIndex);
+      setIsInsertDialogOpen(true);
     },
     []
+  );
+
+  // Story 10.10: 编辑确认回调
+  const handleEditConfirm = React.useCallback(
+    (modifiedContent: string) => {
+      if (editingMessageId) {
+        const message = messages.find((m) => m.id === editingMessageId);
+        if (message) {
+          setOperation(editingMessageId, {
+            type: "modify",
+            originalMessage: message,
+            modifiedContent,
+          });
+        }
+      }
+      setEditingMessageId(null);
+      setIsEditDialogOpen(false);
+    },
+    [editingMessageId, messages, setOperation]
+  );
+
+  // Story 10.10: 获取正在编辑的消息
+  const editingMessage = React.useMemo(
+    () => (editingMessageId ? messages.find((m) => m.id === editingMessageId) ?? null : null),
+    [editingMessageId, messages]
+  );
+
+  // Story 10.10: 插入确认回调
+  const handleInsertConfirm = React.useCallback(
+    (message: NarrativeMessage) => {
+      addInsertion(insertAfterIndex, message);
+      setInsertAfterIndex(-1);
+      setIsInsertDialogOpen(false);
+    },
+    [insertAfterIndex, addInsertion]
   );
 
   const handleToggleHelp = React.useCallback(() => {
@@ -238,6 +283,22 @@ export function CompressModeContent({
       <KeyboardShortcutsHelp
         open={showHelpDialog}
         onOpenChange={setShowHelpDialog}
+      />
+
+      {/* Story 10.10 AC1: 快捷键触发的编辑对话框 */}
+      <EditMessageDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        message={editingMessage}
+        onConfirm={handleEditConfirm}
+      />
+
+      {/* Story 10.10 AC1: 快捷键触发的插入对话框 */}
+      <InsertMessageDialog
+        open={isInsertDialogOpen}
+        onOpenChange={setIsInsertDialogOpen}
+        onConfirm={handleInsertConfirm}
+        insertPosition={insertAfterIndex.toString()}
       />
     </div>
   );

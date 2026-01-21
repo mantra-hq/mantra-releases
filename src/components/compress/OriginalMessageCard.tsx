@@ -308,8 +308,8 @@ export const OriginalMessageCard = React.forwardRef<
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
-        // 阻止 Enter/Space 触发点击，让全局快捷键处理
-        if (e.key === "Enter" || e.key === " ") {
+        // 只阻止 Space 键触发点击（保持焦点行为），Enter 键允许用于无障碍访问
+        if (e.key === " ") {
           e.preventDefault();
         }
       }}

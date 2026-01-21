@@ -11,7 +11,7 @@ import type { NarrativeMessage } from "@/types/message";
 
 // Mock usePlatform hook
 vi.mock("./usePlatform", () => ({
-  usePlatform: () => "other", // 默认非 Mac 平台
+  usePlatform: () => "windows", // 使用有效的 Platform 类型值
 }));
 
 // 创建测试消息

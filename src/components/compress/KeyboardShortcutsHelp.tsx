@@ -60,17 +60,11 @@ export function KeyboardShortcutsHelp({
   const platform = usePlatform();
 
   // AC4: Esc 或 ? 键关闭面板
+  // 注意: shadcn/ui Dialog 已处理 Escape 键，这里只需处理 ? 键
   React.useEffect(() => {
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Esc 键关闭
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onOpenChange(false);
-        return;
-      }
-
       // ? 键关闭 (再次按下)
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault();

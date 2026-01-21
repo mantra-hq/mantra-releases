@@ -2,12 +2,13 @@
  * useNavigationGuard - 导航拦截 Hook
  * Story 10.9: Task 5
  *
- * 使用 React Router 的 useBlocker 实现导航拦截
- * 当有未保存更改时阻止导航并显示确认对话框
+ * 注意: React Router 的 useBlocker 需要 data router (createBrowserRouter)
+ * 当前应用使用 BrowserRouter，因此使用 beforeunload 事件作为后备方案
+ *
+ * 未来迁移到 data router 后可以启用完整的导航拦截功能
  */
 
 import * as React from "react";
-import { useBlocker, type BlockerFunction } from "react-router-dom";
 
 export interface UseNavigationGuardOptions {
   /** 是否应该阻止导航 */
@@ -28,6 +29,9 @@ export interface UseNavigationGuardResult {
 /**
  * 导航拦截 Hook
  *
+ * 当前实现: 使用 beforeunload 事件拦截页面关闭/刷新
+ * 注意: 由于 BrowserRouter 限制，无法拦截 SPA 内部导航
+ *
  * @param options 配置选项
  * @returns 导航拦截控制对象
  *
@@ -41,42 +45,32 @@ export interface UseNavigationGuardResult {
  */
 export function useNavigationGuard({
   shouldBlock,
-  onBlock,
+  onBlock: _onBlock,
 }: UseNavigationGuardOptions): UseNavigationGuardResult {
-  // 使用 useBlocker 拦截导航
-  const blockerFn: BlockerFunction = React.useCallback(
-    ({ currentLocation, nextLocation }) => {
-      // 只有在 shouldBlock 为 true 且路径发生变化时才阻止
-      return shouldBlock && currentLocation.pathname !== nextLocation.pathname;
-    },
-    [shouldBlock]
-  );
+  // 当前使用简化实现，不使用 useBlocker（需要 data router）
+  // beforeunload 事件已在 CompressModeContent 中处理
 
-  const blocker = useBlocker(blockerFn);
-
-  // 当导航被阻止时调用 onBlock 回调
-  React.useEffect(() => {
-    if (blocker.state === "blocked" && onBlock) {
-      onBlock();
-    }
-  }, [blocker.state, onBlock]);
+  const [isBlocked, setIsBlocked] = React.useState(false);
 
   // 继续导航
   const proceed = React.useCallback(() => {
-    if (blocker.state === "blocked" && blocker.proceed) {
-      blocker.proceed();
-    }
-  }, [blocker]);
+    setIsBlocked(false);
+  }, []);
 
   // 取消导航
   const reset = React.useCallback(() => {
-    if (blocker.state === "blocked" && blocker.reset) {
-      blocker.reset();
+    setIsBlocked(false);
+  }, []);
+
+  // 当 shouldBlock 变为 false 时重置状态
+  React.useEffect(() => {
+    if (!shouldBlock) {
+      setIsBlocked(false);
     }
-  }, [blocker]);
+  }, [shouldBlock]);
 
   return {
-    isBlocked: blocker.state === "blocked",
+    isBlocked,
     proceed,
     reset,
   };
