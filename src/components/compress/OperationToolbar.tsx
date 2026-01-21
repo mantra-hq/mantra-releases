@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useCompressState } from "@/hooks/useCompressState";
+import { usePlatform } from "@/hooks/usePlatform";
 import { ResetConfirmDialog } from "./ResetConfirmDialog";
 
 /**
@@ -27,20 +28,6 @@ import { ResetConfirmDialog } from "./ResetConfirmDialog";
 export interface OperationToolbarProps {
   /** 自定义 className */
   className?: string;
-}
-
-/**
- * 检测是否为 Mac 平台
- */
-function usePlatform(): "mac" | "other" {
-  const [platform, setPlatform] = React.useState<"mac" | "other">("other");
-
-  React.useEffect(() => {
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-    setPlatform(isMac ? "mac" : "other");
-  }, []);
-
-  return platform;
 }
 
 /**
@@ -65,8 +52,8 @@ export function OperationToolbar({ className }: OperationToolbarProps) {
         return;
       }
 
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      const modKey = isMac ? e.metaKey : e.ctrlKey;
+      // 复用 platform 变量，避免重复检测
+      const modKey = platform === "mac" ? e.metaKey : e.ctrlKey;
 
       if (modKey && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -83,7 +70,7 @@ export function OperationToolbar({ className }: OperationToolbarProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canUndo, canRedo, undo, redo]);
+  }, [canUndo, canRedo, undo, redo, platform]);
 
   // 快捷键显示文本
   const undoShortcut = platform === "mac" ? "⌘Z" : "Ctrl+Z";

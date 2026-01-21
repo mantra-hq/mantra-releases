@@ -61,6 +61,13 @@ vi.mock("./TokenCompareBar", () => ({
   ),
 }));
 
+// Mock OperationToolbar
+vi.mock("./OperationToolbar", () => ({
+  OperationToolbar: () => (
+    <div data-testid="mock-operation-toolbar">OperationToolbar</div>
+  ),
+}));
+
 // 创建测试消息
 function createMessage(id: string, content: string): NarrativeMessage {
   return {
@@ -228,6 +235,35 @@ describe("TokenStatistics", () => {
 
       const container = screen.getByTestId("token-statistics");
       expect(container).toHaveClass("custom-class");
+    });
+  });
+
+  // Story 10.8: OperationToolbar 集成测试
+  describe("OperationToolbar 集成 (Story 10.8)", () => {
+    it("应渲染 OperationToolbar 组件", () => {
+      render(
+        <CompressStateProvider>
+          <TokenStatistics messages={messages} />
+        </CompressStateProvider>
+      );
+
+      expect(screen.getByTestId("mock-operation-toolbar")).toBeInTheDocument();
+    });
+
+    it("OperationToolbar 应位于统计数字左侧", () => {
+      render(
+        <CompressStateProvider>
+          <TokenStatistics messages={messages} />
+        </CompressStateProvider>
+      );
+
+      const container = screen.getByTestId("token-statistics");
+      const toolbar = screen.getByTestId("mock-operation-toolbar");
+      const originalLabel = screen.getByText("Original");
+
+      // 验证 toolbar 和 original 都在同一个容器内
+      expect(container).toContainElement(toolbar);
+      expect(container).toContainElement(originalLabel);
     });
   });
 });
