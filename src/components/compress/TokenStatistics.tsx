@@ -2,6 +2,7 @@
  * TokenStatistics - Token 统计栏组件
  * Story 10.6: Task 1
  * Story 10.7: Task 4 - 集成导出下拉菜单
+ * Story 10.8: Task 5 - 集成操作工具栏
  *
  * 显示压缩模式下的 Token 统计信息
  * 包括原始/压缩后 Token 数、节省量、变更统计
@@ -22,6 +23,7 @@ import { getMessageDisplayContent } from "@/lib/message-utils";
 import { useCompressState, type ChangeStats } from "@/hooks/useCompressState";
 import { TokenCompareBar } from "./TokenCompareBar";
 import { ExportDropdown } from "./ExportDropdown";
+import { OperationToolbar } from "./OperationToolbar";
 
 /**
  * TokenStatistics 组件 Props
@@ -141,8 +143,14 @@ export function TokenStatistics({
       )}
       data-testid="token-statistics"
     >
-      {/* 左侧: 统计数字 */}
+      {/* 左侧: 操作工具栏 + 统计数字 */}
       <div className="flex items-center gap-4 sm:gap-6">
+        {/* Story 10.8: 操作工具栏 */}
+        <OperationToolbar />
+
+        {/* 分隔线 */}
+        <div className="h-4 w-px bg-border hidden sm:block" />
+
         {/* 原始 Token */}
         <div className="flex flex-col">
           <span className="text-xs text-muted-foreground">

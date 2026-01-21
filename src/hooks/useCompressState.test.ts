@@ -1,8 +1,9 @@
 /**
  * useCompressState Hook Tests
  * Story 10.3: Task 7.1
+ * Story 10.8: Task 8.1 - 添加 undo/redo 测试用例
  *
- * 测试压缩状态管理、操作应用、预览计算
+ * 测试压缩状态管理、操作应用、预览计算、撤销/重做
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -442,6 +443,323 @@ describe("useCompressState", () => {
       });
 
       expect(result.current.getOperationType("msg-1")).toBe("keep");
+    });
+  });
+
+  // Story 10.8: 撤销/重做功能测试
+  describe("undo/redo (Story 10.8)", () => {
+    describe("初始状态", () => {
+      it("初始时 canUndo 应为 false", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        expect(result.current.canUndo).toBe(false);
+      });
+
+      it("初始时 canRedo 应为 false", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        expect(result.current.canRedo).toBe(false);
+      });
+
+      it("初始时 hasAnyChanges 应为 false", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        expect(result.current.hasAnyChanges).toBe(false);
+      });
+    });
+
+    describe("undo 功能 (AC2)", () => {
+      it("执行操作后 canUndo 应为 true", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        expect(result.current.canUndo).toBe(true);
+      });
+
+      it("undo 应恢复到上一个状态", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        expect(result.current.operations.has("msg-1")).toBe(true);
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.operations.has("msg-1")).toBe(false);
+      });
+
+      it("undo 后 canRedo 应为 true", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.canRedo).toBe(true);
+      });
+
+      it("多次操作后可以多次 undo", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.setOperation("msg-2", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.setOperation("msg-3", { type: "delete" });
+        });
+
+        expect(result.current.operations.size).toBe(3);
+
+        act(() => {
+          result.current.undo();
+        });
+        expect(result.current.operations.size).toBe(2);
+
+        act(() => {
+          result.current.undo();
+        });
+        expect(result.current.operations.size).toBe(1);
+
+        act(() => {
+          result.current.undo();
+        });
+        expect(result.current.operations.size).toBe(0);
+      });
+
+      it("空栈时 undo 不应报错", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        expect(() => {
+          act(() => {
+            result.current.undo();
+          });
+        }).not.toThrow();
+      });
+    });
+
+    describe("redo 功能 (AC3)", () => {
+      it("redo 应恢复被撤销的操作", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.operations.has("msg-1")).toBe(false);
+
+        act(() => {
+          result.current.redo();
+        });
+
+        expect(result.current.operations.has("msg-1")).toBe(true);
+        expect(result.current.operations.get("msg-1")?.type).toBe("delete");
+      });
+
+      it("redo 后 canUndo 应为 true", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        act(() => {
+          result.current.redo();
+        });
+
+        expect(result.current.canUndo).toBe(true);
+      });
+
+      it("空栈时 redo 不应报错", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        expect(() => {
+          act(() => {
+            result.current.redo();
+          });
+        }).not.toThrow();
+      });
+    });
+
+    describe("重做栈清空 (AC7)", () => {
+      it("新操作后 redo 栈应被清空", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.canRedo).toBe(true);
+
+        // 执行新操作
+        act(() => {
+          result.current.setOperation("msg-2", { type: "delete" });
+        });
+
+        expect(result.current.canRedo).toBe(false);
+      });
+    });
+
+    describe("历史栈限制 (AC6)", () => {
+      it("历史栈不应超过 50 条", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        // 执行 60 次操作
+        for (let i = 0; i < 60; i++) {
+          act(() => {
+            result.current.setOperation(`msg-${i}`, { type: "delete" });
+          });
+        }
+
+        // 撤销 50 次应该成功
+        for (let i = 0; i < 50; i++) {
+          act(() => {
+            result.current.undo();
+          });
+        }
+
+        // 第 51 次撤销后 canUndo 应为 false
+        expect(result.current.canUndo).toBe(false);
+      });
+    });
+
+    describe("resetAll 清空历史栈 (AC4)", () => {
+      it("resetAll 应清空 undo 栈", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        expect(result.current.canUndo).toBe(true);
+
+        act(() => {
+          result.current.resetAll();
+        });
+
+        expect(result.current.canUndo).toBe(false);
+      });
+
+      it("resetAll 应清空 redo 栈", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.canRedo).toBe(true);
+
+        act(() => {
+          result.current.resetAll();
+        });
+
+        expect(result.current.canRedo).toBe(false);
+      });
+    });
+
+    describe("hasAnyChanges 状态 (AC5)", () => {
+      it("有操作时 hasAnyChanges 应为 true", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        expect(result.current.hasAnyChanges).toBe(true);
+      });
+
+      it("有插入时 hasAnyChanges 应为 true", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        const insertedMessage = createTestMessage("new-1", "user", "New");
+
+        act(() => {
+          result.current.addInsertion(0, insertedMessage);
+        });
+
+        expect(result.current.hasAnyChanges).toBe(true);
+      });
+
+      it("撤销所有操作后 hasAnyChanges 应为 false", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+
+        act(() => {
+          result.current.setOperation("msg-1", { type: "delete" });
+        });
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.hasAnyChanges).toBe(false);
+      });
+    });
+
+    describe("插入操作的 undo/redo", () => {
+      it("addInsertion 应可以被撤销", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        const insertedMessage = createTestMessage("new-1", "user", "New");
+
+        act(() => {
+          result.current.addInsertion(0, insertedMessage);
+        });
+
+        expect(result.current.insertions.size).toBe(1);
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.insertions.size).toBe(0);
+      });
+
+      it("removeInsertion 应可以被撤销", () => {
+        const { result } = renderHook(() => useCompressState(), { wrapper });
+        const insertedMessage = createTestMessage("new-1", "user", "New");
+
+        act(() => {
+          result.current.addInsertion(0, insertedMessage);
+        });
+
+        act(() => {
+          result.current.removeInsertion(0);
+        });
+
+        expect(result.current.insertions.size).toBe(0);
+
+        act(() => {
+          result.current.undo();
+        });
+
+        expect(result.current.insertions.size).toBe(1);
+      });
     });
   });
 });

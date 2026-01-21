@@ -46,3 +46,10 @@ export type { TokenCompareBarProps } from "./TokenCompareBar";
 // Story 10.7: 导出组件
 export { ExportDropdown } from "./ExportDropdown";
 export type { ExportDropdownProps } from "./ExportDropdown";
+
+// Story 10.8: 操作工具栏组件
+export { OperationToolbar } from "./OperationToolbar";
+export type { OperationToolbarProps } from "./OperationToolbar";
+
+export { ResetConfirmDialog } from "./ResetConfirmDialog";
+export type { ResetConfirmDialogProps } from "./ResetConfirmDialog";

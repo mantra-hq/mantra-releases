@@ -591,6 +591,17 @@
       "modified": "modified",
       "inserted": "inserted"
     },
+    "operations": {
+      "undo": "Undo",
+      "redo": "Redo",
+      "reset": "Reset All",
+      "resetConfirm": {
+        "title": "Reset All Changes?",
+        "description": "This will discard all your edits and restore the original message list. This action cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Reset"
+      }
+    },
     "export": {
       "button": "Export",
       "jsonl": "Export as JSONL",

@@ -1,6 +1,7 @@
 /**
  * useCompressState - 压缩状态管理 Hook
  * Story 10.3: Task 1
+ * Story 10.8: 添加撤销/重做/重置功能
  *
  * 管理压缩模式下的操作状态（保留/删除/修改/插入）
  * 使用 React Context 实现左右面板状态共享
@@ -15,6 +16,15 @@ import { getMessageDisplayContent } from "@/lib/message-utils";
 
 /** 操作类型 */
 export type OperationType = "keep" | "delete" | "modify" | "insert";
+
+/**
+ * Story 10.8: 状态快照类型
+ * 用于历史栈存储
+ */
+export interface StateSnapshot {
+  operations: Map<string, CompressOperation>;
+  insertions: Map<number, CompressOperation>;
+}
 
 /** 压缩操作 */
 export interface CompressOperation {
@@ -97,6 +107,16 @@ export interface CompressStateContextValue {
   getOperationType: (messageId: string) => OperationType;
   /** Story 10.6: 获取 Token 统计 */
   getTokenStats: (messages: NarrativeMessage[]) => TokenStats;
+  /** Story 10.8: 撤销操作 */
+  undo: () => void;
+  /** Story 10.8: 重做操作 */
+  redo: () => void;
+  /** Story 10.8: 是否可以撤销 */
+  canUndo: boolean;
+  /** Story 10.8: 是否可以重做 */
+  canRedo: boolean;
+  /** Story 10.8: 是否有任何变更 */
+  hasAnyChanges: boolean;
 }
 
 // ===== Context 创建 =====
@@ -118,6 +138,16 @@ export function useCompressState(): CompressStateContextValue {
 }
 
 // ===== 工具函数 =====
+
+/**
+ * Story 10.8: 深拷贝 Map 的辅助函数
+ */
+function cloneMap<K, V extends object>(map: Map<K, V>): Map<K, V> {
+  return new Map(Array.from(map.entries()).map(([k, v]) => [k, { ...v }]));
+}
+
+/** Story 10.8: 最大历史栈深度 (AC6) */
+const MAX_HISTORY_SIZE = 50;
 
 /**
  * 计算消息的 token 数
@@ -162,36 +192,135 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
     () => new Map()
   );
 
-  // 设置操作
+  // Story 10.8: 撤销/重做历史栈
+  const [undoStack, setUndoStack] = React.useState<StateSnapshot[]>([]);
+  const [redoStack, setRedoStack] = React.useState<StateSnapshot[]>([]);
+
+  // Story 10.8: 使用 Ref 跟踪最新状态 (避免闭包陷阱)
+  const operationsRef = React.useRef(operations);
+  const insertionsRef = React.useRef(insertions);
+
+  React.useEffect(() => {
+    operationsRef.current = operations;
+  }, [operations]);
+
+  React.useEffect(() => {
+    insertionsRef.current = insertions;
+  }, [insertions]);
+
+  // Story 10.8: 推入历史栈 (内部方法)
+  const pushHistory = React.useCallback(() => {
+    // 创建当前状态快照
+    const snapshot: StateSnapshot = {
+      operations: cloneMap(operationsRef.current),
+      insertions: cloneMap(insertionsRef.current),
+    };
+
+    // 推入撤销栈
+    setUndoStack((prev) => {
+      const next = [...prev, snapshot];
+      // AC6: 限制 50 步
+      if (next.length > MAX_HISTORY_SIZE) {
+        return next.slice(-MAX_HISTORY_SIZE);
+      }
+      return next;
+    });
+
+    // AC7: 清空重做栈
+    setRedoStack([]);
+  }, []);
+
+  // Story 10.8: 撤销操作 (AC2)
+  const undo = React.useCallback(() => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+
+      const snapshot = prev[prev.length - 1];
+      const newStack = prev.slice(0, -1);
+
+      // 当前状态推入重做栈
+      setRedoStack((redoPrev) => [
+        ...redoPrev,
+        {
+          operations: cloneMap(operationsRef.current),
+          insertions: cloneMap(insertionsRef.current),
+        },
+      ]);
+
+      // 恢复快照状态
+      setOperations(snapshot.operations);
+      setInsertions(snapshot.insertions);
+
+      return newStack;
+    });
+  }, []);
+
+  // Story 10.8: 重做操作 (AC3)
+  const redo = React.useCallback(() => {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+
+      const snapshot = prev[prev.length - 1];
+      const newStack = prev.slice(0, -1);
+
+      // 当前状态推入撤销栈
+      setUndoStack((undoPrev) => [
+        ...undoPrev,
+        {
+          operations: cloneMap(operationsRef.current),
+          insertions: cloneMap(insertionsRef.current),
+        },
+      ]);
+
+      // 恢复快照状态
+      setOperations(snapshot.operations);
+      setInsertions(snapshot.insertions);
+
+      return newStack;
+    });
+  }, []);
+
+  // Story 10.8: 计算派生状态 (AC5)
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
+  const hasAnyChanges = operations.size > 0 || insertions.size > 0;
+
+  // 设置操作 (修改: 操作前保存历史)
   const setOperation = React.useCallback(
     (messageId: string, operation: CompressOperation) => {
+      pushHistory(); // Story 10.8: 保存历史
       setOperations((prev) => {
         const next = new Map(prev);
         next.set(messageId, operation);
         return next;
       });
     },
-    []
+    [pushHistory]
   );
 
-  // 移除操作 (恢复保留)
+  // 移除操作 (恢复保留) (修改: 操作前保存历史)
   const removeOperation = React.useCallback((messageId: string) => {
+    pushHistory(); // Story 10.8: 保存历史
     setOperations((prev) => {
       const next = new Map(prev);
       next.delete(messageId);
       return next;
     });
-  }, []);
+  }, [pushHistory]);
 
-  // 批量重置
+  // 批量重置 (修改: 同时清空历史栈)
   const resetAll = React.useCallback(() => {
     setOperations(new Map());
     setInsertions(new Map());
+    // Story 10.8 AC4: 重置时清空操作栈
+    setUndoStack([]);
+    setRedoStack([]);
   }, []);
 
-  // 添加插入操作
+  // 添加插入操作 (修改: 操作前保存历史)
   const addInsertion = React.useCallback(
     (afterIndex: number, message: NarrativeMessage) => {
+      pushHistory(); // Story 10.8: 保存历史
       setInsertions((prev) => {
         const next = new Map(prev);
         next.set(afterIndex, {
@@ -202,17 +331,18 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
         return next;
       });
     },
-    []
+    [pushHistory]
   );
 
-  // 移除插入操作
+  // 移除插入操作 (修改: 操作前保存历史)
   const removeInsertion = React.useCallback((afterIndex: number) => {
+    pushHistory(); // Story 10.8: 保存历史
     setInsertions((prev) => {
       const next = new Map(prev);
       next.delete(afterIndex);
       return next;
     });
-  }, []);
+  }, [pushHistory]);
 
   // 获取预览消息列表
   const getPreviewMessages = React.useCallback(
@@ -411,6 +541,12 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       getOperationForMessage,
       getOperationType,
       getTokenStats,
+      // Story 10.8: undo/redo
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      hasAnyChanges,
     }),
     [
       operations,
@@ -425,6 +561,12 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
       getOperationForMessage,
       getOperationType,
       getTokenStats,
+      // Story 10.8: undo/redo
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      hasAnyChanges,
     ]
   );
 
