@@ -83,7 +83,7 @@ export function UnsavedChangesDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="outline" onClick={handleCancel} data-testid="unsaved-cancel-button">
               {t("compress.unsavedChanges.cancel", "取消")}
             </Button>
           </AlertDialogCancel>

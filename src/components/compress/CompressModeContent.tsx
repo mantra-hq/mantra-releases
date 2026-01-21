@@ -5,13 +5,15 @@
  * 在 CompressStateProvider 内部使用，处理：
  * - 状态持久化逻辑
  * - beforeunload 事件监听
+ * - 导航拦截 (AC3, AC4)
  */
 
 import * as React from "react";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { OriginalMessageList, CompressPreviewList, TokenStatistics } from "@/components/compress";
-import { useCompressPersistence } from "@/hooks/useCompressPersistence";
+import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog } from "@/components/compress";
 import { useCompressState } from "@/hooks/useCompressState";
+import { useNavigationGuard } from "@/hooks/useNavigationGuard";
+import { useCompressPersistStore } from "@/stores";
 import type { NarrativeMessage } from "@/types/message";
 
 interface CompressModeContentProps {
@@ -21,6 +23,8 @@ interface CompressModeContentProps {
   messages: NarrativeMessage[];
   /** 当前会话 ID */
   sessionId: string;
+  /** 导出完成回调 (用于 AC4: 导出并离开) */
+  onExportRequest?: () => void;
 }
 
 /**
@@ -31,19 +35,50 @@ export function CompressModeContent({
   layoutRef,
   messages,
   sessionId,
+  onExportRequest,
 }: CompressModeContentProps) {
-  // Story 10.9: 压缩状态持久化
-  useCompressPersistence({
-    sessionId,
-    isCompressMode: true, // 这个组件只在压缩模式下渲染
-  });
+  const { hasAnyChanges, exportSnapshot, resetAll, initializeFromSnapshot } = useCompressState();
+  const persistStore = useCompressPersistStore();
 
-  // Story 10.9 AC5: beforeunload 事件监听
-  const { hasAnyChanges } = useCompressState();
+  // Story 10.9 AC3: 未保存更改对话框状态
+  const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
+
+  // 使用 ref 存储最新值，避免 cleanup 函数中的闭包问题
+  const hasAnyChangesRef = React.useRef(hasAnyChanges);
+  const exportSnapshotRef = React.useRef(exportSnapshot);
+  const sessionIdRef = React.useRef(sessionId);
 
   React.useEffect(() => {
+    hasAnyChangesRef.current = hasAnyChanges;
+  }, [hasAnyChanges]);
+
+  React.useEffect(() => {
+    exportSnapshotRef.current = exportSnapshot;
+  }, [exportSnapshot]);
+
+  React.useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // Story 10.9: 进入压缩模式时尝试恢复状态
+  const hasInitializedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!hasInitializedRef.current) {
+      const savedSnapshot = persistStore.loadState(sessionId);
+      if (savedSnapshot) {
+        initializeFromSnapshot(savedSnapshot);
+        if (import.meta.env.DEV) {
+          console.log("[CompressModeContent] 已恢复压缩状态:", sessionId);
+        }
+      }
+      hasInitializedRef.current = true;
+    }
+  }, [sessionId, persistStore, initializeFromSnapshot]);
+
+  // Story 10.9 AC5: beforeunload 事件监听
+  React.useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasAnyChanges) {
+      if (hasAnyChangesRef.current) {
         e.preventDefault();
         // 现代浏览器会显示通用提示，不再支持自定义消息
         e.returnValue = "";
@@ -52,7 +87,48 @@ export function CompressModeContent({
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasAnyChanges]);
+  }, []);
+
+  // Story 10.9: 组件卸载时保存状态 (模式切换时)
+  React.useEffect(() => {
+    return () => {
+      // 使用 ref 获取最新值避免闭包问题
+      if (hasAnyChangesRef.current) {
+        const snapshot = exportSnapshotRef.current();
+        persistStore.saveState(sessionIdRef.current, snapshot);
+        if (import.meta.env.DEV) {
+          console.log("[CompressModeContent] 已保存压缩状态:", sessionIdRef.current);
+        }
+      }
+    };
+  }, [persistStore]); // persistStore 是稳定的
+
+  // Story 10.9 AC3: 导航拦截
+  const { isBlocked, proceed, reset } = useNavigationGuard({
+    shouldBlock: hasAnyChanges,
+    onBlock: () => setShowUnsavedDialog(true),
+  });
+
+  // Story 10.9 AC4: 导出并离开
+  const handleExportAndLeave = React.useCallback(() => {
+    if (onExportRequest) {
+      onExportRequest();
+    }
+    // 导出完成后由外部调用 proceed
+  }, [onExportRequest]);
+
+  // Story 10.9 AC3: 不保存直接离开
+  const handleDiscardAndLeave = React.useCallback(() => {
+    persistStore.clearState();
+    resetAll();
+    proceed();
+  }, [persistStore, resetAll, proceed]);
+
+  // Story 10.9 AC3: 取消离开
+  const handleCancel = React.useCallback(() => {
+    reset();
+    setShowUnsavedDialog(false);
+  }, [reset]);
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -74,6 +150,15 @@ export function CompressModeContent({
       </div>
       {/* Story 10.6: Token 统计栏 (AC #1: 固定在底部) */}
       <TokenStatistics messages={messages} />
+
+      {/* Story 10.9 AC3/AC4: 未保存更改确认对话框 */}
+      <UnsavedChangesDialog
+        open={showUnsavedDialog || isBlocked}
+        onOpenChange={setShowUnsavedDialog}
+        onExportAndLeave={handleExportAndLeave}
+        onDiscardAndLeave={handleDiscardAndLeave}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

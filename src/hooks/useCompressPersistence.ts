@@ -49,7 +49,9 @@ export function useCompressPersistence({
       const savedSnapshot = persistStore.loadState(sessionId);
       if (savedSnapshot) {
         initializeFromSnapshot(savedSnapshot);
-        console.log("[CompressPersistence] 已恢复压缩状态:", sessionId);
+        if (import.meta.env.DEV) {
+          console.log("[CompressPersistence] 已恢复压缩状态:", sessionId);
+        }
       }
       isInitializedRef.current = true;
     }
@@ -65,7 +67,9 @@ export function useCompressPersistence({
       if (hasAnyChanges) {
         const snapshot = exportSnapshot();
         persistStore.saveState(sessionId, snapshot);
-        console.log("[CompressPersistence] 已保存压缩状态:", sessionId);
+        if (import.meta.env.DEV) {
+          console.log("[CompressPersistence] 已保存压缩状态:", sessionId);
+        }
       }
       isInitializedRef.current = false;
     }
@@ -78,7 +82,9 @@ export function useCompressPersistence({
       persistStore.clearState();
       resetAll();
       isInitializedRef.current = false;
-      console.log("[CompressPersistence] 会话切换，已清除压缩状态");
+      if (import.meta.env.DEV) {
+        console.log("[CompressPersistence] 会话切换，已清除压缩状态");
+      }
     }
     prevSessionIdRef.current = sessionId;
   }, [sessionId, persistStore, resetAll]);
