@@ -608,7 +608,7 @@ fn parse_cursor_tool_result(standard_tool: &StandardTool, result: &str) -> Optio
 
             Some(ToolResultData::FileRead {
                 file_path: path.clone(),
-                start_line: start_line.map(|v| v),
+                start_line: *start_line,
                 num_lines,
                 total_lines: None, // Cursor doesn't provide total_lines in result
             })
@@ -651,21 +651,28 @@ fn parse_cursor_tool_result(standard_tool: &StandardTool, result: &str) -> Optio
 /// Extract exit code from shell command result string
 ///
 /// Tries to find patterns like "exit code: 0", "Exit Code: 1", "exited with 0", etc.
+/// Story 8.19 Code Review Fix: Use lazy_static for regex compilation optimization.
 fn extract_exit_code_from_result(result: &str) -> Option<i32> {
-    // Common patterns for exit code in terminal output
-    let patterns = [
-        r"(?i)exit\s*code[:\s]+(\d+)",
-        r"(?i)exited\s+with\s+(\d+)",
-        r"(?i)returned\s+(\d+)",
-    ];
+    use once_cell::sync::Lazy;
+    use regex::Regex;
 
-    for pattern in &patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(caps) = re.captures(result) {
-                if let Some(code_str) = caps.get(1) {
-                    if let Ok(code) = code_str.as_str().parse::<i32>() {
-                        return Some(code);
-                    }
+    // Pre-compiled regex patterns for exit code extraction
+    static EXIT_CODE_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)exit\s*code[:\s]+(\d+)").unwrap()
+    });
+    static EXITED_WITH_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)exited\s+with\s+(\d+)").unwrap()
+    });
+    static RETURNED_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)returned\s+(\d+)").unwrap()
+    });
+
+    // Try each pattern in order
+    for re in [&*EXIT_CODE_REGEX, &*EXITED_WITH_REGEX, &*RETURNED_REGEX] {
+        if let Some(caps) = re.captures(result) {
+            if let Some(code_str) = caps.get(1) {
+                if let Ok(code) = code_str.as_str().parse::<i32>() {
+                    return Some(code);
                 }
             }
         }
