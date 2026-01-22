@@ -38,6 +38,8 @@ export interface PreviewMessageCardProps {
   index?: number;
   /** 自定义 className */
   className?: string;
+  /** 是否与左侧选中消息联动 */
+  isLinked?: boolean;
 }
 
 // ===== 常量 =====
@@ -161,7 +163,7 @@ function getRoleConfig(
 export const PreviewMessageCard = React.forwardRef<
   HTMLDivElement,
   PreviewMessageCardProps
->(({ previewMessage, measureElement, index, className }, ref) => {
+>(({ previewMessage, measureElement, index, className, isLinked = false }, ref) => {
   const { t } = useTranslation();
   const { operation, message, tokenDelta } = previewMessage;
 
@@ -241,6 +243,8 @@ export const PreviewMessageCard = React.forwardRef<
       // AC4: 新增样式 (绿色边框)
       "border-2 border-green-500 bg-green-500/5": operation === "insert",
     },
+    // 左右联动：与左侧选中消息对应时显示左边框
+    isLinked && "border-l-2 border-l-primary",
     className
   );
 

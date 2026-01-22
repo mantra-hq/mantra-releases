@@ -52,6 +52,8 @@ export interface PreviewMessage {
   originalTokens?: number;
   /** token 变化量 (modify 时显示变化) */
   tokenDelta?: number;
+  /** 原始消息在列表中的索引 (用于左右联动) */
+  originalIndex?: number;
 }
 
 /** 变更统计 */
@@ -360,6 +362,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
           id: `insert--1`,
           operation: "insert",
           message: firstInsertOp.insertedMessage,
+          originalIndex: -1,
         });
       }
 
@@ -377,6 +380,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
               id: `insert-${i - 1}`,
               operation: "insert",
               message: insertOp.insertedMessage,
+              originalIndex: i - 1,
             });
           }
         }
@@ -387,6 +391,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
             id: message.id,
             operation: "keep",
             message,
+            originalIndex: i,
           });
         } else {
           switch (operation.type) {
@@ -395,6 +400,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
                 id: message.id,
                 operation: "keep",
                 message,
+                originalIndex: i,
               });
               break;
 
@@ -404,6 +410,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
                 operation: "delete",
                 message,
                 originalTokens: calculateMessageTokens(message),
+                originalIndex: i,
               });
               break;
 
@@ -421,6 +428,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
                   message: modifiedMessage,
                   originalTokens,
                   tokenDelta: newTokens - originalTokens,
+                  originalIndex: i,
                 });
               }
               break;
@@ -435,6 +443,7 @@ export function CompressStateProvider({ children }: CompressStateProviderProps) 
           id: `insert-${messages.length - 1}`,
           operation: "insert",
           message: lastInsertOp.insertedMessage,
+          originalIndex: messages.length - 1,
         });
       }
 

@@ -546,7 +546,14 @@
       "deleteTooltip": "Mark for deletion (D)",
       "edit": "Edit",
       "editTooltip": "Edit message content (E)",
-      "edited": "Edited"
+      "edited": "Edited",
+      "insert": "Insert",
+      "insertAfterTooltip": "Insert message after this (I)",
+      "insertAtEndTooltip": "Insert message at the end (I)",
+      "insertAtStart": "Insert at start",
+      "insertAtStartTooltip": "Insert a new message at the beginning",
+      "editInsertedTooltip": "Edit the inserted message",
+      "editInsertedAtStart": "Edit inserted message"
     },
     "editDialog": {
       "title": "Edit Message",

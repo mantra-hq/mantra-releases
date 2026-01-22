@@ -8,9 +8,8 @@
  * AC5: 保留操作恢复原始状态
  */
 
-import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Trash2, Pencil } from "lucide-react";
+import { Check, Trash2, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +33,12 @@ export interface MessageActionButtonsProps {
   onDeleteClick: () => void;
   /** 点击修改按钮回调 */
   onEditClick: () => void;
+  /** 点击插入按钮回调 */
+  onInsertClick?: () => void;
+  /** 是否是最后一条消息 */
+  isLastMessage?: boolean;
+  /** 该位置是否已有插入 */
+  hasInsertion?: boolean;
   /** 自定义 className */
   className?: string;
 }
@@ -50,6 +55,9 @@ const deleteActiveClasses = "bg-red-500/20 text-red-500 hover:bg-red-500/30";
 // 修改按钮 (激活时)
 const modifyActiveClasses = "bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30";
 
+// 插入按钮 (已有插入时)
+const insertActiveClasses = "bg-green-500/20 text-green-500 hover:bg-green-500/30";
+
 // 未激活按钮
 const inactiveClasses = "text-muted-foreground hover:text-foreground hover:bg-muted";
 
@@ -65,6 +73,9 @@ export function MessageActionButtons({
   onKeepClick,
   onDeleteClick,
   onEditClick,
+  onInsertClick,
+  isLastMessage = false,
+  hasInsertion = false,
   className,
 }: MessageActionButtonsProps) {
   const { t } = useTranslation();
@@ -73,6 +84,13 @@ export function MessageActionButtons({
   const isKeepActive = currentOperation === "keep";
   const isDeleteActive = currentOperation === "delete";
   const isModifyActive = currentOperation === "modify";
+
+  // 插入按钮的 Tooltip 文案
+  const insertTooltip = hasInsertion
+    ? t("compress.actions.editInsertedTooltip")
+    : isLastMessage
+      ? t("compress.actions.insertAtEndTooltip")
+      : t("compress.actions.insertAfterTooltip");
 
   return (
     <div
@@ -148,6 +166,30 @@ export function MessageActionButtons({
           <p>{t("compress.actions.editTooltip")}</p>
         </TooltipContent>
       </Tooltip>
+
+      {/* 插入按钮 */}
+      {onInsertClick && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onInsertClick}
+              className={cn(
+                buttonBaseClasses,
+                hasInsertion ? insertActiveClasses : inactiveClasses
+              )}
+              data-testid="action-insert"
+              aria-label={t("compress.actions.insert")}
+            >
+              <Plus className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{insertTooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

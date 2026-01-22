@@ -261,7 +261,10 @@ export function CompressModeContent({
           }
           // Story 10.3: 右侧显示压缩预览列表
           codeContent={
-            <CompressPreviewList messages={messages} />
+            <CompressPreviewList
+              messages={messages}
+              focusedOriginalIndex={focus.focusedIndex}
+            />
           }
           // Story 10.1 AC #5: 精简模式隐藏时间轴
           showTimeline={false}

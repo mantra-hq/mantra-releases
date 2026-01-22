@@ -35,6 +35,8 @@ export interface CompressPreviewListProps {
   messages: NarrativeMessage[];
   /** 自定义 className */
   className?: string;
+  /** 左侧选中的原始消息索引 (用于联动高亮) */
+  focusedOriginalIndex?: number;
 }
 
 // ===== 估算高度函数 =====
@@ -97,6 +99,7 @@ function EmptyState() {
 export function CompressPreviewList({
   messages,
   className,
+  focusedOriginalIndex,
 }: CompressPreviewListProps) {
   const { t } = useTranslation();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -132,7 +135,21 @@ export function CompressPreviewList({
     estimateSize: (index) => estimatePreviewSize(filteredMessages[index]),
     overscan: 5, // 预渲染优化滚动体验
   });
-  
+
+  // 左右联动：焦点变化时滚动到对应位置
+  React.useEffect(() => {
+    if (focusedOriginalIndex === undefined || focusedOriginalIndex < 0) return;
+
+    // 在 filteredMessages 中找到对应原始索引的位置
+    const targetIndex = filteredMessages.findIndex(
+      (m) => m.originalIndex === focusedOriginalIndex
+    );
+
+    if (targetIndex >= 0) {
+      virtualizer.scrollToIndex(targetIndex, { align: "center" });
+    }
+  }, [focusedOriginalIndex, filteredMessages, virtualizer]);
+
   // 空状态: 无变更时的提示
   const hasNoChanges = previewMessages.every((m) => m.operation === "keep");
   
@@ -218,7 +235,8 @@ export function CompressPreviewList({
           >
             {virtualItems.map((virtualItem) => {
               const previewMessage = filteredMessages[virtualItem.index];
-              
+              const isLinked = previewMessage.originalIndex === focusedOriginalIndex;
+
               return (
                 <div
                   key={virtualItem.key}
@@ -240,6 +258,7 @@ export function CompressPreviewList({
                       previewMessage={previewMessage}
                       measureElement={virtualizer.measureElement}
                       index={virtualItem.index}
+                      isLinked={isLinked}
                     />
                   )}
                 </div>

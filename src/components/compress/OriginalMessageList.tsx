@@ -11,11 +11,16 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { OriginalMessageCard } from "./OriginalMessageCard";
 import { EditMessageDialog } from "./EditMessageDialog";
-import { InsertMessageTrigger } from "./InsertMessageTrigger";
 import { InsertMessageDialog } from "./InsertMessageDialog";
 import { InsertedMessageCard } from "./InsertedMessageCard";
 import type { NarrativeMessage } from "@/types/message";
@@ -74,6 +79,8 @@ export function OriginalMessageList({
   focus,
   containerRef,
 }: OriginalMessageListProps) {
+  const { t } = useTranslation();
+
   // Story 10.4: 压缩状态管理
   const {
     setOperation,
@@ -204,7 +211,7 @@ export function OriginalMessageList({
       >
         {/* 消息列表容器 - 使用普通流式布局避免重叠问题 */}
         <div className="w-full px-3 py-2 space-y-1">
-          {/* Story 10.5: 列表开头的插入触发器 (索引 -1) */}
+          {/* 列表开头的插入按钮和已插入消息 */}
           {insertions.get(-1) && (
             <InsertedMessageCard
               message={insertions.get(-1)!.insertedMessage!}
@@ -212,17 +219,50 @@ export function OriginalMessageList({
               onEdit={() => handleEditInsertion(-1)}
             />
           )}
-          <InsertMessageTrigger
-            afterIndex={-1}
-            hasInsertion={false}
-            onClick={() => handleOpenInsertDialog(-1)}
-          />
+          <div className="flex justify-center py-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-6 text-xs",
+                    insertions.get(-1)
+                      ? "text-green-500 hover:text-green-600"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => {
+                    // 如果已有插入，打开编辑；否则打开新建
+                    if (insertions.get(-1)?.insertedMessage) {
+                      handleEditInsertion(-1);
+                    } else {
+                      handleOpenInsertDialog(-1);
+                    }
+                  }}
+                  data-testid="insert-at-start"
+                >
+                  <Plus className="size-3.5 mr-1" />
+                  {insertions.get(-1)
+                    ? t("compress.actions.editInsertedAtStart")
+                    : t("compress.actions.insertAtStart")}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>
+                  {insertions.get(-1)
+                    ? t("compress.actions.editInsertedTooltip")
+                    : t("compress.actions.insertAtStartTooltip")}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
           {/* 渲染消息列表 */}
           {messages.map((message, index) => {
             const handlers = createOperationHandlers(message);
             const currentOperation = getOperationType(message.id);
             const insertion = insertions.get(index);
+            const isLastMessage = index === messages.length - 1;
 
             return (
               <div key={message.id} data-index={index}>
@@ -234,11 +274,21 @@ export function OriginalMessageList({
                   onKeepClick={handlers.onKeepClick}
                   onDeleteClick={handlers.onDeleteClick}
                   onEditClick={handlers.onEditClick}
+                  onInsertClick={() => {
+                    // 如果已有插入，打开编辑；否则打开新建
+                    if (insertion?.insertedMessage) {
+                      handleEditInsertion(index);
+                    } else {
+                      handleOpenInsertDialog(index);
+                    }
+                  }}
+                  isLastMessage={isLastMessage}
+                  hasInsertion={!!insertion?.insertedMessage}
                   isFocused={focus?.focusedIndex === index}
                   onClick={() => focus?.setFocusedIndex(index)}
                 />
 
-                {/* Story 10.5: 已插入的消息卡片 */}
+                {/* 已插入的消息卡片 */}
                 {insertion?.insertedMessage && (
                   <InsertedMessageCard
                     message={insertion.insertedMessage}
@@ -246,13 +296,6 @@ export function OriginalMessageList({
                     onEdit={() => handleEditInsertion(index)}
                   />
                 )}
-
-                {/* Story 10.5: 插入触发器 */}
-                <InsertMessageTrigger
-                  afterIndex={index}
-                  hasInsertion={false}
-                  onClick={() => handleOpenInsertDialog(index)}
-                />
               </div>
             );
           })}

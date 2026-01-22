@@ -58,6 +58,12 @@ export interface OriginalMessageCardProps {
   onDeleteClick?: () => void;
   /** Story 10.4: 点击修改按钮回调 */
   onEditClick?: () => void;
+  /** 点击插入按钮回调 */
+  onInsertClick?: () => void;
+  /** 是否是最后一条消息 */
+  isLastMessage?: boolean;
+  /** 该位置是否已有插入 */
+  hasInsertion?: boolean;
   /** Story 10.4: 是否显示操作按钮 (压缩模式下显示) */
   showActionButtons?: boolean;
   /** Story 10.10: 是否获得键盘焦点 (AC3) */
@@ -223,6 +229,9 @@ export const OriginalMessageCard = React.forwardRef<
   onKeepClick,
   onDeleteClick,
   onEditClick,
+  onInsertClick,
+  isLastMessage = false,
+  hasInsertion = false,
   showActionButtons = false,
   isFocused = false,
   onClick,
@@ -373,6 +382,9 @@ export const OriginalMessageCard = React.forwardRef<
               onKeepClick={onKeepClick}
               onDeleteClick={onDeleteClick}
               onEditClick={onEditClick}
+              onInsertClick={onInsertClick}
+              isLastMessage={isLastMessage}
+              hasInsertion={hasInsertion}
             />
           )}
 

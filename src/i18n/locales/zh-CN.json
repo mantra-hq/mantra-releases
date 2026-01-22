@@ -546,7 +546,14 @@
       "deleteTooltip": "标记为删除 (D)",
       "edit": "修改",
       "editTooltip": "编辑消息内容 (E)",
-      "edited": "已修改"
+      "edited": "已修改",
+      "insert": "插入",
+      "insertAfterTooltip": "在此消息后插入 (I)",
+      "insertAtEndTooltip": "在末尾插入新消息 (I)",
+      "insertAtStart": "在开头插入",
+      "insertAtStartTooltip": "在列表开头插入新消息",
+      "editInsertedTooltip": "编辑已插入的消息",
+      "editInsertedAtStart": "编辑已插入消息"
     },
     "editDialog": {
       "title": "编辑消息",
