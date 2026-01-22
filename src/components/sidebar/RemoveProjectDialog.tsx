@@ -59,7 +59,8 @@ export function RemoveProjectDialog({
           <AlertDialogTitle>⚠️ {t("project.removeFromMantra")}</AlertDialogTitle>
           <AlertDialogDescription>
             {/* AC14: 明确说明不会影响原始代码项目 */}
-            <span className="break-all">
+            {/* Review Fix M3: 改进响应式处理，使用 break-words 替代 break-all */}
+            <span className="block max-w-full break-words">
               {t("project.removeConfirm", { name: projectName })}
             </span>
             <br />
