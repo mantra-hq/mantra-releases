@@ -53,13 +53,15 @@ export function RemoveProjectDialog({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           {/* AC13: 标题包含警告图标 */}
           <AlertDialogTitle>⚠️ {t("project.removeFromMantra")}</AlertDialogTitle>
           <AlertDialogDescription>
             {/* AC14: 明确说明不会影响原始代码项目 */}
-            {t("project.removeConfirm", { name: projectName })}
+            <span className="break-all">
+              {t("project.removeConfirm", { name: projectName })}
+            </span>
             <br />
             <br />
             {t("project.removeDescription")}

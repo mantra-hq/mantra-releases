@@ -463,7 +463,7 @@ async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
 /// Each session file is represented as a DiscoveredFile with:
 /// - path: The session JSONL file path (used for import)
 /// - name: The session filename with date
-/// - project_path: The cwd from session, or codex-project:{cwd_hash} format
+/// - project_path: The cwd from session directly (Story 8.20: no more hashing)
 async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
     let result = tokio::task::spawn_blocking(|| {
         // Try to detect Codex paths
@@ -493,15 +493,9 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
                 // Extract session_id from Codex JSONL file
                 let session_id = extract_session_id_from_codex_file(&session_file.path);
 
-                // Extract cwd from Codex file for project_path
+                // Story 8.20: Use cwd directly as project_path (no more hashing)
+                // Fallback to session-based identifier only if cwd is not available
                 let project_path = extract_cwd_from_codex_file(&session_file.path)
-                    .map(|cwd| {
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::{Hash, Hasher};
-                        let mut hasher = DefaultHasher::new();
-                        cwd.hash(&mut hasher);
-                        format!("codex-project:{:x}", hasher.finish())
-                    })
                     .unwrap_or_else(|| format!("codex-session:{}", session_file.session_id));
 
                 Some(DiscoveredFile {
