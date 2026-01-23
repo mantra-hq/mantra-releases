@@ -192,15 +192,6 @@ export function LogicalProjectTreeItem({
         )}
       </div>
 
-      {/* "需关联"状态提示 */}
-      {logicalProject.needs_association && isExpanded && (
-        <div className="pl-10 pr-4 py-1 text-xs text-yellow-600 dark:text-yellow-500">
-          {logicalProject.path_type === "virtual"
-            ? t("project.needsRealPath", "虚拟路径，点击关联真实目录")
-            : t("project.pathNotFound", "路径不存在，点击更新")}
-        </div>
-      )}
-
       {/* 会话列表 (展开时显示) */}
       {isExpanded && (
         <div className="transition-opacity duration-200 opacity-100">

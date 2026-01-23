@@ -381,7 +381,16 @@ export function ProjectInfoDialog({
             await addProjectPath(projectId, selected, true);
             refetchPaths();
             onProjectUpdated?.();
-            toast.success(t("projectInfo.pathAssociated", "路径已关联"));
+
+            // 显示聚合提示，包含会话数和目标路径
+            const targetName = selected.split("/").pop() || selected;
+            const sessionCount = sessions.length;
+            toast.success(
+                t("projectInfo.pathAssociatedWithCount", "已关联到 {{name}}，{{count}} 个会话已聚合", {
+                    name: targetName,
+                    count: sessionCount,
+                })
+            );
             // 关联成功后关闭对话框
             onOpenChange(false);
         } catch (error) {
@@ -542,7 +551,7 @@ export function ProjectInfoDialog({
                                                 {isAddingPath ? (
                                                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                                 ) : (
-                                                    <FolderOpen className="h-4 w-4 mr-2" />
+                                                    <Link2 className="h-4 w-4 mr-2" />
                                                 )}
                                                 {t("projectInfo.associatePath", "关联真实路径")}
                                             </Button>

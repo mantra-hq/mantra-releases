@@ -159,7 +159,9 @@
     "removeConfirm": "确定要移除「{{name}}」吗？",
     "removeDescription": "这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。",
     "removeProject": "移除项目",
-    "hideEmptyProjects": "隐藏空会话"
+    "hideEmptyProjects": "隐藏空会话",
+    "multiSource": "{{count}} 个来源",
+    "needsRealPath": "需关联真实目录"
   },
   "projectInfo": {
     "description": "项目详细信息",
@@ -188,6 +190,7 @@
     "invalidCwdDescription": "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。",
     "associatePath": "关联真实路径",
     "pathAssociated": "路径已关联",
+    "pathAssociatedWithCount": "已关联到 {{name}}，{{count}} 个会话已聚合",
     "associatePathFailed": "关联路径失败: {{error}}"
   },
   "sync": {
