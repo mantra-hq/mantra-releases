@@ -147,7 +147,10 @@ export function ProjectDrawer({
 
         // 匹配会话（如果已加载）
         const sessions = projectSessions[lp.physical_path];
-        if (sessions?.some((s) => s.id.toLowerCase().includes(keyword))) {
+        if (sessions?.some((s) =>
+          s.id.toLowerCase().includes(keyword) ||
+          s.title?.toLowerCase().includes(keyword)
+        )) {
           return true;
         }
 
@@ -219,10 +222,10 @@ export function ProjectDrawer({
     setIsRemoveDialogOpen(false);
 
     try {
-      // 移除所有关联的存储层项目
-      for (const projectId of logicalProjectToRemove.project_ids) {
-        await removeProject(projectId);
-      }
+      // 并行移除所有关联的存储层项目
+      await Promise.all(
+        logicalProjectToRemove.project_ids.map((projectId) => removeProject(projectId))
+      );
       onProjectsChange?.();
       // 如果移除的是当前正在查看的项目，导航到空状态
       if (isRemovingCurrent) {
@@ -350,9 +353,6 @@ export function ProjectDrawer({
                   onSessionSelect={(sessionId) =>
                     handleSessionSelect(sessionId, lp.physical_path)
                   }
-                  onProjectClick={() => {
-                    setInfoLogicalProject(lp);
-                  }}
                   // Story 2.18 fix: 菜单打开状态
                   isSettingsMenuOpen={menuOpenPath === lp.physical_path}
                   // Story 2.29 V2: 隐藏空会话
@@ -385,18 +385,17 @@ export function ProjectDrawer({
                       onSync={async () => {
                         appLog.syncStart(lp.display_name);
                         try {
-                          // 同步所有关联的存储层项目
-                          let totalNew = 0;
-                          let totalUpdated = 0;
-                          for (const projectId of lp.project_ids) {
-                            const result = await syncProject(projectId);
-                            totalNew += result.new_sessions.length;
-                            totalUpdated += result.updated_sessions.length;
-                          }
+                          // 同步所有关联的存储层项目（并行执行）
+                          const results = await Promise.all(
+                            lp.project_ids.map((projectId) => syncProject(projectId))
+                          );
+                          const totalNew = results.reduce((sum, r) => sum + r.new_sessions.length, 0);
+                          const totalUpdated = results.reduce((sum, r) => sum + r.updated_sessions.length, 0);
+                          const totalUnchanged = results.reduce((sum, r) => sum + r.unchanged_count, 0);
                           showSyncResult(lp.display_name, {
-                            new_sessions: Array(totalNew).fill(null) as any[],
-                            updated_sessions: Array(totalUpdated).fill(null) as any[],
-                            unchanged_count: 0,
+                            new_sessions: results.flatMap((r) => r.new_sessions),
+                            updated_sessions: results.flatMap((r) => r.updated_sessions),
+                            unchanged_count: totalUnchanged,
                           });
                           appLog.syncComplete(lp.display_name, totalNew, totalUpdated);
                           if (totalNew > 0 || totalUpdated > 0) {

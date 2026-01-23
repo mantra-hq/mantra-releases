@@ -39,8 +39,6 @@ export interface LogicalProjectTreeItemProps {
   onToggle: () => void;
   /** 会话点击回调 */
   onSessionSelect: (sessionId: string) => void;
-  /** 点击项目（用于打开详情页）回调 */
-  onProjectClick?: () => void;
   /** 设置菜单组件 */
   settingsMenu?: React.ReactNode;
   /** 菜单是否打开（用于保持按钮可见） */
@@ -84,7 +82,6 @@ export function LogicalProjectTreeItem({
   searchKeyword,
   onToggle,
   onSessionSelect,
-  onProjectClick: _onProjectClick, // Bug Fix V6: 保留 prop 接口，但不再使用（点击名称改为展开/折叠）
   settingsMenu,
   isSettingsMenuOpen = false,
   hideEmptySessions = false,
