@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use super::database::Database;
 use super::error::StorageError;
+use crate::git::detect_git_repo_sync;
 use crate::models::{
     classify_path_type, extract_project_name, normalize_cwd, ContentBlock, ImportResult,
     MantraSession, PathType, Project, SessionSource, SessionSummary,
@@ -1700,10 +1701,11 @@ impl Database {
         Ok(stats)
     }
 
-    /// Check if a path has a .git directory (Task 17: AC15)
+    /// Check if a path is inside a Git repository (Task 17: AC15)
+    /// Bug Fix: Use detect_git_repo_sync to search upward for .git directory
+    /// This correctly handles cases where the associated path is a subdirectory of a git repo
     fn check_git_repo_exists(path: &str) -> bool {
-        let git_path = std::path::Path::new(path).join(".git");
-        git_path.exists()
+        detect_git_repo_sync(path).is_some()
     }
 
     /// Get all sessions for a physical path across all projects (Story 1.12 - AC9)
