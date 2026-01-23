@@ -3,17 +3,17 @@
  * Story 2.18: Task 2
  * Story 2.19: Task 10 - 集成项目管理功能
  * Story 2-26: i18n 国际化
- * Story 1.12: 未分类会话分组
+ * Story 1.12: Phase 5 - 完全切换到逻辑项目视图
  *
  * 侧边抽屉，用于浏览和管理所有项目
  * - 从左侧滑入，宽度 320px
  * - 包含标题栏、搜索框、项目树列表和导入按钮
- * - 支持项目同步、重命名、移除操作
- * - Story 1.12: 显示未分类会话分组
+ * - 显示按物理路径聚合的逻辑项目
+ * - Task 12: 移除"未分类"分组，虚拟路径作为独立逻辑项目
  */
 
 import * as React from "react";
-import { FolderOpen, Plus, Rocket, ChevronsDownUp, Inbox } from "lucide-react";
+import { FolderOpen, Plus, Rocket, ChevronsDownUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -26,47 +26,45 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DrawerSearch } from "./DrawerSearch";
-import { ProjectTreeItem } from "./ProjectTreeItem";
-import { ProjectContextMenu } from "./ProjectContextMenu";
+import { LogicalProjectTreeItem } from "./LogicalProjectTreeItem";
+import { LogicalProjectContextMenu } from "./LogicalProjectContextMenu";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
 import { ProjectInfoDialog } from "./ProjectInfoDialog";
-import { BindSessionDialog } from "./BindSessionDialog";
 import { showSyncResult } from "./SyncResultToast";
 import {
   syncProject,
   removeProject,
-  renameProject,
 } from "@/lib/project-ipc";
-import { useUnassignedSessions } from "@/hooks/useProjects";
 import { toast } from "sonner";
 import { appLog } from "@/lib/log-actions";
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
-import type { Project, Session } from "@/types/project";
+import type { LogicalProjectStats } from "@/types/project";
 import type { SessionSummary } from "./types";
 
 /**
  * ProjectDrawer Props
+ * Story 1.12: Phase 5 - 改用逻辑项目视图
  */
 export interface ProjectDrawerProps {
   /** 抽屉是否打开 */
   isOpen: boolean;
   /** 抽屉开关回调 */
   onOpenChange: (open: boolean) => void;
-  /** 项目列表 */
-  projects: Project[];
+  /** 逻辑项目列表 (按物理路径聚合) - Story 1.12 */
+  logicalProjects: LogicalProjectStats[];
   /** 是否正在加载 */
   isLoading?: boolean;
   /** 当前会话 ID（用于高亮当前选中） */
   currentSessionId?: string;
-  /** 当前项目 ID（用于检测移除当前项目） */
-  currentProjectId?: string;
-  /** 会话点击回调 */
-  onSessionSelect: (sessionId: string, projectId: string) => void;
+  /** 当前物理路径（用于检测移除当前项目） - Story 1.12 */
+  currentPhysicalPath?: string;
+  /** 会话点击回调 - projectId 参数改为物理路径 */
+  onSessionSelect: (sessionId: string, physicalPath: string) => void;
   /** 导入按钮点击回调 */
   onImportClick: () => void;
-  /** 获取项目会话列表 */
-  getProjectSessions: (projectId: string) => Promise<SessionSummary[]>;
-  /** Story 2.19: 项目列表变更回调（用于刷新列表） */
+  /** 获取逻辑项目会话列表 (按物理路径) - Story 1.12 */
+  getLogicalProjectSessions: (physicalPath: string) => Promise<SessionSummary[]>;
+  /** 项目列表变更回调（用于刷新列表） */
   onProjectsChange?: () => void;
   /** 当前项目被移除时的回调（用于导航到空状态） */
   onCurrentProjectRemoved?: () => void;
@@ -74,83 +72,78 @@ export interface ProjectDrawerProps {
 
 /**
  * ProjectDrawer 组件
- * 项目抽屉，从左侧滑入显示项目树
+ * 项目抽屉，从左侧滑入显示逻辑项目树
+ * Story 1.12: Phase 5 - 完全使用逻辑项目视图
  */
 export function ProjectDrawer({
   isOpen,
   onOpenChange,
-  projects,
+  logicalProjects,
   isLoading = false,
   currentSessionId,
-  currentProjectId,
+  currentPhysicalPath,
   onSessionSelect,
   onImportClick,
-  getProjectSessions,
+  getLogicalProjectSessions,
   onProjectsChange,
   onCurrentProjectRemoved,
 }: ProjectDrawerProps) {
   const { t } = useTranslation();
   // 搜索关键词状态
   const [searchKeyword, setSearchKeyword] = React.useState("");
-  // 展开的项目 ID 集合
+  // 展开的逻辑项目路径集合 (使用 physical_path 作为 key)
   const [expandedProjects, setExpandedProjects] = React.useState<Set<string>>(
     new Set()
   );
-  // 项目会话缓存
+  // 逻辑项目会话缓存 (key: physical_path)
   const [projectSessions, setProjectSessions] = React.useState<
     Record<string, SessionSummary[]>
   >({});
-  // 加载中的项目 ID 集合
+  // 加载中的逻辑项目路径集合
   const [loadingProjects, setLoadingProjects] = React.useState<Set<string>>(
     new Set()
   );
 
   // Story 2.19: 项目管理状态
-  // 当前操作的项目（用于对话框）
-  const [activeProject, setActiveProject] = React.useState<Project | null>(null);
+  // 当前操作的逻辑项目（用于对话框）
+  const [activeLogicalProject, setActiveLogicalProject] = React.useState<LogicalProjectStats | null>(null);
   // 移除对话框打开状态
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = React.useState(false);
-  // 重命名中的项目 ID
-  const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null);
-  // Story 2.18 fix: 菜单打开的项目 ID（用于保持按钮可见）
-  const [menuOpenProjectId, setMenuOpenProjectId] = React.useState<string | null>(null);
-  // Story 2.27: 显示详情对话框的项目
-  const [infoProject, setInfoProject] = React.useState<Project | null>(null);
+  // Story 2.18 fix: 菜单打开的逻辑项目路径（用于保持按钮可见）
+  const [menuOpenPath, setMenuOpenPath] = React.useState<string | null>(null);
+  // Story 2.27: 显示详情对话框的逻辑项目
+  const [infoLogicalProject, setInfoLogicalProject] = React.useState<LogicalProjectStats | null>(null);
   // Story 2.29: 隐藏空项目偏好
   const [hideEmptyProjects, setHideEmptyProjects] = useHideEmptyProjects();
 
-  // Story 1.12: 未分类会话
-  const { sessions: unassignedSessions, refetch: refetchUnassigned } = useUnassignedSessions();
-  const [isUnassignedExpanded, setIsUnassignedExpanded] = React.useState(false);
-  // Story 1.12: 会话绑定对话框状态
-  const [bindingSession, setBindingSession] = React.useState<Session | null>(null);
+  // Task 12: 移除未分类会话相关状态（虚拟路径作为独立逻辑项目显示）
 
   // 一键折叠所有项目
   const handleCollapseAll = React.useCallback(() => {
     setExpandedProjects(new Set());
   }, []);
 
-  // 过滤后的项目列表
+  // 过滤后的逻辑项目列表
   const filteredProjects = React.useMemo(() => {
-    let result = projects;
+    let result = logicalProjects;
 
-    // Story 2.29 V2: 使用项目的 is_empty 字段进行过滤（加载时已确定）
+    // Story 2.29 V2: 使用 total_sessions 过滤空项目
     if (hideEmptyProjects) {
-      result = result.filter((project) => !project.is_empty);
+      result = result.filter((lp) => lp.total_sessions > 0);
     }
 
     // 搜索过滤
     if (searchKeyword.trim()) {
       const keyword = searchKeyword.toLowerCase();
-      result = result.filter((project) => {
-        // 匹配项目名
-        if (project.name.toLowerCase().includes(keyword)) return true;
+      result = result.filter((lp) => {
+        // 匹配显示名称
+        if (lp.display_name.toLowerCase().includes(keyword)) return true;
 
-        // 匹配项目路径
-        if (project.cwd.toLowerCase().includes(keyword)) return true;
+        // 匹配物理路径
+        if (lp.physical_path.toLowerCase().includes(keyword)) return true;
 
         // 匹配会话（如果已加载）
-        const sessions = projectSessions[project.id];
+        const sessions = projectSessions[lp.physical_path];
         if (sessions?.some((s) => s.id.toLowerCase().includes(keyword))) {
           return true;
         }
@@ -160,49 +153,49 @@ export function ProjectDrawer({
     }
 
     return result;
-  }, [projects, searchKeyword, projectSessions, hideEmptyProjects]);
+  }, [logicalProjects, searchKeyword, projectSessions, hideEmptyProjects]);
 
-  // 切换项目展开状态
+  // 切换逻辑项目展开状态
   const handleToggleProject = React.useCallback(
-    async (projectId: string) => {
+    async (physicalPath: string) => {
       setExpandedProjects((prev) => {
         const next = new Set(prev);
-        if (next.has(projectId)) {
-          next.delete(projectId);
+        if (next.has(physicalPath)) {
+          next.delete(physicalPath);
         } else {
-          next.add(projectId);
+          next.add(physicalPath);
         }
         return next;
       });
 
       // 如果展开且尚未加载会话，则加载
       if (
-        !expandedProjects.has(projectId) &&
-        !projectSessions[projectId] &&
-        !loadingProjects.has(projectId)
+        !expandedProjects.has(physicalPath) &&
+        !projectSessions[physicalPath] &&
+        !loadingProjects.has(physicalPath)
       ) {
-        setLoadingProjects((prev) => new Set(prev).add(projectId));
+        setLoadingProjects((prev) => new Set(prev).add(physicalPath));
         try {
-          const sessions = await getProjectSessions(projectId);
-          setProjectSessions((prev) => ({ ...prev, [projectId]: sessions }));
+          const sessions = await getLogicalProjectSessions(physicalPath);
+          setProjectSessions((prev) => ({ ...prev, [physicalPath]: sessions }));
         } catch (error) {
-          console.error("Failed to load project sessions:", error);
+          console.error("Failed to load logical project sessions:", error);
         } finally {
           setLoadingProjects((prev) => {
             const next = new Set(prev);
-            next.delete(projectId);
+            next.delete(physicalPath);
             return next;
           });
         }
       }
     },
-    [expandedProjects, projectSessions, loadingProjects, getProjectSessions]
+    [expandedProjects, projectSessions, loadingProjects, getLogicalProjectSessions]
   );
 
   // 处理会话选择
   const handleSessionSelect = React.useCallback(
-    (sessionId: string, projectId: string) => {
-      onSessionSelect(sessionId, projectId);
+    (sessionId: string, physicalPath: string) => {
+      onSessionSelect(sessionId, physicalPath);
       onOpenChange(false); // AC11: 导航后自动关闭抽屉
     },
     [onSessionSelect, onOpenChange]
@@ -214,59 +207,36 @@ export function ProjectDrawer({
     onOpenChange(false);
   }, [onImportClick, onOpenChange]);
 
-  // Story 2.19: 处理重命名保存
-  const handleRenameSave = React.useCallback(
-    async (newName: string) => {
-      if (!renamingProjectId) return;
-
-      try {
-        await renameProject(renamingProjectId, newName);
-        // Story 2.28: 记录重命名日志
-        const oldProject = projects.find((p) => p.id === renamingProjectId);
-        appLog.projectRenamed(oldProject?.name || renamingProjectId, newName);
-        onProjectsChange?.();
-        setRenamingProjectId(null);
-      } catch (error) {
-        toast.error(t("project.renameFailed", "重命名失败"), {
-          description: (error as Error).message,
-        });
-      }
-    },
-    [renamingProjectId, onProjectsChange, t]
-  );
-
-  // Story 2.19: 处理重命名取消
-  const handleRenameCancel = React.useCallback(() => {
-    setRenamingProjectId(null);
-  }, []);
-
-  // Story 2.19: 处理移除确认
+  // Story 2.19: 处理移除确认（移除逻辑项目关联的所有存储层项目）
   const handleRemoveConfirm = React.useCallback(async () => {
-    if (!activeProject) return;
+    if (!activeLogicalProject) return;
 
-    const projectToRemove = activeProject;
-    const isRemovingCurrentProject = projectToRemove.id === currentProjectId;
+    const logicalProjectToRemove = activeLogicalProject;
+    const isRemovingCurrent = logicalProjectToRemove.physical_path === currentPhysicalPath;
     setIsRemoveDialogOpen(false);
 
     try {
-      await removeProject(projectToRemove.id);
+      // 移除所有关联的存储层项目
+      for (const projectId of logicalProjectToRemove.project_ids) {
+        await removeProject(projectId);
+      }
       onProjectsChange?.();
       // 如果移除的是当前正在查看的项目，导航到空状态
-      if (isRemovingCurrentProject) {
+      if (isRemovingCurrent) {
         onCurrentProjectRemoved?.();
       }
-      toast.success(t("project.removed", { name: projectToRemove.name }));
-      // Story 2.28: 记录移除日志
-      appLog.projectRemoved(projectToRemove.name);
+      toast.success(t("project.removed", { name: logicalProjectToRemove.display_name }));
+      // 记录移除日志
+      appLog.projectRemoved(logicalProjectToRemove.display_name);
     } catch (error) {
       toast.error(t("project.removeFailed"), {
         description: (error as Error).message,
       });
     }
-  }, [activeProject, currentProjectId, onProjectsChange, onCurrentProjectRemoved, t]);
+  }, [activeLogicalProject, currentPhysicalPath, onProjectsChange, onCurrentProjectRemoved, t]);
 
   // 空状态
-  const isEmpty = !isLoading && projects.length === 0;
+  const isEmpty = !isLoading && logicalProjects.length === 0;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -363,125 +333,74 @@ export function ProjectDrawer({
             </div>
           ) : (
             <div data-testid="project-list" className="py-2">
-              {filteredProjects.map((project) => (
-                <ProjectTreeItem
-                  key={project.id}
-                  project={project}
-                  isExpanded={expandedProjects.has(project.id)}
-                  isLoading={loadingProjects.has(project.id)}
-                  sessions={projectSessions[project.id] || []}
+              {/* Story 1.12: 使用 LogicalProjectTreeItem 显示逻辑项目 */}
+              {filteredProjects.map((lp) => (
+                <LogicalProjectTreeItem
+                  key={lp.physical_path}
+                  logicalProject={lp}
+                  isExpanded={expandedProjects.has(lp.physical_path)}
+                  isLoading={loadingProjects.has(lp.physical_path)}
+                  sessions={projectSessions[lp.physical_path] || []}
                   currentSessionId={currentSessionId}
                   searchKeyword={searchKeyword}
-                  onToggle={() => handleToggleProject(project.id)}
+                  onToggle={() => handleToggleProject(lp.physical_path)}
                   onSessionSelect={(sessionId) =>
-                    handleSessionSelect(sessionId, project.id)
+                    handleSessionSelect(sessionId, lp.physical_path)
                   }
-                  // Story 2.19: 重命名相关
-                  isRenaming={renamingProjectId === project.id}
-                  onRename={handleRenameSave}
-                  onRenameCancel={handleRenameCancel}
+                  onProjectClick={() => {
+                    setInfoLogicalProject(lp);
+                  }}
                   // Story 2.18 fix: 菜单打开状态
-                  isSettingsMenuOpen={menuOpenProjectId === project.id}
+                  isSettingsMenuOpen={menuOpenPath === lp.physical_path}
                   // Story 2.29 V2: 隐藏空会话
                   hideEmptySessions={hideEmptyProjects}
-                  // Story 2.19: 设置菜单
+                  // 设置菜单
                   settingsMenu={
-                    <ProjectContextMenu
+                    <LogicalProjectContextMenu
+                      logicalProject={lp}
                       onOpenChange={(open) => {
-                        setMenuOpenProjectId(open ? project.id : null);
+                        setMenuOpenPath(open ? lp.physical_path : null);
                       }}
                       onSync={async () => {
-                        appLog.syncStart(project.name);
+                        appLog.syncStart(lp.display_name);
                         try {
-                          const result = await syncProject(project.id);
-                          showSyncResult(project.name, result);
-                          appLog.syncComplete(project.name, result.new_sessions.length, result.updated_sessions.length);
-                          if (result.new_sessions.length > 0 || result.updated_sessions.length > 0) {
-                            const sessions = await getProjectSessions(project.id);
-                            setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
+                          // 同步所有关联的存储层项目
+                          let totalNew = 0;
+                          let totalUpdated = 0;
+                          for (const projectId of lp.project_ids) {
+                            const result = await syncProject(projectId);
+                            totalNew += result.new_sessions.length;
+                            totalUpdated += result.updated_sessions.length;
+                          }
+                          showSyncResult(lp.display_name, {
+                            new_sessions: Array(totalNew).fill(null) as any[],
+                            updated_sessions: Array(totalUpdated).fill(null) as any[],
+                            unchanged_count: 0,
+                          });
+                          appLog.syncComplete(lp.display_name, totalNew, totalUpdated);
+                          if (totalNew > 0 || totalUpdated > 0) {
+                            const sessions = await getLogicalProjectSessions(lp.physical_path);
+                            setProjectSessions((prev) => ({ ...prev, [lp.physical_path]: sessions }));
                             onProjectsChange?.();
                           }
                         } catch (error) {
-                          showSyncResult(project.name, null, error as Error);
-                          appLog.syncError(project.name, (error as Error).message);
+                          showSyncResult(lp.display_name, null, error as Error);
+                          appLog.syncError(lp.display_name, (error as Error).message);
                         }
-                      }}
-                      onForceSync={async () => {
-                        appLog.syncStart(project.name + " (force)");
-                        try {
-                          const result = await syncProject(project.id, true);
-                          showSyncResult(project.name, result, undefined, true);
-                          appLog.syncComplete(project.name, result.new_sessions.length, result.updated_sessions.length);
-                          // 强制重新解析后总是刷新会话列表
-                          const sessions = await getProjectSessions(project.id);
-                          setProjectSessions((prev) => ({ ...prev, [project.id]: sessions }));
-                          onProjectsChange?.();
-                        } catch (error) {
-                          showSyncResult(project.name, null, error as Error);
-                          appLog.syncError(project.name, (error as Error).message);
-                        }
-                      }}
-                      onRename={() => {
-                        setRenamingProjectId(project.id);
                       }}
                       onRemove={() => {
-                        setActiveProject(project);
+                        setActiveLogicalProject(lp);
                         setIsRemoveDialogOpen(true);
                       }}
                       onViewInfo={() => {
-                        setInfoProject(project);
+                        setInfoLogicalProject(lp);
                       }}
                     />
                   }
                 />
               ))}
 
-              {/* Story 1.12: 未分类会话分组 */}
-              {unassignedSessions.length > 0 && (
-                <div className="mt-2 border-t pt-2">
-                  <button
-                    onClick={() => setIsUnassignedExpanded(!isUnassignedExpanded)}
-                    className={cn(
-                      "flex items-center gap-2 w-full px-3 py-1.5 text-left",
-                      "hover:bg-muted/50 rounded-md transition-colors",
-                      "text-muted-foreground"
-                    )}
-                    data-testid="unassigned-sessions-toggle"
-                  >
-                    <Inbox className="h-4 w-4 shrink-0" />
-                    <span className="text-sm font-medium flex-1">
-                      {t("project.unassigned", "未分类")}
-                    </span>
-                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                      {unassignedSessions.length}
-                    </span>
-                  </button>
-                  {isUnassignedExpanded && (
-                    <div className="pl-6 py-1 space-y-0.5">
-                      {unassignedSessions.map((session) => (
-                        <button
-                          key={session.id}
-                          onClick={() => handleSessionSelect(session.id, "")}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setBindingSession(session);
-                          }}
-                          className={cn(
-                            "flex items-center gap-2 w-full px-2 py-1 text-left",
-                            "hover:bg-muted/50 rounded text-sm transition-colors",
-                            currentSessionId === session.id && "bg-muted"
-                          )}
-                          title={t("session.rightClickToBind", "右键点击绑定到项目")}
-                        >
-                          <span className="truncate text-muted-foreground">
-                            {session.title || session.id.slice(0, 8)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Task 12: 移除"未分类"分组 - 虚拟路径作为独立逻辑项目显示 */}
             </div>
           )}
         </div>
@@ -506,40 +425,26 @@ export function ProjectDrawer({
       <RemoveProjectDialog
         isOpen={isRemoveDialogOpen}
         onOpenChange={setIsRemoveDialogOpen}
-        projectName={activeProject?.name ?? ""}
+        projectName={activeLogicalProject?.display_name ?? ""}
         onConfirm={handleRemoveConfirm}
       />
 
-      {/* Story 2.27: 项目元信息对话框 */}
-      {/* Story 1.9: Task 8.4 - 添加 onProjectUpdated 回调支持项目 cwd 更新 */}
+      {/* Story 2.27 + 1.12: 逻辑项目信息对话框 */}
+      {/* Task 15: 详情页统一为唯一关联入口 */}
       <ProjectInfoDialog
-        isOpen={infoProject !== null}
+        isOpen={infoLogicalProject !== null}
         onOpenChange={(open) => {
-          if (!open) setInfoProject(null);
+          if (!open) setInfoLogicalProject(null);
         }}
-        project={infoProject}
-        getProjectSessions={getProjectSessions}
-        onProjectUpdated={(updatedProject) => {
-          // 更新 infoProject 状态以刷新对话框显示
-          setInfoProject(updatedProject);
+        logicalProject={infoLogicalProject}
+        getLogicalProjectSessions={getLogicalProjectSessions}
+        onProjectUpdated={() => {
           // 触发项目列表刷新
           onProjectsChange?.();
         }}
       />
 
-      {/* Story 1.12: 会话绑定对话框 */}
-      <BindSessionDialog
-        isOpen={bindingSession !== null}
-        onOpenChange={(open) => {
-          if (!open) setBindingSession(null);
-        }}
-        session={bindingSession}
-        projects={projects}
-        onBindSuccess={() => {
-          refetchUnassigned();
-          onProjectsChange?.();
-        }}
-      />
+      {/* Task 12: 移除会话绑定对话框 - 虚拟路径作为独立逻辑项目显示 */}
     </Sheet>
   );
 }

@@ -40,7 +40,7 @@ import {
     Trash2,
     Star,
 } from "lucide-react";
-import type { Project } from "@/types/project";
+import type { Project, LogicalProjectStats } from "@/types/project";
 import type { SessionSummary } from "@/lib/project-ipc";
 import { updateProjectCwd } from "@/lib/project-ipc";
 import { useProjectPaths, addProjectPath, removeProjectPath, setProjectPrimaryPath } from "@/hooks/useProjects";
@@ -49,18 +49,23 @@ import { toast } from "sonner";
 
 /**
  * ProjectInfoDialog Props
+ * Story 1.12: Phase 5 - 支持逻辑项目视图
  */
 export interface ProjectInfoDialogProps {
     /** 是否打开 */
     isOpen: boolean;
     /** 打开状态变化回调 */
     onOpenChange: (open: boolean) => void;
-    /** 项目信息 */
-    project: Project | null;
-    /** 获取项目会话列表 */
-    getProjectSessions: (projectId: string) => Promise<SessionSummary[]>;
-    /** 项目更新回调 (Story 1.9) */
-    onProjectUpdated?: (project: Project) => void;
+    /** 项目信息 (存储层视图) - 向后兼容 */
+    project?: Project | null;
+    /** 获取项目会话列表 (存储层) - 向后兼容 */
+    getProjectSessions?: (projectId: string) => Promise<SessionSummary[]>;
+    /** 逻辑项目信息 (视图层) - Story 1.12 */
+    logicalProject?: LogicalProjectStats | null;
+    /** 获取逻辑项目会话列表 (视图层) - Story 1.12 */
+    getLogicalProjectSessions?: (physicalPath: string) => Promise<SessionSummary[]>;
+    /** 项目更新回调 */
+    onProjectUpdated?: (project?: Project) => void;
 }
 
 /**
@@ -223,42 +228,63 @@ function countSessionsBySource(sessions: SessionSummary[]): Record<string, numbe
 /**
  * ProjectInfoDialog 组件
  * 显示项目的元信息
+ * Story 1.12: 支持逻辑项目视图
  */
 export function ProjectInfoDialog({
     isOpen,
     onOpenChange,
     project,
     getProjectSessions,
+    logicalProject,
+    getLogicalProjectSessions,
     onProjectUpdated,
 }: ProjectInfoDialogProps) {
     const { t, i18n } = useTranslation();
     const [sessions, setSessions] = React.useState<SessionSummary[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isUpdatingCwd, setIsUpdatingCwd] = React.useState(false);
-    const [currentProject, setCurrentProject] = React.useState<Project | null>(project);
+    const [currentProject, setCurrentProject] = React.useState<Project | null>(project ?? null);
     const [isAddingPath, setIsAddingPath] = React.useState(false);
     const [removingPathId, setRemovingPathId] = React.useState<string | null>(null);
 
-    // Story 1.12: 获取项目的所有关联路径
-    const { paths, refetch: refetchPaths } = useProjectPaths(currentProject?.id ?? null);
+    // Story 1.12: 判断是否使用逻辑项目视图
+    const isLogicalView = Boolean(logicalProject);
+    const displayName = isLogicalView ? logicalProject?.display_name : currentProject?.name;
+
+    // Story 1.12: 获取项目的所有关联路径（仅存储层模式）
+    const { paths, refetch: refetchPaths } = useProjectPaths(
+        isLogicalView ? null : (currentProject?.id ?? null)
+    );
 
     // 当 project prop 变化时更新内部状态
     React.useEffect(() => {
-        setCurrentProject(project);
+        setCurrentProject(project ?? null);
     }, [project]);
 
     // 当对话框打开时加载会话
     React.useEffect(() => {
-        if (isOpen && currentProject) {
-            setIsLoading(true);
+        if (!isOpen) {
+            setSessions([]);
+            return;
+        }
+
+        setIsLoading(true);
+
+        // 根据视图模式选择不同的加载方式
+        if (isLogicalView && logicalProject && getLogicalProjectSessions) {
+            getLogicalProjectSessions(logicalProject.physical_path)
+                .then(setSessions)
+                .catch(console.error)
+                .finally(() => setIsLoading(false));
+        } else if (currentProject && getProjectSessions) {
             getProjectSessions(currentProject.id)
                 .then(setSessions)
                 .catch(console.error)
                 .finally(() => setIsLoading(false));
         } else {
-            setSessions([]);
+            setIsLoading(false);
         }
-    }, [isOpen, currentProject, getProjectSessions]);
+    }, [isOpen, currentProject, getProjectSessions, logicalProject, getLogicalProjectSessions, isLogicalView]);
 
     /**
      * 处理设置工作目录
@@ -371,9 +397,12 @@ export function ProjectInfoDialog({
         }
     };
 
-    if (!currentProject) return null;
+    // 如果没有任何项目数据，不渲染
+    if (!currentProject && !logicalProject) return null;
 
-    const isPlaceholder = isPlaceholderCwd(currentProject.cwd);
+    const isPlaceholder = isLogicalView
+        ? logicalProject?.needs_association ?? false
+        : isPlaceholderCwd(currentProject?.cwd ?? "");
     const sourceCounts = countSessionsBySource(sessions);
     const sources = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1]);
 
@@ -385,10 +414,16 @@ export function ProjectInfoDialog({
                         <DialogTitle className="flex items-center gap-2">
                             <FolderOpen className="h-5 w-5 shrink-0" />
                             <TruncatedText
-                                text={currentProject.name}
+                                text={displayName ?? "Unknown"}
                                 maxLength={30}
                                 className="text-lg"
                             />
+                            {/* 多来源指示器 (逻辑项目视图) */}
+                            {isLogicalView && logicalProject && logicalProject.project_count > 1 && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                                    {t("project.multiSource", { count: logicalProject.project_count })}
+                                </span>
+                            )}
                         </DialogTitle>
                         <DialogDescription className="sr-only">
                             {t("projectInfo.description", "项目详细信息")}
@@ -485,7 +520,7 @@ export function ProjectInfoDialog({
                                                 )}
                                             </div>
                                         ))
-                                    ) : (
+                                    ) : currentProject ? (
                                         // 如果没有 paths 记录，显示 cwd 作为兼容
                                         <div className="flex items-center gap-2">
                                             <TruncatedText
@@ -509,13 +544,23 @@ export function ProjectInfoDialog({
                                                 )}
                                             </Button>
                                         </div>
-                                    )}
+                                    ) : logicalProject ? (
+                                        // 逻辑项目视图：显示物理路径
+                                        <div className="flex items-center gap-2">
+                                            <TruncatedText
+                                                text={logicalProject.physical_path}
+                                                maxLength={40}
+                                                mono
+                                                className="text-sm flex-1"
+                                            />
+                                        </div>
+                                    ) : null}
                                 </div>
                             </div>
                         </div>
 
                         {/* Git Remote URL (如果有) - Story 1.9 */}
-                        {currentProject.git_remote_url && (
+                        {currentProject?.git_remote_url && (
                             <InfoRow
                                 icon={Link2}
                                 label={t("projectInfo.gitRemoteUrl", "Git 仓库 URL")}
@@ -551,30 +596,37 @@ export function ProjectInfoDialog({
                                     </div>
                                 ) : (
                                     <div className="text-sm text-muted-foreground">
-                                        {currentProject.session_count}
+                                        {isLogicalView ? logicalProject?.total_sessions : currentProject?.session_count}
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* 创建时间 */}
-                        <InfoRow
-                            icon={Calendar}
-                            label={t("projectInfo.createdAt", "创建时间")}
-                            value={formatDateTime(currentProject.created_at, i18n.language)}
-                        />
+                        {/* 创建时间 - 仅存储层模式 */}
+                        {currentProject && (
+                            <InfoRow
+                                icon={Calendar}
+                                label={t("projectInfo.createdAt", "创建时间")}
+                                value={formatDateTime(currentProject.created_at, i18n.language)}
+                            />
+                        )}
 
                         {/* 最后活动时间 */}
                         <InfoRow
                             icon={Clock}
                             label={t("projectInfo.lastActivity", "最后活动")}
-                            value={formatDateTime(currentProject.last_activity, i18n.language)}
+                            value={formatDateTime(
+                                isLogicalView && logicalProject
+                                    ? logicalProject.last_activity
+                                    : currentProject?.last_activity ?? new Date().toISOString(),
+                                i18n.language
+                            )}
                         />
 
                         {/* Git 仓库路径 - 仅当与 cwd 不同时显示（cwd 是子目录的情况） */}
-                        {currentProject.has_git_repo &&
-                            currentProject.git_repo_path &&
-                            currentProject.git_repo_path !== currentProject.cwd && (
+                        {currentProject?.has_git_repo &&
+                            currentProject?.git_repo_path &&
+                            currentProject?.git_repo_path !== currentProject?.cwd && (
                                 <InfoRow
                                     icon={GitBranch}
                                     label={t("projectInfo.gitPath", "Git 仓库根目录")}
@@ -582,6 +634,15 @@ export function ProjectInfoDialog({
                                     mono
                                 />
                             )}
+                        
+                        {/* 逻辑项目 Git 状态 */}
+                        {isLogicalView && logicalProject?.has_git_repo && (
+                            <InfoRow
+                                icon={GitBranch}
+                                label={t("projectInfo.gitStatus", "Git 状态")}
+                                value={t("projectInfo.hasGitRepo", "已检测到 Git 仓库")}
+                            />
+                        )}
                     </div>
 
                     {/* 无效 CWD 提示 */}

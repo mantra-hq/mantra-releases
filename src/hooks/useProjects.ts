@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 // Story 9.4: 使用 IPC 适配器支持 E2E 测试环境
 import { invoke } from "@/lib/ipc-adapter";
-import type { Project, ProjectPath, SessionBinding } from "@/types/project";
+import type { Project, ProjectPath, SessionBinding, LogicalProjectStats } from "@/types/project";
 import type { Session } from "@/types/project";
 
 /**

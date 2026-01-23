@@ -32,6 +32,18 @@ pub struct LogicalProjectStats {
     pub total_sessions: u32,
     /// Most recent activity across all projects with this path
     pub last_activity: DateTime<Utc>,
+    /// Display name extracted from the path (Task 8.1)
+    pub display_name: String,
+    /// Path type: local, virtual, or remote (Task 8.2)
+    pub path_type: String,
+    /// Whether the local path exists on filesystem (Task 8.3)
+    /// Only meaningful for path_type = "local"
+    pub path_exists: bool,
+    /// Whether this logical project needs association (Task 8.4)
+    /// True if path_type is "virtual" or (path_type is "local" AND path_exists is false)
+    pub needs_association: bool,
+    /// Whether any of the associated projects has a git repo (Task 17: AC15)
+    pub has_git_repo: bool,
 }
 
 /// Search result item
@@ -1484,6 +1496,7 @@ impl Database {
         is_primary: bool,
     ) -> Result<crate::models::ProjectPath, StorageError> {
         let normalized_path = normalize_cwd(path);
+        let path_type = classify_path_type(&normalized_path);
 
         // Story 1.12: Check if path already exists for THIS project (project-level uniqueness)
         // Same path can belong to multiple projects (from different import sources)
@@ -1519,6 +1532,11 @@ impl Database {
                 "UPDATE project_paths SET is_primary = 0 WHERE project_id = ?1 AND is_primary = 1",
                 params![project_id],
             )?;
+
+            // Task 16 (AC14): When adding a non-virtual path as primary, remove virtual paths
+            if path_type != PathType::Virtual {
+                self.remove_virtual_paths_for_project(project_id)?;
+            }
         }
 
         self.connection().execute(
@@ -1533,6 +1551,28 @@ impl Database {
             is_primary,
             created_at: now,
         })
+    }
+
+    /// Remove all virtual paths for a project (Task 16 - AC14)
+    ///
+    /// When a user associates a real path with a project (as primary),
+    /// the original virtual path placeholder should be removed.
+    pub fn remove_virtual_paths_for_project(&self, project_id: &str) -> Result<u32, StorageError> {
+        let deleted = self.connection().execute(
+            r#"
+            DELETE FROM project_paths
+            WHERE project_id = ?1
+              AND (
+                  path LIKE 'gemini-project:%'
+                  OR path LIKE 'placeholder:%'
+                  OR path = ''
+                  OR path = 'unknown'
+              )
+            "#,
+            params![project_id],
+        )?;
+
+        Ok(deleted as u32)
     }
 
     /// Remove a path from a project (Story 1.12 - AC1)
@@ -1590,6 +1630,9 @@ impl Database {
     /// This enables the view layer to display "logical projects" that combine sessions
     /// from different import sources (Claude, Gemini, Cursor, etc.) that share the same path.
     pub fn get_logical_project_stats(&self) -> Result<Vec<LogicalProjectStats>, StorageError> {
+        use crate::models::{classify_path_type, check_path_exists, extract_project_name, PathType};
+
+        // Task 9.1: Remove virtual path exclusion - include ALL paths including virtual ones
         let mut stmt = self.connection().prepare(
             r#"
             SELECT
@@ -1600,13 +1643,10 @@ impl Database {
                  INNER JOIN projects proj ON s.project_id = proj.id
                  INNER JOIN project_paths pp2 ON pp2.project_id = proj.id
                  WHERE pp2.path = pp.path) as total_sessions,
-                MAX(p.last_activity) as last_activity
+                MAX(p.last_activity) as last_activity,
+                MAX(p.has_git_repo) as has_git_repo
             FROM project_paths pp
             JOIN projects p ON pp.project_id = p.id
-            WHERE pp.path NOT LIKE 'gemini-project:%'
-              AND pp.path NOT LIKE 'placeholder:%'
-              AND pp.path != ''
-              AND pp.path != 'unknown'
             GROUP BY pp.path
             ORDER BY last_activity DESC
             "#,
@@ -1614,22 +1654,56 @@ impl Database {
 
         let stats = stmt
             .query_map([], |row| {
+                let physical_path: String = row.get(0)?;
                 let project_ids_str: String = row.get(2)?;
                 let last_activity_str: String = row.get(4)?;
+                let has_git_repo_db: i32 = row.get(5)?;
+
+                // Task 9.2: Calculate path_type and path_exists
+                let path_type = classify_path_type(&physical_path);
+                let path_type_str = path_type.as_str().to_string();
+                let path_exists = match path_type {
+                    PathType::Local => check_path_exists(&physical_path),
+                    _ => true, // Virtual and remote paths always "exist"
+                };
+
+                // Task 8.4: Calculate needs_association
+                let needs_association = match path_type {
+                    PathType::Virtual => true,
+                    PathType::Local => !path_exists,
+                    PathType::Remote => false,
+                };
+
+                // Task 9.3: Extract display_name from path
+                let display_name = extract_project_name(&physical_path);
+
+                // Task 17: Aggregate has_git_repo from DB + real-time check
+                let has_git_repo = has_git_repo_db > 0 || (path_exists && Self::check_git_repo_exists(&physical_path));
 
                 Ok(LogicalProjectStats {
-                    physical_path: row.get(0)?,
+                    physical_path,
                     project_count: row.get::<_, i32>(1)? as u32,
                     project_ids: project_ids_str.split(',').map(String::from).collect(),
                     total_sessions: row.get::<_, i32>(3)? as u32,
                     last_activity: DateTime::parse_from_rfc3339(&last_activity_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
+                    display_name,
+                    path_type: path_type_str,
+                    path_exists,
+                    needs_association,
+                    has_git_repo,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(stats)
+    }
+
+    /// Check if a path has a .git directory (Task 17: AC15)
+    fn check_git_repo_exists(path: &str) -> bool {
+        let git_path = std::path::Path::new(path).join(".git");
+        git_path.exists()
     }
 
     /// Get all sessions for a physical path across all projects (Story 1.12 - AC9)

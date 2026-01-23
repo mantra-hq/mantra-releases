@@ -1,24 +1,27 @@
 /**
  * useProjectDrawer Hook Tests
  * Story 2.18: Task 6.5
+ * Story 1.12: Phase 5 - 更新为逻辑项目视图接口
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useProjectDrawer } from "./useProjectDrawer";
 
-// Mock useProjects hook
+// Mock useLogicalProjectStats hook (Story 1.12)
 vi.mock("./useProjects", () => ({
-  useProjects: () => ({
-    projects: [
+  useLogicalProjectStats: () => ({
+    stats: [
       {
-        id: "proj-1",
-        name: "test-project",
-        cwd: "/home/user/test",
-        session_count: 3,
-        created_at: "2024-01-01T00:00:00Z",
+        physical_path: "/home/user/test",
+        project_count: 1,
+        project_ids: ["proj-1"],
+        total_sessions: 3,
         last_activity: "2024-01-02T00:00:00Z",
-        git_repo_path: null,
+        display_name: "test-project",
+        path_type: "local",
+        path_exists: true,
+        needs_association: false,
         has_git_repo: false,
       },
     ],
@@ -26,17 +29,14 @@ vi.mock("./useProjects", () => ({
     error: null,
     refetch: vi.fn(),
   }),
-}));
-
-// Mock project-ipc
-vi.mock("@/lib/project-ipc", () => ({
-  getProjectSessions: vi.fn().mockResolvedValue([
+  getSessionsByPhysicalPath: vi.fn().mockResolvedValue([
     {
       id: "sess-1",
       source: "claude",
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-02T00:00:00Z",
       message_count: 10,
+      is_empty: false,
     },
   ]),
 }));
@@ -99,19 +99,19 @@ describe("useProjectDrawer", () => {
     expect(result.current.isOpen).toBe(false);
   });
 
-  it("provides projects from useProjects", () => {
+  it("provides logicalProjects from useLogicalProjectStats", () => {
     const { result } = renderHook(() => useProjectDrawer());
-    expect(result.current.projects).toHaveLength(1);
-    expect(result.current.projects[0].name).toBe("test-project");
+    expect(result.current.logicalProjects).toHaveLength(1);
+    expect(result.current.logicalProjects[0].display_name).toBe("test-project");
   });
 
-  it("provides loading state from useProjects", () => {
+  it("provides loading state from useLogicalProjectStats", () => {
     const { result } = renderHook(() => useProjectDrawer());
     expect(result.current.isLoading).toBe(false);
   });
 
-  it("provides getProjectSessions function", () => {
+  it("provides getLogicalProjectSessions function", () => {
     const { result } = renderHook(() => useProjectDrawer());
-    expect(typeof result.current.getProjectSessions).toBe("function");
+    expect(typeof result.current.getLogicalProjectSessions).toBe("function");
   });
 });

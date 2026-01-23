@@ -180,6 +180,8 @@ export interface SourceContext {
  *
  * 按物理路径聚合的项目统计信息。
  * 用于视图层显示"逻辑项目"，将来自不同导入源的会话聚合在一起。
+ *
+ * Story 1.12 Phase 5: 增强数据结构
  */
 export interface LogicalProjectStats {
   /** 物理路径 (已标准化) */
@@ -192,4 +194,16 @@ export interface LogicalProjectStats {
   total_sessions: number;
   /** 最近活动时间 (ISO 8601 字符串) */
   last_activity: string;
+  /** 显示名称 (从路径提取) - Task 8.1 */
+  display_name: string;
+  /** 路径类型: local/virtual/remote - Task 8.2 */
+  path_type: PathType;
+  /** 本机路径是否存在 (仅 local 类型有效) - Task 8.3 */
+  path_exists: boolean;
+  /** 是否需要关联真实路径 - Task 8.4
+   * True if path_type is "virtual" or (path_type is "local" AND path_exists is false)
+   */
+  needs_association: boolean;
+  /** 是否关联 Git 仓库 (聚合自关联项目) - Task 17 */
+  has_git_repo: boolean;
 }

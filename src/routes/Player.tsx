@@ -181,12 +181,13 @@ export default function Player() {
 
   // Story 2.18: ProjectDrawer 状态
   // Story 2.21 AC #2: 无 sessionId 时默认展开抽屉
+  // Story 1.12: 改用逻辑项目视图
   const {
     isOpen: drawerOpen,
     setIsOpen: setDrawerOpen,
-    projects: allProjects,
+    logicalProjects,
     isLoading: projectsLoading,
-    getProjectSessions: fetchProjectSessions,
+    getLogicalProjectSessions: fetchLogicalProjectSessions,
     refetchProjects,
   } = useProjectDrawer({ defaultOpen: !sessionId });
 
@@ -775,17 +776,18 @@ export default function Player() {
         />
         {/* Story 2.34: 根据模式显示不同内容 */}
         <main className="flex-1 min-h-0">
-          {appMode === "analytics" && allProjects.length > 0 ? (
+          {appMode === "analytics" && logicalProjects.length > 0 ? (
             /* 统计模式下显示第一个项目的统计（或提示选择项目） */
+            /* Story 1.12: 使用第一个逻辑项目的第一个存储层项目 ID */
             <ProjectStatsView
-              projectId={allProjects[0]?.id ?? ""}
-              projectName={allProjects[0]?.name}
+              projectId={logicalProjects[0]?.project_ids[0] ?? ""}
+              projectName={logicalProjects[0]?.display_name}
               onImport={() => setImportOpen(true)}
             />
           ) : (
             /* 回放模式或无项目时显示空状态 */
             <PlayerEmptyState
-              hasProjects={allProjects.length > 0}
+              hasProjects={logicalProjects.length > 0}
               onOpenDrawer={() => setDrawerOpen(true)}
               onImport={() => setImportOpen(true)}
             />
@@ -797,16 +799,16 @@ export default function Player() {
           onOpenChange={handleImportOpenChange}
           onComplete={handleImportComplete}
         />
-        {/* ProjectDrawer 项目抽屉 */}
+        {/* ProjectDrawer 项目抽屉 - Story 1.12: 使用逻辑项目视图 */}
         <ProjectDrawer
           isOpen={drawerOpen}
           onOpenChange={setDrawerOpen}
-          projects={allProjects}
+          logicalProjects={logicalProjects}
           isLoading={projectsLoading}
           currentSessionId={undefined}
           onSessionSelect={handleDrawerSessionSelect}
           onImportClick={handleDrawerImport}
-          getProjectSessions={fetchProjectSessions}
+          getLogicalProjectSessions={fetchLogicalProjectSessions}
           onProjectsChange={() => {
             // Story 1.9: 刷新项目列表和当前会话信息
             refetchProjects();
@@ -999,17 +1001,17 @@ export default function Player() {
         onComplete={handleImportComplete}
       />
 
-      {/* Story 2.18: ProjectDrawer 项目抽屉 */}
+      {/* Story 2.18 + 1.12: ProjectDrawer 项目抽屉 - 使用逻辑项目视图 */}
       <ProjectDrawer
         isOpen={drawerOpen}
         onOpenChange={setDrawerOpen}
-        projects={allProjects}
+        logicalProjects={logicalProjects}
         isLoading={projectsLoading}
         currentSessionId={sessionId}
-        currentProjectId={currentProject?.id}
+        currentPhysicalPath={currentProject?.cwd}
         onSessionSelect={handleDrawerSessionSelect}
         onImportClick={handleDrawerImport}
-        getProjectSessions={fetchProjectSessions}
+        getLogicalProjectSessions={fetchLogicalProjectSessions}
         onProjectsChange={() => {
           // Story 1.9: 刷新项目列表和当前会话信息（修复项目 cwd 更新后导航栏不同步问题）
           refetchProjects();
