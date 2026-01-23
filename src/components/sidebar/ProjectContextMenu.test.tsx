@@ -1,6 +1,7 @@
 /**
  * ProjectContextMenu Tests
  * Story 2.19: Task 1.6
+ * Story 1.12: 移除强制解析测试（已弃用）
  *
  * 测试项目上下文菜单的渲染和交互
  */
@@ -42,7 +43,6 @@ afterEach(() => {
 describe("ProjectContextMenu", () => {
   const defaultProps = {
     onSync: vi.fn().mockResolvedValue(undefined),
-    onForceSync: vi.fn().mockResolvedValue(undefined),
     onRename: vi.fn(),
     onRemove: vi.fn(),
     onViewInfo: vi.fn(),

@@ -4,6 +4,7 @@
  *
  * 逻辑项目管理菜单：
  * - 同步更新（同步所有关联的存储层项目）
+ * - 重命名（仅单项目时启用）
  * - 查看详情
  * - 移除
  *
@@ -12,7 +13,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Trash2, Loader2, Settings, Info } from "lucide-react";
+import { RefreshCw, Trash2, Loader2, Settings, Info, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,8 @@ export interface LogicalProjectContextMenuProps {
   logicalProject: LogicalProjectStats;
   /** 同步回调 */
   onSync: () => Promise<void>;
+  /** 重命名回调（仅单项目时启用） */
+  onRename?: () => void;
   /** 移除回调 */
   onRemove: () => void;
   /** 查看详情回调 */
@@ -45,6 +48,7 @@ export interface LogicalProjectContextMenuProps {
 export function LogicalProjectContextMenu({
   logicalProject,
   onSync,
+  onRename,
   onRemove,
   onViewInfo,
   onOpenChange,
@@ -52,6 +56,9 @@ export function LogicalProjectContextMenu({
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSyncing, setIsSyncing] = React.useState(false);
+
+  // 仅单项目时启用重命名
+  const canRename = logicalProject.project_count === 1 && !!onRename;
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -67,6 +74,12 @@ export function LogicalProjectContextMenu({
       setIsSyncing(false);
       setIsOpen(false);
     }
+  };
+
+  const handleRename = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onRename?.();
+    setIsOpen(false);
   };
 
   const handleRemove = (e: React.MouseEvent) => {
@@ -121,6 +134,14 @@ export function LogicalProjectContextMenu({
             ? t("project.associatePath", "关联路径")
             : t("projectInfo.viewDetails", "查看详情")}
         </DropdownMenuItem>
+
+        {/* 重命名 - 仅单项目时启用 */}
+        {canRename && (
+          <DropdownMenuItem onClick={handleRename}>
+            <Pencil className="h-4 w-4 mr-2" />
+            {t("project.rename")}
+          </DropdownMenuItem>
+        )}
 
         {/* 分隔线 */}
         <DropdownMenuSeparator />

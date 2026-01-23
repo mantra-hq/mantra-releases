@@ -2,13 +2,15 @@
  * ProjectContextMenu Component - 项目上下文菜单
  * Story 2.19: Task 1
  * Story 2.26: 国际化支持
+ * Story 1.12: 移除强制解析选项（已弃用）
  *
  * 项目管理菜单，包含同步、重命名、移除操作
+ * 注意：此组件保留用于向后兼容，新代码请使用 LogicalProjectContextMenu
  */
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, RotateCcw, Pencil, Trash2, Loader2, Settings, Info } from "lucide-react";
+import { RefreshCw, Pencil, Trash2, Loader2, Settings, Info } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,8 +25,6 @@ import {
 export interface ProjectContextMenuProps {
   /** 同步回调（增量同步） */
   onSync: () => Promise<void>;
-  /** 强制重新解析回调（完全重新解析所有会话） */
-  onForceSync: () => Promise<void>;
   /** 重命名回调 */
   onRename: () => void;
   /** 移除回调 */
@@ -41,7 +41,6 @@ export interface ProjectContextMenuProps {
  */
 export function ProjectContextMenu({
   onSync,
-  onForceSync,
   onRename,
   onRemove,
   onViewInfo,
@@ -50,7 +49,6 @@ export function ProjectContextMenu({
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSyncing, setIsSyncing] = React.useState(false);
-  const [isForceSyncing, setIsForceSyncing] = React.useState(false);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -64,17 +62,6 @@ export function ProjectContextMenu({
       await onSync();
     } finally {
       setIsSyncing(false);
-      setIsOpen(false);
-    }
-  };
-
-  const handleForceSync = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsForceSyncing(true);
-    try {
-      await onForceSync();
-    } finally {
-      setIsForceSyncing(false);
       setIsOpen(false);
     }
   };
@@ -113,7 +100,7 @@ export function ProjectContextMenu({
 
       <DropdownMenuContent align="start" className="w-48">
         {/* 同步更新 (AC2) */}
-        <DropdownMenuItem onClick={handleSync} disabled={isSyncing || isForceSyncing}>
+        <DropdownMenuItem onClick={handleSync} disabled={isSyncing}>
           {isSyncing ? (
             <Loader2
               className="h-4 w-4 mr-2 animate-spin"
@@ -123,24 +110,6 @@ export function ProjectContextMenu({
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
           {t("project.syncUpdate")}
-        </DropdownMenuItem>
-
-        {/* 强制重新解析 - 用于修复解析 bug 后恢复数据 */}
-        <DropdownMenuItem onClick={handleForceSync} disabled={isSyncing || isForceSyncing}>
-          {isForceSyncing ? (
-            <Loader2
-              className="h-4 w-4 mr-2 animate-spin"
-              data-testid="force-sync-loading"
-            />
-          ) : (
-            <RotateCcw className="h-4 w-4 mr-2" />
-          )}
-          <div className="flex flex-col items-start">
-            <span>{t("sync.forceReparse")}</span>
-            <span className="text-xs text-muted-foreground">
-              {t("sync.reparseAllSessions")}
-            </span>
-          </div>
         </DropdownMenuItem>
 
         {/* Story 2.27 AC1: 查看详情 */}

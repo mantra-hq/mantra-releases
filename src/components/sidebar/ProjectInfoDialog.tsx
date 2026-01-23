@@ -251,10 +251,12 @@ export function ProjectInfoDialog({
     const isLogicalView = Boolean(logicalProject);
     const displayName = isLogicalView ? logicalProject?.display_name : currentProject?.name;
 
-    // Story 1.12: 获取项目的所有关联路径（仅存储层模式）
-    const { paths, refetch: refetchPaths } = useProjectPaths(
-        isLogicalView ? null : (currentProject?.id ?? null)
-    );
+    // Story 1.12: 获取项目的所有关联路径
+    // 逻辑项目视图下使用第一个存储层项目 ID
+    const projectIdForPaths = isLogicalView
+        ? (logicalProject?.project_ids[0] ?? null)
+        : (currentProject?.id ?? null);
+    const { paths, refetch: refetchPaths } = useProjectPaths(projectIdForPaths);
 
     // 当 project prop 变化时更新内部状态
     React.useEffect(() => {
@@ -324,9 +326,12 @@ export function ProjectInfoDialog({
 
     /**
      * Story 1.12: 添加新路径
+     * 支持逻辑项目视图：使用第一个存储层项目 ID
      */
     const handleAddPath = async () => {
-        if (!currentProject) return;
+        // 获取 project_id：优先使用 currentProject，否则使用逻辑项目的第一个存储层项目
+        const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
+        if (!projectId) return;
 
         try {
             const selected = await open({
@@ -338,8 +343,9 @@ export function ProjectInfoDialog({
             if (!selected || typeof selected !== "string") return;
 
             setIsAddingPath(true);
-            await addProjectPath(currentProject.id, selected, false);
+            await addProjectPath(projectId, selected, false);
             refetchPaths();
+            onProjectUpdated?.();
             toast.success(t("projectInfo.pathAdded", "路径已添加"));
         } catch (error) {
             console.error("Failed to add path:", error);
@@ -376,14 +382,18 @@ export function ProjectInfoDialog({
 
     /**
      * Story 1.12: 设置为主路径
+     * 支持逻辑项目视图：使用第一个存储层项目 ID
      */
     const handleSetPrimaryPath = async (path: string) => {
-        if (!currentProject) return;
+        // 获取 project_id：优先使用 currentProject，否则使用逻辑项目的第一个存储层项目
+        const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
+        if (!projectId) return;
 
         try {
             setIsUpdatingCwd(true);
-            await setProjectPrimaryPath(currentProject.id, path);
+            await setProjectPrimaryPath(projectId, path);
             refetchPaths();
+            onProjectUpdated?.();
             toast.success(t("projectInfo.primaryPathSet", "主路径已设置"));
         } catch (error) {
             console.error("Failed to set primary path:", error);

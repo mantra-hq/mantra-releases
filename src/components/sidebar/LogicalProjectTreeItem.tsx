@@ -6,6 +6,7 @@
  * - 显示从路径提取的 display_name
  * - 显示路径类型图标和"需关联"状态
  * - 支持展开显示所有来源的会话
+ * - 支持重命名（仅单项目时）
  */
 
 import * as React from "react";
@@ -14,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { SessionTreeItem } from "./SessionTreeItem";
 import { HighlightText } from "./DrawerSearch";
+import { ProjectRenameInput } from "./ProjectRenameInput";
 import type { LogicalProjectStats } from "@/types/project";
 import type { SessionSummary } from "./types";
 
@@ -45,6 +47,12 @@ export interface LogicalProjectTreeItemProps {
   isSettingsMenuOpen?: boolean;
   /** 是否隐藏空会话 */
   hideEmptySessions?: boolean;
+  /** 是否处于重命名模式（仅单项目时有效） */
+  isRenaming?: boolean;
+  /** 重命名保存回调 */
+  onRename?: (newName: string) => void;
+  /** 重命名取消回调 */
+  onRenameCancel?: () => void;
 }
 
 /**
@@ -80,6 +88,9 @@ export function LogicalProjectTreeItem({
   settingsMenu,
   isSettingsMenuOpen = false,
   hideEmptySessions = false,
+  isRenaming = false,
+  onRename,
+  onRenameCancel,
 }: LogicalProjectTreeItemProps) {
   const { t } = useTranslation();
   
@@ -112,6 +123,7 @@ export function LogicalProjectTreeItem({
           onClick={onToggle}
           className="flex items-center gap-2 flex-1 text-left min-w-0 cursor-pointer"
           data-testid={`logical-project-toggle-${testId}`}
+          disabled={isRenaming}
         >
           {/* 展开/折叠图标 */}
           <ChevronRight
@@ -124,47 +136,57 @@ export function LogicalProjectTreeItem({
           {/* 路径类型图标 */}
           {getPathTypeIcon(logicalProject.path_type, logicalProject.needs_association)}
 
-          {/* 项目名称 */}
-          <span
-            className={cn(
-              "flex-1 truncate text-sm",
-              logicalProject.needs_association && "text-yellow-500"
-            )}
-            title={logicalProject.physical_path}
-            onClick={(e) => {
-              // 点击名称时打开详情页（如果有回调）
-              if (onProjectClick) {
-                e.stopPropagation();
-                onProjectClick();
-              }
-            }}
-          >
-            <HighlightText text={logicalProject.display_name} keyword={searchKeyword} />
-          </span>
+          {/* 项目名称 - 重命名模式或普通显示 */}
+          {isRenaming && onRename && onRenameCancel ? (
+            <ProjectRenameInput
+              initialName={logicalProject.display_name}
+              onSave={onRename}
+              onCancel={onRenameCancel}
+            />
+          ) : (
+            <>
+              <span
+                className={cn(
+                  "flex-1 truncate text-sm",
+                  logicalProject.needs_association && "text-yellow-500"
+                )}
+                title={logicalProject.physical_path}
+                onClick={(e) => {
+                  // 点击名称时打开详情页（如果有回调）
+                  if (onProjectClick) {
+                    e.stopPropagation();
+                    onProjectClick();
+                  }
+                }}
+              >
+                <HighlightText text={logicalProject.display_name} keyword={searchKeyword} />
+              </span>
 
-          {/* 多来源指示器 */}
-          {logicalProject.project_count > 1 && (
-            <span
-              className="text-[10px] px-1 py-0.5 rounded bg-primary/10 text-primary shrink-0"
-              title={t("project.multiSource", { count: logicalProject.project_count })}
-            >
-              {logicalProject.project_count}
-            </span>
+              {/* 多来源指示器 */}
+              {logicalProject.project_count > 1 && (
+                <span
+                  className="text-[10px] px-1 py-0.5 rounded bg-primary/10 text-primary shrink-0"
+                  title={t("project.multiSource", { count: logicalProject.project_count })}
+                >
+                  {logicalProject.project_count}
+                </span>
+              )}
+
+              {/* Git 状态指示器 */}
+              {logicalProject.has_git_repo && (
+                <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
+              )}
+
+              {/* 会话数量 */}
+              <span className="text-xs text-muted-foreground shrink-0">
+                {logicalProject.total_sessions}
+              </span>
+            </>
           )}
-
-          {/* Git 状态指示器 */}
-          {logicalProject.has_git_repo && (
-            <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
-          )}
-
-          {/* 会话数量 */}
-          <span className="text-xs text-muted-foreground shrink-0">
-            {logicalProject.total_sessions}
-          </span>
         </button>
 
         {/* 设置菜单 */}
-        {settingsMenu && (
+        {settingsMenu && !isRenaming && (
           <div
             className={cn(
               "shrink-0 transition-opacity",
