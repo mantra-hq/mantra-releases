@@ -84,7 +84,7 @@ export function LogicalProjectTreeItem({
   searchKeyword,
   onToggle,
   onSessionSelect,
-  onProjectClick,
+  onProjectClick: _onProjectClick, // Bug Fix V6: 保留 prop 接口，但不再使用（点击名称改为展开/折叠）
   settingsMenu,
   isSettingsMenuOpen = false,
   hideEmptySessions = false,
@@ -145,19 +145,14 @@ export function LogicalProjectTreeItem({
             />
           ) : (
             <>
+              {/* Bug Fix V6: 移除点击名称打开详情页的行为，让点击名称时也展开/折叠 */}
+              {/* 详情页通过右键菜单或设置按钮打开 */}
               <span
                 className={cn(
                   "flex-1 truncate text-sm",
                   logicalProject.needs_association && "text-yellow-500"
                 )}
                 title={logicalProject.physical_path}
-                onClick={(e) => {
-                  // 点击名称时打开详情页（如果有回调）
-                  if (onProjectClick) {
-                    e.stopPropagation();
-                    onProjectClick();
-                  }
-                }}
               >
                 <HighlightText text={logicalProject.display_name} keyword={searchKeyword} />
               </span>

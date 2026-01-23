@@ -191,6 +191,14 @@ export default function Player() {
     refetchProjects,
   } = useProjectDrawer({ defaultOpen: !sessionId });
 
+  // Bug Fix V6: 根据 currentProject.id 查找对应的逻辑项目
+  // 使用逻辑项目的 display_name 和 has_git_repo 替代存储层项目的数据
+  // 这样关联路径后，导航栏项目名和 Git 状态能正确更新
+  const currentLogicalProject = React.useMemo(() => {
+    if (!currentProject?.id) return null;
+    return logicalProjects.find(lp => lp.project_ids.includes(currentProject.id)) ?? null;
+  }, [currentProject?.id, logicalProjects]);
+
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
 
@@ -483,11 +491,16 @@ export default function Player() {
   }, [sessionCwd, setCode]);
 
   // Story 1.9: 当项目信息变化时更新 repoPath（修复 cwd 更新后 git 仓库信息不同步问题）
+  // Bug Fix V6: 优先使用逻辑项目的 physical_path 检测 Git 仓库
   React.useEffect(() => {
-    if (!currentProject) return;
+    // 优先使用逻辑项目的物理路径（关联后会更新）
+    const effectivePath = currentLogicalProject?.physical_path ?? currentProject?.cwd;
+    const effectiveHasGit = currentLogicalProject?.has_git_repo ?? currentProject?.has_git_repo;
 
-    // 更新 repoPath 和 hasNoGit 状态
-    if (currentProject.has_git_repo && currentProject.git_repo_path) {
+    if (!effectivePath) return;
+
+    // 如果逻辑项目标记有 Git 仓库，或者存储层项目有 Git 信息
+    if (effectiveHasGit && currentProject?.git_repo_path) {
       setRepoPath(currentProject.git_repo_path);
       setHasNoGit(false);
       console.log("[Player] Git 仓库信息已更新 (from currentProject):", currentProject.git_repo_path);
@@ -503,11 +516,37 @@ export default function Player() {
         .catch((err) => {
           console.warn("[Player] 代表性文件加载失败:", err);
         });
+    } else if (currentLogicalProject?.has_git_repo && !currentProject?.git_repo_path) {
+      // Bug Fix V6: 逻辑项目标记有 Git，但存储层没有 - 重新检测
+      // 这发生在关联新路径后，physical_path 更新但存储层还没同步
+      detectGitRepo(currentLogicalProject.physical_path)
+        .then((detected) => {
+          if (detected) {
+            setRepoPath(detected);
+            setHasNoGit(false);
+            console.log("[Player] Git 仓库重新检测成功:", detected);
+
+            // 加载代表性文件
+            getRepresentativeFile(detected)
+              .then((repFile) => {
+                if (repFile) {
+                  setCode(repFile.content, repFile.path);
+                  console.log("[Player] 代表性文件已加载:", repFile.path);
+                }
+              })
+              .catch((err) => {
+                console.warn("[Player] 代表性文件加载失败:", err);
+              });
+          }
+        })
+        .catch((err) => {
+          console.warn("[Player] Git 仓库检测失败:", err);
+        });
     } else {
       setRepoPath(null);
       setHasNoGit(true);
     }
-  }, [currentProject?.id, currentProject?.git_repo_path, currentProject?.has_git_repo, setCode]);
+  }, [currentProject?.id, currentProject?.git_repo_path, currentProject?.has_git_repo, currentLogicalProject?.physical_path, currentLogicalProject?.has_git_repo, setCode]);
 
   // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002, Story 2.12)
   // 统一标签管理：会话点击时打开历史版本标签
@@ -871,12 +910,13 @@ export default function Player() {
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Story 2.17: TopBar 面包屑导航 */}
+      {/* Bug Fix V6: 使用逻辑项目的 display_name 替代存储层项目名 */}
       <TopBar
         sessionId={sessionId}
         sessionName={projectSessions.find(s => s.id === sessionId)?.name ?? `Session ${sessionId.slice(0, 8)}`}
         messageCount={messages.length}
         projectId={currentProject?.id ?? ""}
-        projectName={currentProject?.name ?? sessionCwd?.split("/").pop() ?? "项目"}
+        projectName={currentLogicalProject?.display_name ?? currentProject?.name ?? sessionCwd?.split("/").pop() ?? "项目"}
         sessions={projectSessions}
         onDrawerOpen={handleDrawerOpen}
         onSessionSelect={handleSessionSelect}
