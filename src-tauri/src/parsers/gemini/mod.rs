@@ -348,6 +348,9 @@ impl GeminiParser {
                         let response = &result_wrapper.function_response;
                         let is_error = tool_call.status == "error";
 
+                        // Extract display content from ToolResultDisplay (supports string | FileDiff | AnsiOutput | TodoList)
+                        let display_string = tool_call.result_display.as_ref().map(|d| d.as_display_string());
+
                         // Try to parse shell result format (Gemini CLI multi-line format)
                         let (content, structured_result, display_content) = if let Some(parsed) = response.response.parse_shell_result() {
                             // Shell result format detected: extract actual output
@@ -363,15 +366,32 @@ impl GeminiParser {
                             });
 
                             // Use Gemini's resultDisplay if available, otherwise use extracted output
-                            let display = tool_call.result_display.clone()
+                            let display = display_string.clone()
                                 .or_else(|| if shell_output.is_empty() { None } else { Some(shell_output.clone()) });
 
                             (shell_output, structured, display)
+                        } else if let Some(ref result_display) = tool_call.result_display {
+                            // Check if this is a FileDiff - use diff content for structured result
+                            if let Some(file_diff) = result_display.as_file_diff() {
+                                // For FileDiff, use the diff as content and create structured result
+                                let structured = Some(ToolResultData::FileEdit {
+                                    file_path: file_diff.file_name.clone(),
+                                    old_string: None,
+                                    new_string: None,
+                                });
+                                (file_diff.file_diff.clone(), structured, display_string.clone())
+                            } else {
+                                // For other display types (String, AnsiOutput, TodoList):
+                                // content comes from response.output, display_content from result_display
+                                let raw_content = response.response.as_content();
+                                let cleaned = crate::parsers::strip_system_reminders(&raw_content);
+                                (cleaned, None, display_string.clone())
+                            }
                         } else {
-                            // Not shell format: use original content
+                            // No resultDisplay: use original content
                             let raw_content = response.response.as_content();
                             let cleaned = crate::parsers::strip_system_reminders(&raw_content);
-                            (cleaned, None, tool_call.result_display.clone())
+                            (cleaned, None, None)
                         };
 
                         // Add ToolResult with display metadata (AC2)

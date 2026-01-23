@@ -141,6 +141,12 @@ impl Database {
         // Migration: Add interception_records table (Story 3.7)
         Self::run_interception_records_migration(conn)?;
 
+        // Migration: Add project_paths and session_project_bindings tables (Story 1.12)
+        Self::run_view_based_aggregation_migration(conn)?;
+
+        // Migration: Add path_type and path_exists columns to projects (Story 1.12)
+        Self::run_path_validation_migration(conn)?;
+
         Ok(())
     }
 
@@ -180,6 +186,232 @@ impl Database {
                 "#,
             )?;
         }
+
+        Ok(())
+    }
+
+    /// Migration for view-based project aggregation (Story 1.12)
+    ///
+    /// Creates:
+    /// - project_paths table: Maps multiple paths to a single project
+    /// - session_project_bindings table: Manual session-to-project bindings
+    /// - original_cwd and source_context columns on sessions table
+    fn run_view_based_aggregation_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if project_paths table already exists
+        let project_paths_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_paths'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !project_paths_exists {
+            conn.execute_batch(
+                r#"
+                -- project_paths 表: 项目路径映射 (Story 1.12)
+                -- 同一路径可以属于多个项目（不同导入源），通过视图层聚合显示
+                CREATE TABLE IF NOT EXISTS project_paths (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    is_primary INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(project_id, path),
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_paths_project ON project_paths(project_id);
+                CREATE INDEX IF NOT EXISTS idx_project_paths_path ON project_paths(path);
+                "#,
+            )?;
+
+            // Migrate existing projects.cwd to project_paths
+            conn.execute_batch(
+                r#"
+                INSERT OR IGNORE INTO project_paths (id, project_id, path, is_primary, created_at)
+                SELECT
+                    lower(hex(randomblob(16))),
+                    id,
+                    cwd,
+                    1,
+                    created_at
+                FROM projects
+                WHERE cwd IS NOT NULL AND cwd != '';
+                "#,
+            )?;
+        } else {
+            // Migration: Remove old path UNIQUE constraint and add UNIQUE(project_id, path)
+            // SQLite doesn't support ALTER TABLE to modify constraints, so we need to recreate the table
+            Self::migrate_project_paths_constraint(conn)?;
+        }
+
+        // Check if session_project_bindings table already exists
+        let bindings_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_project_bindings'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !bindings_exists {
+            conn.execute_batch(
+                r#"
+                -- session_project_bindings 表: 会话手动绑定 (Story 1.12)
+                CREATE TABLE IF NOT EXISTS session_project_bindings (
+                    session_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    bound_at TEXT NOT NULL,
+                    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_session_bindings_project ON session_project_bindings(project_id);
+                "#,
+            )?;
+        }
+
+        // Check if sessions.original_cwd column exists
+        let has_original_cwd: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'original_cwd'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_original_cwd {
+            conn.execute_batch(
+                r#"
+                -- Add original_cwd column (Story 1.12)
+                ALTER TABLE sessions ADD COLUMN original_cwd TEXT DEFAULT '';
+
+                -- Backfill: Copy existing cwd to original_cwd
+                UPDATE sessions SET original_cwd = cwd WHERE original_cwd = '' OR original_cwd IS NULL;
+                "#,
+            )?;
+
+            // Create index for original_cwd
+            conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_original_cwd ON sessions(original_cwd);",
+            )?;
+        }
+
+        // Check if sessions.source_context column exists
+        let has_source_context: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'source_context'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_source_context {
+            conn.execute_batch(
+                "ALTER TABLE sessions ADD COLUMN source_context TEXT DEFAULT '{}';",
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration: Add path_type and path_exists columns to projects table (Story 1.12)
+    fn run_path_validation_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if path_type column exists
+        let has_path_type: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'path_type'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_path_type {
+            conn.execute_batch(
+                r#"
+                -- Add path_type column (Story 1.12)
+                ALTER TABLE projects ADD COLUMN path_type TEXT DEFAULT 'local';
+
+                -- Add path_exists column (Story 1.12)
+                ALTER TABLE projects ADD COLUMN path_exists INTEGER DEFAULT 1;
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration: Change project_paths constraint from path UNIQUE to UNIQUE(project_id, path)
+    ///
+    /// This allows the same path to belong to multiple projects (from different import sources),
+    /// enabling view-layer aggregation by physical path.
+    fn migrate_project_paths_constraint(conn: &Connection) -> Result<(), StorageError> {
+        // Check if we need to migrate by looking at the table schema
+        // If the table has a unique index on just 'path', we need to migrate
+        let has_path_unique_index: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND tbl_name='project_paths' AND sql LIKE '%UNIQUE%' AND sql LIKE '%path%' AND sql NOT LIKE '%project_id%'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        // Also check if the table definition itself has UNIQUE on path column
+        let table_sql: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='project_paths'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let needs_migration = has_path_unique_index
+            || table_sql
+                .as_ref()
+                .map(|sql| sql.contains("path TEXT NOT NULL UNIQUE"))
+                .unwrap_or(false);
+
+        if !needs_migration {
+            return Ok(());
+        }
+
+        // SQLite doesn't support ALTER TABLE to modify constraints
+        // We need to recreate the table with the new constraint
+        conn.execute_batch(
+            r#"
+            -- Disable foreign keys temporarily
+            PRAGMA foreign_keys = OFF;
+
+            -- Create new table with correct constraint
+            CREATE TABLE project_paths_new (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                is_primary INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(project_id, path),
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+
+            -- Copy data from old table
+            INSERT INTO project_paths_new (id, project_id, path, is_primary, created_at)
+            SELECT id, project_id, path, is_primary, created_at FROM project_paths;
+
+            -- Drop old table
+            DROP TABLE project_paths;
+
+            -- Rename new table
+            ALTER TABLE project_paths_new RENAME TO project_paths;
+
+            -- Recreate indexes
+            CREATE INDEX IF NOT EXISTS idx_project_paths_project ON project_paths(project_id);
+            CREATE INDEX IF NOT EXISTS idx_project_paths_path ON project_paths(path);
+
+            -- Re-enable foreign keys
+            PRAGMA foreign_keys = ON;
+            "#,
+        )?;
 
         Ok(())
     }
@@ -310,5 +542,223 @@ mod tests {
         assert!(indexes.contains(&"idx_records_timestamp".to_string()));
         assert!(indexes.contains(&"idx_records_source".to_string()));
         assert!(indexes.contains(&"idx_records_project".to_string()));
+    }
+
+    // ===== Story 1.12: View-based Project Aggregation Tests =====
+
+    #[test]
+    fn test_project_paths_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify project_paths table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM project_paths LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(project_paths)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"id".to_string()));
+        assert!(columns.contains(&"project_id".to_string()));
+        assert!(columns.contains(&"path".to_string()));
+        assert!(columns.contains(&"is_primary".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+    }
+
+    #[test]
+    fn test_project_paths_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='project_paths'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_project_paths_project".to_string()));
+        assert!(indexes.contains(&"idx_project_paths_path".to_string()));
+    }
+
+    #[test]
+    fn test_session_project_bindings_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify session_project_bindings table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM session_project_bindings LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(session_project_bindings)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"session_id".to_string()));
+        assert!(columns.contains(&"project_id".to_string()));
+        assert!(columns.contains(&"bound_at".to_string()));
+    }
+
+    #[test]
+    fn test_session_project_bindings_index_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='session_project_bindings'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_session_bindings_project".to_string()));
+    }
+
+    #[test]
+    fn test_sessions_original_cwd_column_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(sessions)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"original_cwd".to_string()));
+        assert!(columns.contains(&"source_context".to_string()));
+    }
+
+    #[test]
+    fn test_sessions_original_cwd_index_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_sessions_original_cwd".to_string()));
+    }
+
+    // ===== Story 1.12: Constraint Migration Tests =====
+
+    #[test]
+    fn test_project_paths_allows_same_path_different_projects() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create two projects
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path/to/proj1', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj2', 'Project 2', '/path/to/proj2', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // Add the same path to both projects - should succeed with new constraint
+        db.connection()
+            .execute(
+                "INSERT INTO project_paths (id, project_id, path, is_primary, created_at) VALUES ('path1', 'proj1', '/shared/path', 1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        let result = db.connection().execute(
+            "INSERT INTO project_paths (id, project_id, path, is_primary, created_at) VALUES ('path2', 'proj2', '/shared/path', 1, ?1)",
+            [&now],
+        );
+
+        // With UNIQUE(project_id, path), same path in different projects should succeed
+        assert!(result.is_ok(), "Same path should be allowed in different projects");
+    }
+
+    #[test]
+    fn test_project_paths_rejects_duplicate_path_same_project() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path/to/proj1', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // Add a path
+        db.connection()
+            .execute(
+                "INSERT INTO project_paths (id, project_id, path, is_primary, created_at) VALUES ('path1', 'proj1', '/shared/path', 1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // Try to add the same path to the same project - should fail
+        let result = db.connection().execute(
+            "INSERT INTO project_paths (id, project_id, path, is_primary, created_at) VALUES ('path2', 'proj1', '/shared/path', 0, ?1)",
+            [&now],
+        );
+
+        // With UNIQUE(project_id, path), duplicate path in same project should fail
+        assert!(result.is_err(), "Duplicate path in same project should be rejected");
+    }
+
+    #[test]
+    fn test_project_paths_composite_unique_constraint() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Check that the table has the composite unique constraint
+        let table_sql: String = db
+            .connection()
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='project_paths'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // Verify the constraint is UNIQUE(project_id, path) not just UNIQUE on path
+        assert!(
+            table_sql.contains("UNIQUE(project_id, path)") || table_sql.contains("UNIQUE (project_id, path)"),
+            "Table should have UNIQUE(project_id, path) constraint, got: {}",
+            table_sql
+        );
+        assert!(
+            !table_sql.contains("path TEXT NOT NULL UNIQUE"),
+            "Table should NOT have path UNIQUE constraint, got: {}",
+            table_sql
+        );
     }
 }

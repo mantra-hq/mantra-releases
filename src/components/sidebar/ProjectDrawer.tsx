@@ -3,15 +3,17 @@
  * Story 2.18: Task 2
  * Story 2.19: Task 10 - 集成项目管理功能
  * Story 2-26: i18n 国际化
+ * Story 1.12: 未分类会话分组
  *
  * 侧边抽屉，用于浏览和管理所有项目
  * - 从左侧滑入，宽度 320px
  * - 包含标题栏、搜索框、项目树列表和导入按钮
  * - 支持项目同步、重命名、移除操作
+ * - Story 1.12: 显示未分类会话分组
  */
 
 import * as React from "react";
-import { FolderOpen, Plus, Rocket, ChevronsDownUp } from "lucide-react";
+import { FolderOpen, Plus, Rocket, ChevronsDownUp, Inbox } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -28,16 +30,18 @@ import { ProjectTreeItem } from "./ProjectTreeItem";
 import { ProjectContextMenu } from "./ProjectContextMenu";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
 import { ProjectInfoDialog } from "./ProjectInfoDialog";
+import { BindSessionDialog } from "./BindSessionDialog";
 import { showSyncResult } from "./SyncResultToast";
 import {
   syncProject,
   removeProject,
   renameProject,
 } from "@/lib/project-ipc";
+import { useUnassignedSessions } from "@/hooks/useProjects";
 import { toast } from "sonner";
 import { appLog } from "@/lib/log-actions";
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
-import type { Project } from "@/types/project";
+import type { Project, Session } from "@/types/project";
 import type { SessionSummary } from "./types";
 
 /**
@@ -114,6 +118,12 @@ export function ProjectDrawer({
   const [infoProject, setInfoProject] = React.useState<Project | null>(null);
   // Story 2.29: 隐藏空项目偏好
   const [hideEmptyProjects, setHideEmptyProjects] = useHideEmptyProjects();
+
+  // Story 1.12: 未分类会话
+  const { sessions: unassignedSessions, refetch: refetchUnassigned } = useUnassignedSessions();
+  const [isUnassignedExpanded, setIsUnassignedExpanded] = React.useState(false);
+  // Story 1.12: 会话绑定对话框状态
+  const [bindingSession, setBindingSession] = React.useState<Session | null>(null);
 
   // 一键折叠所有项目
   const handleCollapseAll = React.useCallback(() => {
@@ -425,6 +435,53 @@ export function ProjectDrawer({
                   }
                 />
               ))}
+
+              {/* Story 1.12: 未分类会话分组 */}
+              {unassignedSessions.length > 0 && (
+                <div className="mt-2 border-t pt-2">
+                  <button
+                    onClick={() => setIsUnassignedExpanded(!isUnassignedExpanded)}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-1.5 text-left",
+                      "hover:bg-muted/50 rounded-md transition-colors",
+                      "text-muted-foreground"
+                    )}
+                    data-testid="unassigned-sessions-toggle"
+                  >
+                    <Inbox className="h-4 w-4 shrink-0" />
+                    <span className="text-sm font-medium flex-1">
+                      {t("project.unassigned", "未分类")}
+                    </span>
+                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                      {unassignedSessions.length}
+                    </span>
+                  </button>
+                  {isUnassignedExpanded && (
+                    <div className="pl-6 py-1 space-y-0.5">
+                      {unassignedSessions.map((session) => (
+                        <button
+                          key={session.id}
+                          onClick={() => handleSessionSelect(session.id, "")}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setBindingSession(session);
+                          }}
+                          className={cn(
+                            "flex items-center gap-2 w-full px-2 py-1 text-left",
+                            "hover:bg-muted/50 rounded text-sm transition-colors",
+                            currentSessionId === session.id && "bg-muted"
+                          )}
+                          title={t("session.rightClickToBind", "右键点击绑定到项目")}
+                        >
+                          <span className="truncate text-muted-foreground">
+                            {session.title || session.id.slice(0, 8)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -466,6 +523,20 @@ export function ProjectDrawer({
           // 更新 infoProject 状态以刷新对话框显示
           setInfoProject(updatedProject);
           // 触发项目列表刷新
+          onProjectsChange?.();
+        }}
+      />
+
+      {/* Story 1.12: 会话绑定对话框 */}
+      <BindSessionDialog
+        isOpen={bindingSession !== null}
+        onOpenChange={(open) => {
+          if (!open) setBindingSession(null);
+        }}
+        session={bindingSession}
+        projects={projects}
+        onBindSuccess={() => {
+          refetchUnassigned();
           onProjectsChange?.();
         }}
       />

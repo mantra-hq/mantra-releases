@@ -53,14 +53,17 @@ export function RemoveProjectDialog({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent className="max-w-md overflow-hidden">
         <AlertDialogHeader>
           {/* AC13: 标题包含警告图标 */}
           <AlertDialogTitle>⚠️ {t("project.removeFromMantra")}</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogDescription className="overflow-hidden">
             {/* AC14: 明确说明不会影响原始代码项目 */}
-            {/* Review Fix M3: 改进响应式处理，使用 break-words 替代 break-all */}
-            <span className="block max-w-full break-words">
+            {/* Fix: 长项目名称溢出 - 使用 overflow-wrap 和 word-break 确保正确换行 */}
+            <span 
+              className="block max-w-full overflow-hidden"
+              style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+            >
               {t("project.removeConfirm", { name: projectName })}
             </span>
             <br />

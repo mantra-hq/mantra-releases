@@ -20,8 +20,242 @@
 //!   "summary": "optional summary"
 //! }
 //! ```
+//!
+//! ## ToolResultDisplay Types
+//!
+//! Gemini CLI's `ToolResultDisplay` is a union type:
+//! ```typescript
+//! type ToolResultDisplay = string | FileDiff | AnsiOutput | TodoList;
+//! ```
+//!
+//! This module provides complete support for all variants.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, Serialize};
+
+// ===== ToolResultDisplay Types (matching Gemini CLI official definitions) =====
+
+/// Diff statistics for file edits
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DiffStat {
+    pub model_added_lines: i32,
+    pub model_removed_lines: i32,
+    pub model_added_chars: i32,
+    pub model_removed_chars: i32,
+    pub user_added_lines: i32,
+    pub user_removed_lines: i32,
+    pub user_added_chars: i32,
+    pub user_removed_chars: i32,
+}
+
+/// File diff display (from Gemini CLI write-file/edit tools)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiff {
+    /// The unified diff content
+    pub file_diff: String,
+    /// The file name/path
+    pub file_name: String,
+    /// Original file content (null for new files)
+    pub original_content: Option<String>,
+    /// New file content after edit
+    pub new_content: String,
+    /// Optional diff statistics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff_stat: Option<DiffStat>,
+}
+
+/// ANSI token for terminal output styling
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnsiToken {
+    pub text: String,
+    #[serde(default)]
+    pub bold: bool,
+    #[serde(default)]
+    pub italic: bool,
+    #[serde(default)]
+    pub underline: bool,
+    #[serde(default)]
+    pub dim: bool,
+    #[serde(default)]
+    pub inverse: bool,
+    #[serde(default)]
+    pub fg: String,
+    #[serde(default)]
+    pub bg: String,
+}
+
+/// ANSI line (array of tokens)
+pub type AnsiLine = Vec<AnsiToken>;
+
+/// ANSI output (array of lines) - terminal output with styling
+pub type AnsiOutput = Vec<AnsiLine>;
+
+/// Todo item status
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Cancelled,
+}
+
+/// Todo item
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TodoItem {
+    pub description: String,
+    pub status: TodoStatus,
+}
+
+/// Todo list display
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TodoList {
+    pub todos: Vec<TodoItem>,
+}
+
+/// Gemini CLI's ToolResultDisplay union type
+///
+/// Supports all official variants:
+/// - String: Simple text output
+/// - FileDiff: File edit with diff display
+/// - AnsiOutput: Terminal output with ANSI styling
+/// - TodoList: Todo list display
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolResultDisplay {
+    /// Simple string content
+    String(String),
+    /// File diff display
+    FileDiff(FileDiff),
+    /// ANSI terminal output
+    AnsiOutput(AnsiOutput),
+    /// Todo list display
+    TodoList(TodoList),
+}
+
+impl ToolResultDisplay {
+    /// Get display content as string (for backward compatibility)
+    pub fn as_display_string(&self) -> String {
+        match self {
+            ToolResultDisplay::String(s) => s.clone(),
+            ToolResultDisplay::FileDiff(diff) => diff.file_diff.clone(),
+            ToolResultDisplay::AnsiOutput(output) => {
+                // Convert ANSI output to plain text
+                output
+                    .iter()
+                    .map(|line| {
+                        line.iter().map(|token| token.text.as_str()).collect::<Vec<_>>().join("")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+            ToolResultDisplay::TodoList(list) => {
+                list.todos
+                    .iter()
+                    .map(|todo| format!("[{:?}] {}", todo.status, todo.description))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        }
+    }
+
+    /// Check if this is a FileDiff variant
+    pub fn is_file_diff(&self) -> bool {
+        matches!(self, ToolResultDisplay::FileDiff(_))
+    }
+
+    /// Get FileDiff if this is a FileDiff variant
+    pub fn as_file_diff(&self) -> Option<&FileDiff> {
+        match self {
+            ToolResultDisplay::FileDiff(diff) => Some(diff),
+            _ => None,
+        }
+    }
+}
+
+/// Custom deserializer for ToolResultDisplay
+///
+/// Handles the union type: string | FileDiff | AnsiOutput | TodoList
+impl<'de> Deserialize<'de> for ToolResultDisplay {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value: serde_json::Value = serde_json::Value::deserialize(deserializer)?;
+
+        match value {
+            serde_json::Value::String(s) => Ok(ToolResultDisplay::String(s)),
+            serde_json::Value::Array(arr) => {
+                // AnsiOutput is Array<Array<AnsiToken>>
+                // Try to deserialize as AnsiOutput
+                match serde_json::from_value::<AnsiOutput>(serde_json::Value::Array(arr.clone())) {
+                    Ok(output) => Ok(ToolResultDisplay::AnsiOutput(output)),
+                    Err(_) => {
+                        // Fallback: convert to string representation
+                        Ok(ToolResultDisplay::String(serde_json::to_string(&arr).unwrap_or_default()))
+                    }
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                // Could be FileDiff or TodoList
+                // Check for fileDiff field (FileDiff)
+                if obj.contains_key("fileDiff") {
+                    match serde_json::from_value::<FileDiff>(serde_json::Value::Object(obj.clone())) {
+                        Ok(diff) => return Ok(ToolResultDisplay::FileDiff(diff)),
+                        Err(_) => {}
+                    }
+                }
+                // Check for todos field (TodoList)
+                if obj.contains_key("todos") {
+                    match serde_json::from_value::<TodoList>(serde_json::Value::Object(obj.clone())) {
+                        Ok(list) => return Ok(ToolResultDisplay::TodoList(list)),
+                        Err(_) => {}
+                    }
+                }
+                // Fallback: serialize object as JSON string
+                Ok(ToolResultDisplay::String(serde_json::to_string(&obj).unwrap_or_default()))
+            }
+            other => {
+                // Other types: convert to string
+                Ok(ToolResultDisplay::String(other.to_string()))
+            }
+        }
+    }
+}
+
+impl Serialize for ToolResultDisplay {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ToolResultDisplay::String(s) => serializer.serialize_str(s),
+            ToolResultDisplay::FileDiff(diff) => diff.serialize(serializer),
+            ToolResultDisplay::AnsiOutput(output) => output.serialize(serializer),
+            ToolResultDisplay::TodoList(list) => list.serialize(serializer),
+        }
+    }
+}
+
+/// Custom deserializer for Option<ToolResultDisplay>
+fn deserialize_result_display<'de, D>(deserializer: D) -> Result<Option<ToolResultDisplay>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+
+    match value {
+        None => Ok(None),
+        Some(serde_json::Value::Null) => Ok(None),
+        Some(v) => {
+            // Use the ToolResultDisplay deserializer
+            match serde_json::from_value::<ToolResultDisplay>(v) {
+                Ok(display) => Ok(Some(display)),
+                Err(_) => Ok(None),
+            }
+        }
+    }
+}
 
 /// Gemini CLI conversation record
 #[derive(Debug, Clone, Deserialize)]
@@ -253,9 +487,9 @@ pub struct GeminiToolCall {
     #[serde(default)]
     pub description: Option<String>,
 
-    /// Pre-formatted result for display (cleaner than raw output)
-    #[serde(default)]
-    pub result_display: Option<String>,
+    /// Pre-formatted result for display (supports multiple types: string | FileDiff | AnsiOutput | TodoList)
+    #[serde(default, deserialize_with = "deserialize_result_display")]
+    pub result_display: Option<ToolResultDisplay>,
 
     /// Whether to render output as markdown
     #[serde(default)]

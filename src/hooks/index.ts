@@ -17,6 +17,18 @@ export {
     type UseDiffFadeOutResult,
 } from "./useDiffFadeOut";
 export { useProjects, type UseProjectsResult } from "./useProjects";
+// Story 1.12: View-based Project Aggregation
+export {
+    useUnassignedSessions,
+    useProjectPaths,
+    getProjectPaths,
+    addProjectPath,
+    removeProjectPath,
+    setProjectPrimaryPath,
+    bindSessionToProject,
+    unbindSession,
+    getUnassignedSessions,
+} from "./useProjects";
 export { useDebouncedValue } from "./useDebouncedValue";
 export { useGlobalShortcut } from "./useGlobalShortcut";
 

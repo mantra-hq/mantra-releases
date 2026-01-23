@@ -34,4 +34,12 @@ pub enum StorageError {
     /// Invalid input parameters
     #[error("无效输入: {0}")]
     InvalidInput(String),
+
+    /// Path already exists in another project (Story 1.12)
+    #[error("路径已被其他项目使用: {0}")]
+    PathAlreadyExists(String),
+
+    /// Path already exists in current project (Story 1.12)
+    #[error("该路径已添加到当前项目")]
+    PathAlreadyInProject,
 }

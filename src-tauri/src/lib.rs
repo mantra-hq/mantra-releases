@@ -36,6 +36,10 @@ use commands::{
     sync_project, remove_project, rename_project,
     // Story 1.9: Project cwd update
     update_project_cwd,
+    // Story 1.12: View-based project aggregation
+    add_project_path, remove_project_path, get_project_paths,
+    bind_session_to_project, unbind_session, get_unassigned_sessions, set_project_primary_path,
+    get_logical_project_stats, get_sessions_by_physical_path, get_projects_by_physical_path,
     // Story 2.20: Import wizard enhancement
     get_imported_session_ids,
     // Story 2.23: Import with progress events
@@ -174,6 +178,17 @@ pub fn run() {
             rename_project,
             // Story 1.9: Project cwd update
             update_project_cwd,
+            // Story 1.12: View-based project aggregation
+            add_project_path,
+            remove_project_path,
+            get_project_paths,
+            bind_session_to_project,
+            unbind_session,
+            get_unassigned_sessions,
+            set_project_primary_path,
+            get_logical_project_stats,
+            get_sessions_by_physical_path,
+            get_projects_by_physical_path,
             // Story 2.20: Import wizard enhancement
             get_imported_session_ids,
             // Story 2.23: Import with progress events

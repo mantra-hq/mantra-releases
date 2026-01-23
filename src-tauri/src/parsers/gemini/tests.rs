@@ -1158,3 +1158,57 @@ fn test_parse_inline_data_missing_fields() {
         _ => panic!("Expected only Text block for incomplete inline_data"),
     }
 }
+
+#[test]
+fn test_read_file_with_empty_result_display() {
+    // Test that when resultDisplay is empty string, content still comes from response.output
+    // This is the real-world Gemini CLI behavior for read_file
+    let json = r##"{
+        "sessionId": "readfile-test",
+        "projectHash": "abc",
+        "startTime": "2026-01-23T10:00:00Z",
+        "lastUpdated": "2026-01-23T10:05:00Z",
+        "messages": [
+            {
+                "id": "m1",
+                "timestamp": "2026-01-23T10:01:00Z",
+                "type": "gemini",
+                "content": "",
+                "toolCalls": [{
+                    "id": "read_file-1",
+                    "name": "read_file",
+                    "args": {"file_path": "test.txt"},
+                    "status": "success",
+                    "resultDisplay": "",
+                    "result": [{
+                        "functionResponse": {
+                            "id": "read_file-1",
+                            "name": "read_file",
+                            "response": {"output": "#!/bin/bash\necho 'hello world'\nexit 0"}
+                        }
+                    }]
+                }]
+            }
+        ]
+    }"##;
+
+    let parser = GeminiParser::new();
+    let session = parser.parse_string(json).unwrap();
+
+    assert_eq!(session.messages.len(), 1);
+    let tool_msg = &session.messages[0];
+    
+    // Should have ToolUse and ToolResult
+    assert_eq!(tool_msg.content_blocks.len(), 2);
+
+    // Check ToolResult content is from response.output, NOT from empty resultDisplay
+    if let ContentBlock::ToolResult { content, display_content, .. } = &tool_msg.content_blocks[1] {
+        // Content should have the actual file content
+        assert!(content.contains("#!/bin/bash"), "Content should contain file content, got: {}", content);
+        assert!(content.contains("echo 'hello world'"), "Content should contain file content");
+        // display_content should be the empty string from resultDisplay
+        assert_eq!(display_content, &Some("".to_string()));
+    } else {
+        panic!("Expected ToolResult block");
+    }
+}

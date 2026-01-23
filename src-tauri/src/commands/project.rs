@@ -163,13 +163,18 @@ pub async fn get_project_by_session(
 }
 
 /// Get all sessions for a specific project
+///
+/// Story 1.12: Uses view-based aggregation that combines:
+/// 1. Sessions manually bound to the project (highest priority)
+/// 2. Sessions matching project paths via original_cwd
 #[tauri::command]
 pub async fn get_project_sessions(
     state: State<'_, AppState>,
     project_id: String,
 ) -> Result<Vec<SessionSummary>, AppError> {
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
-    db.get_project_sessions(&project_id).map_err(Into::into)
+    // Story 1.12: Use aggregated method for view-based project aggregation
+    db.get_project_sessions_aggregated(&project_id).map_err(Into::into)
 }
 
 /// Get a single session by ID
@@ -415,8 +420,10 @@ fn detect_language(filename: &str) -> &str {
 
 /// Sync a project: detect new sessions and message updates
 ///
-/// Scans the project's cwd directory for new session files and checks
+/// Scans the project's paths for new session files and checks
 /// existing sessions for message count changes.
+///
+/// Story 1.12: Now uses project_paths table to scan all associated paths.
 ///
 /// # Arguments
 /// * `project_id` - The project ID to sync
@@ -429,14 +436,23 @@ pub async fn sync_project(
     force: Option<bool>,
 ) -> Result<SyncResult, AppError> {
     let force = force.unwrap_or(false);
-    // Get project info
-    let project = {
+
+    // Get project info and all associated paths (Story 1.12)
+    let (project, project_paths) = {
         let db = state.db.lock().map_err(|_| AppError::LockError)?;
-        db.get_project(&project_id)?
-            .ok_or_else(|| AppError::NotFound(format!("Project {} not found", project_id)))?
+        let project = db.get_project(&project_id)?
+            .ok_or_else(|| AppError::NotFound(format!("Project {} not found", project_id)))?;
+        let paths = db.get_project_paths(&project_id)?;
+        (project, paths)
     };
 
-    let cwd = project.cwd.clone();
+    // Collect all paths to scan (Story 1.12: use project_paths table)
+    let paths_to_scan: Vec<String> = if project_paths.is_empty() {
+        // Fallback to legacy cwd if no project_paths exist
+        vec![project.cwd.clone()]
+    } else {
+        project_paths.iter().map(|p| p.path.clone()).collect()
+    };
 
     // Get existing sessions
     let existing_sessions = {
@@ -451,61 +467,59 @@ pub async fn sync_project(
         .map(|s| (s.id.clone(), (s.message_count, s.source.clone())))
         .collect();
 
-    // Scan for sessions in the project directory
+    // Scan for sessions in all project paths
     let claude_parser = ClaudeParser::new();
     let gemini_parser = GeminiParser::new();
     let cursor_parser = CursorParser::new();
 
-    let cwd_path = PathBuf::from(&cwd);
     let mut all_sessions: Vec<MantraSession> = Vec::new();
 
-    // Try different session file locations based on tool type
-    // Claude: ~/.claude/projects/{project-hash}/*.jsonl
-    // Gemini: {cwd}/.gemini/history/
-    // Cursor: {cwd}/.cursor/ directory
+    // Story 1.12: Scan all associated paths
+    for path_str in &paths_to_scan {
+        let cwd_path = PathBuf::from(path_str);
 
-    // Detect Claude sessions
-    if let Some(home) = dirs::home_dir() {
-        let claude_projects_dir = home.join(".claude").join("projects");
-        if claude_projects_dir.exists() {
-            // Search for session files that match this project's cwd
-            if let Ok(entries) = std::fs::read_dir(&claude_projects_dir) {
-                for entry in entries.flatten() {
-                    let project_dir = entry.path();
-                    // Claude Code stores JSONL files directly in the project directory
-                    // (not in a sessions/ subdirectory)
-                    if project_dir.is_dir() {
-                        if let Ok(session_files) = std::fs::read_dir(&project_dir) {
-                            for session_file in session_files.flatten() {
-                                let path = session_file.path();
-                                if path.extension().is_some_and(|e| e == "jsonl") {
-                                    // 跳过 agent- 开头的文件
-                                    if path.file_name()
-                                        .and_then(|n| n.to_str())
-                                        .is_some_and(|n| n.starts_with("agent-"))
-                                    {
-                                        continue;
-                                    }
-
-                                    match claude_parser.parse_file(path.to_string_lossy().as_ref()) {
-                                        Ok(session) => {
-                                            eprintln!(
-                                                "[sync_project] Parsed session {} from {:?}: cwd={}, messages={}",
-                                                session.id,
-                                                path.file_name(),
-                                                session.cwd,
-                                                session.messages.len()
-                                            );
-                                            if session.cwd == cwd {
-                                                all_sessions.push(session);
-                                            }
+        // Detect Claude sessions
+        if let Some(home) = dirs::home_dir() {
+            let claude_projects_dir = home.join(".claude").join("projects");
+            if claude_projects_dir.exists() {
+                // Search for session files that match this project's path
+                if let Ok(entries) = std::fs::read_dir(&claude_projects_dir) {
+                    for entry in entries.flatten() {
+                        let project_dir = entry.path();
+                        if project_dir.is_dir() {
+                            if let Ok(session_files) = std::fs::read_dir(&project_dir) {
+                                for session_file in session_files.flatten() {
+                                    let path = session_file.path();
+                                    if path.extension().is_some_and(|e| e == "jsonl") {
+                                        // 跳过 agent- 开头的文件
+                                        if path.file_name()
+                                            .and_then(|n| n.to_str())
+                                            .is_some_and(|n| n.starts_with("agent-"))
+                                        {
+                                            continue;
                                         }
-                                        Err(e) => {
-                                            eprintln!(
-                                                "[sync_project] Failed to parse {:?}: {:?}",
-                                                path.file_name(),
-                                                e
-                                            );
+
+                                        match claude_parser.parse_file(path.to_string_lossy().as_ref()) {
+                                            Ok(session) => {
+                                                eprintln!(
+                                                    "[sync_project] Parsed session {} from {:?}: cwd={}, messages={}",
+                                                    session.id,
+                                                    path.file_name(),
+                                                    session.cwd,
+                                                    session.messages.len()
+                                                );
+                                                // Story 1.12: Match against any of the project's paths
+                                                if session.cwd == *path_str {
+                                                    all_sessions.push(session);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!(
+                                                    "[sync_project] Failed to parse {:?}: {:?}",
+                                                    path.file_name(),
+                                                    e
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -515,30 +529,34 @@ pub async fn sync_project(
                 }
             }
         }
-    }
 
-    // Detect Gemini sessions
-    let gemini_history_dir = cwd_path.join(".gemini").join("history");
-    if gemini_history_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(&gemini_history_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "json") {
-                    if let Ok(session) = gemini_parser.parse_file(path.to_string_lossy().as_ref()) {
-                        all_sessions.push(session);
+        // Detect Gemini sessions
+        let gemini_history_dir = cwd_path.join(".gemini").join("history");
+        if gemini_history_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&gemini_history_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().is_some_and(|e| e == "json") {
+                        if let Ok(session) = gemini_parser.parse_file(path.to_string_lossy().as_ref()) {
+                            all_sessions.push(session);
+                        }
                     }
                 }
             }
         }
-    }
 
-    // Detect Cursor workspace
-    let cursor_dir = cwd_path.join(".cursor");
-    if cursor_dir.exists() && cursor_dir.is_dir() {
-        if let Ok(sessions) = cursor_parser.parse_workspace(&cwd_path) {
-            all_sessions.extend(sessions);
+        // Detect Cursor workspace
+        let cursor_dir = cwd_path.join(".cursor");
+        if cursor_dir.exists() && cursor_dir.is_dir() {
+            if let Ok(sessions) = cursor_parser.parse_workspace(&cwd_path) {
+                all_sessions.extend(sessions);
+            }
         }
     }
+
+    // Deduplicate sessions by ID (in case same session matched multiple paths)
+    let mut seen_ids = std::collections::HashSet::new();
+    all_sessions.retain(|s| seen_ids.insert(s.id.clone()));
 
     // Process sessions
     let mut new_sessions: Vec<SessionSummary> = Vec::new();
@@ -546,10 +564,11 @@ pub async fn sync_project(
     let mut unchanged_count: u32 = 0;
 
     eprintln!(
-        "[sync_project] Processing {} sessions for project {} (force={})",
+        "[sync_project] Processing {} sessions for project {} (force={}, paths={})",
         all_sessions.len(),
         project_id,
-        force
+        force,
+        paths_to_scan.len()
     );
 
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
@@ -606,6 +625,7 @@ pub async fn sync_project(
                     message_count: session.messages.len() as u32,
                     is_empty: session.is_empty(),
                     title: session.metadata.title.clone(),
+                    original_cwd: Some(session.cwd.clone()),
                 });
             }
         }
@@ -1173,6 +1193,200 @@ pub async fn cancel_import() -> Result<(), AppError> {
 }
 
 // ============================================================================
+// ============================================================================
+// Story 1.12: View-based Project Aggregation Commands
+// ============================================================================
+
+/// Add a path to a project (Story 1.12 - AC1)
+///
+/// Associates an additional path with a project, enabling multi-path aggregation.
+///
+/// # Arguments
+/// * `project_id` - The project to add the path to
+/// * `path` - The path to add (will be normalized)
+/// * `is_primary` - Whether this should be the primary path (optional, defaults to false)
+#[tauri::command]
+pub async fn add_project_path(
+    state: State<'_, AppState>,
+    project_id: String,
+    path: String,
+    is_primary: Option<bool>,
+) -> Result<crate::models::ProjectPath, AppError> {
+    let is_primary = is_primary.unwrap_or(false);
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.add_project_path(&project_id, &path, is_primary)
+        .map_err(Into::into)
+}
+
+/// Remove a path from a project (Story 1.12 - AC1)
+///
+/// Removes the specified path association from a project.
+///
+/// # Arguments
+/// * `path_id` - The project_path ID to remove
+#[tauri::command]
+pub async fn remove_project_path(
+    state: State<'_, AppState>,
+    path_id: String,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.remove_project_path(&path_id).map_err(Into::into)
+}
+
+/// Get all paths for a project (Story 1.12 - AC1)
+///
+/// Returns all paths associated with a project, ordered by primary status then creation time.
+///
+/// # Arguments
+/// * `project_id` - The project to get paths for
+#[tauri::command]
+pub async fn get_project_paths(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<Vec<crate::models::ProjectPath>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_project_paths(&project_id).map_err(Into::into)
+}
+
+/// Get logical project statistics grouped by physical path (Story 1.12 - AC9)
+///
+/// Returns aggregated statistics for each unique physical path across all projects.
+/// This enables the view layer to display "logical projects" that combine sessions
+/// from different import sources (Claude, Gemini, Cursor, etc.) that share the same path.
+#[tauri::command]
+pub async fn get_logical_project_stats(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::storage::LogicalProjectStats>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_logical_project_stats().map_err(Into::into)
+}
+
+/// Get all sessions for a physical path across all projects (Story 1.12 - AC9)
+///
+/// Returns sessions from all projects that have the given physical path associated.
+/// This enables the view layer to display all sessions for a "logical project".
+#[tauri::command]
+pub async fn get_sessions_by_physical_path(
+    state: State<'_, AppState>,
+    physical_path: String,
+) -> Result<Vec<crate::models::SessionSummary>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_sessions_by_physical_path(&physical_path)
+        .map_err(Into::into)
+}
+
+/// Get all projects that share a physical path (Story 1.12 - AC9)
+///
+/// Returns all projects that have the given physical path associated.
+/// Useful for displaying which import sources contributed to a logical project.
+#[tauri::command]
+pub async fn get_projects_by_physical_path(
+    state: State<'_, AppState>,
+    physical_path: String,
+) -> Result<Vec<crate::models::Project>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_projects_by_physical_path(&physical_path)
+        .map_err(Into::into)
+}
+
+/// Bind a session to a project manually (Story 1.12 - AC3)
+///
+/// Creates a manual binding that takes priority over path-based matching.
+///
+/// # Arguments
+/// * `session_id` - The session to bind
+/// * `project_id` - The project to bind the session to
+#[tauri::command]
+pub async fn bind_session_to_project(
+    state: State<'_, AppState>,
+    session_id: String,
+    project_id: String,
+) -> Result<crate::models::SessionBinding, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.bind_session_to_project(&session_id, &project_id)
+        .map_err(Into::into)
+}
+
+/// Unbind a session from its manual project binding (Story 1.12 - AC3)
+///
+/// Removes the manual binding, allowing the session to fall back to path-based matching.
+///
+/// # Arguments
+/// * `session_id` - The session to unbind
+#[tauri::command]
+pub async fn unbind_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.unbind_session(&session_id).map_err(Into::into)
+}
+
+/// Get unassigned sessions (Story 1.12 - AC5)
+///
+/// Returns sessions that have no manual binding and no matching path in project_paths.
+/// These sessions should be displayed in an "Unassigned" group in the UI.
+#[tauri::command]
+pub async fn get_unassigned_sessions(
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionSummary>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_unassigned_sessions().map_err(Into::into)
+}
+
+/// Set the primary path for a project (Story 1.12 - AC1)
+///
+/// Updates which path is considered the primary path for a project.
+/// This replaces the deprecated update_project_cwd functionality.
+///
+/// # Arguments
+/// * `project_id` - The project to update
+/// * `path` - The path to set as primary (will be normalized)
+#[tauri::command]
+pub async fn set_project_primary_path(
+    state: State<'_, AppState>,
+    project_id: String,
+    path: String,
+) -> Result<crate::models::ProjectPath, AppError> {
+    use crate::models::normalize_cwd;
+
+    // Validate path is not empty
+    let trimmed_path = path.trim();
+    if trimmed_path.is_empty() {
+        return Err(AppError::Validation("路径不能为空".to_string()));
+    }
+
+    let normalized_path = normalize_cwd(trimmed_path);
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    // Check if this path already exists for this project
+    let existing_paths = db.get_project_paths(&project_id)?;
+
+    if let Some(existing) = existing_paths.iter().find(|p| p.path == normalized_path) {
+        // Path already exists, just set it as primary if not already
+        if existing.is_primary {
+            return Ok(existing.clone());
+        }
+        // Demote current primary and promote this one
+        db.connection().execute(
+            "UPDATE project_paths SET is_primary = 0 WHERE project_id = ?1 AND is_primary = 1",
+            rusqlite::params![project_id],
+        ).map_err(|e| AppError::Internal(e.to_string()))?;
+        db.connection().execute(
+            "UPDATE project_paths SET is_primary = 1 WHERE id = ?1",
+            rusqlite::params![existing.id],
+        ).map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let mut updated = existing.clone();
+        updated.is_primary = true;
+        return Ok(updated);
+    }
+
+    // Add new path as primary
+    db.add_project_path(&project_id, &normalized_path, true)
+        .map_err(Into::into)
+}
+
 // Story 2.10: Global Search Command
 // Story 2.33: Enhanced with filters support
 // ============================================================================

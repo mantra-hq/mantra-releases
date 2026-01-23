@@ -10,4 +10,4 @@ mod repository;
 
 pub use database::Database;
 pub use error::StorageError;
-pub use repository::{ContentType, SearchFilters, SearchResult, TimePreset};
+pub use repository::{ContentType, LogicalProjectStats, SearchFilters, SearchResult, TimePreset};

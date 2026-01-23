@@ -2,6 +2,7 @@
  * ProjectInfoDialog Component - 项目元信息对话框
  * Story 2.27: Task 1 - 项目元信息查看
  * Story 1.9: Task 8.4-8.8 - 设置工作目录功能
+ * Story 1.12: 多路径支持
  *
  * 展示项目详细信息：名称、路径、来源、会话数、创建时间等
  * 支持手动设置工作目录（修复 Gemini 等占位符路径问题）
@@ -35,10 +36,14 @@ import {
     AlertTriangle,
     FolderEdit,
     Link2,
+    Plus,
+    Trash2,
+    Star,
 } from "lucide-react";
 import type { Project } from "@/types/project";
 import type { SessionSummary } from "@/lib/project-ipc";
 import { updateProjectCwd } from "@/lib/project-ipc";
+import { useProjectPaths, addProjectPath, removeProjectPath, setProjectPrimaryPath } from "@/hooks/useProjects";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import { toast } from "sonner";
 
@@ -231,6 +236,11 @@ export function ProjectInfoDialog({
     const [isLoading, setIsLoading] = React.useState(false);
     const [isUpdatingCwd, setIsUpdatingCwd] = React.useState(false);
     const [currentProject, setCurrentProject] = React.useState<Project | null>(project);
+    const [isAddingPath, setIsAddingPath] = React.useState(false);
+    const [removingPathId, setRemovingPathId] = React.useState<string | null>(null);
+
+    // Story 1.12: 获取项目的所有关联路径
+    const { paths, refetch: refetchPaths } = useProjectPaths(currentProject?.id ?? null);
 
     // 当 project prop 变化时更新内部状态
     React.useEffect(() => {
@@ -271,12 +281,88 @@ export function ProjectInfoDialog({
             const updatedProject = await updateProjectCwd(currentProject.id, selected);
             setCurrentProject(updatedProject);
             onProjectUpdated?.(updatedProject);
+            refetchPaths();
 
             toast.success(t("projectInfo.cwdUpdated", "工作目录已更新"));
         } catch (error) {
             console.error("Failed to update project cwd:", error);
             toast.error(
                 t("projectInfo.cwdUpdateFailed", "更新工作目录失败: {{error}}", {
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            );
+        } finally {
+            setIsUpdatingCwd(false);
+        }
+    };
+
+    /**
+     * Story 1.12: 添加新路径
+     */
+    const handleAddPath = async () => {
+        if (!currentProject) return;
+
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: t("projectInfo.addPath", "添加项目路径"),
+            });
+
+            if (!selected || typeof selected !== "string") return;
+
+            setIsAddingPath(true);
+            await addProjectPath(currentProject.id, selected, false);
+            refetchPaths();
+            toast.success(t("projectInfo.pathAdded", "路径已添加"));
+        } catch (error) {
+            console.error("Failed to add path:", error);
+            toast.error(
+                t("projectInfo.addPathFailed", "添加路径失败: {{error}}", {
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            );
+        } finally {
+            setIsAddingPath(false);
+        }
+    };
+
+    /**
+     * Story 1.12: 移除路径
+     */
+    const handleRemovePath = async (pathId: string) => {
+        try {
+            setRemovingPathId(pathId);
+            await removeProjectPath(pathId);
+            refetchPaths();
+            toast.success(t("projectInfo.pathRemoved", "路径已移除"));
+        } catch (error) {
+            console.error("Failed to remove path:", error);
+            toast.error(
+                t("projectInfo.removePathFailed", "移除路径失败: {{error}}", {
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            );
+        } finally {
+            setRemovingPathId(null);
+        }
+    };
+
+    /**
+     * Story 1.12: 设置为主路径
+     */
+    const handleSetPrimaryPath = async (path: string) => {
+        if (!currentProject) return;
+
+        try {
+            setIsUpdatingCwd(true);
+            await setProjectPrimaryPath(currentProject.id, path);
+            refetchPaths();
+            toast.success(t("projectInfo.primaryPathSet", "主路径已设置"));
+        } catch (error) {
+            console.error("Failed to set primary path:", error);
+            toast.error(
+                t("projectInfo.setPrimaryFailed", "设置主路径失败: {{error}}", {
                     error: error instanceof Error ? error.message : String(error),
                 })
             );
@@ -310,37 +396,123 @@ export function ProjectInfoDialog({
                     </DialogHeader>
 
                     <div className="divide-y divide-border">
-                        {/* 项目路径 - 带设置按钮 */}
-                        <InfoRow
-                            icon={MapPin}
-                            label={t("projectInfo.path", "项目路径")}
-                            value={currentProject.cwd}
-                            mono
-                            warning={
-                                isPlaceholder
-                                    ? t(
-                                          "projectInfo.invalidCwdWarning",
-                                          "无法识别的路径格式，请手动设置正确的工作目录"
-                                      )
-                                    : undefined
-                            }
-                            action={
-                                <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={handleSetCwd}
-                                    disabled={isUpdatingCwd}
-                                    title={t("projectInfo.setCwd", "设置工作目录")}
-                                    className="shrink-0"
-                                >
-                                    {isUpdatingCwd ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {/* Story 1.12: 项目路径列表 - 多路径支持 */}
+                        <div className="flex items-start gap-3 py-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <div className="text-xs text-muted-foreground mb-1 flex items-center justify-between">
+                                    <span className="flex items-center gap-1">
+                                        {t("projectInfo.paths", "项目路径")}
+                                        {isPlaceholder && (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                                </TooltipTrigger>
+                                                <TooltipContent side="right" className="max-w-xs">
+                                                    {t(
+                                                        "projectInfo.invalidCwdWarning",
+                                                        "无法识别的路径格式，请手动设置正确的工作目录"
+                                                    )}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        )}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        onClick={handleAddPath}
+                                        disabled={isAddingPath}
+                                        title={t("projectInfo.addPath", "添加路径")}
+                                        className="h-5 w-5"
+                                    >
+                                        {isAddingPath ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                            <Plus className="h-3 w-3" />
+                                        )}
+                                    </Button>
+                                </div>
+                                {/* 路径列表 */}
+                                <div className="space-y-1">
+                                    {paths.length > 0 ? (
+                                        paths.map((pathItem) => (
+                                            <div
+                                                key={pathItem.id}
+                                                className="flex items-center gap-1 group"
+                                            >
+                                                {pathItem.is_primary ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Star className="h-3 w-3 text-yellow-500 shrink-0" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            {t("projectInfo.primaryPath", "主路径")}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ) : (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        onClick={() => handleSetPrimaryPath(pathItem.path)}
+                                                        disabled={isUpdatingCwd}
+                                                        title={t("projectInfo.setAsPrimary", "设为主路径")}
+                                                        className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <Star className="h-3 w-3" />
+                                                    </Button>
+                                                )}
+                                                <TruncatedText
+                                                    text={pathItem.path}
+                                                    maxLength={40}
+                                                    mono
+                                                    className="text-sm flex-1"
+                                                />
+                                                {!pathItem.is_primary && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        onClick={() => handleRemovePath(pathItem.id)}
+                                                        disabled={removingPathId === pathItem.id}
+                                                        title={t("projectInfo.removePath", "移除路径")}
+                                                        className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                                                    >
+                                                        {removingPathId === pathItem.id ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-3 w-3" />
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))
                                     ) : (
-                                        <FolderEdit className="h-4 w-4" />
+                                        // 如果没有 paths 记录，显示 cwd 作为兼容
+                                        <div className="flex items-center gap-2">
+                                            <TruncatedText
+                                                text={currentProject.cwd}
+                                                maxLength={40}
+                                                mono
+                                                className="text-sm flex-1"
+                                            />
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                onClick={handleSetCwd}
+                                                disabled={isUpdatingCwd}
+                                                title={t("projectInfo.setCwd", "设置工作目录")}
+                                                className="shrink-0"
+                                            >
+                                                {isUpdatingCwd ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <FolderEdit className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </div>
                                     )}
-                                </Button>
-                            }
-                        />
+                                </div>
+                            </div>
+                        </div>
 
                         {/* Git Remote URL (如果有) - Story 1.9 */}
                         {currentProject.git_remote_url && (

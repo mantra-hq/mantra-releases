@@ -208,7 +208,9 @@ fn test_deserialize_tool_call_with_display_fields() {
     let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
     assert_eq!(tool_call.display_name, Some("Shell".to_string()));
     assert_eq!(tool_call.description, Some("Execute shell commands".to_string()));
-    assert_eq!(tool_call.result_display, Some("file1.txt\nfile2.txt".to_string()));
+    // result_display is now ToolResultDisplay enum
+    let result_display = tool_call.result_display.unwrap();
+    assert_eq!(result_display.as_display_string(), "file1.txt\nfile2.txt");
     assert_eq!(tool_call.render_output_as_markdown, Some(false));
 }
 
@@ -353,4 +355,266 @@ fn test_parse_shell_result_signal_terminated() {
     let parsed = response.parse_shell_result().unwrap();
     assert_eq!(parsed.exit_code, None); // (none) should be None
     assert_eq!(parsed.signal, Some(9));
+}
+
+// ========== ToolResultDisplay Tests ==========
+
+#[test]
+fn test_tool_result_display_string() {
+    let json = r#""file1.txt\nfile2.txt""#;
+    let display: ToolResultDisplay = serde_json::from_str(json).unwrap();
+    match &display {
+        ToolResultDisplay::String(s) => assert_eq!(s, "file1.txt\nfile2.txt"),
+        _ => panic!("Expected String variant"),
+    }
+    assert_eq!(display.as_display_string(), "file1.txt\nfile2.txt");
+}
+
+#[test]
+fn test_tool_result_display_file_diff() {
+    let json = r#"{
+        "fileDiff": "--- a/test.ts\n+++ b/test.ts\n@@ -1,3 +1,4 @@\n+const x = 1;",
+        "fileName": "test.ts",
+        "originalContent": "// old content",
+        "newContent": "const x = 1;\n// old content",
+        "diffStat": {
+            "model_added_lines": 1,
+            "model_removed_lines": 0,
+            "model_added_chars": 12,
+            "model_removed_chars": 0,
+            "user_added_lines": 0,
+            "user_removed_lines": 0,
+            "user_added_chars": 0,
+            "user_removed_chars": 0
+        }
+    }"#;
+    
+    let display: ToolResultDisplay = serde_json::from_str(json).unwrap();
+    assert!(display.is_file_diff());
+    
+    match &display {
+        ToolResultDisplay::FileDiff(diff) => {
+            assert_eq!(diff.file_name, "test.ts");
+            assert!(diff.file_diff.contains("const x = 1;"));
+            assert_eq!(diff.original_content, Some("// old content".to_string()));
+            assert!(diff.diff_stat.is_some());
+            let stat = diff.diff_stat.as_ref().unwrap();
+            assert_eq!(stat.model_added_lines, 1);
+        }
+        _ => panic!("Expected FileDiff variant"),
+    }
+}
+
+#[test]
+fn test_tool_result_display_file_diff_new_file() {
+    // New file has null originalContent
+    let json = r#"{
+        "fileDiff": "--- /dev/null\n+++ b/new_file.ts\n@@ -0,0 +1,3 @@\n+const x = 1;\n+const y = 2;",
+        "fileName": "new_file.ts",
+        "originalContent": null,
+        "newContent": "const x = 1;\nconst y = 2;"
+    }"#;
+    
+    let display: ToolResultDisplay = serde_json::from_str(json).unwrap();
+    
+    if let Some(diff) = display.as_file_diff() {
+        assert_eq!(diff.file_name, "new_file.ts");
+        assert!(diff.original_content.is_none());
+        assert!(diff.diff_stat.is_none());
+    } else {
+        panic!("Expected FileDiff variant");
+    }
+}
+
+#[test]
+fn test_tool_result_display_ansi_output() {
+    // Use escaped hex codes to avoid Rust raw string issues with #
+    let json = r##"[
+        [
+            {"text": "Hello ", "bold": true, "italic": false, "underline": false, "dim": false, "inverse": false, "fg": "#00ff00", "bg": ""},
+            {"text": "World", "bold": false, "italic": false, "underline": true, "dim": false, "inverse": false, "fg": "", "bg": ""}
+        ],
+        [
+            {"text": "Line 2", "bold": false, "italic": false, "underline": false, "dim": false, "inverse": false, "fg": "", "bg": ""}
+        ]
+    ]"##;
+    
+    let display: ToolResultDisplay = serde_json::from_str(json).unwrap();
+    
+    match &display {
+        ToolResultDisplay::AnsiOutput(output) => {
+            assert_eq!(output.len(), 2);
+            assert_eq!(output[0].len(), 2);
+            assert_eq!(output[0][0].text, "Hello ");
+            assert!(output[0][0].bold);
+            assert_eq!(output[0][0].fg, "#00ff00");
+            assert_eq!(output[0][1].text, "World");
+            assert!(output[0][1].underline);
+            assert_eq!(output[1][0].text, "Line 2");
+        }
+        _ => panic!("Expected AnsiOutput variant"),
+    }
+    
+    // Check display string conversion
+    assert_eq!(display.as_display_string(), "Hello World\nLine 2");
+}
+
+#[test]
+fn test_tool_result_display_todo_list() {
+    let json = r#"{
+        "todos": [
+            {"description": "Implement feature A", "status": "completed"},
+            {"description": "Write tests", "status": "in_progress"},
+            {"description": "Review code", "status": "pending"},
+            {"description": "Old task", "status": "cancelled"}
+        ]
+    }"#;
+    
+    let display: ToolResultDisplay = serde_json::from_str(json).unwrap();
+    
+    match display {
+        ToolResultDisplay::TodoList(list) => {
+            assert_eq!(list.todos.len(), 4);
+            assert_eq!(list.todos[0].description, "Implement feature A");
+            assert_eq!(list.todos[0].status, TodoStatus::Completed);
+            assert_eq!(list.todos[1].status, TodoStatus::InProgress);
+            assert_eq!(list.todos[2].status, TodoStatus::Pending);
+            assert_eq!(list.todos[3].status, TodoStatus::Cancelled);
+        }
+        _ => panic!("Expected TodoList variant"),
+    }
+}
+
+#[test]
+fn test_deserialize_tool_call_with_file_diff_result_display() {
+    let json = r#"{
+        "id": "edit-123",
+        "name": "edit_file",
+        "args": {"filePath": "/src/main.rs", "newContent": "fn main() {}"},
+        "result": [
+            {
+                "functionResponse": {
+                    "id": "edit-123",
+                    "name": "edit_file",
+                    "response": {"output": "File edited successfully"}
+                }
+            }
+        ],
+        "status": "success",
+        "timestamp": "2025-12-30T20:13:20.000Z",
+        "displayName": "Edit File",
+        "resultDisplay": {
+            "fileDiff": "--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1 +1 @@\n-fn main() { println!(\"old\"); }\n+fn main() {}",
+            "fileName": "src/main.rs",
+            "originalContent": "fn main() { println!(\"old\"); }",
+            "newContent": "fn main() {}"
+        }
+    }"#;
+
+    let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+    assert_eq!(tool_call.id, "edit-123");
+    assert_eq!(tool_call.display_name, Some("Edit File".to_string()));
+    
+    let result_display = tool_call.result_display.unwrap();
+    assert!(result_display.is_file_diff());
+    
+    let diff = result_display.as_file_diff().unwrap();
+    assert_eq!(diff.file_name, "src/main.rs");
+    assert!(diff.file_diff.contains("-fn main() { println!(\"old\"); }"));
+    assert!(diff.file_diff.contains("+fn main() {}"));
+}
+
+#[test]
+fn test_deserialize_tool_call_with_ansi_result_display() {
+    // Use r##"..."## to allow # in the JSON string
+    let json = r##"{
+        "id": "shell-123",
+        "name": "run_shell_command",
+        "args": {"command": "ls --color"},
+        "result": [
+            {
+                "functionResponse": {
+                    "id": "shell-123",
+                    "name": "run_shell_command",
+                    "response": {"output": "file1.txt file2.txt"}
+                }
+            }
+        ],
+        "status": "success",
+        "resultDisplay": [
+            [
+                {"text": "file1.txt", "bold": false, "italic": false, "underline": false, "dim": false, "inverse": false, "fg": "#0000ff", "bg": ""},
+                {"text": " ", "bold": false, "italic": false, "underline": false, "dim": false, "inverse": false, "fg": "", "bg": ""},
+                {"text": "file2.txt", "bold": false, "italic": false, "underline": false, "dim": false, "inverse": false, "fg": "#00ff00", "bg": ""}
+            ]
+        ]
+    }"##;
+
+    let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+    
+    let result_display = tool_call.result_display.unwrap();
+    match result_display {
+        ToolResultDisplay::AnsiOutput(output) => {
+            assert_eq!(output.len(), 1);
+            assert_eq!(output[0].len(), 3);
+            assert_eq!(output[0][0].text, "file1.txt");
+            assert_eq!(output[0][0].fg, "#0000ff");
+        }
+        _ => panic!("Expected AnsiOutput variant"),
+    }
+}
+
+#[test]
+fn test_deserialize_tool_call_with_todo_result_display() {
+    let json = r#"{
+        "id": "todo-123",
+        "name": "todo_write",
+        "args": {},
+        "status": "success",
+        "resultDisplay": {
+            "todos": [
+                {"description": "Task 1", "status": "pending"},
+                {"description": "Task 2", "status": "completed"}
+            ]
+        }
+    }"#;
+
+    let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+    
+    let result_display = tool_call.result_display.unwrap();
+    match result_display {
+        ToolResultDisplay::TodoList(list) => {
+            assert_eq!(list.todos.len(), 2);
+            assert_eq!(list.todos[0].description, "Task 1");
+            assert_eq!(list.todos[0].status, TodoStatus::Pending);
+        }
+        _ => panic!("Expected TodoList variant"),
+    }
+}
+
+#[test]
+fn test_deserialize_tool_call_with_null_result_display() {
+    let json = r#"{
+        "id": "test-123",
+        "name": "read_file",
+        "args": {},
+        "status": "success",
+        "resultDisplay": null
+    }"#;
+
+    let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+    assert!(tool_call.result_display.is_none());
+}
+
+#[test]
+fn test_deserialize_tool_call_without_result_display() {
+    let json = r#"{
+        "id": "test-123",
+        "name": "read_file",
+        "args": {},
+        "status": "success"
+    }"#;
+
+    let tool_call: GeminiToolCall = serde_json::from_str(json).unwrap();
+    assert!(tool_call.result_display.is_none());
 }
