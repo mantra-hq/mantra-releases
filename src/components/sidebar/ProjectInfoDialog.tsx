@@ -360,6 +360,43 @@ export function ProjectInfoDialog({
     };
 
     /**
+     * Story 1.12 fix: 关联真实路径
+     * 对于 needs_association 项目，选择目录后直接设置为主路径
+     */
+    const handleAssociatePath = async () => {
+        const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
+        if (!projectId) return;
+
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: t("projectInfo.associatePath", "关联真实路径"),
+            });
+
+            if (!selected || typeof selected !== "string") return;
+
+            setIsAddingPath(true);
+            // 直接添加为主路径
+            await addProjectPath(projectId, selected, true);
+            refetchPaths();
+            onProjectUpdated?.();
+            toast.success(t("projectInfo.pathAssociated", "路径已关联"));
+            // 关联成功后关闭对话框
+            onOpenChange(false);
+        } catch (error) {
+            console.error("Failed to associate path:", error);
+            toast.error(
+                t("projectInfo.associatePathFailed", "关联路径失败: {{error}}", {
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            );
+        } finally {
+            setIsAddingPath(false);
+        }
+    };
+
+    /**
      * Story 1.12: 移除路径
      */
     const handleRemovePath = async (pathId: string) => {
@@ -462,24 +499,55 @@ export function ProjectInfoDialog({
                                             </Tooltip>
                                         )}
                                     </span>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        onClick={handleAddPath}
-                                        disabled={isAddingPath}
-                                        title={t("projectInfo.addPath", "添加路径")}
-                                        className="h-5 w-5"
-                                    >
-                                        {isAddingPath ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                            <Plus className="h-3 w-3" />
-                                        )}
-                                    </Button>
+                                    {/* Story 1.12 fix: 仅对已关联的项目显示添加路径按钮 */}
+                                    {!isPlaceholder && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            onClick={handleAddPath}
+                                            disabled={isAddingPath}
+                                            title={t("projectInfo.addPath", "添加路径")}
+                                            className="h-5 w-5"
+                                        >
+                                            {isAddingPath ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <Plus className="h-3 w-3" />
+                                            )}
+                                        </Button>
+                                    )}
                                 </div>
                                 {/* 路径列表 */}
                                 <div className="space-y-1">
-                                    {paths.length > 0 ? (
+                                    {/* Story 1.12 fix: 对于 needs_association 项目，显示关联真实路径按钮 */}
+                                    {isPlaceholder ? (
+                                        <div className="space-y-2">
+                                            {/* 显示当前虚拟路径 */}
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <TruncatedText
+                                                    text={logicalProject?.physical_path ?? currentProject?.cwd ?? ""}
+                                                    maxLength={40}
+                                                    mono
+                                                    className="opacity-60"
+                                                />
+                                            </div>
+                                            {/* 关联真实路径按钮 */}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleAssociatePath}
+                                                disabled={isAddingPath}
+                                                className="w-full"
+                                            >
+                                                {isAddingPath ? (
+                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <FolderOpen className="h-4 w-4 mr-2" />
+                                                )}
+                                                {t("projectInfo.associatePath", "关联真实路径")}
+                                            </Button>
+                                        </div>
+                                    ) : paths.length > 0 ? (
                                         paths.map((pathItem) => (
                                             <div
                                                 key={pathItem.id}

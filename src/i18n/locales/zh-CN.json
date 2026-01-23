@@ -185,7 +185,10 @@
     "cwdUpdateFailed": "更新工作目录失败: {{error}}",
     "invalidCwdWarning": "无法识别的路径格式，请手动设置正确的工作目录",
     "invalidCwdTitle": "无法识别的路径",
-    "invalidCwdDescription": "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。"
+    "invalidCwdDescription": "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。",
+    "associatePath": "关联真实路径",
+    "pathAssociated": "路径已关联",
+    "associatePathFailed": "关联路径失败: {{error}}"
   },
   "sync": {
     "reParseFailed": "重新解析失败",

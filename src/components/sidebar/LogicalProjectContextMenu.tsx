@@ -128,11 +128,10 @@ export function LogicalProjectContextMenu({
         </DropdownMenuItem>
 
         {/* 查看详情 - Task 15: 关联入口统一到详情页 */}
+        {/* 始终显示"查看详情"，关联操作在详情页内进行 */}
         <DropdownMenuItem onClick={handleViewInfo}>
           <Info className="h-4 w-4 mr-2" />
-          {logicalProject.needs_association
-            ? t("project.associatePath", "关联路径")
-            : t("projectInfo.viewDetails", "查看详情")}
+          {t("projectInfo.viewDetails", "查看详情")}
         </DropdownMenuItem>
 
         {/* 重命名 - 仅单项目时启用 */}
