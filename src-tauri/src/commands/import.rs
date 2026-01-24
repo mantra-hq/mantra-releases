@@ -493,16 +493,20 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
                 // Extract session_id from Codex JSONL file
                 let session_id = extract_session_id_from_codex_file(&session_file.path);
 
-                // Story 8.20: Use cwd directly as project_path (no more hashing)
-                // Review Fix M1: Use file path as fallback for better user experience
+                // Story 8.20: 直接使用 cwd 作为 project_path（不再 Hash）
+                // 代码审查修复 M1: 使用文件路径作为 fallback 提升用户体验
+                // 代码审查修复 M2: 统一虚拟路径前缀格式为 "placeholder:"
                 let project_path = extract_cwd_from_codex_file(&session_file.path)
                     .unwrap_or_else(|| {
-                        // Fallback: use parent directory of session file as project identifier
+                        // Fallback: 使用会话文件的父目录作为项目标识
+                        // 虚拟路径前缀说明：
+                        // - "placeholder:" 用于无法确定真实路径的情况（Codex/Gemini 等）
+                        // - "gemini-project:" 是 Gemini 的历史格式，保持兼容
                         session_file.path
                             .parent()
-                            .and_then(|p| p.parent()) // Go up from sessions/date/ to .codex/
+                            .and_then(|p| p.parent()) // 从 sessions/date/ 向上到 .codex/
                             .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_else(|| format!("codex-session:{}", session_file.session_id))
+                            .unwrap_or_else(|| format!("placeholder:codex-{}", session_file.session_id))
                     });
 
                 Some(DiscoveredFile {
@@ -523,17 +527,17 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
     Ok(result)
 }
 
-/// Codex session metadata extracted from JSONL file
+/// 从 JSONL 文件提取的 Codex 会话元数据
 #[derive(Debug, Default)]
 struct CodexSessionMeta {
-    /// Session ID from payload.id
+    /// 会话 ID（来自 payload.id）
     pub id: Option<String>,
-    /// Working directory from payload.cwd
+    /// 工作目录（来自 payload.cwd）
     pub cwd: Option<String>,
 }
 
-/// Extract session metadata from a Codex JSONL session file
-/// This is a unified function to avoid code duplication (Review Fix M2)
+/// 从 Codex JSONL 会话文件提取元数据
+/// 这是一个统一函数，避免代码重复（代码审查修复 M2）
 fn extract_codex_session_meta(path: &Path) -> CodexSessionMeta {
     use std::io::{BufRead, BufReader};
 
@@ -545,7 +549,7 @@ fn extract_codex_session_meta(path: &Path) -> CodexSessionMeta {
     };
     let reader = BufReader::new(file);
 
-    // Read the first few lines to find session_meta
+    // 读取前几行以查找 session_meta
     for line in reader.lines().take(5) {
         if let Ok(line) = line {
             let line = line.trim();
@@ -553,24 +557,24 @@ fn extract_codex_session_meta(path: &Path) -> CodexSessionMeta {
                 continue;
             }
 
-            // Parse as JSON and check for session_meta type
+            // 解析 JSON 并检查 session_meta 类型
             if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
                 if record.get("type").and_then(|v| v.as_str()) == Some("session_meta") {
                     if let Some(payload) = record.get("payload") {
-                        // Extract id
+                        // 提取 id
                         if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
                             if !id.is_empty() {
                                 meta.id = Some(id.to_string());
                             }
                         }
-                        // Extract cwd
+                        // 提取 cwd
                         if let Some(cwd) = payload.get("cwd").and_then(|v| v.as_str()) {
                             if !cwd.is_empty() {
                                 meta.cwd = Some(cwd.to_string());
                             }
                         }
                     }
-                    break; // Found session_meta, no need to continue
+                    break; // 找到 session_meta，无需继续
                 }
             }
         }
@@ -579,12 +583,12 @@ fn extract_codex_session_meta(path: &Path) -> CodexSessionMeta {
     meta
 }
 
-/// Extract sessionId from a Codex JSONL session file
+/// 从 Codex JSONL 会话文件提取 sessionId
 fn extract_session_id_from_codex_file(path: &Path) -> Option<String> {
     extract_codex_session_meta(path).id
 }
 
-/// Extract cwd from a Codex JSONL session file
+/// 从 Codex JSONL 会话文件提取 cwd
 fn extract_cwd_from_codex_file(path: &Path) -> Option<String> {
     extract_codex_session_meta(path).cwd
 }
@@ -1094,6 +1098,59 @@ mod tests {
         let meta = extract_codex_session_meta(&nonexistent);
         assert_eq!(meta.id, None);
         assert_eq!(meta.cwd, None);
+    }
+
+    // Story 8.20 代码审查修复 L1: 添加 Codex 路径直通的集成测试
+    #[test]
+    fn test_codex_project_path_uses_cwd_directly() {
+        use std::io::Write;
+
+        // 创建临时目录模拟 Codex 会话结构
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_codex_path_direct.jsonl");
+
+        // 模拟真实的 Codex 会话文件，包含 cwd
+        let content = r#"{"type":"session_meta","payload":{"id":"path-test-session","cwd":"/home/user/real-project-path","model":"gpt-4"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}]}}
+"#;
+
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+
+        // 验证 cwd 被直接提取，而非 Hash
+        let cwd = extract_cwd_from_codex_file(&test_file);
+        assert_eq!(cwd, Some("/home/user/real-project-path".to_string()));
+
+        // 验证路径不包含 "codex-project:" 或 Hash 格式
+        let path = cwd.unwrap();
+        assert!(!path.starts_with("codex-project:"), "路径不应该使用 codex-project: 前缀");
+        assert!(!path.starts_with("placeholder:"), "有效 cwd 不应该使用 placeholder: 前缀");
+        assert!(path.starts_with("/"), "路径应该是绝对路径");
+
+        // 清理
+        fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_codex_fallback_uses_placeholder_prefix() {
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_codex_fallback.jsonl");
+
+        // 模拟没有 cwd 的会话文件
+        let content = r#"{"type":"session_meta","payload":{"id":"fallback-test-session","model":"gpt-4"}}
+"#;
+
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+
+        // 验证 cwd 为 None
+        let cwd = extract_cwd_from_codex_file(&test_file);
+        assert_eq!(cwd, None, "没有 cwd 字段时应返回 None");
+
+        // 清理
+        fs::remove_file(&test_file).ok();
     }
 }
 

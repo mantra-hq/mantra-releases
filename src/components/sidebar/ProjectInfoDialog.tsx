@@ -392,16 +392,25 @@ export function ProjectInfoDialog({
      * Story 1.9: Task 8.4, 8.5
      */
     const handleSetCwd = async () => {
-        if (!currentProject) return;
+        console.log("[DEBUG-DIALOG] handleSetCwd: Called. currentProject:", currentProject);
+        if (!currentProject) {
+            console.warn("[DEBUG-DIALOG] handleSetCwd: currentProject is null, returning.");
+            return;
+        }
 
         try {
+            console.log("[DEBUG-DIALOG] handleSetCwd: Opening dialog...");
             const selected = await open({
                 directory: true,
                 multiple: false,
                 title: t("projectInfo.selectDirectory", "选择项目工作目录"),
             });
+            console.log("[DEBUG-DIALOG] handleSetCwd: Dialog result:", selected);
 
-            if (!selected || typeof selected !== "string") return;
+            if (!selected || typeof selected !== "string") {
+                console.log("[DEBUG-DIALOG] handleSetCwd: No selection or invalid type");
+                return;
+            }
 
             setIsUpdatingCwd(true);
 
@@ -412,7 +421,7 @@ export function ProjectInfoDialog({
 
             toast.success(t("projectInfo.cwdUpdated", "工作目录已更新"));
         } catch (error) {
-            console.error("Failed to update project cwd:", error);
+            console.error("[DEBUG-DIALOG] Failed to update project cwd:", error);
             toast.error(
                 t("projectInfo.cwdUpdateFailed", "更新工作目录失败: {{error}}", {
                     error: error instanceof Error ? error.message : String(error),
@@ -430,16 +439,26 @@ export function ProjectInfoDialog({
     const handleAddPath = async () => {
         // 获取 project_id：优先使用 currentProject，否则使用逻辑项目的第一个存储层项目
         const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
-        if (!projectId) return;
+        console.log("[DEBUG-DIALOG] handleAddPath: Called. projectId:", projectId);
+
+        if (!projectId) {
+            console.warn("[DEBUG-DIALOG] handleAddPath: projectId is missing, returning.");
+            return;
+        }
 
         try {
+            console.log("[DEBUG-DIALOG] handleAddPath: Opening dialog...");
             const selected = await open({
                 directory: true,
                 multiple: false,
                 title: t("projectInfo.addPath", "添加项目路径"),
             });
+            console.log("[DEBUG-DIALOG] handleAddPath: Dialog result:", selected);
 
-            if (!selected || typeof selected !== "string") return;
+            if (!selected || typeof selected !== "string") {
+                console.log("[DEBUG-DIALOG] handleAddPath: No selection or invalid type");
+                return;
+            }
 
             setIsAddingPath(true);
             await addProjectPath(projectId, selected, false);
@@ -447,7 +466,7 @@ export function ProjectInfoDialog({
             onProjectUpdated?.();
             toast.success(t("projectInfo.pathAdded", "路径已添加"));
         } catch (error) {
-            console.error("Failed to add path:", error);
+            console.error("[DEBUG-DIALOG] Failed to add path:", error);
             toast.error(
                 t("projectInfo.addPathFailed", "添加路径失败: {{error}}", {
                     error: error instanceof Error ? error.message : String(error),
@@ -464,16 +483,26 @@ export function ProjectInfoDialog({
      */
     const handleAssociatePath = async () => {
         const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
-        if (!projectId) return;
+        console.log("[DEBUG-DIALOG] handleAssociatePath: Called. projectId:", projectId);
+
+        if (!projectId) {
+            console.warn("[DEBUG-DIALOG] handleAssociatePath: projectId is missing, returning.");
+            return;
+        }
 
         try {
+            console.log("[DEBUG-DIALOG] handleAssociatePath: Opening dialog...");
             const selected = await open({
                 directory: true,
                 multiple: false,
                 title: t("projectInfo.associatePath", "关联真实路径"),
             });
+            console.log("[DEBUG-DIALOG] handleAssociatePath: Dialog result:", selected);
 
-            if (!selected || typeof selected !== "string") return;
+            if (!selected || typeof selected !== "string") {
+                console.log("[DEBUG-DIALOG] handleAssociatePath: No selection or invalid type");
+                return;
+            }
 
             setIsAddingPath(true);
             // 直接添加为主路径
@@ -493,7 +522,7 @@ export function ProjectInfoDialog({
             // 关联成功后关闭对话框
             onOpenChange(false);
         } catch (error) {
-            console.error("Failed to associate path:", error);
+            console.error("[DEBUG-DIALOG] Failed to associate path:", error);
             toast.error(
                 t("projectInfo.associatePathFailed", "关联路径失败: {{error}}", {
                     error: error instanceof Error ? error.message : String(error),
