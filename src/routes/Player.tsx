@@ -54,12 +54,19 @@ import { ProjectDrawer } from "@/components/sidebar";
 import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
-import { PlayerEmptyState } from "@/components/player";
+// Story 10.11: 移除 ModeSwitch (已集成到 TopBar)
+import { PlayerEmptyState, CompressGuideDialog } from "@/components/player";
+// Story 10.2/10.3/10.6: 压缩模式组件
+import { CompressModeContent } from "@/components/compress";
+// Story 10.3: 压缩状态 Provider
+import { CompressStateProvider } from "@/hooks/useCompressState";
 // Story 2.29 V2: 隐藏空会话设置
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
 // Story 2.34: 统计视图组件
 import { useAppModeStore } from "@/stores/useAppModeStore";
 import { ProjectStatsView, SessionStatsView, StatsLevelTabs, type StatsLevel } from "@/components/analytics";
+// Story 10.1: 压缩模式 hook
+import { useCompressMode } from "@/hooks";
 
 
 /**
@@ -186,11 +193,45 @@ export default function Player() {
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
 
-  // Story 2.34: 应用模式状态（回放/统计）
+  // Story 2.34 + 10.11: 统一应用模式状态（回放/统计/压缩）
   const appMode = useAppModeStore((state) => state.mode);
+  const setAppMode = useAppModeStore((state) => state.setMode);
 
   // Story 2.34: 统计视图层级状态（项目/会话）
   const [statsLevel, setStatsLevel] = React.useState<StatsLevel>("session");
+
+  // Story 10.1 + 10.11: 压缩模式引导弹窗状态（保留首次引导逻辑）
+  const {
+    isFirstTimeCompress,
+    hideGuide,
+    dismissGuide,
+  } = useCompressMode({ sessionId: sessionId ?? "" });
+
+  // Story 10.11 AC4: URL 参数同步 - 初始化时读取 mode 参数
+  // 用于支持 deep link：/player/123?mode=compress
+  React.useEffect(() => {
+    const modeParam = searchParams.get("mode");
+    if (modeParam && ["playback", "analytics", "compress"].includes(modeParam)) {
+      // 无 sessionId 时不允许进入压缩模式
+      if (modeParam === "compress" && !sessionId) {
+        setAppMode("playback");
+      } else {
+        setAppMode(modeParam as "playback" | "analytics" | "compress");
+      }
+    }
+    // 只在首次加载时执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Story 10.11 AC4: URL 参数同步 - 模式变化时更新 URL
+  React.useEffect(() => {
+    const currentModeParam = searchParams.get("mode");
+    if (currentModeParam !== appMode) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set("mode", appMode);
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [appMode, searchParams, setSearchParams]);
 
   // Bug Fix: 切换项目时重置右侧内容区域状态
   // 当 sessionId 变化时，清空所有关联的 store 状态，避免显示旧项目内容
@@ -734,7 +775,7 @@ export default function Player() {
         />
         {/* Story 2.34: 根据模式显示不同内容 */}
         <main className="flex-1 min-h-0">
-          {appMode === "statistics" && allProjects.length > 0 ? (
+          {appMode === "analytics" && allProjects.length > 0 ? (
             /* 统计模式下显示第一个项目的统计（或提示选择项目） */
             <ProjectStatsView
               projectId={allProjects[0]?.id ?? ""}
@@ -845,7 +886,7 @@ export default function Player() {
 
       {/* Main Content - Story 2.34: 根据模式切换显示 */}
       <main className="flex-1 min-h-0 flex flex-col">
-        {appMode === "statistics" ? (
+        {appMode === "analytics" ? (
           /* 统计模式: 显示统计视图 */
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Story 2.34: 统计层级切换 Tabs (仅当有 sessionId 和 project 时显示) */}
@@ -890,38 +931,63 @@ export default function Player() {
             </div>
           </div>
         ) : (
-          /* 回放模式: 显示 DualStreamLayout */
+          /* Story 10.11: 回放/压缩模式 - ModeSwitch 已移至 TopBar */
+          /* 内容区域 - 根据统一的 appMode 切换 */
           <>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <DualStreamLayout
-                ref={layoutRef}
-                messages={messages}
-                selectedMessageId={selectedMessageId}
-                onMessageSelect={handleMessageSelect}
-                // TimberLine 时间轴 Props (Story 2.6)
-                showTimeline={false}
-                timelineStartTime={timelineRange.startTime}
-                timelineEndTime={timelineRange.endTime}
-                timelineCurrentTime={currentTime}
-                timelineEvents={timelineEvents}
-                onTimelineSeek={handleTimelineSeek}
-                // Story 2.11 AC6: 无 Git 仓库时显示警告
-                showNoGitWarning={hasNoGit}
-                projectPath={sessionCwd}
-                // Story 2.13: 文件浏览器
-                repoPath={repoPath ?? undefined}
-              />
-            </div>
-            {/* 直接在 Player 层渲染 TimberLine */}
-            {messages.length > 0 && (
-              <TimberLine
-                startTime={timelineRange.startTime}
-                endTime={timelineRange.endTime}
-                currentTime={currentTime}
-                events={timelineEvents}
-                onSeek={handleTimelineSeek}
-              />
-            )}
+            {appMode === "playback" ? (
+              /* 回放模式: 显示 DualStreamLayout */
+              <>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <DualStreamLayout
+                    ref={layoutRef}
+                    messages={messages}
+                    selectedMessageId={selectedMessageId}
+                    onMessageSelect={handleMessageSelect}
+                    // TimberLine 时间轴 Props (Story 2.6)
+                    showTimeline={false}
+                    timelineStartTime={timelineRange.startTime}
+                    timelineEndTime={timelineRange.endTime}
+                    timelineCurrentTime={currentTime}
+                    timelineEvents={timelineEvents}
+                    onTimelineSeek={handleTimelineSeek}
+                    // Story 2.11 AC6: 无 Git 仓库时显示警告
+                    showNoGitWarning={hasNoGit}
+                    projectPath={sessionCwd}
+                    // Story 2.13: 文件浏览器
+                    repoPath={repoPath ?? undefined}
+                  />
+                </div>
+                {/* 直接在 Player 层渲染 TimberLine (AC #5: 回放模式显示时间轴) */}
+                {messages.length > 0 && (
+                  <TimberLine
+                    startTime={timelineRange.startTime}
+                    endTime={timelineRange.endTime}
+                    currentTime={currentTime}
+                    events={timelineEvents}
+                    onSeek={handleTimelineSeek}
+                  />
+                )}
+              </>
+            ) : appMode === "compress" ? (
+              /* Story 10.11: 压缩模式 - 显示原始消息列表 + 压缩预览 */
+              /* Story 10.3: 使用 CompressStateProvider 包裹实现左右面板状态共享 */
+              /* Story 10.9: 使用 CompressModeContent 处理持久化和 beforeunload */
+              <CompressStateProvider>
+                <CompressModeContent
+                  layoutRef={layoutRef}
+                  messages={messages}
+                  sessionId={sessionId}
+                />
+              </CompressStateProvider>
+              /* 压缩模式不显示 TimberLine */
+            ) : null}
+
+            {/* Story 10.1 AC #2: 首次使用引导弹窗 */}
+            <CompressGuideDialog
+              open={isFirstTimeCompress}
+              onClose={hideGuide} // 临时隐藏弹窗，下次还会显示
+              onDismissForever={dismissGuide}
+            />
           </>
         )}
       </main>
@@ -954,3 +1020,4 @@ export default function Player() {
     </div>
   );
 }
+

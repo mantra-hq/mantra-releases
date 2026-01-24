@@ -153,7 +153,7 @@ export function Settings() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => openUrl("https://mantra.gonewx.com/docs")}
+                                    onClick={() => openUrl("https://docs.mantra.gonewx.com")}
                                     className="gap-2"
                                     data-testid="documentation-button"
                                 >

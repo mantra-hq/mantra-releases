@@ -11,3 +11,5 @@ export { useLogStore, type LogState, type LogEntry, type LogLevel } from "./useL
 export { useNotificationStore, type NotificationState } from "./useNotificationStore";
 // Story 2.34: App mode store
 export { useAppModeStore, type AppModeState, type AppMode } from "./useAppModeStore";
+// Story 10.9: Compress persist store
+export { useCompressPersistStore, type CompressPersistState, type SerializedSnapshot } from "./useCompressPersistStore";

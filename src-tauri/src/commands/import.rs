@@ -463,7 +463,7 @@ async fn scan_gemini_projects() -> Result<Vec<DiscoveredFile>, AppError> {
 /// Each session file is represented as a DiscoveredFile with:
 /// - path: The session JSONL file path (used for import)
 /// - name: The session filename with date
-/// - project_path: The cwd from session, or codex-project:{cwd_hash} format
+/// - project_path: The cwd from session directly (Story 8.20: no more hashing)
 async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
     let result = tokio::task::spawn_blocking(|| {
         // Try to detect Codex paths
@@ -493,16 +493,17 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
                 // Extract session_id from Codex JSONL file
                 let session_id = extract_session_id_from_codex_file(&session_file.path);
 
-                // Extract cwd from Codex file for project_path
+                // Story 8.20: Use cwd directly as project_path (no more hashing)
+                // Review Fix M1: Use file path as fallback for better user experience
                 let project_path = extract_cwd_from_codex_file(&session_file.path)
-                    .map(|cwd| {
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::{Hash, Hasher};
-                        let mut hasher = DefaultHasher::new();
-                        cwd.hash(&mut hasher);
-                        format!("codex-project:{:x}", hasher.finish())
-                    })
-                    .unwrap_or_else(|| format!("codex-session:{}", session_file.session_id));
+                    .unwrap_or_else(|| {
+                        // Fallback: use parent directory of session file as project identifier
+                        session_file.path
+                            .parent()
+                            .and_then(|p| p.parent()) // Go up from sessions/date/ to .codex/
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|| format!("codex-session:{}", session_file.session_id))
+                    });
 
                 Some(DiscoveredFile {
                     path: session_file.path.to_string_lossy().to_string(),
@@ -522,14 +523,29 @@ async fn scan_codex_sessions() -> Result<Vec<DiscoveredFile>, AppError> {
     Ok(result)
 }
 
-/// Extract sessionId from a Codex JSONL session file
-fn extract_session_id_from_codex_file(path: &Path) -> Option<String> {
+/// Codex session metadata extracted from JSONL file
+#[derive(Debug, Default)]
+struct CodexSessionMeta {
+    /// Session ID from payload.id
+    pub id: Option<String>,
+    /// Working directory from payload.cwd
+    pub cwd: Option<String>,
+}
+
+/// Extract session metadata from a Codex JSONL session file
+/// This is a unified function to avoid code duplication (Review Fix M2)
+fn extract_codex_session_meta(path: &Path) -> CodexSessionMeta {
     use std::io::{BufRead, BufReader};
 
-    let file = fs::File::open(path).ok()?;
+    let mut meta = CodexSessionMeta::default();
+
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return meta,
+    };
     let reader = BufReader::new(file);
 
-    // Read the first line which should be session_meta
+    // Read the first few lines to find session_meta
     for line in reader.lines().take(5) {
         if let Ok(line) = line {
             let line = line.trim();
@@ -541,51 +557,36 @@ fn extract_session_id_from_codex_file(path: &Path) -> Option<String> {
             if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
                 if record.get("type").and_then(|v| v.as_str()) == Some("session_meta") {
                     if let Some(payload) = record.get("payload") {
+                        // Extract id
                         if let Some(id) = payload.get("id").and_then(|v| v.as_str()) {
                             if !id.is_empty() {
-                                return Some(id.to_string());
+                                meta.id = Some(id.to_string());
+                            }
+                        }
+                        // Extract cwd
+                        if let Some(cwd) = payload.get("cwd").and_then(|v| v.as_str()) {
+                            if !cwd.is_empty() {
+                                meta.cwd = Some(cwd.to_string());
                             }
                         }
                     }
+                    break; // Found session_meta, no need to continue
                 }
             }
         }
     }
 
-    None
+    meta
+}
+
+/// Extract sessionId from a Codex JSONL session file
+fn extract_session_id_from_codex_file(path: &Path) -> Option<String> {
+    extract_codex_session_meta(path).id
 }
 
 /// Extract cwd from a Codex JSONL session file
 fn extract_cwd_from_codex_file(path: &Path) -> Option<String> {
-    use std::io::{BufRead, BufReader};
-
-    let file = fs::File::open(path).ok()?;
-    let reader = BufReader::new(file);
-
-    // Read the first line which should be session_meta
-    for line in reader.lines().take(5) {
-        if let Ok(line) = line {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            // Parse as JSON and check for session_meta type
-            if let Ok(record) = serde_json::from_str::<serde_json::Value>(line) {
-                if record.get("type").and_then(|v| v.as_str()) == Some("session_meta") {
-                    if let Some(payload) = record.get("payload") {
-                        if let Some(cwd) = payload.get("cwd").and_then(|v| v.as_str()) {
-                            if !cwd.is_empty() {
-                                return Some(cwd.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    None
+    extract_codex_session_meta(path).cwd
 }
 
 /// Scan a custom directory for session files
@@ -1017,6 +1018,82 @@ mod tests {
         let gemini_path_win = "C:\\Users\\test\\.gemini\\tmp\\abc123\\chats\\session.json";
         assert!(gemini_path_win.contains("\\.gemini\\"));
         assert!(gemini_path_win.ends_with(".json"));
+    }
+
+    // Review Fix H1: Add unit tests for Codex session metadata extraction
+    #[test]
+    fn test_extract_codex_session_meta_with_valid_file() {
+        use std::io::Write;
+
+        // Create a temp file with valid Codex JSONL format
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_codex_session_valid.jsonl");
+
+        let content = r#"{"type":"session_meta","payload":{"id":"test-session-123","cwd":"/home/user/my-project","model":"gpt-4"}}
+{"type":"message","payload":{"role":"user","content":"Hello"}}
+"#;
+
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+
+        // Test extraction
+        let meta = extract_codex_session_meta(&test_file);
+        assert_eq!(meta.id, Some("test-session-123".to_string()));
+        assert_eq!(meta.cwd, Some("/home/user/my-project".to_string()));
+
+        // Also test wrapper functions
+        assert_eq!(extract_session_id_from_codex_file(&test_file), Some("test-session-123".to_string()));
+        assert_eq!(extract_cwd_from_codex_file(&test_file), Some("/home/user/my-project".to_string()));
+
+        // Clean up
+        fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_extract_codex_session_meta_with_empty_file() {
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_codex_session_empty.jsonl");
+
+        // Create empty file
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(b"").unwrap();
+
+        let meta = extract_codex_session_meta(&test_file);
+        assert_eq!(meta.id, None);
+        assert_eq!(meta.cwd, None);
+
+        fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_extract_codex_session_meta_with_missing_fields() {
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_codex_session_partial.jsonl");
+
+        // session_meta without cwd field
+        let content = r#"{"type":"session_meta","payload":{"id":"partial-session","model":"gpt-4"}}
+"#;
+
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+
+        let meta = extract_codex_session_meta(&test_file);
+        assert_eq!(meta.id, Some("partial-session".to_string()));
+        assert_eq!(meta.cwd, None);
+
+        fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_extract_codex_session_meta_with_nonexistent_file() {
+        let nonexistent = PathBuf::from("/nonexistent/path/to/file.jsonl");
+        let meta = extract_codex_session_meta(&nonexistent);
+        assert_eq!(meta.id, None);
+        assert_eq!(meta.cwd, None);
     }
 }
 

@@ -503,6 +503,152 @@
     "noMessages": "No messages",
     "messagesWillAppear": "Messages will appear here"
   },
+  "compress": {
+    "originalList": {
+      "title": "Original Messages",
+      "empty": "No messages to display",
+      "emptyHint": "Import a session to view messages"
+    },
+    "messageCard": {
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "tokens": "tokens",
+      "toolCall": "Tool Call",
+      "toolResult": "Tool Result",
+      "thinking": "Thinking",
+      "codeDiff": "Code Diff",
+      "codeSuggestion": "Code Suggestion",
+      "image": "Image",
+      "reference": "Reference",
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    },
+    "previewList": {
+      "title": "Compressed Preview",
+      "empty": "No changes yet",
+      "emptyHint": "Mark messages as delete/modify on the left panel",
+      "modeFull": "Full",
+      "modeChanges": "Changes Only",
+      "modeHideDeleted": "Hide Deleted"
+    },
+    "previewCard": {
+      "deleted": "Deleted",
+      "modified": "Modified",
+      "inserted": "Inserted",
+      "savedTokens": "saved",
+      "tokenDelta": "tokens"
+    },
+    "actions": {
+      "keep": "Keep",
+      "keepTooltip": "Keep this message (K)",
+      "delete": "Delete",
+      "deleteTooltip": "Mark for deletion (D)",
+      "edit": "Edit",
+      "editTooltip": "Edit message content (E)",
+      "edited": "Edited",
+      "insert": "Insert",
+      "insertAfterTooltip": "Insert message after this (I)",
+      "insertAtEndTooltip": "Insert message at the end (I)",
+      "insertAtStart": "Insert at start",
+      "insertAtStartTooltip": "Insert a new message at the beginning",
+      "editInsertedTooltip": "Edit the inserted message",
+      "editInsertedAtStart": "Edit inserted message"
+    },
+    "editDialog": {
+      "title": "Edit Message",
+      "description": "Edit message content. Original content is shown above for reference.",
+      "original": "Original Content",
+      "modified": "Modified Content",
+      "placeholder": "Enter modified content...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Edit",
+      "tokenChange": "Token change"
+    },
+    "insertTrigger": {
+      "tooltip": "Insert message here",
+      "hasInsertion": "Message inserted",
+      "removeTooltip": "Remove inserted message"
+    },
+    "insertDialog": {
+      "title": "Insert Message",
+      "titleEdit": "Edit Inserted Message",
+      "description": "Add a new message to the conversation context.",
+      "descriptionEdit": "Modify the content of this inserted message.",
+      "roleLabel": "Role",
+      "roleUser": "User",
+      "roleAssistant": "Assistant",
+      "contentLabel": "Content",
+      "placeholder": "Enter message content...",
+      "tokens": "tokens",
+      "cancel": "Cancel",
+      "confirm": "Insert",
+      "confirmEdit": "Save"
+    },
+    "insertedCard": {
+      "inserted": "Inserted",
+      "editTooltip": "Edit this inserted message",
+      "removeTooltip": "Remove this inserted message"
+    },
+    "tokenStats": {
+      "original": "Original",
+      "compressed": "Compressed",
+      "saved": "Saved",
+      "deleted": "deleted",
+      "modified": "modified",
+      "inserted": "inserted"
+    },
+    "operations": {
+      "undo": "Undo",
+      "redo": "Redo",
+      "reset": "Reset All",
+      "resetConfirm": {
+        "title": "Reset All Changes?",
+        "description": "This will discard all your edits and restore the original message list. This action cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Reset"
+      }
+    },
+    "export": {
+      "button": "Export",
+      "jsonl": "Export as JSONL",
+      "jsonlDescription": "Claude Code compatible format",
+      "markdown": "Export as Markdown",
+      "markdownDescription": "Human-readable format",
+      "copy": "Copy to Clipboard",
+      "copyDescription": "Copy compressed content",
+      "copySuccess": "Copied to clipboard",
+      "exportSuccess": "Export successful",
+      "exportFailed": "Export failed",
+      "saveDialogTitle": "Export Compressed Session"
+    },
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "description": "You have unsaved edits. These changes will be lost if you leave.",
+      "cancel": "Cancel",
+      "discard": "Don't Save",
+      "exportAndLeave": "Export & Leave"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "categories": {
+        "messageOps": "Message Operations",
+        "navigation": "Navigation",
+        "global": "Global"
+      },
+      "keep": "Keep message",
+      "delete": "Delete message",
+      "edit": "Edit message",
+      "insert": "Insert message after",
+      "prevMessage": "Previous message",
+      "nextMessage": "Next message",
+      "undo": "Undo",
+      "redo": "Redo",
+      "export": "Open export menu",
+      "help": "Show keyboard shortcuts",
+      "closeHint": "Press Esc or ? to close"
+    }
+  },
   "player": {
     "selectSessionToPlay": "Select a session to start playback",
     "selectFromList": "Choose from the project list on the left, or import new AI coding sessions",
@@ -510,7 +656,30 @@
     "importProject": "Import Project",
     "noProjectsYet": "No projects imported yet",
     "importPrompt": "Import your AI coding sessions to start exploring and playback",
-    "supportedLabel": "Supported:"
+    "supportedLabel": "Supported:",
+    "modeSwitch": "Mode Switch",
+    "playbackMode": "Playback",
+    "compressMode": "Compress",
+    "compressGuide": {
+      "title": "Compress Mode",
+      "description": "Compress mode allows you to optimize session context and fight auto-truncation:",
+      "feature1": "Mark unwanted messages for deletion",
+      "feature2": "Edit message content",
+      "feature3": "Insert new context information",
+      "feature4": "Real-time preview of compressed token statistics",
+      "benefitsTitle": "This helps you:",
+      "benefit1": "Reduce token usage costs",
+      "benefit2": "Improve AI response accuracy",
+      "benefit3": "Reduce risk of automatic context compression",
+      "dontShowAgain": "Don't show this again",
+      "getStarted": "Get Started"
+    },
+    "compressPlaceholder": {
+      "originalList": "Original Messages",
+      "originalListHint": "Original session messages will be displayed here",
+      "previewList": "Compressed Preview",
+      "previewListHint": "Compressed message preview will be displayed here"
+    }
   },
   "feedback": {
     "saved": "Saved",
@@ -564,8 +733,12 @@
     "projectStats": "Project Statistics",
     "sessionStats": "Session Statistics",
     "mode": {
+      "analytics": "Analytics",
+      "analyticsTooltip": "View statistics and insights",
       "playback": "Playback",
       "playbackTooltip": "View session messages and code snapshots",
+      "compress": "Compress",
+      "compressTooltip": "Optimize session context for AI",
       "statistics": "Statistics",
       "statisticsTooltip": "View analytics and statistics"
     },

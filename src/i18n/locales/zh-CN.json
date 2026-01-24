@@ -503,6 +503,152 @@
     "noMessages": "暂无消息",
     "messagesWillAppear": "对话消息将在这里显示"
   },
+  "compress": {
+    "originalList": {
+      "title": "原始消息",
+      "empty": "暂无消息",
+      "emptyHint": "导入会话后即可查看消息"
+    },
+    "messageCard": {
+      "expand": "展开全部",
+      "collapse": "收起",
+      "tokens": "tokens",
+      "toolCall": "工具调用",
+      "toolResult": "工具结果",
+      "thinking": "思考过程",
+      "codeDiff": "代码差异",
+      "codeSuggestion": "代码建议",
+      "image": "图片",
+      "reference": "代码引用",
+      "system": "系统",
+      "user": "用户",
+      "assistant": "助手"
+    },
+    "previewList": {
+      "title": "压缩预览",
+      "empty": "暂无变更",
+      "emptyHint": "在左侧面板标记消息为删除/修改",
+      "modeFull": "完整",
+      "modeChanges": "仅变更",
+      "modeHideDeleted": "隐藏删除"
+    },
+    "previewCard": {
+      "deleted": "已删除",
+      "modified": "已修改",
+      "inserted": "已新增",
+      "savedTokens": "已节省",
+      "tokenDelta": "tokens"
+    },
+    "actions": {
+      "keep": "保留",
+      "keepTooltip": "保留此消息 (K)",
+      "delete": "删除",
+      "deleteTooltip": "标记为删除 (D)",
+      "edit": "修改",
+      "editTooltip": "编辑消息内容 (E)",
+      "edited": "已修改",
+      "insert": "插入",
+      "insertAfterTooltip": "在此消息后插入 (I)",
+      "insertAtEndTooltip": "在末尾插入新消息 (I)",
+      "insertAtStart": "在开头插入",
+      "insertAtStartTooltip": "在列表开头插入新消息",
+      "editInsertedTooltip": "编辑已插入的消息",
+      "editInsertedAtStart": "编辑已插入消息"
+    },
+    "editDialog": {
+      "title": "编辑消息",
+      "description": "编辑消息内容。原始内容显示在上方供参考。",
+      "original": "原始内容",
+      "modified": "修改内容",
+      "placeholder": "输入修改后的内容...",
+      "cancel": "取消",
+      "confirm": "确认修改",
+      "tokenChange": "Token 变化"
+    },
+    "insertTrigger": {
+      "tooltip": "在此处插入消息",
+      "hasInsertion": "已插入消息",
+      "removeTooltip": "移除插入的消息"
+    },
+    "insertDialog": {
+      "title": "插入消息",
+      "titleEdit": "编辑已插入消息",
+      "description": "向会话上下文中添加一条新消息。",
+      "descriptionEdit": "修改此插入消息的内容。",
+      "roleLabel": "角色",
+      "roleUser": "用户",
+      "roleAssistant": "助手",
+      "contentLabel": "内容",
+      "placeholder": "输入消息内容...",
+      "tokens": "tokens",
+      "cancel": "取消",
+      "confirm": "插入",
+      "confirmEdit": "保存"
+    },
+    "insertedCard": {
+      "inserted": "已插入",
+      "editTooltip": "编辑此插入的消息",
+      "removeTooltip": "移除此插入的消息"
+    },
+    "tokenStats": {
+      "original": "原始",
+      "compressed": "压缩后",
+      "saved": "节省",
+      "deleted": "删",
+      "modified": "改",
+      "inserted": "增"
+    },
+    "operations": {
+      "undo": "撤销",
+      "redo": "重做",
+      "reset": "重置全部",
+      "resetConfirm": {
+        "title": "重置所有更改？",
+        "description": "这将丢弃您的所有编辑并恢复原始消息列表。此操作无法撤销。",
+        "cancel": "取消",
+        "confirm": "重置"
+      }
+    },
+    "export": {
+      "button": "导出",
+      "jsonl": "导出为 JSONL",
+      "jsonlDescription": "Claude Code 兼容格式",
+      "markdown": "导出为 Markdown",
+      "markdownDescription": "人类可读格式",
+      "copy": "复制内容",
+      "copyDescription": "复制压缩后的内容",
+      "copySuccess": "已复制到剪贴板",
+      "exportSuccess": "导出成功",
+      "exportFailed": "导出失败",
+      "saveDialogTitle": "导出压缩会话"
+    },
+    "unsavedChanges": {
+      "title": "有未保存的编辑",
+      "description": "您对消息的编辑尚未导出。离开后这些更改将会丢失。",
+      "cancel": "取消",
+      "discard": "不保存",
+      "exportAndLeave": "导出并离开"
+    },
+    "shortcuts": {
+      "title": "快捷键",
+      "categories": {
+        "messageOps": "消息操作",
+        "navigation": "导航",
+        "global": "全局"
+      },
+      "keep": "保留消息",
+      "delete": "删除消息",
+      "edit": "编辑消息",
+      "insert": "在此后插入消息",
+      "prevMessage": "上一条消息",
+      "nextMessage": "下一条消息",
+      "undo": "撤销",
+      "redo": "重做",
+      "export": "打开导出菜单",
+      "help": "显示快捷键帮助",
+      "closeHint": "按 Esc 或 ? 关闭"
+    }
+  },
   "player": {
     "selectSessionToPlay": "选择一个会话开始回放",
     "selectFromList": "从左侧项目列表中选择，或导入新的 AI 编程会话",
@@ -510,7 +656,30 @@
     "importProject": "导入项目",
     "noProjectsYet": "还没有导入任何项目",
     "importPrompt": "导入你的 AI 编程会话，开始探索和回放心法",
-    "supportedLabel": "支持:"
+    "supportedLabel": "支持:",
+    "modeSwitch": "模式切换",
+    "playbackMode": "回放",
+    "compressMode": "压缩",
+    "compressGuide": {
+      "title": "压缩模式",
+      "description": "压缩模式允许你优化会话上下文，对抗自动截断：",
+      "feature1": "标记不需要的消息为删除",
+      "feature2": "修改消息内容",
+      "feature3": "插入新的上下文信息",
+      "feature4": "实时预览压缩后的 Token 统计",
+      "benefitsTitle": "这可以帮助你：",
+      "benefit1": "减少 Token 使用成本",
+      "benefit2": "提高 AI 响应准确率",
+      "benefit3": "降低上下文被自动压缩的风险",
+      "dontShowAgain": "知道了，不再提示",
+      "getStarted": "开始使用"
+    },
+    "compressPlaceholder": {
+      "originalList": "原始消息",
+      "originalListHint": "原始会话消息将在此显示",
+      "previewList": "压缩预览",
+      "previewListHint": "压缩后的消息预览将在此显示"
+    }
   },
   "feedback": {
     "saved": "已保存",
@@ -564,8 +733,12 @@
     "projectStats": "项目统计",
     "sessionStats": "会话统计",
     "mode": {
+      "analytics": "分析",
+      "analyticsTooltip": "查看统计数据和洞察",
       "playback": "回放",
       "playbackTooltip": "查看会话消息和代码快照",
+      "compress": "压缩",
+      "compressTooltip": "优化会话上下文，提升 AI 准确率",
       "statistics": "统计",
       "statisticsTooltip": "查看分析统计数据"
     },
