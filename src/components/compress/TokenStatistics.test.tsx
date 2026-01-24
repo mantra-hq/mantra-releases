@@ -171,13 +171,13 @@ describe("TokenStatistics", () => {
 
   describe("删除操作影响 (AC #3)", () => {
     it("删除消息后压缩 Token 应减少", () => {
-      let setupContext: CompressStateContextValue | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <CompressStateProvider>
           <TestHelper
             onSetup={(ctx) => {
-              setupContext = ctx;
+              setupContext.current = ctx;
             }}
           />
           <TokenStatistics messages={messages} />
@@ -185,8 +185,8 @@ describe("TokenStatistics", () => {
       );
 
       // 删除第一条消息 (11 tokens)
-      if (setupContext) {
-        setupContext.setOperation("msg-1", {
+      if (setupContext.current) {
+        setupContext.current.setOperation("msg-1", {
           type: "delete",
           originalMessage: messages[0],
         });
