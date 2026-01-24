@@ -99,10 +99,8 @@ describe('usePrivacyScanDialog', () => {
     describe('performCheck - 有敏感信息时的异步交互', () => {
         it('有敏感信息时应该等待用户操作', async () => {
             const scanResult = createMockScanResult();
-            let _capturedShowReport: ((result: ScanResult) => Promise<{ action: string; redactedContent?: string }>) | null = null;
 
             vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
-                _capturedShowReport = showReport;
                 // 模拟显示弹窗等待用户操作
                 const userResponse = await showReport(scanResult);
                 return {
@@ -115,9 +113,8 @@ describe('usePrivacyScanDialog', () => {
             const { result } = renderHook(() => usePrivacyScanDialog());
 
             // 开始检查但不等待完成
-            let _checkPromise: Promise<unknown>;
             act(() => {
-                _checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
+                result.current.performCheck('session-1', 'sensitive content', 'TestProject');
             });
 
             // 等待弹窗打开
@@ -144,9 +141,8 @@ describe('usePrivacyScanDialog', () => {
 
             const { result } = renderHook(() => usePrivacyScanDialog());
 
-            let _checkPromise: Promise<unknown>;
             act(() => {
-                _checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
+                result.current.performCheck('session-1', 'sensitive content', 'TestProject');
             });
 
             // 等待弹窗打开
@@ -184,11 +180,8 @@ describe('usePrivacyScanDialog', () => {
 
             const { result } = renderHook(() => usePrivacyScanDialog());
 
-            let _checkResult: unknown;
             act(() => {
-                result.current.performCheck('session-1', 'sensitive content', 'TestProject').then((r) => {
-                    _checkResult = r;
-                });
+                result.current.performCheck('session-1', 'sensitive content', 'TestProject');
             });
 
             // 等待弹窗打开

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { performPreUploadScan, type PreUploadCheckResult, type ShowReportCallback } from './privacy-check';
+import { performPreUploadScan, type ShowReportCallback } from './privacy-check';
 import type { ScanResult, UserAction } from '@/components/sanitizer/types';
 
 // Mock sanitizer-ipc
