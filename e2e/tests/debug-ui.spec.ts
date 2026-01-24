@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 
 test("Debug: Check UI structure after click", async ({ page }) => {
   // Intercept console logs

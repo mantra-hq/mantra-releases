@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import * as React from "react";
 import { ResetConfirmDialog } from "./ResetConfirmDialog";
 
 // Mock i18next

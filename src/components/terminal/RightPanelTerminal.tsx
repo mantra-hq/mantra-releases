@@ -110,7 +110,7 @@ export function RightPanelTerminal({
         const handleResize = () => {
             try {
                 fitAddon.fit();
-            } catch (e) {
+            } catch (_e) {
                 // 忽略 fit 错误
             }
         };

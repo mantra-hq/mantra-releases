@@ -55,6 +55,12 @@ vi.mock('@/lib/ipc/sanitizer-ipc', () => ({
     getPrivacyRules: vi.fn(() => Promise.resolve(mockRules)),
     getBuiltinRules: vi.fn(() => Promise.resolve(mockBuiltinRules)),
     updatePrivacyRules: vi.fn(() => Promise.resolve()),
+    validateRegex: vi.fn(() => Promise.resolve({ valid: true })),
+    validateRegexV2: vi.fn(() => Promise.resolve({ valid: true })),
+    saveInterceptionRecord: vi.fn(),
+    getInterceptionRecords: vi.fn(() => Promise.resolve({ records: [], total: 0 })),
+    getInterceptionStats: vi.fn(() => Promise.resolve({ total_blocked: 0 })),
+    deleteInterceptionRecords: vi.fn(),
 }));
 
 describe('PrivacySettingsPanel', () => {

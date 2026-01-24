@@ -108,7 +108,7 @@ test.describe('IPC Mock Layer', () => {
 
     // 检查是否有 Mock 相关的日志
     // ipc-mock.ts 会在每次调用时打印 [IPC Mock]
-    const hasMockLogs = consoleLogs.some(log =>
+    const _hasMockLogs = consoleLogs.some(log =>
       log.includes('[IPC Mock]') || log.includes('Playwright')
     );
 

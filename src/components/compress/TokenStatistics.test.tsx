@@ -5,10 +5,10 @@
  * 测试 Token 统计栏组件
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TokenStatistics } from "./TokenStatistics";
-import { CompressStateProvider, useCompressState } from "@/hooks/useCompressState";
+import { CompressStateProvider, useCompressState, type CompressStateContextValue } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 import * as React from "react";
 
@@ -82,7 +82,7 @@ function createMessage(id: string, content: string): NarrativeMessage {
 function TestHelper({
   onSetup,
 }: {
-  onSetup: (context: ReturnType<typeof useCompressState>) => void;
+  onSetup: (context: CompressStateContextValue) => void;
 }) {
   const context = useCompressState();
   React.useEffect(() => {
@@ -171,13 +171,13 @@ describe("TokenStatistics", () => {
 
   describe("删除操作影响 (AC #3)", () => {
     it("删除消息后压缩 Token 应减少", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <CompressStateProvider>
           <TestHelper
             onSetup={(ctx) => {
-              setupContext = ctx;
+              setupContext.current = ctx;
             }}
           />
           <TokenStatistics messages={messages} />
@@ -185,8 +185,8 @@ describe("TokenStatistics", () => {
       );
 
       // 删除第一条消息 (11 tokens)
-      if (setupContext) {
-        setupContext.setOperation("msg-1", {
+      if (setupContext.current) {
+        setupContext.current.setOperation("msg-1", {
           type: "delete",
           originalMessage: messages[0],
         });

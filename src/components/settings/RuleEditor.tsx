@@ -66,7 +66,7 @@ export function RuleEditor({ initialData, onSave, onCancel }: RuleEditorProps) {
             } else {
                 setValidationError(result.error ?? t("settings.invalidRegex"));
             }
-        } catch (err) {
+        } catch (_err) {
             // 降级到本地验证 (测试环境)
             try {
                 new RegExp(pattern);

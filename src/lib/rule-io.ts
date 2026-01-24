@@ -18,7 +18,7 @@ export async function exportRules(rules: CustomRule[]): Promise<boolean> {
     const exportData: RuleExportData = {
         version: EXPORT_VERSION,
         exportedAt: new Date().toISOString(),
-        rules: rules.map(({ id, createdAt, updatedAt, ...rest }) => rest),
+        rules: rules.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest }) => rest),
     };
 
     const filePath = await save({

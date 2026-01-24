@@ -5,7 +5,7 @@
  * 测试未保存更改对话框的渲染和按钮交互
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
@@ -13,7 +13,7 @@ import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, fallback: string) => fallback,
+    t: (_key: string, fallback: string) => fallback,
   }),
 }));
 

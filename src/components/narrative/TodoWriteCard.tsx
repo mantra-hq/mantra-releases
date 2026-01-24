@@ -109,14 +109,14 @@ export function TodoWriteCard({
         onHover?.(null);
     }, [onHover]);
 
-    if (todos.length === 0) {
-        return null;
-    }
-
     // 阻止事件冒泡，避免触发父组件的消息选中逻辑
     const handleClick = React.useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
     }, []);
+
+    if (todos.length === 0) {
+        return null;
+    }
 
     return (
         <div

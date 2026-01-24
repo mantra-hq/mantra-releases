@@ -10,7 +10,7 @@
 
 import { test, expect } from "@playwright/test";
 import { PlayerPage } from "../pages";
-import { TEST_SESSION_IDS, assertVisible } from "../utils/test-helpers";
+import { TEST_SESSION_IDS } from "../utils/test-helpers";
 
 test.describe("工具代码显示功能", () => {
   /**

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uploadSession, type UploadSessionOptions, type UploadSessionResult } from './cloud-sync';
+import { uploadSession, type UploadSessionOptions } from './cloud-sync';
 import type { UserAction } from '@/components/sanitizer/types';
 
 // Mock privacy-check

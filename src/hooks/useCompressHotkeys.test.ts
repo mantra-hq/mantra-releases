@@ -19,8 +19,8 @@ function createTestMessage(id: string): NarrativeMessage {
   return {
     id,
     role: "user",
-    content: [{ type: "text", text: `Message ${id}` }],
-    timestamp: Date.now(),
+    content: [{ type: "text", content: `Message ${id}` }],
+    timestamp: new Date().toISOString(),
   };
 }
 

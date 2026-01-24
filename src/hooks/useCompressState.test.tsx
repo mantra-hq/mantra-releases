@@ -6,13 +6,12 @@
  * 测试压缩状态管理、操作应用、预览计算、撤销/重做
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import * as React from "react";
 import {
   useCompressState,
   CompressStateProvider,
-  type CompressOperation,
 } from "./useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 
@@ -36,8 +35,9 @@ function createTestMessage(
 }
 
 // Wrapper 组件
-const wrapper = ({ children }: { children: React.ReactNode }) =>
-  React.createElement(CompressStateProvider, {}, children);
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <CompressStateProvider>{children}</CompressStateProvider>
+);
 
 describe("useCompressState", () => {
   describe("Context 错误处理", () => {

@@ -199,7 +199,7 @@ version-sync: ## 同步版本号到所有配置文件
 # ----------------------------------------
 
 .PHONY: release
-release: pre-release build collect-artifacts post-release ## 执行完整发布流程
+release: check pre-release build collect-artifacts post-release ## 执行完整发布流程
 
 .PHONY: pre-release
 pre-release: ## 发布前检查
@@ -296,6 +296,17 @@ endif
 # ----------------------------------------
 ## 测试与质量
 # ----------------------------------------
+
+.PHONY: check
+check: ## 运行完整质量检查 (Lint + Type Check + Test)
+	@echo "$(CYAN)执行质量检查...$(RESET)"
+	@echo "1. 代码风格检查 (Lint)"
+	pnpm lint
+	@echo "2. 类型检查 (TypeScript)"
+	pnpm exec tsc --noEmit
+	@echo "3. 单元测试 (Vitest)"
+	pnpm test:run
+	@echo "$(GREEN)所有检查通过!$(RESET)"
 
 .PHONY: test
 test: test-web test-rust ## 运行所有测试

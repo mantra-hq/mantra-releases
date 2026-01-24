@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 
 test("Debug: Capture errors after click", async ({ page }) => {
   // Capture page errors

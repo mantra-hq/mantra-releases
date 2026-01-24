@@ -9,8 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import * as React from "react";
 import { OperationToolbar } from "./OperationToolbar";
-import { CompressStateProvider, useCompressState } from "@/hooks/useCompressState";
-import type { NarrativeMessage } from "@/types/message";
+import { CompressStateProvider, useCompressState, type CompressStateContextValue } from "@/hooks/useCompressState";
 
 // Mock i18next
 vi.mock("react-i18next", () => ({
@@ -34,23 +33,13 @@ vi.mock("react-i18next", () => ({
 function TestHelper({
   onSetup,
 }: {
-  onSetup: (context: ReturnType<typeof useCompressState>) => void;
+  onSetup: (context: CompressStateContextValue) => void;
 }) {
   const context = useCompressState();
   React.useEffect(() => {
     onSetup(context);
   }, [context, onSetup]);
   return null;
-}
-
-// 创建测试消息
-function createTestMessage(id: string, content: string): NarrativeMessage {
-  return {
-    id,
-    role: "user",
-    timestamp: new Date().toISOString(),
-    content: [{ type: "text", content }],
-  };
 }
 
 // Wrapper 组件
@@ -97,18 +86,18 @@ describe("OperationToolbar", () => {
     });
 
     it("有操作后撤销按钮应启用", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 执行一个操作
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       expect(screen.getByTestId("undo-button")).not.toBeDisabled();
@@ -118,18 +107,18 @@ describe("OperationToolbar", () => {
 
   describe("点击事件", () => {
     it("点击重置按钮应打开确认对话框", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作使重置按钮启用
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       // 点击重置按钮
@@ -141,18 +130,18 @@ describe("OperationToolbar", () => {
     });
 
     it("确认重置后对话框应关闭", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       // 打开对话框
@@ -166,55 +155,55 @@ describe("OperationToolbar", () => {
     });
 
     it("点击撤销按钮应调用 undo", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
-      expect(setupContext?.operations.has("msg-1")).toBe(true);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(true);
 
       // 点击撤销
       fireEvent.click(screen.getByTestId("undo-button"));
 
       // 操作应被撤销
-      expect(setupContext?.operations.has("msg-1")).toBe(false);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(false);
     });
 
     it("点击重做按钮应调用 redo", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作然后撤销
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       act(() => {
-        setupContext?.undo();
+        setupContext.current?.undo();
       });
 
-      expect(setupContext?.operations.has("msg-1")).toBe(false);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(false);
 
       // 点击重做
       fireEvent.click(screen.getByTestId("redo-button"));
 
       // 操作应被恢复
-      expect(setupContext?.operations.has("msg-1")).toBe(true);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(true);
     });
   });
 
@@ -229,63 +218,63 @@ describe("OperationToolbar", () => {
     });
 
     it("Ctrl+Z 应触发撤销", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
-      expect(setupContext?.operations.has("msg-1")).toBe(true);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(true);
 
       // 触发 Ctrl+Z
       fireEvent.keyDown(window, { key: "z", ctrlKey: true });
 
       // 操作应被撤销
-      expect(setupContext?.operations.has("msg-1")).toBe(false);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(false);
     });
 
     it("Ctrl+Shift+Z 应触发重做", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
         </TestWrapper>
       );
 
       // 先执行操作然后撤销
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       act(() => {
-        setupContext?.undo();
+        setupContext.current?.undo();
       });
 
-      expect(setupContext?.operations.has("msg-1")).toBe(false);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(false);
 
       // 触发 Ctrl+Shift+Z
       fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
 
       // 操作应被恢复
-      expect(setupContext?.operations.has("msg-1")).toBe(true);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(true);
     });
 
     it("在输入框中按 Ctrl+Z 不应触发撤销", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      const setupContext = { current: null as CompressStateContextValue | null };
 
       render(
         <TestWrapper>
-          <TestHelper onSetup={(ctx) => { setupContext = ctx; }} />
+          <TestHelper onSetup={(ctx) => { setupContext.current = ctx; }} />
           <OperationToolbar />
           <input data-testid="test-input" />
         </TestWrapper>
@@ -293,7 +282,7 @@ describe("OperationToolbar", () => {
 
       // 先执行操作
       act(() => {
-        setupContext?.setOperation("msg-1", { type: "delete" });
+        setupContext.current?.setOperation("msg-1", { type: "delete" });
       });
 
       const input = screen.getByTestId("test-input");
@@ -302,7 +291,7 @@ describe("OperationToolbar", () => {
       fireEvent.keyDown(input, { key: "z", ctrlKey: true });
 
       // 操作不应被撤销
-      expect(setupContext?.operations.has("msg-1")).toBe(true);
+      expect(setupContext.current?.operations.has("msg-1")).toBe(true);
     });
   });
 });

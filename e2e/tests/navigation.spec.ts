@@ -11,7 +11,7 @@
 
 import { test, expect } from "@playwright/test";
 import { BasePage, PlayerPage } from "../pages";
-import { dismissOverlays, waitForElementStable } from "../utils/test-helpers";
+import { waitForElementStable } from "../utils/test-helpers";
 
 // 为不稳定测试配置重试
 test.describe("导航测试", () => {
@@ -94,7 +94,7 @@ test.describe("导航测试", () => {
       await basePage.waitForAppReady();
 
       // 抽屉按钮应可见 (通常是 hamburger 图标或项目名按钮)
-      const drawerButton = page.locator('[data-testid="drawer-trigger"]');
+      const _drawerButton = page.locator('[data-testid="drawer-trigger"]');
       // 如果没有专门的按钮，检查 TopBar 的可点击区域
       const topBar = basePage.getByTestId("top-bar");
       await expect(topBar).toBeVisible();
