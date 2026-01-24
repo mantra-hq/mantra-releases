@@ -147,6 +147,9 @@ impl Database {
         // Migration: Add path_type and path_exists columns to projects (Story 1.12)
         Self::run_path_validation_migration(conn)?;
 
+        // Migration: Add logical_project_names table (Story 1.13)
+        Self::run_logical_project_names_migration(conn)?;
+
         Ok(())
     }
 
@@ -412,6 +415,42 @@ impl Database {
             PRAGMA foreign_keys = ON;
             "#,
         )?;
+
+        Ok(())
+    }
+
+    /// Migration for logical_project_names table (Story 1.13)
+    ///
+    /// Creates the logical_project_names table for storing custom names for logical projects.
+    /// This allows users to rename aggregated logical projects without affecting the underlying
+    /// storage-layer project names.
+    fn run_logical_project_names_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if table already exists
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='logical_project_names'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            conn.execute_batch(
+                r#"
+                -- logical_project_names 表: 逻辑项目自定义名称 (Story 1.13)
+                -- 存储用户为逻辑项目设置的自定义显示名称
+                CREATE TABLE IF NOT EXISTS logical_project_names (
+                    physical_path TEXT PRIMARY KEY,
+                    custom_name TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+
+                -- 物理路径索引 (用于快速查询)
+                CREATE INDEX IF NOT EXISTS idx_logical_project_names_path ON logical_project_names(physical_path);
+                "#,
+            )?;
+        }
 
         Ok(())
     }
@@ -760,5 +799,136 @@ mod tests {
             "Table should NOT have path UNIQUE constraint, got: {}",
             table_sql
         );
+    }
+
+    // ===== Story 1.13: Logical Project Names Migration Tests =====
+
+    #[test]
+    fn test_logical_project_names_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify logical_project_names table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM logical_project_names LIMIT 1",
+            [],
+        );
+        // Table exists but is empty, so query should succeed
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(logical_project_names)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"physical_path".to_string()));
+        assert!(columns.contains(&"custom_name".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+        assert!(columns.contains(&"updated_at".to_string()));
+    }
+
+    #[test]
+    fn test_logical_project_names_index_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify index exists
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='logical_project_names'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_logical_project_names_path".to_string()));
+    }
+
+    #[test]
+    fn test_logical_project_names_primary_key() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Insert a record
+        db.connection()
+            .execute(
+                "INSERT INTO logical_project_names (physical_path, custom_name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+                ["/path/to/project", "My Custom Name", &now],
+            )
+            .unwrap();
+
+        // Try to insert with the same physical_path - should fail due to PRIMARY KEY
+        let result = db.connection().execute(
+            "INSERT INTO logical_project_names (physical_path, custom_name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            ["/path/to/project", "Another Name", &now],
+        );
+
+        assert!(result.is_err(), "Duplicate physical_path should be rejected");
+    }
+
+    #[test]
+    fn test_logical_project_names_crud_operations() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // CREATE
+        db.connection()
+            .execute(
+                "INSERT INTO logical_project_names (physical_path, custom_name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+                ["/path/to/project", "My Project", &now],
+            )
+            .unwrap();
+
+        // READ
+        let custom_name: String = db
+            .connection()
+            .query_row(
+                "SELECT custom_name FROM logical_project_names WHERE physical_path = ?1",
+                ["/path/to/project"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(custom_name, "My Project");
+
+        // UPDATE
+        let new_now = chrono::Utc::now().to_rfc3339();
+        db.connection()
+            .execute(
+                "UPDATE logical_project_names SET custom_name = ?1, updated_at = ?2 WHERE physical_path = ?3",
+                ["Renamed Project", &new_now, "/path/to/project"],
+            )
+            .unwrap();
+
+        let updated_name: String = db
+            .connection()
+            .query_row(
+                "SELECT custom_name FROM logical_project_names WHERE physical_path = ?1",
+                ["/path/to/project"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(updated_name, "Renamed Project");
+
+        // DELETE
+        db.connection()
+            .execute(
+                "DELETE FROM logical_project_names WHERE physical_path = ?1",
+                ["/path/to/project"],
+            )
+            .unwrap();
+
+        let result: Option<String> = db
+            .connection()
+            .query_row(
+                "SELECT custom_name FROM logical_project_names WHERE physical_path = ?1",
+                ["/path/to/project"],
+                |row| row.get(0),
+            )
+            .ok();
+        assert!(result.is_none(), "Record should be deleted");
     }
 }

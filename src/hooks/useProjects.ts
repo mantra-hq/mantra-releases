@@ -258,6 +258,41 @@ export async function getProjectsByPhysicalPath(
   return invoke<Project[]>("get_projects_by_physical_path", { physicalPath });
 }
 
+// ============================================================================
+// Story 1.13: Logical Project Rename API Functions
+// ============================================================================
+
+/**
+ * 重命名逻辑项目 (Story 1.13)
+ *
+ * 为逻辑项目设置自定义显示名称。自定义名称存储在 logical_project_names 表中，
+ * 优先于从路径提取的默认名称。
+ *
+ * @param physicalPath 逻辑项目的物理路径
+ * @param newName 新的显示名称
+ * @throws 如果名称为空或操作失败
+ */
+export async function renameLogicalProject(
+  physicalPath: string,
+  newName: string
+): Promise<void> {
+  return invoke<void>("rename_logical_project", { physicalPath, newName });
+}
+
+/**
+ * 重置逻辑项目名称为默认值 (Story 1.13)
+ *
+ * 删除逻辑项目的自定义名称，恢复从物理路径提取的默认名称。
+ *
+ * @param physicalPath 逻辑项目的物理路径
+ * @throws 如果没有自定义名称或操作失败
+ */
+export async function resetLogicalProjectName(
+  physicalPath: string
+): Promise<void> {
+  return invoke<void>("reset_logical_project_name", { physicalPath });
+}
+
 /**
  * useLogicalProjectStats Hook
  * 获取按物理路径聚合的逻辑项目统计

@@ -1387,6 +1387,59 @@ pub async fn set_project_primary_path(
         .map_err(Into::into)
 }
 
+// ============================================================================
+// Story 1.13: Logical Project Rename Commands
+// ============================================================================
+
+/// Rename a logical project by setting a custom display name (Story 1.13 - AC2, AC3)
+///
+/// Sets a custom name for a logical project identified by its physical path.
+/// The custom name is stored in the `logical_project_names` table and takes
+/// priority over the default name extracted from the path.
+///
+/// # Arguments
+/// * `physical_path` - The physical path of the logical project
+/// * `new_name` - The new display name to set
+///
+/// # Returns
+/// Success or error
+#[tauri::command]
+pub async fn rename_logical_project(
+    state: State<'_, AppState>,
+    physical_path: String,
+    new_name: String,
+) -> Result<(), AppError> {
+    // Validate name is not empty
+    let trimmed_name = new_name.trim();
+    if trimmed_name.is_empty() {
+        return Err(AppError::Validation("项目名称不能为空".to_string()));
+    }
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.set_logical_project_name(&physical_path, trimmed_name)
+        .map_err(Into::into)
+}
+
+/// Reset a logical project's name to default (Story 1.13 - AC4)
+///
+/// Deletes the custom name for a logical project, reverting to the default
+/// name extracted from the physical path.
+///
+/// # Arguments
+/// * `physical_path` - The physical path of the logical project
+///
+/// # Returns
+/// Success or error (NotFound if no custom name exists)
+#[tauri::command]
+pub async fn reset_logical_project_name(
+    state: State<'_, AppState>,
+    physical_path: String,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.delete_logical_project_name(&physical_path)
+        .map_err(Into::into)
+}
+
 // Story 2.10: Global Search Command
 // Story 2.33: Enhanced with filters support
 // ============================================================================

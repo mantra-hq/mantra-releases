@@ -1630,10 +1630,13 @@ impl Database {
     /// Returns aggregated statistics for each unique physical path across all projects.
     /// This enables the view layer to display "logical projects" that combine sessions
     /// from different import sources (Claude, Gemini, Cursor, etc.) that share the same path.
+    ///
+    /// Story 1.13: Now includes custom names from logical_project_names table.
     pub fn get_logical_project_stats(&self) -> Result<Vec<LogicalProjectStats>, StorageError> {
         use crate::models::{classify_path_type, check_path_exists, extract_project_name, PathType};
 
         // Task 9.1: Remove virtual path exclusion - include ALL paths including virtual ones
+        // Story 1.13: LEFT JOIN logical_project_names to get custom names
         let mut stmt = self.connection().prepare(
             r#"
             SELECT
@@ -1645,9 +1648,11 @@ impl Database {
                  INNER JOIN project_paths pp2 ON pp2.project_id = proj.id
                  WHERE pp2.path = pp.path) as total_sessions,
                 MAX(p.last_activity) as last_activity,
-                MAX(p.has_git_repo) as has_git_repo
+                MAX(p.has_git_repo) as has_git_repo,
+                lpn.custom_name
             FROM project_paths pp
             JOIN projects p ON pp.project_id = p.id
+            LEFT JOIN logical_project_names lpn ON lpn.physical_path = pp.path
             GROUP BY pp.path
             ORDER BY last_activity DESC
             "#,
@@ -1659,6 +1664,7 @@ impl Database {
                 let project_ids_str: String = row.get(2)?;
                 let last_activity_str: String = row.get(4)?;
                 let has_git_repo_db: i32 = row.get(5)?;
+                let custom_name: Option<String> = row.get(6)?;
 
                 // Task 9.2: Calculate path_type and path_exists
                 let path_type = classify_path_type(&physical_path);
@@ -1675,8 +1681,8 @@ impl Database {
                     PathType::Remote => false,
                 };
 
-                // Task 9.3: Extract display_name from path
-                let display_name = extract_project_name(&physical_path);
+                // Story 1.13: Use custom_name if set, otherwise extract from path
+                let display_name = custom_name.unwrap_or_else(|| extract_project_name(&physical_path));
 
                 // Task 17: Aggregate has_git_repo from DB + real-time check
                 let has_git_repo = has_git_repo_db > 0 || (path_exists && Self::check_git_repo_exists(&physical_path));
@@ -1706,6 +1712,93 @@ impl Database {
     /// This correctly handles cases where the associated path is a subdirectory of a git repo
     fn check_git_repo_exists(path: &str) -> bool {
         detect_git_repo_sync(path).is_some()
+    }
+
+    // ============================================================================
+    // Story 1.13: Logical Project Rename Methods
+    // ============================================================================
+
+    /// Get the custom name for a logical project (Story 1.13 - AC2)
+    ///
+    /// # Arguments
+    /// * `physical_path` - The physical path of the logical project
+    ///
+    /// # Returns
+    /// The custom name if set, None otherwise
+    pub fn get_logical_project_name(&self, physical_path: &str) -> Result<Option<String>, StorageError> {
+        let normalized_path = normalize_cwd(physical_path);
+
+        let result = self.connection().query_row(
+            "SELECT custom_name FROM logical_project_names WHERE physical_path = ?1",
+            params![normalized_path],
+            |row| row.get::<_, String>(0),
+        );
+
+        match result {
+            Ok(name) => Ok(Some(name)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// Set or update the custom name for a logical project (Story 1.13 - AC2)
+    ///
+    /// Uses INSERT OR REPLACE to handle both new and existing names.
+    ///
+    /// # Arguments
+    /// * `physical_path` - The physical path of the logical project
+    /// * `custom_name` - The custom name to set
+    ///
+    /// # Returns
+    /// Success or error
+    pub fn set_logical_project_name(
+        &self,
+        physical_path: &str,
+        custom_name: &str,
+    ) -> Result<(), StorageError> {
+        let normalized_path = normalize_cwd(physical_path);
+        let now = Utc::now().to_rfc3339();
+
+        // Use INSERT OR REPLACE for upsert behavior
+        self.connection().execute(
+            r#"
+            INSERT INTO logical_project_names (physical_path, custom_name, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?3)
+            ON CONFLICT(physical_path) DO UPDATE SET
+                custom_name = excluded.custom_name,
+                updated_at = excluded.updated_at
+            "#,
+            params![normalized_path, custom_name, now],
+        )?;
+
+        Ok(())
+    }
+
+    /// Delete the custom name for a logical project (Story 1.13 - AC4)
+    ///
+    /// After deletion, the display name will revert to the default extracted from path.
+    ///
+    /// # Arguments
+    /// * `physical_path` - The physical path of the logical project
+    ///
+    /// # Returns
+    /// Success or error (NotFound if no custom name exists)
+    pub fn delete_logical_project_name(&self, physical_path: &str) -> Result<(), StorageError> {
+        let normalized_path = normalize_cwd(physical_path);
+
+        let rows_affected = self.connection().execute(
+            "DELETE FROM logical_project_names WHERE physical_path = ?1",
+            params![normalized_path],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "No custom name found for path: {}",
+                physical_path
+            )));
+        }
+
+        Ok(())
     }
 
     /// Get all sessions for a physical path across all projects (Story 1.12 - AC9)
@@ -2946,18 +3039,24 @@ mod tests {
     }
 
     #[test]
-    fn test_logical_project_stats_excludes_virtual_paths() {
+    fn test_logical_project_stats_includes_virtual_paths() {
+        // Task 9.1: Virtual paths are now included in logical project stats
         let db = Database::new_in_memory().unwrap();
 
         // Create a project with a virtual path
-        let (project, _) = db.get_or_create_project("gemini-project:abc123").unwrap();
+        let (_project, _) = db.get_or_create_project("gemini-project:abc123").unwrap();
 
-        // Get logical project stats - should not include virtual paths
+        // Get logical project stats - should now include virtual paths (Task 9.1 change)
         let stats = db.get_logical_project_stats().unwrap();
 
-        // Should not have stats for virtual path
+        // Should have stats for virtual path
         let virtual_stats = stats.iter().find(|s| s.physical_path.starts_with("gemini-project:"));
-        assert!(virtual_stats.is_none(), "Should not include virtual paths");
+        assert!(virtual_stats.is_some(), "Should include virtual paths (Task 9.1)");
+
+        // Verify virtual path is marked correctly
+        let virtual_stats = virtual_stats.unwrap();
+        assert_eq!(virtual_stats.path_type, "virtual");
+        assert!(virtual_stats.needs_association, "Virtual paths need association");
     }
 
     #[test]
@@ -3180,5 +3279,168 @@ mod tests {
         db.bind_session_to_project("sess_rebind", &project3.id).unwrap();
         let binding2 = db.get_session_binding("sess_rebind").unwrap().unwrap();
         assert_eq!(binding2.project_id, project3.id);
+    }
+
+    // =========================================================================
+    // Story 1.13: Logical Project Rename Tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_logical_project_name_not_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Get name for non-existent path
+        let result = db.get_logical_project_name("/home/user/project").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_set_and_get_logical_project_name() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Set a custom name
+        db.set_logical_project_name("/home/user/project", "My Custom Project").unwrap();
+
+        // Get it back
+        let name = db.get_logical_project_name("/home/user/project").unwrap();
+        assert_eq!(name, Some("My Custom Project".to_string()));
+    }
+
+    #[test]
+    fn test_update_logical_project_name() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Set initial name
+        db.set_logical_project_name("/home/user/project", "Initial Name").unwrap();
+
+        // Update to new name
+        db.set_logical_project_name("/home/user/project", "Updated Name").unwrap();
+
+        // Verify update
+        let name = db.get_logical_project_name("/home/user/project").unwrap();
+        assert_eq!(name, Some("Updated Name".to_string()));
+    }
+
+    #[test]
+    fn test_delete_logical_project_name() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Set a name
+        db.set_logical_project_name("/home/user/project", "My Project").unwrap();
+
+        // Delete it
+        db.delete_logical_project_name("/home/user/project").unwrap();
+
+        // Verify it's gone
+        let name = db.get_logical_project_name("/home/user/project").unwrap();
+        assert!(name.is_none());
+    }
+
+    #[test]
+    fn test_delete_logical_project_name_not_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Try to delete non-existent name
+        let result = db.delete_logical_project_name("/home/user/project");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_logical_project_stats_with_custom_name() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a project
+        let (project, _) = db.get_or_create_project("/home/user/myproject").unwrap();
+
+        // Set a custom name for the logical project
+        db.set_logical_project_name("/home/user/myproject", "My Custom Name").unwrap();
+
+        // Get logical project stats
+        let stats = db.get_logical_project_stats().unwrap();
+
+        // Find our project
+        let my_stats = stats.iter().find(|s| s.physical_path == "/home/user/myproject");
+        assert!(my_stats.is_some(), "Should find the project in stats");
+
+        // Verify custom name is used
+        let my_stats = my_stats.unwrap();
+        assert_eq!(my_stats.display_name, "My Custom Name");
+    }
+
+    #[test]
+    fn test_logical_project_stats_without_custom_name() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a project without custom name
+        let (_project, _) = db.get_or_create_project("/home/user/myproject").unwrap();
+
+        // Get logical project stats
+        let stats = db.get_logical_project_stats().unwrap();
+
+        // Find our project
+        let my_stats = stats.iter().find(|s| s.physical_path == "/home/user/myproject");
+        assert!(my_stats.is_some(), "Should find the project in stats");
+
+        // Verify default name (extracted from path) is used
+        let my_stats = my_stats.unwrap();
+        assert_eq!(my_stats.display_name, "myproject");
+    }
+
+    #[test]
+    fn test_logical_project_stats_custom_name_reset() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a project and set custom name
+        let (_project, _) = db.get_or_create_project("/home/user/myproject").unwrap();
+        db.set_logical_project_name("/home/user/myproject", "Custom Name").unwrap();
+
+        // Verify custom name is used
+        let stats1 = db.get_logical_project_stats().unwrap();
+        let my_stats1 = stats1.iter().find(|s| s.physical_path == "/home/user/myproject").unwrap();
+        assert_eq!(my_stats1.display_name, "Custom Name");
+
+        // Delete custom name (reset to default)
+        db.delete_logical_project_name("/home/user/myproject").unwrap();
+
+        // Verify default name is used again
+        let stats2 = db.get_logical_project_stats().unwrap();
+        let my_stats2 = stats2.iter().find(|s| s.physical_path == "/home/user/myproject").unwrap();
+        assert_eq!(my_stats2.display_name, "myproject");
+    }
+
+    #[test]
+    fn test_logical_project_name_path_normalization() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Set name with trailing slash
+        db.set_logical_project_name("/home/user/project/", "My Project").unwrap();
+
+        // Get with path without trailing slash - should still find it due to normalization
+        let name = db.get_logical_project_name("/home/user/project").unwrap();
+        assert_eq!(name, Some("My Project".to_string()));
+    }
+
+    #[test]
+    fn test_rename_aggregated_logical_project() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create two projects with the same physical path (simulating multi-source aggregation)
+        let (project1, _) = db.get_or_create_project("/home/user/project1").unwrap();
+        let (project2, _) = db.get_or_create_project("/home/user/project2").unwrap();
+
+        let shared_path = "/shared/workspace";
+        db.add_project_path(&project1.id, shared_path, false).unwrap();
+        db.add_project_path(&project2.id, shared_path, false).unwrap();
+
+        // Set custom name for the aggregated logical project
+        db.set_logical_project_name(shared_path, "Shared Workspace Renamed").unwrap();
+
+        // Get logical project stats
+        let stats = db.get_logical_project_stats().unwrap();
+        let shared_stats = stats.iter().find(|s| s.physical_path == shared_path).unwrap();
+
+        // Verify aggregation still works with custom name
+        assert_eq!(shared_stats.project_count, 2);
+        assert_eq!(shared_stats.display_name, "Shared Workspace Renamed");
     }
 }

@@ -40,6 +40,8 @@ use commands::{
     add_project_path, remove_project_path, get_project_paths,
     bind_session_to_project, unbind_session, get_unassigned_sessions, set_project_primary_path,
     get_logical_project_stats, get_sessions_by_physical_path, get_projects_by_physical_path,
+    // Story 1.13: Logical project rename
+    rename_logical_project, reset_logical_project_name,
     // Story 2.20: Import wizard enhancement
     get_imported_session_ids,
     // Story 2.23: Import with progress events
@@ -189,6 +191,9 @@ pub fn run() {
             get_logical_project_stats,
             get_sessions_by_physical_path,
             get_projects_by_physical_path,
+            // Story 1.13: Logical project rename
+            rename_logical_project,
+            reset_logical_project_name,
             // Story 2.20: Import wizard enhancement
             get_imported_session_ids,
             // Story 2.23: Import with progress events

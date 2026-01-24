@@ -1,10 +1,11 @@
 /**
  * LogicalProjectContextMenu Component - 逻辑项目上下文菜单
  * Story 1.12: Phase 6 - Task 13, 14
+ * Story 1.13: 支持所有逻辑项目重命名（移除 project_count === 1 限制）
  *
  * 逻辑项目管理菜单：
  * - 同步更新（同步所有关联的存储层项目）
- * - 重命名（仅单项目时启用）
+ * - 重命名（支持所有逻辑项目，包括聚合项目）
  * - 查看详情
  * - 移除
  *
@@ -31,7 +32,7 @@ export interface LogicalProjectContextMenuProps {
   logicalProject: LogicalProjectStats;
   /** 同步回调 */
   onSync: () => Promise<void>;
-  /** 重命名回调（仅单项目时启用） */
+  /** 重命名回调 (Story 1.13: 支持所有逻辑项目) */
   onRename?: () => void;
   /** 移除回调 */
   onRemove: () => void;
@@ -57,8 +58,8 @@ export function LogicalProjectContextMenu({
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSyncing, setIsSyncing] = React.useState(false);
 
-  // 仅单项目时启用重命名
-  const canRename = logicalProject.project_count === 1 && !!onRename;
+  // Story 1.13: 所有逻辑项目都可以重命名（移除 project_count === 1 限制）
+  const canRename = !!onRename;
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -134,7 +135,7 @@ export function LogicalProjectContextMenu({
           {t("projectInfo.viewDetails", "查看详情")}
         </DropdownMenuItem>
 
-        {/* 重命名 - 仅单项目时启用 */}
+        {/* 重命名 - Story 1.13: 支持所有逻辑项目 */}
         {canRename && (
           <DropdownMenuItem onClick={handleRename}>
             <Pencil className="h-4 w-4 mr-2" />

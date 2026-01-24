@@ -4,6 +4,7 @@
  * Story 2.19: Task 10 - 集成项目管理功能
  * Story 2-26: i18n 国际化
  * Story 1.12: Phase 5 - 完全切换到逻辑项目视图
+ * Story 1.13: 逻辑项目重命名 - 支持所有逻辑项目（包括聚合项目）
  *
  * 侧边抽屉，用于浏览和管理所有项目
  * - 从左侧滑入，宽度 320px
@@ -34,8 +35,8 @@ import { showSyncResult } from "./SyncResultToast";
 import {
   syncProject,
   removeProject,
-  renameProject,
 } from "@/lib/project-ipc";
+import { renameLogicalProject } from "@/hooks/useProjects";
 import { toast } from "sonner";
 import { appLog } from "@/lib/log-actions";
 import { useHideEmptyProjects } from "@/hooks/useHideEmptyProjects";
@@ -119,7 +120,7 @@ export function ProjectDrawer({
   const [infoLogicalProject, setInfoLogicalProject] = React.useState<LogicalProjectStats | null>(null);
   // Story 2.29: 隐藏空项目偏好
   const [hideEmptyProjects, setHideEmptyProjects] = useHideEmptyProjects();
-  // Story 1.12 fix: 正在重命名的逻辑项目路径
+  // Story 1.13: 正在重命名的逻辑项目路径（支持所有逻辑项目）
   const [renamingPath, setRenamingPath] = React.useState<string | null>(null);
 
   // Task 12: 移除未分类会话相关状态（虚拟路径作为独立逻辑项目显示）
@@ -386,13 +387,12 @@ export function ProjectDrawer({
                   isSettingsMenuOpen={menuOpenPath === lp.physical_path}
                   // Story 2.29 V2: 隐藏空会话
                   hideEmptySessions={hideEmptyProjects}
-                  // Story 1.12 fix: 重命名状态（仅单项目时有效）
+                  // Story 1.13: 重命名状态（支持所有逻辑项目）
                   isRenaming={renamingPath === lp.physical_path}
                   onRename={async (newName) => {
-                    if (lp.project_count !== 1) return;
-                    const projectId = lp.project_ids[0];
                     try {
-                      await renameProject(projectId, newName);
+                      // Story 1.13: 使用 renameLogicalProject API，支持所有逻辑项目
+                      await renameLogicalProject(lp.physical_path, newName);
                       toast.success(t("project.renamed", { name: newName }));
                       onProjectsChange?.();
                     } catch (error) {
@@ -437,8 +437,8 @@ export function ProjectDrawer({
                           appLog.syncError(lp.display_name, (error as Error).message);
                         }
                       }}
-                      // Story 1.12 fix: 重命名回调（仅单项目时启用）
-                      onRename={lp.project_count === 1 ? () => setRenamingPath(lp.physical_path) : undefined}
+                      // Story 1.13: 重命名回调（支持所有逻辑项目）
+                      onRename={() => setRenamingPath(lp.physical_path)}
                       onRemove={() => {
                         setActiveLogicalProject(lp);
                         setIsRemoveDialogOpen(true);
