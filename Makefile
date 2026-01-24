@@ -15,6 +15,7 @@ PROJECT_ROOT := $(shell pwd)
 VERSION := $(shell cat VERSION 2>/dev/null || echo "0.0.0")
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+CURRENT_TAG := $(shell git describe --exact-match --tags HEAD 2>/dev/null || echo "")
 BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # 目录定义
@@ -206,14 +207,23 @@ pre-release: ## 发布前检查
 	@echo "$(CYAN)执行发布前检查...$(RESET)"
 	@echo "版本: $(VERSION)"
 	@echo "分支: $(GIT_BRANCH)"
+	@if [ -n "$(CURRENT_TAG)" ]; then echo "标签: $(GREEN)$(CURRENT_TAG)$(RESET)"; fi
 	@echo ""
 	@# 检查是否有未提交的更改
 	@if [ -n "$$(git status --porcelain)" ]; then \
 		echo "$(YELLOW)警告: 存在未提交的更改$(RESET)"; \
 		git status --short; \
 	fi
-	@# 检查版本号是否同步
-	@./scripts/version.sh sync
+	@# 检查版本号是否同步 (如果是现有标签，则验证版本并跳过同步)
+	@if [ -n "$(CURRENT_TAG)" ]; then \
+		echo "$(GREEN)检测到当前处于标签 $(CURRENT_TAG) 上，跳过版本写入以保持原样...$(RESET)"; \
+		if [ "v$(VERSION)" != "$(CURRENT_TAG)" ] && [ "$(VERSION)" != "$(CURRENT_TAG)" ]; then \
+			echo "$(RED)错误: VERSION ($(VERSION)) 与当前标签 ($(CURRENT_TAG)) 不匹配!$(RESET)"; \
+			exit 1; \
+		fi; \
+	else \
+		./scripts/version.sh sync; \
+	fi
 	@echo "$(GREEN)发布前检查完成$(RESET)"
 
 .PHONY: collect-artifacts
@@ -249,10 +259,15 @@ post-release: ## 发布后操作
 	@echo "$(CYAN)发布后操作...$(RESET)"
 	@echo "$(GREEN)版本 $(VERSION) 发布完成!$(RESET)"
 	@echo ""
-	@echo "下一步操作建议:"
-	@echo "  1. 创建 Git 标签: git tag -a v$(VERSION) -m 'Release $(VERSION)'"
-	@echo "  2. 推送标签: git push origin v$(VERSION)"
-	@echo "  3. 在 GitHub 创建 Release"
+	@if [ -n "$(CURRENT_TAG)" ]; then \
+		echo "$(GREEN)已为现有标签 $(CURRENT_TAG) 构建产物。$(RESET)"; \
+		echo "请检查 $(RELEASE_DIR)/$(VERSION) 目录下的文件。"; \
+	else \
+		echo "下一步操作建议:"; \
+		echo "  1. 创建 Git 标签: git tag -a v$(VERSION) -m 'Release $(VERSION)'"; \
+		echo "  2. 推送标签: git push origin v$(VERSION)"; \
+		echo "  3. 在 GitHub 创建 Release"; \
+	fi
 
 .PHONY: release-linux
 release-linux: pre-release build-linux collect-artifacts ## 发布 Linux 版本

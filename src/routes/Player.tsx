@@ -191,6 +191,10 @@ export default function Player() {
     refetchProjects,
   } = useProjectDrawer({ defaultOpen: !sessionId });
 
+  // Bug fix: 清除会话缓存信号，用于强制 ProjectDrawer 刷新会话列表
+  // 当关联/解除关联/导入会话后，需要清除缓存确保 UI 同步
+  const [clearSessionCacheSignal, setClearSessionCacheSignal] = React.useState(0);
+
   // Bug Fix V6: 根据 currentProject.id 查找对应的逻辑项目
   // 使用逻辑项目的 display_name 和 has_git_repo 替代存储层项目的数据
   // 这样关联路径后，导航栏项目名和 Git 状态能正确更新
@@ -852,7 +856,10 @@ export default function Player() {
             // Story 1.9: 刷新项目列表和当前会话信息
             refetchProjects();
             refetchCurrentSession();
+            // Bug fix: 清除 ProjectDrawer 会话缓存，确保关联/解除关联后 UI 同步
+            setClearSessionCacheSignal((prev) => prev + 1);
           }}
+          clearSessionCacheSignal={clearSessionCacheSignal}
         />
       </div>
     );
@@ -1056,7 +1063,10 @@ export default function Player() {
           // Story 1.9: 刷新项目列表和当前会话信息（修复项目 cwd 更新后导航栏不同步问题）
           refetchProjects();
           refetchCurrentSession();
+          // Bug fix: 清除 ProjectDrawer 会话缓存，确保关联/解除关联后 UI 同步
+          setClearSessionCacheSignal((prev) => prev + 1);
         }}
+        clearSessionCacheSignal={clearSessionCacheSignal}
         onCurrentProjectRemoved={() => navigate("/player")}
       />
     </div>

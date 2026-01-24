@@ -190,7 +190,12 @@
     "setPrimaryFailed": "Failed to set primary path: {{error}}",
     "associatePath": "Associate Real Path",
     "pathAssociated": "Path associated",
-    "associatePathFailed": "Failed to associate path: {{error}}"
+    "associatePathFailed": "Failed to associate path: {{error}}",
+    "linkedSources": "Linked Sources",
+    "sessions": "sessions",
+    "unlinkProject": "Unlink",
+    "projectUnlinked": "Unlinked successfully",
+    "unlinkFailed": "Failed to unlink: {{error}}"
   },
   "sync": {
     "reParseFailed": "Re-parse Failed",

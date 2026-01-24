@@ -69,6 +69,8 @@ export interface ProjectDrawerProps {
   onProjectsChange?: () => void;
   /** 当前项目被移除时的回调（用于导航到空状态） */
   onCurrentProjectRemoved?: () => void;
+  /** 清除会话缓存的信号（用于强制刷新会话列表）- Bug fix */
+  clearSessionCacheSignal?: number;
 }
 
 /**
@@ -88,6 +90,7 @@ export function ProjectDrawer({
   getLogicalProjectSessions,
   onProjectsChange,
   onCurrentProjectRemoved,
+  clearSessionCacheSignal,
 }: ProjectDrawerProps) {
   const { t } = useTranslation();
   // 搜索关键词状态
@@ -120,6 +123,32 @@ export function ProjectDrawer({
   const [renamingPath, setRenamingPath] = React.useState<string | null>(null);
 
   // Task 12: 移除未分类会话相关状态（虚拟路径作为独立逻辑项目显示）
+
+  // Bug fix: 当 clearSessionCacheSignal 变化时，清除会话缓存并重新加载已展开项目的会话
+  // 这确保关联/解除关联/导入后会话列表能正确刷新
+  React.useEffect(() => {
+    if (clearSessionCacheSignal !== undefined && clearSessionCacheSignal > 0) {
+      // 清除缓存
+      setProjectSessions({});
+
+      // 重新加载所有已展开项目的会话列表
+      expandedProjects.forEach(async (physicalPath) => {
+        setLoadingProjects((prev) => new Set(prev).add(physicalPath));
+        try {
+          const sessions = await getLogicalProjectSessions(physicalPath);
+          setProjectSessions((prev) => ({ ...prev, [physicalPath]: sessions }));
+        } catch (error) {
+          console.error("Failed to reload sessions for:", physicalPath, error);
+        } finally {
+          setLoadingProjects((prev) => {
+            const next = new Set(prev);
+            next.delete(physicalPath);
+            return next;
+          });
+        }
+      });
+    }
+  }, [clearSessionCacheSignal, expandedProjects, getLogicalProjectSessions]);
 
   // 一键折叠所有项目
   const handleCollapseAll = React.useCallback(() => {

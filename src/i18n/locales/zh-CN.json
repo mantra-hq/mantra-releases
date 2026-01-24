@@ -191,7 +191,12 @@
     "associatePath": "关联真实路径",
     "pathAssociated": "路径已关联",
     "pathAssociatedWithCount": "已关联到 {{name}}，{{count}} 个会话已聚合",
-    "associatePathFailed": "关联路径失败: {{error}}"
+    "associatePathFailed": "关联路径失败: {{error}}",
+    "linkedSources": "关联来源",
+    "sessions": "会话",
+    "unlinkProject": "解除关联",
+    "projectUnlinked": "已解除关联",
+    "unlinkFailed": "解除关联失败: {{error}}"
   },
   "sync": {
     "reParseFailed": "重新解析失败",

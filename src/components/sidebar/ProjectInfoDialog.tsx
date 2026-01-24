@@ -43,8 +43,9 @@ import {
 import type { Project, LogicalProjectStats } from "@/types/project";
 import type { SessionSummary } from "@/lib/project-ipc";
 import { updateProjectCwd } from "@/lib/project-ipc";
-import { useProjectPaths, addProjectPath, removeProjectPath, setProjectPrimaryPath } from "@/hooks/useProjects";
+import { useProjectPaths, addProjectPath, removeProjectPath, setProjectPrimaryPath, getProjectPaths, getProjectsByPhysicalPath } from "@/hooks/useProjects";
 import { SourceIcon } from "@/components/import/SourceIcons";
+import type { ProjectPath } from "@/types/project";
 import { toast } from "sonner";
 
 /**
@@ -66,6 +67,18 @@ export interface ProjectInfoDialogProps {
     getLogicalProjectSessions?: (physicalPath: string) => Promise<SessionSummary[]>;
     /** 项目更新回调 */
     onProjectUpdated?: (project?: Project) => void;
+}
+
+/**
+ * Story 1.12 Phase 7: 从项目 cwd 推断来源类型
+ * 由于 Project 类型没有 source 属性，需要从 cwd 格式推断
+ */
+function inferSourceFromCwd(cwd: string): string {
+    if (cwd.startsWith("gemini-project:")) return "gemini";
+    if (cwd.startsWith("cursor-workspace:")) return "cursor";
+    if (cwd.startsWith("codex-project:")) return "codex";
+    // 默认假设是 Claude Code (本地路径格式)
+    return "claude";
 }
 
 /**
@@ -246,6 +259,9 @@ export function ProjectInfoDialog({
     const [currentProject, setCurrentProject] = React.useState<Project | null>(project ?? null);
     const [isAddingPath, setIsAddingPath] = React.useState(false);
     const [removingPathId, setRemovingPathId] = React.useState<string | null>(null);
+    // Story 1.12 Phase 7: 解除关联功能
+    const [unlinkingProjectId, setUnlinkingProjectId] = React.useState<string | null>(null);
+    const [linkedProjects, setLinkedProjects] = React.useState<Array<{ project: Project; pathId: string | null }>>([]);
 
     // Story 1.12: 判断是否使用逻辑项目视图
     const isLogicalView = Boolean(logicalProject);
@@ -287,6 +303,89 @@ export function ProjectInfoDialog({
             setIsLoading(false);
         }
     }, [isOpen, currentProject, getProjectSessions, logicalProject, getLogicalProjectSessions, isLogicalView]);
+
+    // Story 1.12 Phase 7: 加载多源聚合的关联项目列表
+    React.useEffect(() => {
+        if (!isOpen || !isLogicalView || !logicalProject || logicalProject.project_count <= 1) {
+            setLinkedProjects([]);
+            return;
+        }
+
+        // 获取所有关联此物理路径的项目及其 path_id
+        const loadLinkedProjects = async () => {
+            try {
+                const projects = await getProjectsByPhysicalPath(logicalProject.physical_path);
+                // 为每个项目查找对应的 path_id
+                const projectsWithPathId = await Promise.all(
+                    projects.map(async (proj) => {
+                        const projectPaths = await getProjectPaths(proj.id);
+                        const matchingPath = projectPaths.find(
+                            (p: ProjectPath) => p.path === logicalProject.physical_path
+                        );
+                        return { project: proj, pathId: matchingPath?.id ?? null };
+                    })
+                );
+                setLinkedProjects(projectsWithPathId);
+            } catch (error) {
+                console.error("Failed to load linked projects:", error);
+                setLinkedProjects([]);
+            }
+        };
+
+        loadLinkedProjects();
+    }, [isOpen, isLogicalView, logicalProject]);
+
+    /**
+     * Story 1.12 Phase 7: 解除项目关联
+     * 删除项目与当前物理路径的关联记录
+     * 解除后，项目会恢复到其原始 cwd 路径作为独立逻辑项目显示
+     */
+    const handleUnlinkProject = async (projectId: string, pathId: string) => {
+        try {
+            setUnlinkingProjectId(projectId);
+
+            // 获取被解除项目的信息，用于恢复其原始路径
+            const projectToUnlink = linkedProjects.find((item) => item.project.id === projectId);
+            const originalCwd = projectToUnlink?.project.cwd;
+
+            // 删除当前关联
+            await removeProjectPath(pathId);
+
+            // 如果项目有原始 cwd 且与当前物理路径不同，确保它有自己的路径记录
+            // 这样解除后项目会作为独立逻辑项目显示
+            if (originalCwd && logicalProject && originalCwd !== logicalProject.physical_path) {
+                try {
+                    // 添加原始 cwd 作为主路径（如果还没有）
+                    await addProjectPath(projectId, originalCwd, true);
+                } catch {
+                    // 如果路径已存在则忽略错误
+                }
+            }
+
+            // 从本地状态移除
+            setLinkedProjects((prev) => prev.filter((item) => item.project.id !== projectId));
+
+            // 刷新数据并关闭详情页
+            refetchPaths();
+            onProjectUpdated?.();
+
+            // 延迟关闭详情页，确保列表刷新完成
+            setTimeout(() => {
+                onOpenChange(false);
+            }, 100);
+
+            toast.success(t("projectInfo.projectUnlinked", "已解除关联"));
+        } catch (error) {
+            console.error("Failed to unlink project:", error);
+            toast.error(
+                t("projectInfo.unlinkFailed", "解除关联失败: {{error}}", {
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            );
+        } finally {
+            setUnlinkingProjectId(null);
+        }
+    };
 
     /**
      * 处理设置工作目录
@@ -645,6 +744,53 @@ export function ProjectInfoDialog({
                                 </div>
                             </div>
                         </div>
+
+                        {/* Story 1.12 Phase 7: 多源关联项目列表 - 仅在多源聚合时显示 */}
+                        {isLogicalView && linkedProjects.length > 1 && (
+                            <div className="flex items-start gap-3 py-2">
+                                <Link2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs text-muted-foreground mb-1">
+                                        {t("projectInfo.linkedSources", "关联来源")}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {linkedProjects.map(({ project: proj, pathId }) => {
+                                            const source = inferSourceFromCwd(proj.cwd);
+                                            return (
+                                            <div
+                                                key={proj.id}
+                                                className="flex items-center gap-2 group"
+                                            >
+                                                <SourceIcon source={source} className="h-4 w-4 shrink-0" />
+                                                <span className="text-sm flex-1 truncate">
+                                                    {getSourceLabel(source)}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {proj.session_count} {t("projectInfo.sessions", "会话")}
+                                                </span>
+                                                {pathId && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        onClick={() => handleUnlinkProject(proj.id, pathId)}
+                                                        disabled={unlinkingProjectId === proj.id}
+                                                        title={t("projectInfo.unlinkProject", "解除关联")}
+                                                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                                                    >
+                                                        {unlinkingProjectId === proj.id ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-3 w-3" />
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Git Remote URL (如果有) - Story 1.9 */}
                         {currentProject?.git_remote_url && (
