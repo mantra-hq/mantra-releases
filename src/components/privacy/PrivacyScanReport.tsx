@@ -200,8 +200,8 @@ export function PrivacyScanReport({
                 // 安全设计：阻止点击外部关闭弹窗
                 // 对于隐私敏感操作，防止用户意外点击导致未经审查就继续上传
                 // 用户必须明确选择"脱敏"、"忽略"或"取消"
-                onInteractOutside={(e) => e.preventDefault()}
-                onEscapeKeyDown={(e) => {
+                onInteractOutside={(_e) => _e.preventDefault()}
+                onEscapeKeyDown={(_e) => {
                     // ESC 键触发取消操作
                     // 安全设计：对于隐私敏感操作，默认取消比意外继续更安全
                     onCancel();

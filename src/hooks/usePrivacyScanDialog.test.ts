@@ -99,15 +99,15 @@ describe('usePrivacyScanDialog', () => {
     describe('performCheck - 有敏感信息时的异步交互', () => {
         it('有敏感信息时应该等待用户操作', async () => {
             const scanResult = createMockScanResult();
-            let capturedShowReport: ((result: ScanResult) => Promise<{ action: string; redactedContent?: string }>) | null = null;
+            let _capturedShowReport: ((result: ScanResult) => Promise<{ action: string; redactedContent?: string }>) | null = null;
 
-            vi.mocked(performPreUploadScan).mockImplementation(async (sessionId, content, projectName, showReport) => {
-                capturedShowReport = showReport;
+            vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
+                _capturedShowReport = showReport;
                 // 模拟显示弹窗等待用户操作
                 const userResponse = await showReport(scanResult);
                 return {
                     shouldProceed: userResponse.action !== 'cancelled',
-                    content: userResponse.redactedContent ?? content,
+                    content: userResponse.redactedContent ?? _content,
                     userAction: userResponse.action as 'redacted' | 'ignored' | 'cancelled',
                 };
             });
@@ -115,9 +115,9 @@ describe('usePrivacyScanDialog', () => {
             const { result } = renderHook(() => usePrivacyScanDialog());
 
             // 开始检查但不等待完成
-            let checkPromise: Promise<unknown>;
+            let _checkPromise: Promise<unknown>;
             act(() => {
-                checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
+                _checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
             });
 
             // 等待弹窗打开
@@ -133,20 +133,20 @@ describe('usePrivacyScanDialog', () => {
         it('handleRedact 应该调用 applyRedaction', async () => {
             const scanResult = createMockScanResult();
 
-            vi.mocked(performPreUploadScan).mockImplementation(async (sessionId, content, projectName, showReport) => {
+            vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
                 const userResponse = await showReport(scanResult);
                 return {
                     shouldProceed: true,
-                    content: userResponse.redactedContent ?? content,
+                    content: userResponse.redactedContent ?? _content,
                     userAction: userResponse.action as 'redacted' | 'ignored' | 'cancelled',
                 };
             });
 
             const { result } = renderHook(() => usePrivacyScanDialog());
 
-            let checkPromise: Promise<unknown>;
+            let _checkPromise: Promise<unknown>;
             act(() => {
-                checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
+                _checkPromise = result.current.performCheck('session-1', 'sensitive content', 'TestProject');
             });
 
             // 等待弹窗打开
@@ -173,21 +173,21 @@ describe('usePrivacyScanDialog', () => {
         it('handleIgnore 应该关闭弹窗并继续', async () => {
             const scanResult = createMockScanResult();
 
-            vi.mocked(performPreUploadScan).mockImplementation(async (sessionId, content, projectName, showReport) => {
+            vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
                 const userResponse = await showReport(scanResult);
                 return {
                     shouldProceed: userResponse.action !== 'cancelled',
-                    content,
+                    content: _content,
                     userAction: userResponse.action as 'redacted' | 'ignored' | 'cancelled',
                 };
             });
 
             const { result } = renderHook(() => usePrivacyScanDialog());
 
-            let checkResult: unknown;
+            let _checkResult: unknown;
             act(() => {
                 result.current.performCheck('session-1', 'sensitive content', 'TestProject').then((r) => {
-                    checkResult = r;
+                    _checkResult = r;
                 });
             });
 
@@ -212,11 +212,11 @@ describe('usePrivacyScanDialog', () => {
         it('handleCancel 应该关闭弹窗并阻止上传', async () => {
             const scanResult = createMockScanResult();
 
-            vi.mocked(performPreUploadScan).mockImplementation(async (sessionId, content, projectName, showReport) => {
+            vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
                 const userResponse = await showReport(scanResult);
                 return {
                     shouldProceed: userResponse.action !== 'cancelled',
-                    content,
+                    content: _content,
                     userAction: userResponse.action as 'redacted' | 'ignored' | 'cancelled',
                 };
             });
@@ -262,11 +262,11 @@ describe('usePrivacyScanDialog', () => {
         it('close 在有 pending promise 时应该触发 cancel', async () => {
             const scanResult = createMockScanResult();
 
-            vi.mocked(performPreUploadScan).mockImplementation(async (sessionId, content, projectName, showReport) => {
+            vi.mocked(performPreUploadScan).mockImplementation(async (_sessionId, _content, _projectName, showReport) => {
                 const userResponse = await showReport(scanResult);
                 return {
                     shouldProceed: userResponse.action !== 'cancelled',
-                    content,
+                    content: _content,
                     userAction: userResponse.action as 'redacted' | 'ignored' | 'cancelled',
                 };
             });
