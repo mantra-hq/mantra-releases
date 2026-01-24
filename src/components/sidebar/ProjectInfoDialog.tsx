@@ -36,14 +36,11 @@ import {
     AlertTriangle,
     FolderEdit,
     Link2,
-    Plus,
     Trash2,
-    Star,
 } from "lucide-react";
 import type { Project, LogicalProjectStats } from "@/types/project";
 import type { SessionSummary } from "@/lib/project-ipc";
-import { updateProjectCwd } from "@/lib/project-ipc";
-import { useProjectPaths, addProjectPath, removeProjectPath, setProjectPrimaryPath, getProjectPaths, getProjectsByPhysicalPath } from "@/hooks/useProjects";
+import { useProjectPaths, addProjectPath, removeProjectPath, getProjectPaths, getProjectsByPhysicalPath } from "@/hooks/useProjects";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import type { ProjectPath } from "@/types/project";
 import { toast } from "sonner";
@@ -255,10 +252,8 @@ export function ProjectInfoDialog({
     const { t, i18n } = useTranslation();
     const [sessions, setSessions] = React.useState<SessionSummary[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
-    const [isUpdatingCwd, setIsUpdatingCwd] = React.useState(false);
     const [currentProject, setCurrentProject] = React.useState<Project | null>(project ?? null);
     const [isAddingPath, setIsAddingPath] = React.useState(false);
-    const [removingPathId, setRemovingPathId] = React.useState<string | null>(null);
     // Story 1.12 Phase 7: 解除关联功能
     const [unlinkingProjectId, setUnlinkingProjectId] = React.useState<string | null>(null);
     const [linkedProjects, setLinkedProjects] = React.useState<Array<{ project: Project; pathId: string | null }>>([]);
@@ -304,9 +299,9 @@ export function ProjectInfoDialog({
         }
     }, [isOpen, currentProject, getProjectSessions, logicalProject, getLogicalProjectSessions, isLogicalView]);
 
-    // Story 1.12 Phase 7: 加载多源聚合的关联项目列表
+    // Story 1.12 V10: 加载聚合项目列表（单源和多源都加载）
     React.useEffect(() => {
-        if (!isOpen || !isLogicalView || !logicalProject || logicalProject.project_count <= 1) {
+        if (!isOpen || !isLogicalView || !logicalProject) {
             setLinkedProjects([]);
             return;
         }
@@ -388,96 +383,6 @@ export function ProjectInfoDialog({
     };
 
     /**
-     * 处理设置工作目录
-     * Story 1.9: Task 8.4, 8.5
-     */
-    const handleSetCwd = async () => {
-        console.log("[DEBUG-DIALOG] handleSetCwd: Called. currentProject:", currentProject);
-        if (!currentProject) {
-            console.warn("[DEBUG-DIALOG] handleSetCwd: currentProject is null, returning.");
-            return;
-        }
-
-        try {
-            console.log("[DEBUG-DIALOG] handleSetCwd: Opening dialog...");
-            const selected = await open({
-                directory: true,
-                multiple: false,
-                title: t("projectInfo.selectDirectory", "选择项目工作目录"),
-            });
-            console.log("[DEBUG-DIALOG] handleSetCwd: Dialog result:", selected);
-
-            if (!selected || typeof selected !== "string") {
-                console.log("[DEBUG-DIALOG] handleSetCwd: No selection or invalid type");
-                return;
-            }
-
-            setIsUpdatingCwd(true);
-
-            const updatedProject = await updateProjectCwd(currentProject.id, selected);
-            setCurrentProject(updatedProject);
-            onProjectUpdated?.(updatedProject);
-            refetchPaths();
-
-            toast.success(t("projectInfo.cwdUpdated", "工作目录已更新"));
-        } catch (error) {
-            console.error("[DEBUG-DIALOG] Failed to update project cwd:", error);
-            toast.error(
-                t("projectInfo.cwdUpdateFailed", "更新工作目录失败: {{error}}", {
-                    error: error instanceof Error ? error.message : String(error),
-                })
-            );
-        } finally {
-            setIsUpdatingCwd(false);
-        }
-    };
-
-    /**
-     * Story 1.12: 添加新路径
-     * 支持逻辑项目视图：使用第一个存储层项目 ID
-     */
-    const handleAddPath = async () => {
-        // 获取 project_id：优先使用 currentProject，否则使用逻辑项目的第一个存储层项目
-        const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
-        console.log("[DEBUG-DIALOG] handleAddPath: Called. projectId:", projectId);
-
-        if (!projectId) {
-            console.warn("[DEBUG-DIALOG] handleAddPath: projectId is missing, returning.");
-            return;
-        }
-
-        try {
-            console.log("[DEBUG-DIALOG] handleAddPath: Opening dialog...");
-            const selected = await open({
-                directory: true,
-                multiple: false,
-                title: t("projectInfo.addPath", "添加项目路径"),
-            });
-            console.log("[DEBUG-DIALOG] handleAddPath: Dialog result:", selected);
-
-            if (!selected || typeof selected !== "string") {
-                console.log("[DEBUG-DIALOG] handleAddPath: No selection or invalid type");
-                return;
-            }
-
-            setIsAddingPath(true);
-            await addProjectPath(projectId, selected, false);
-            refetchPaths();
-            onProjectUpdated?.();
-            toast.success(t("projectInfo.pathAdded", "路径已添加"));
-        } catch (error) {
-            console.error("[DEBUG-DIALOG] Failed to add path:", error);
-            toast.error(
-                t("projectInfo.addPathFailed", "添加路径失败: {{error}}", {
-                    error: error instanceof Error ? error.message : String(error),
-                })
-            );
-        } finally {
-            setIsAddingPath(false);
-        }
-    };
-
-    /**
      * Story 1.12 fix: 关联真实路径
      * 对于 needs_association 项目，选择目录后直接设置为主路径
      */
@@ -530,54 +435,6 @@ export function ProjectInfoDialog({
             );
         } finally {
             setIsAddingPath(false);
-        }
-    };
-
-    /**
-     * Story 1.12: 移除路径
-     */
-    const handleRemovePath = async (pathId: string) => {
-        try {
-            setRemovingPathId(pathId);
-            await removeProjectPath(pathId);
-            refetchPaths();
-            toast.success(t("projectInfo.pathRemoved", "路径已移除"));
-        } catch (error) {
-            console.error("Failed to remove path:", error);
-            toast.error(
-                t("projectInfo.removePathFailed", "移除路径失败: {{error}}", {
-                    error: error instanceof Error ? error.message : String(error),
-                })
-            );
-        } finally {
-            setRemovingPathId(null);
-        }
-    };
-
-    /**
-     * Story 1.12: 设置为主路径
-     * 支持逻辑项目视图：使用第一个存储层项目 ID
-     */
-    const handleSetPrimaryPath = async (path: string) => {
-        // 获取 project_id：优先使用 currentProject，否则使用逻辑项目的第一个存储层项目
-        const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
-        if (!projectId) return;
-
-        try {
-            setIsUpdatingCwd(true);
-            await setProjectPrimaryPath(projectId, path);
-            refetchPaths();
-            onProjectUpdated?.();
-            toast.success(t("projectInfo.primaryPathSet", "主路径已设置"));
-        } catch (error) {
-            console.error("Failed to set primary path:", error);
-            toast.error(
-                t("projectInfo.setPrimaryFailed", "设置主路径失败: {{error}}", {
-                    error: error instanceof Error ? error.message : String(error),
-                })
-            );
-        } finally {
-            setIsUpdatingCwd(false);
         }
     };
 
@@ -636,27 +493,10 @@ export function ProjectInfoDialog({
                                             </Tooltip>
                                         )}
                                     </span>
-                                    {/* Story 1.12 fix: 仅对已关联的项目显示添加路径按钮 */}
-                                    {!isPlaceholder && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            onClick={handleAddPath}
-                                            disabled={isAddingPath}
-                                            title={t("projectInfo.addPath", "添加路径")}
-                                            className="h-5 w-5"
-                                        >
-                                            {isAddingPath ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <Plus className="h-3 w-3" />
-                                            )}
-                                        </Button>
-                                    )}
+                                    {/* Story 1.12 V10: 移除添加路径按钮，一个项目只能关联一个路径 */}
                                 </div>
-                                {/* 路径列表 */}
+                                {/* Story 1.12 V10: 简化路径显示，一个项目只能关联一个路径 */}
                                 <div className="space-y-1">
-                                    {/* Story 1.12 fix: 对于 needs_association 项目，显示关联真实路径按钮 */}
                                     {isPlaceholder ? (
                                         <div className="space-y-2">
                                             {/* 显示当前虚拟路径 */}
@@ -684,139 +524,146 @@ export function ProjectInfoDialog({
                                                 {t("projectInfo.associatePath", "关联真实路径")}
                                             </Button>
                                         </div>
-                                    ) : paths.length > 0 ? (
-                                        paths.map((pathItem) => (
-                                            <div
-                                                key={pathItem.id}
-                                                className="flex items-center gap-1 group"
-                                            >
-                                                {pathItem.is_primary ? (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Star className="h-3 w-3 text-yellow-500 shrink-0" />
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            {t("projectInfo.primaryPath", "主路径")}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                ) : (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        onClick={() => handleSetPrimaryPath(pathItem.path)}
-                                                        disabled={isUpdatingCwd}
-                                                        title={t("projectInfo.setAsPrimary", "设为主路径")}
-                                                        className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    >
-                                                        <Star className="h-3 w-3" />
-                                                    </Button>
-                                                )}
-                                                <TruncatedText
-                                                    text={pathItem.path}
-                                                    maxLength={40}
-                                                    mono
-                                                    className="text-sm flex-1"
-                                                />
-                                                {!pathItem.is_primary && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        onClick={() => handleRemovePath(pathItem.id)}
-                                                        disabled={removingPathId === pathItem.id}
-                                                        title={t("projectInfo.removePath", "移除路径")}
-                                                        className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                                                    >
-                                                        {removingPathId === pathItem.id ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : (
-                                                            <Trash2 className="h-3 w-3" />
-                                                        )}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        ))
-                                    ) : currentProject ? (
-                                        // 如果没有 paths 记录，显示 cwd 作为兼容
+                                    ) : (
+                                        // 已关联：显示单一路径（主路径或 cwd）
                                         <div className="flex items-center gap-2">
                                             <TruncatedText
-                                                text={currentProject.cwd}
+                                                text={
+                                                    paths.find((p) => p.is_primary)?.path ??
+                                                    paths[0]?.path ??
+                                                    logicalProject?.physical_path ??
+                                                    currentProject?.cwd ??
+                                                    ""
+                                                }
                                                 maxLength={40}
                                                 mono
                                                 className="text-sm flex-1"
                                             />
+                                            {/* 更换路径按钮 */}
                                             <Button
                                                 variant="ghost"
                                                 size="icon-sm"
-                                                onClick={handleSetCwd}
-                                                disabled={isUpdatingCwd}
-                                                title={t("projectInfo.setCwd", "设置工作目录")}
+                                                onClick={handleAssociatePath}
+                                                disabled={isAddingPath}
+                                                title={t("projectInfo.changePath", "更换路径")}
                                                 className="shrink-0"
                                             >
-                                                {isUpdatingCwd ? (
+                                                {isAddingPath ? (
                                                     <Loader2 className="h-4 w-4 animate-spin" />
                                                 ) : (
                                                     <FolderEdit className="h-4 w-4" />
                                                 )}
                                             </Button>
                                         </div>
-                                    ) : logicalProject ? (
-                                        // 逻辑项目视图：显示物理路径
-                                        <div className="flex items-center gap-2">
-                                            <TruncatedText
-                                                text={logicalProject.physical_path}
-                                                maxLength={40}
-                                                mono
-                                                className="text-sm flex-1"
-                                            />
-                                        </div>
-                                    ) : null}
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Story 1.12 Phase 7: 多源关联项目列表 - 仅在多源聚合时显示 */}
-                        {isLogicalView && linkedProjects.length > 1 && (
+                        {/* Story 1.12 V10: 聚合来源 - 显示所有来源及会话数（单源和多源都显示） */}
+                        {isLogicalView && (
                             <div className="flex items-start gap-3 py-2">
-                                <Link2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                <Hash className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                 <div className="flex-1 min-w-0">
                                     <div className="text-xs text-muted-foreground mb-1">
-                                        {t("projectInfo.linkedSources", "关联来源")}
+                                        {t("projectInfo.aggregatedSources", "聚合来源")}
                                     </div>
-                                    <div className="space-y-1">
-                                        {linkedProjects.map(({ project: proj, pathId }) => {
-                                            const source = inferSourceFromCwd(proj.cwd);
-                                            return (
-                                            <div
-                                                key={proj.id}
-                                                className="flex items-center gap-2 group"
-                                            >
-                                                <SourceIcon source={source} className="h-4 w-4 shrink-0" />
-                                                <span className="text-sm flex-1 truncate">
-                                                    {getSourceLabel(source)}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {proj.session_count} {t("projectInfo.sessions", "会话")}
-                                                </span>
-                                                {pathId && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-sm"
-                                                        onClick={() => handleUnlinkProject(proj.id, pathId)}
-                                                        disabled={unlinkingProjectId === proj.id}
-                                                        title={t("projectInfo.unlinkProject", "解除关联")}
-                                                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                                                    >
-                                                        {unlinkingProjectId === proj.id ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : (
-                                                            <Trash2 className="h-3 w-3" />
-                                                        )}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                            );
-                                        })}
+                                    {isLoading ? (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            {t("common.loading", "加载中")}...
+                                        </div>
+                                    ) : linkedProjects.length > 0 ? (
+                                        <div className="space-y-1">
+                                            {linkedProjects.map(({ project: proj, pathId }) => {
+                                                const source = inferSourceFromCwd(proj.cwd);
+                                                return (
+                                                <div
+                                                    key={proj.id}
+                                                    className="flex items-center gap-2 group"
+                                                >
+                                                    <SourceIcon source={source} className="h-4 w-4 shrink-0" />
+                                                    <span className="text-sm flex-1 truncate">
+                                                        {getSourceLabel(source)}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {proj.session_count} {t("projectInfo.sessions", "会话")}
+                                                    </span>
+                                                    {/* 多源时显示解除关联按钮 */}
+                                                    {linkedProjects.length > 1 && pathId && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            onClick={() => handleUnlinkProject(proj.id, pathId)}
+                                                            disabled={unlinkingProjectId === proj.id}
+                                                            title={t("projectInfo.unlinkProject", "解除关联")}
+                                                            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                                                        >
+                                                            {unlinkingProjectId === proj.id ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-3 w-3" />
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : sources.length > 0 ? (
+                                        // 单源项目：从会话统计显示
+                                        <div className="flex flex-wrap gap-3">
+                                            {sources.map(([source, count]) => (
+                                                <div
+                                                    key={source}
+                                                    className="flex items-center gap-1.5 text-sm"
+                                                >
+                                                    <SourceIcon source={source} className="h-4 w-4" />
+                                                    <span className="text-muted-foreground">{getSourceLabel(source)}:</span>
+                                                    <span className="font-medium">{count}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-muted-foreground">
+                                            {logicalProject?.total_sessions ?? 0} {t("projectInfo.sessions", "会话")}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* 存储层视图：显示会话来源统计 */}
+                        {!isLogicalView && currentProject && (
+                            <div className="flex items-start gap-3 py-2">
+                                <Hash className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs text-muted-foreground mb-1">
+                                        {t("projectInfo.aggregatedSources", "聚合来源")}
                                     </div>
+                                    {isLoading ? (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            {t("common.loading", "加载中")}...
+                                        </div>
+                                    ) : sources.length > 0 ? (
+                                        <div className="flex flex-wrap gap-3">
+                                            {sources.map(([source, count]) => (
+                                                <div
+                                                    key={source}
+                                                    className="flex items-center gap-1.5 text-sm"
+                                                >
+                                                    <SourceIcon source={source} className="h-4 w-4" />
+                                                    <span className="text-muted-foreground">{getSourceLabel(source)}:</span>
+                                                    <span className="font-medium">{count}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-muted-foreground">
+                                            {currentProject.session_count} {t("projectInfo.sessions", "会话")}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -831,38 +678,7 @@ export function ProjectInfoDialog({
                             />
                         )}
 
-                        {/* 会话数量 - 按来源分组 */}
-                        <div className="flex items-start gap-3 py-2">
-                            <Hash className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <div className="text-xs text-muted-foreground mb-1">
-                                    {t("projectInfo.sessionCount", "会话数量")}
-                                </div>
-                                {isLoading ? (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        {t("common.loading", "加载中")}...
-                                    </div>
-                                ) : sources.length > 0 ? (
-                                    <div className="flex flex-wrap gap-3">
-                                        {sources.map(([source, count]) => (
-                                            <div
-                                                key={source}
-                                                className="flex items-center gap-1.5 text-sm"
-                                            >
-                                                <SourceIcon source={source} className="h-4 w-4" />
-                                                <span className="text-muted-foreground">{getSourceLabel(source)}:</span>
-                                                <span className="font-medium">{count}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-sm text-muted-foreground">
-                                        {isLogicalView ? logicalProject?.total_sessions : currentProject?.session_count}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        {/* Story 1.12 V10: 移除会话数量区域，信息已在"聚合来源"中显示 */}
 
                         {/* 创建时间 - 仅存储层模式 */}
                         {currentProject && (

@@ -195,10 +195,14 @@
     "pathAssociatedWithCount": "已关联到 {{name}}，{{count}} 个会话已聚合",
     "associatePathFailed": "关联路径失败: {{error}}",
     "linkedSources": "关联来源",
+    "aggregatedSources": "聚合来源",
+    "changePath": "更换路径",
     "sessions": "会话",
     "unlinkProject": "解除关联",
     "projectUnlinked": "已解除关联",
-    "unlinkFailed": "解除关联失败: {{error}}"
+    "unlinkFailed": "解除关联失败: {{error}}",
+    "gitStatus": "Git 状态",
+    "hasGitRepo": "已检测到 Git 仓库"
   },
   "sync": {
     "reParseFailed": "重新解析失败",
