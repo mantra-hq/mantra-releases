@@ -13,7 +13,7 @@
 
 import { test, expect } from "@playwright/test";
 import { PlayerPage } from "../pages";
-import { waitForElementStable, getExpectedMessageCount, TEST_SESSION_IDS } from "../utils/test-helpers";
+import { waitForElementStable } from "../utils/test-helpers";
 
 // 为不稳定测试配置重试
 test.describe("Player 页面测试", () => {
@@ -92,7 +92,7 @@ test.describe("Player 页面测试", () => {
 
       // 代码面板或空状态应该可见
       // 在 Mock 环境中，代码面板依赖 Git 数据，可能显示为空状态
-      const codePanel = playerPage.codePanel;
+      const _codePanel = playerPage.codePanel;
       const codePanelContainer = page.locator('[data-testid="code-panel"], [data-testid="code-panel-empty"]');
 
       // 等待代码面板容器出现（无论是否有内容）

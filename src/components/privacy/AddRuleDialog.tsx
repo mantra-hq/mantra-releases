@@ -112,7 +112,7 @@ export function AddRuleDialog({
 
             onAdd(newRule);
             handleClose();
-        } catch (err) {
+        } catch (_err) {
             setError(t('privacy.rules.errors.validationFailed'));
         } finally {
             setIsValidating(false);

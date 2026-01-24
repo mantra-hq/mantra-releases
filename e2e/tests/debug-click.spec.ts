@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 
 test("Debug: Click file_edit card", async ({ page }) => {
   await page.goto("/session/mock-session-file-edit?playwright");

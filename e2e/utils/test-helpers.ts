@@ -12,7 +12,6 @@ import { Page, Locator, expect } from "@playwright/test";
 import {
   MOCK_PROJECTS,
   MOCK_SESSION_SUMMARIES,
-  MOCK_SESSIONS,
   getSessionById,
   getSessionsByProjectId,
 } from "../fixtures/mock-data";

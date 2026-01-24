@@ -29,6 +29,8 @@ vi.mock('react-i18next', () => ({
 // Mock IPC
 vi.mock('@/lib/ipc/sanitizer-ipc', () => ({
     getBuiltinRules: vi.fn(),
+    getPrivacyRules: vi.fn(),
+    updatePrivacyRules: vi.fn(),
 }));
 
 describe('SystemRuleList', () => {
@@ -37,7 +39,7 @@ describe('SystemRuleList', () => {
     });
 
     it('should render loading state initially', async () => {
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockImplementation(
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockImplementation(
             () => new Promise(() => { }) // Never resolves
         );
 
@@ -53,7 +55,7 @@ describe('SystemRuleList', () => {
             { name: 'AWS Access Key', pattern: 'AKIA[0-9A-Z]+', sensitive_type: 'aws_key' },
         ];
 
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockResolvedValue(mockRules as never);
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
 
         render(<SystemRuleList />);
 
@@ -77,7 +79,7 @@ describe('SystemRuleList', () => {
             { name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token' },
         ];
 
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockResolvedValue(mockRules as never);
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
 
         render(<SystemRuleList />);
 
@@ -101,7 +103,7 @@ describe('SystemRuleList', () => {
             { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
         ];
 
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockResolvedValue(mockRules as never);
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
 
         render(<SystemRuleList />);
 
@@ -114,7 +116,7 @@ describe('SystemRuleList', () => {
     });
 
     it('should show error state when loading fails', async () => {
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockRejectedValue(new Error('Network error'));
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockRejectedValue(new Error('Network error'));
 
         render(<SystemRuleList />);
 
@@ -129,7 +131,7 @@ describe('SystemRuleList', () => {
             { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
         ];
 
-        vi.mocked(sanitizerIpc.getBuiltinRules).mockResolvedValue(mockRules as never);
+        vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
 
         render(<SystemRuleList />);
 

@@ -131,7 +131,7 @@ describe("ImportWizard", () => {
         <ImportWizard open={true} onOpenChange={vi.fn()} initialStep="files" />
       );
 
-      expect(screen.getByTestId("file-selector")).toBeInTheDocument();
+      expect(screen.getByTestId("file-list")).toBeInTheDocument();
     });
   });
 

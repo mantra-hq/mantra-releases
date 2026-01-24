@@ -520,7 +520,7 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
   User({required this.name, required this.age});
 
   void greet() {
-    print('Hello, I am \$name and I am \$age years old.');
+    print('Hello, I am $name and I am $age years old.');
   }
 }`,
           },
@@ -534,7 +534,7 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
   User({required this.name, required this.age});
 
   void greet() {
-    print('Hello, I am \$name and I am \$age years old.');
+    print('Hello, I am $name and I am $age years old.');
   }
 }`,
           },
@@ -552,7 +552,7 @@ export const MOCK_SESSIONS: Record<string, MantraSession> = {
   User({required this.name, required this.age});
 
   void greet() {
-    print('Hello, I am \$name and I am \$age years old.');
+    print('Hello, I am $name and I am $age years old.');
   }
 }`,
           is_error: false,
@@ -744,7 +744,7 @@ export const MOCK_DART_CODE = `class User {
   User({required this.name, required this.age});
 
   void greet() {
-    print('Hello, I am \$name and I am \$age years old.');
+    print('Hello, I am $name and I am $age years old.');
   }
 }`;
 

@@ -84,16 +84,6 @@ export function SnapshotBadge({
     const styles = STYLES[type];
     const Icon = type === "snapshot" ? Camera : GitCommit;
 
-    // 图标模式：仅渲染图标
-    if (mode === "icon") {
-        return (
-            <Icon
-                data-testid={`snapshot-badge-icon-${type}`}
-                className={cn("h-3 w-3 flex-shrink-0", styles.icon, className)}
-            />
-        );
-    }
-
     // Pill 模式：渲染图标+文字胶囊
     const pillContent = React.useMemo(() => {
         if (type === "snapshot" && timestamp) {
@@ -107,6 +97,16 @@ export function SnapshotBadge({
         }
         return null;
     }, [type, timestamp, commitHash, relativeTime, i18n.language]);
+
+    // 图标模式：仅渲染图标
+    if (mode === "icon") {
+        return (
+            <Icon
+                data-testid={`snapshot-badge-icon-${type}`}
+                className={cn("h-3 w-3 flex-shrink-0", styles.icon, className)}
+            />
+        );
+    }
 
     if (!pillContent) return null;
 

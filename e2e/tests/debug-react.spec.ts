@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 
 test("Debug: Check React state and handlers", async ({ page }) => {
   // Intercept console logs
@@ -15,7 +15,7 @@ test("Debug: Check React state and handlers", async ({ page }) => {
   // Add debugging to window
   await page.evaluate(() => {
     // Get React fiber from DOM
-    const getReactFiber = (element: Element): any => {
+    const _getReactFiber = (element: Element): any => {
       const key = Object.keys(element).find(k =>
         k.startsWith("__reactFiber$") ||
         k.startsWith("__reactInternalInstance$") ||

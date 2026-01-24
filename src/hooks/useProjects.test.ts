@@ -78,7 +78,7 @@ describe("useProjects", () => {
       renderHook(() => useProjects());
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith("list_projects");
+        expect(mockInvoke).toHaveBeenCalledWith("list_projects", undefined);
       });
     });
 
