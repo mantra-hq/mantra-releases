@@ -203,6 +203,40 @@ export default function Player() {
     return logicalProjects.find(lp => lp.project_ids.includes(currentProject.id)) ?? null;
   }, [currentProject?.id, logicalProjects]);
 
+  // Bug Fix: Story 1.12 遗留 - 使用逻辑项目的会话列表而非存储层项目
+  // 关联项目后，TopBar 应显示聚合后的逻辑项目会话（可能来自多个存储层项目）
+  const [logicalProjectSessions, setLogicalProjectSessions] = React.useState<
+    Array<{ id: string; name: string; messageCount: number; lastActiveAt: number; is_empty?: boolean }>
+  >([]);
+
+  // Bug Fix: 当逻辑项目变化时，获取逻辑项目的会话列表
+  React.useEffect(() => {
+    if (!currentLogicalProject?.physical_path) {
+      setLogicalProjectSessions([]);
+      return;
+    }
+
+    // 获取逻辑项目的会话列表
+    fetchLogicalProjectSessions(currentLogicalProject.physical_path)
+      .then((sessions) => {
+        // 转换为 TopBar 需要的格式
+        const formatted = sessions.map((s) => ({
+          id: s.id,
+          name: s.title || `Session ${s.id.slice(0, 8)}`,
+          messageCount: s.message_count ?? 0,
+          lastActiveAt: new Date(s.updated_at ?? s.created_at).getTime(),
+          is_empty: s.is_empty,
+        }));
+        // 按最后活动时间降序排列
+        formatted.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+        setLogicalProjectSessions(formatted);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch logical project sessions:", error);
+        setLogicalProjectSessions([]);
+      });
+  }, [currentLogicalProject?.physical_path, fetchLogicalProjectSessions, clearSessionCacheSignal]);
+
   // Story 2.29 V2: 隐藏空会话设置（与 ProjectDrawer 同步）
   const [hideEmptySessions] = useHideEmptyProjects();
 
@@ -918,13 +952,14 @@ export default function Player() {
     <div className="h-screen flex flex-col bg-background">
       {/* Story 2.17: TopBar 面包屑导航 */}
       {/* Bug Fix V6: 使用逻辑项目的 display_name 替代存储层项目名 */}
+      {/* Bug Fix: Story 1.12 遗留 - 使用逻辑项目会话列表显示聚合后的会话 */}
       <TopBar
         sessionId={sessionId}
-        sessionName={projectSessions.find(s => s.id === sessionId)?.name ?? `Session ${sessionId.slice(0, 8)}`}
+        sessionName={logicalProjectSessions.find(s => s.id === sessionId)?.name ?? projectSessions.find(s => s.id === sessionId)?.name ?? `Session ${sessionId.slice(0, 8)}`}
         messageCount={messages.length}
         projectId={currentProject?.id ?? ""}
         projectName={currentLogicalProject?.display_name ?? currentProject?.name ?? sessionCwd?.split("/").pop() ?? "项目"}
-        sessions={projectSessions}
+        sessions={logicalProjectSessions.length > 0 ? logicalProjectSessions : projectSessions}
         onDrawerOpen={handleDrawerOpen}
         onSessionSelect={handleSessionSelect}
         onSync={handleSync}

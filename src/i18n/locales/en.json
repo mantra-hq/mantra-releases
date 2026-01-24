@@ -159,7 +159,9 @@
     "removeConfirm": "Are you sure you want to remove \"{{name}}\"?",
     "removeDescription": "This will only remove the imported session logs from Mantra, and will not affect your original code project.",
     "removeProject": "Remove Project",
-    "hideEmptyProjects": "Hide empty sessions"
+    "hideEmptyProjects": "Hide empty sessions",
+    "renamed": "Renamed to \"{{name}}\"",
+    "renameFailed": "Rename Failed"
   },
   "projectInfo": {
     "description": "Project Details",

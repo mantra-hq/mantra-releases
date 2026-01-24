@@ -160,6 +160,8 @@
     "removeDescription": "这只会从 Mantra 中移除导入的会话记录，不会影响你的原始代码项目。",
     "removeProject": "移除项目",
     "hideEmptyProjects": "隐藏空会话",
+    "renamed": "已重命名为「{{name}}」",
+    "renameFailed": "重命名失败",
     "multiSource": "{{count}} 个来源",
     "needsRealPath": "需关联真实目录"
   },
