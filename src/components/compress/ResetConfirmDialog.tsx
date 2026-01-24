@@ -5,7 +5,6 @@
  * AC4: 重置前显示确认对话框
  */
 
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertDialog,

@@ -6,9 +6,9 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import * as React from "react";
-import { CompressPreviewList, PreviewMode } from "./CompressPreviewList";
+import { CompressPreviewList } from "./CompressPreviewList";
 import { CompressStateProvider } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 

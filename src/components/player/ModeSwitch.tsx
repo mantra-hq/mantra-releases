@@ -7,7 +7,6 @@
  * - 压缩模式: 优化会话上下文，对抗自动截断
  */
 
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Play, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";

@@ -5,10 +5,10 @@
  * 测试 Token 统计栏组件
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TokenStatistics } from "./TokenStatistics";
-import { CompressStateProvider, useCompressState } from "@/hooks/useCompressState";
+import { CompressStateProvider, useCompressState, type CompressStateContextValue } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 import * as React from "react";
 
@@ -82,7 +82,7 @@ function createMessage(id: string, content: string): NarrativeMessage {
 function TestHelper({
   onSetup,
 }: {
-  onSetup: (context: ReturnType<typeof useCompressState>) => void;
+  onSetup: (context: CompressStateContextValue) => void;
 }) {
   const context = useCompressState();
   React.useEffect(() => {
@@ -171,7 +171,7 @@ describe("TokenStatistics", () => {
 
   describe("删除操作影响 (AC #3)", () => {
     it("删除消息后压缩 Token 应减少", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <CompressStateProvider>

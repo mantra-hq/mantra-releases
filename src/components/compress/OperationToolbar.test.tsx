@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import * as React from "react";
 import { OperationToolbar } from "./OperationToolbar";
-import { CompressStateProvider, useCompressState } from "@/hooks/useCompressState";
+import { CompressStateProvider, useCompressState, type CompressStateContextValue } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
 
 // Mock i18next
@@ -34,23 +34,13 @@ vi.mock("react-i18next", () => ({
 function TestHelper({
   onSetup,
 }: {
-  onSetup: (context: ReturnType<typeof useCompressState>) => void;
+  onSetup: (context: CompressStateContextValue) => void;
 }) {
   const context = useCompressState();
   React.useEffect(() => {
     onSetup(context);
   }, [context, onSetup]);
   return null;
-}
-
-// 创建测试消息
-function createTestMessage(id: string, content: string): NarrativeMessage {
-  return {
-    id,
-    role: "user",
-    timestamp: new Date().toISOString(),
-    content: [{ type: "text", content }],
-  };
 }
 
 // Wrapper 组件
@@ -97,7 +87,7 @@ describe("OperationToolbar", () => {
     });
 
     it("有操作后撤销按钮应启用", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -118,7 +108,7 @@ describe("OperationToolbar", () => {
 
   describe("点击事件", () => {
     it("点击重置按钮应打开确认对话框", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -141,7 +131,7 @@ describe("OperationToolbar", () => {
     });
 
     it("确认重置后对话框应关闭", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -166,7 +156,7 @@ describe("OperationToolbar", () => {
     });
 
     it("点击撤销按钮应调用 undo", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -190,7 +180,7 @@ describe("OperationToolbar", () => {
     });
 
     it("点击重做按钮应调用 redo", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -229,7 +219,7 @@ describe("OperationToolbar", () => {
     });
 
     it("Ctrl+Z 应触发撤销", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -253,7 +243,7 @@ describe("OperationToolbar", () => {
     });
 
     it("Ctrl+Shift+Z 应触发重做", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>
@@ -281,7 +271,7 @@ describe("OperationToolbar", () => {
     });
 
     it("在输入框中按 Ctrl+Z 不应触发撤销", () => {
-      let setupContext: ReturnType<typeof useCompressState> | null = null;
+      let setupContext: CompressStateContextValue | null = null;
 
       render(
         <TestWrapper>

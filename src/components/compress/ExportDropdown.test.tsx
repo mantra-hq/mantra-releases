@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ExportDropdown } from "./ExportDropdown";
 import type { PreviewMessage } from "@/hooks/useCompressState";
@@ -89,7 +89,7 @@ beforeAll(() => {
 // Mock DropdownMenu to simplify testing (avoid Radix Portal issues)
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) => (
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
     <div data-testid="dropdown-trigger-wrapper">{children}</div>
   ),
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (

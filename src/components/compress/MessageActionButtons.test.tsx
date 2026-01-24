@@ -5,7 +5,7 @@
  * 测试消息操作按钮组件
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MessageActionButtons } from "./MessageActionButtons";
 

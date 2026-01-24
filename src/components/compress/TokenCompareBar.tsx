@@ -5,7 +5,6 @@
  * 双行进度条可视化对比原始和压缩后的 Token 数量
  */
 
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
