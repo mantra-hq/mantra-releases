@@ -320,7 +320,8 @@ check: ## 运行完整质量检查 (Lint + Type Check + Test)
 	@echo "2. 类型检查 (TypeScript)"
 	pnpm exec tsc --noEmit
 	@echo "3. 单元测试 (Vitest)"
-	pnpm test:run
+	NODE_OPTIONS="--max-old-space-size=8192" pnpm exec vitest run --shard 1/2
+	NODE_OPTIONS="--max-old-space-size=8192" pnpm exec vitest run --shard 2/2
 	@echo "$(GREEN)所有检查通过!$(RESET)"
 
 .PHONY: test

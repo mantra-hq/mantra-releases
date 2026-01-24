@@ -10,6 +10,7 @@ import { Shield, AlertTriangle, Info, Loader2 } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogFooter,
@@ -212,6 +213,9 @@ export function PrivacyScanReport({
                         <Shield className="h-5 w-5 text-primary" />
                         {t('privacy.scan.title')}
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                        {t('privacy.scan.detected')}
+                    </DialogDescription>
                 </DialogHeader>
 
                 {/* 加载状态 */}

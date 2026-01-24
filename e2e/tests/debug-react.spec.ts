@@ -15,13 +15,13 @@ test("Debug: Check React state and handlers", async ({ page }) => {
   // Add debugging to window
   await page.evaluate(() => {
     // Get React fiber from DOM
-    const _getReactFiber = (element: Element): any => {
+    const _getReactFiber = (element: Element): unknown => {
       const key = Object.keys(element).find(k =>
         k.startsWith("__reactFiber$") ||
         k.startsWith("__reactInternalInstance$") ||
         k.startsWith("__reactProps$")
       );
-      return key ? (element as any)[key] : null;
+      return key ? (element as Record<string, unknown>)[key] : null;
     };
 
     const toolCard = document.querySelector('[data-testid="tool-call-card"]');
@@ -31,8 +31,10 @@ test("Debug: Check React state and handlers", async ({ page }) => {
       // Check props
       const propsKey = Object.keys(toolCard).find(k => k.startsWith("__reactProps$"));
       if (propsKey) {
-        const props = (toolCard as any)[propsKey];
-        console.log("[Debug] onClick is function:", typeof props?.onClick === 'function');
+        const props = (toolCard as Record<string, unknown>)[propsKey] as {
+          onClick?: unknown;
+        };
+        console.log("[Debug] onClick is function:", typeof props?.onClick === "function");
         console.log("[Debug] onClick type:", typeof props?.onClick);
       }
     } else {

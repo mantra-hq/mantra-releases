@@ -82,19 +82,23 @@ describe('PrivacyRecords Page', () => {
             </MemoryRouter>
         );
 
-        expect(screen.getByText('Privacy Records')).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByText('Privacy Records')).toBeInTheDocument();
+        });
     });
 
-    it('should render back button', () => {
+    it('should render back button', async () => {
         render(
             <MemoryRouter>
                 <PrivacyRecords />
             </MemoryRouter>
         );
 
-        const backButton = screen.getByTestId('back-button');
-        expect(backButton).toBeInTheDocument();
-        expect(backButton).toHaveAttribute('aria-label', 'Back');
+        await waitFor(() => {
+            const backButton = screen.getByTestId('back-button');
+            expect(backButton).toBeInTheDocument();
+            expect(backButton).toHaveAttribute('aria-label', 'Back');
+        });
     });
 
     it('should render InterceptionStats component', async () => {

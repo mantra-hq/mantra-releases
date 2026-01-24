@@ -6,6 +6,8 @@
  * 根据 standardTool 类型选择对应的渲染器
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import * as React from "react";
 import { TerminalRenderer } from "./TerminalRenderer";
 import { FileRenderer } from "./FileRenderer";

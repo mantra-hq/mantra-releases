@@ -10,24 +10,28 @@ import { PrivacySettingsPanel } from './PrivacySettingsPanel';
 import type { SanitizationRule } from '@/components/sanitizer/types';
 
 // Mock i18n
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({
-        t: (key: string, params?: Record<string, unknown>) => {
-            const translations: Record<string, string> = {
-                'privacy.rules.title': 'Privacy Detection Rules',
-                'privacy.rules.add': 'Add Rule',
-                'privacy.rules.empty': 'No rules',
-                'privacy.rules.customGroup': 'Custom Rules',
-                'privacy.rules.deleteConfirmTitle': 'Confirm Delete Rule',
-                'privacy.rules.deleteConfirmDesc': `Are you sure you want to delete rule "${params?.name ?? ''}"?`,
-                'common.cancel': 'Cancel',
-                'common.delete': 'Delete',
-                'common.saving': 'Saving...',
-            };
-            return translations[key] || key;
-        },
-    }),
-}));
+vi.mock('react-i18next', () => {
+    const t = (key: string, params?: Record<string, unknown>) => {
+        const translations: Record<string, string> = {
+            'privacy.rules.title': 'Privacy Detection Rules',
+            'privacy.rules.add': 'Add Rule',
+            'privacy.rules.empty': 'No rules',
+            'privacy.rules.customGroup': 'Custom Rules',
+            'privacy.rules.deleteConfirmTitle': 'Confirm Delete Rule',
+            'privacy.rules.deleteConfirmDesc': `Are you sure you want to delete rule "${params?.name ?? ''}"?`,
+            'common.cancel': 'Cancel',
+            'common.delete': 'Delete',
+            'common.saving': 'Saving...',
+        };
+        return translations[key] || key;
+    };
+
+    return {
+        useTranslation: () => ({
+            t,
+        }),
+    };
+});
 
 // Mock IPC functions
 const mockRules: SanitizationRule[] = [
@@ -86,9 +90,11 @@ describe('PrivacySettingsPanel', () => {
             });
         });
 
-        it('加载时应该显示加载状态', () => {
+        it('加载时应该显示加载状态', async () => {
             render(<PrivacySettingsPanel />);
-            expect(screen.getByRole('status')).toBeInTheDocument();
+            await waitFor(() => {
+                expect(screen.getByRole('status')).toBeInTheDocument();
+            });
         });
     });
 
@@ -138,7 +144,9 @@ describe('PrivacySettingsPanel', () => {
             await userEvent.click(deleteButton);
 
             await waitFor(() => {
-                expect(screen.getByText(/My Custom Rule/)).toBeInTheDocument();
+                expect(
+                    screen.getByText('Are you sure you want to delete rule "My Custom Rule"?')
+                ).toBeInTheDocument();
             });
         });
 

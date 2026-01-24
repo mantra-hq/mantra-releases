@@ -5,6 +5,8 @@
  * 提供工具调用和输出的配对信息，支持跳转和高亮
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import * as React from "react";
 import type { NarrativeMessage, ToolResultData } from "@/types/message";
 import { useDetailPanelStore } from "@/stores/useDetailPanelStore";

@@ -149,7 +149,6 @@ export async function uploadSession(options: UploadSessionOptions): Promise<Uplo
  * @param _content 待检查内容 (当前未使用)
  * @returns 是否需要隐私检查
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function needsPrivacyCheck(_content: string): Promise<boolean> {
     // 当前默认返回 true，确保所有上传内容都经过隐私扫描
     return true;

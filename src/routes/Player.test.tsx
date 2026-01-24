@@ -5,10 +5,23 @@
  * Story 2.12: Task 6.4, 6.5 - 智能文件选择集成测试
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
-import Player from "./Player";
+
+let Player: typeof import("./Player").default;
+const mockRefetchCurrentSession = vi.hoisted(() => vi.fn());
+const mockRefetchProjects = vi.hoisted(() => vi.fn());
+const mockGetProjectSessions = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockGetLogicalProjectSessions = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockSetDrawerOpen = vi.hoisted(() => vi.fn());
+const mockOpenDrawer = vi.hoisted(() => vi.fn());
+const mockCloseDrawer = vi.hoisted(() => vi.fn());
+const mockToggleDrawer = vi.hoisted(() => vi.fn());
+const mockHideGuide = vi.hoisted(() => vi.fn());
+const mockDismissGuide = vi.hoisted(() => vi.fn());
+const mockFetchSnapshot = vi.hoisted(() => vi.fn());
+const mockHideEmptyProjects = vi.hoisted(() => [false]);
 
 // Mock Tauri IPC
 vi.mock("@tauri-apps/api/core", () => ({
@@ -33,6 +46,16 @@ vi.mock("@tauri-apps/api/core", () => ({
 // Mock project-ipc
 vi.mock("@/lib/project-ipc", () => ({
   getProjectByCwd: vi.fn().mockResolvedValue({
+    id: "proj-123",
+    name: "test-project",
+    cwd: "/test/project",
+    session_count: 1,
+    created_at: new Date().toISOString(),
+    last_activity: new Date().toISOString(),
+    git_repo_path: "/test/project",
+    has_git_repo: true,
+  }),
+  getProjectBySession: vi.fn().mockResolvedValue({
     id: "proj-123",
     name: "test-project",
     cwd: "/test/project",
@@ -93,6 +116,11 @@ vi.mock("@/components/sidebar", () => ({
   ),
 }));
 
+// Mock SyncResultToast
+vi.mock("@/components/sidebar/SyncResultToast", () => ({
+  showSyncResult: vi.fn(),
+}));
+
 // Mock PlayerEmptyState
 vi.mock("@/components/player", () => ({
   PlayerEmptyState: ({ onOpenDrawer, onImport }: { onOpenDrawer: () => void; onImport: () => void }) => (
@@ -102,21 +130,82 @@ vi.mock("@/components/player", () => ({
       <button onClick={onImport}>导入项目</button>
     </div>
   ),
+  CompressGuideDialog: () => <div data-testid="compress-guide-dialog">Compress Guide</div>,
+}));
+
+// Mock analytics components
+vi.mock("@/components/analytics", () => ({
+  ProjectStatsView: () => <div data-testid="project-stats-view">Project Stats</div>,
+  SessionStatsView: () => <div data-testid="session-stats-view">Session Stats</div>,
+  StatsLevelTabs: () => <div data-testid="stats-level-tabs">Stats Tabs</div>,
+}));
+
+// Mock compress mode content
+vi.mock("@/components/compress", () => ({
+  CompressModeContent: () => <div data-testid="compress-mode-content">Compress Mode</div>,
+}));
+
+// Mock CompressStateProvider
+vi.mock("@/hooks/useCompressState", () => ({
+  CompressStateProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+
+// Mock app mode store
+vi.mock("@/stores/useAppModeStore", () => {
+  const mockAppModeState = { mode: "playback", setMode: vi.fn() };
+  return {
+    useAppModeStore: (selector: (storeState: typeof mockAppModeState) => unknown) =>
+      selector(mockAppModeState),
+  };
+});
+
+// Mock useHideEmptyProjects
+vi.mock("@/hooks/useHideEmptyProjects", () => ({
+  useHideEmptyProjects: () => mockHideEmptyProjects,
+}));
+
+// Mock useCompressMode
+vi.mock("@/hooks/useCompressMode", () => ({
+  useCompressMode: () => ({
+    isFirstTimeCompress: false,
+    hideGuide: mockHideGuide,
+    dismissGuide: mockDismissGuide,
+  }),
+}));
+
+// Mock useCurrentSession
+vi.mock("@/hooks", () => ({
+  useCurrentSession: () => ({
+    session: null,
+    project: null,
+    sessions: [],
+    refetch: mockRefetchCurrentSession,
+  }),
+  useCompressMode: () => ({
+    isFirstTimeCompress: false,
+    hideGuide: mockHideGuide,
+    dismissGuide: mockDismissGuide,
+  }),
 }));
 
 // Mock useProjectDrawer hook
 vi.mock("@/hooks/useProjectDrawer", () => ({
   useProjectDrawer: () => ({
     isOpen: false,
-    setIsOpen: vi.fn(),
-    openDrawer: vi.fn(),
-    closeDrawer: vi.fn(),
-    toggleDrawer: vi.fn(),
+    setIsOpen: mockSetDrawerOpen,
+    openDrawer: mockOpenDrawer,
+    closeDrawer: mockCloseDrawer,
+    toggleDrawer: mockToggleDrawer,
+    // Story 1.12: logicalProjects replaces projects
+    logicalProjects: [],
     projects: [],
     isLoading: false,
     error: null,
-    refetchProjects: vi.fn(),
-    getProjectSessions: vi.fn().mockResolvedValue([]),
+    refetchProjects: mockRefetchProjects,
+    getProjectSessions: mockGetProjectSessions,
+    getLogicalProjectSessions: mockGetLogicalProjectSessions,
   }),
 }));
 
@@ -133,7 +222,7 @@ vi.mock("@/hooks/useProjects", () => ({
 // Mock useTimeMachine hook
 vi.mock("@/hooks/useTimeMachine", () => ({
   useTimeMachine: () => ({
-    fetchSnapshot: vi.fn(),
+    fetchSnapshot: mockFetchSnapshot,
     isLoading: false,
     error: null,
   }),
@@ -161,6 +250,11 @@ function renderWithRouter(
 }
 
 describe("Player Page", () => {
+  beforeAll(async () => {
+    const module = await import("./Player");
+    Player = module.default;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -183,10 +277,13 @@ describe("Player Page", () => {
       });
     });
 
-    it("应该在加载时显示加载状态（有 sessionId 时）", () => {
+    it("应该在加载时显示加载状态（有 sessionId 时）", async () => {
       renderWithRouter(<Player />);
       // 初始渲染时应该显示加载中状态
       expect(screen.getByText("加载会话中...")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("Mantra")).toBeInTheDocument();
+      });
     });
   });
 
@@ -222,10 +319,13 @@ describe("Player Page", () => {
   });
 
   describe("样式", () => {
-    it("应该有全屏高度布局", () => {
+    it("应该有全屏高度布局", async () => {
       const { container } = renderWithRouter(<Player />);
       const mainDiv = container.firstChild as HTMLElement;
       expect(mainDiv).toHaveClass("h-screen");
+      await waitFor(() => {
+        expect(screen.getByText("Mantra")).toBeInTheDocument();
+      });
     });
   });
 });

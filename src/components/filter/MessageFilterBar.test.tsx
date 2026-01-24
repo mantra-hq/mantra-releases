@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MessageFilterBar } from "./MessageFilterBar";
 import { useMessageFilterStore } from "@/stores/useMessageFilterStore";
 import { act } from "@testing-library/react";
@@ -125,13 +125,21 @@ describe("MessageFilterBar", () => {
             const input = screen.getByLabelText("搜索消息");
 
             // Focus input first
-            input.focus();
-            expect(document.activeElement).toBe(input);
+            act(() => {
+                input.focus();
+            });
+            await waitFor(() => {
+                expect(document.activeElement).toBe(input);
+            });
 
             // Simulate Escape
-            fireEvent.keyDown(document, { key: "Escape" });
+            act(() => {
+                fireEvent.keyDown(document, { key: "Escape" });
+            });
 
-            expect(useMessageFilterStore.getState().searchQuery).toBe("");
+            await waitFor(() => {
+                expect(useMessageFilterStore.getState().searchQuery).toBe("");
+            });
         });
     });
 });

@@ -8,7 +8,7 @@
  * - Toast 显示
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ExportDropdown } from "./ExportDropdown";
@@ -138,6 +138,8 @@ function createTokenStats(): TokenStats {
 }
 
 describe("ExportDropdown", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
   const defaultProps = {
     previewMessages: [
       createPreviewMessage("1", "user", "Hello"),
@@ -154,6 +156,10 @@ describe("ExportDropdown", () => {
     mockGetExportContent.mockReturnValue("## User\n\nHello");
     mockFormatExportFilename.mockReturnValue("test-session-compressed-2026-01-21.jsonl");
     mockClipboardWriteText.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockClear();
   });
 
   describe("基础渲染 (AC #1, #2)", () => {

@@ -16,12 +16,15 @@ import { invoke } from "@tauri-apps/api/core";
 const mockInvoke = invoke as ReturnType<typeof vi.fn>;
 
 describe("search-ipc", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     beforeEach(() => {
         mockInvoke.mockClear();
     });
 
     afterEach(() => {
         vi.clearAllMocks();
+        consoleErrorSpy.mockClear();
     });
 
     describe("searchSessions", () => {

@@ -47,6 +47,9 @@ vi.mock("@/stores/useTimeTravelStore", () => ({
 import { invoke } from "@tauri-apps/api/core";
 
 describe("useTimeMachine", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
     beforeEach(() => {
         vi.clearAllMocks();
         // 重置模块以清除缓存
@@ -55,6 +58,8 @@ describe("useTimeMachine", () => {
 
     afterEach(() => {
         vi.clearAllMocks();
+        consoleErrorSpy.mockClear();
+        consoleWarnSpy.mockClear();
     });
 
     // 每个测试使用不同的文件路径来避免缓存冲突

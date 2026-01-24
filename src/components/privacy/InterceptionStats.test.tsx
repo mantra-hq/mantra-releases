@@ -3,7 +3,7 @@
  * Story 3-8: Task 2.5 - 单元测试
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { InterceptionStats } from './InterceptionStats';
 import * as sanitizerIpc from '@/lib/ipc/sanitizer-ipc';
@@ -30,8 +30,14 @@ vi.mock('@/lib/ipc/sanitizer-ipc', () => ({
 }));
 
 describe('InterceptionStats', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        consoleErrorSpy.mockClear();
     });
 
     it('should render loading state initially', async () => {

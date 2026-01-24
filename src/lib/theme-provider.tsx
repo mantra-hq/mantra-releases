@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import {
   createContext,
   useContext,
@@ -135,4 +137,3 @@ export function useTheme(): ThemeProviderContextValue {
 }
 
 export type { Theme, ThemeProviderProps, ThemeProviderContextValue };
-

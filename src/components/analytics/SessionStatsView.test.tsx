@@ -3,7 +3,7 @@
  * Story 2.34: Code Review - M1 修复
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { SessionStatsView } from "./SessionStatsView";
 import type { SessionStatsView as SessionStatsViewType } from "@/types/analytics";
@@ -47,7 +47,7 @@ vi.mock("recharts", () => ({
 
 // Mock date-fns
 vi.mock("date-fns", () => ({
-  format: (date: Date, formatStr: string) => {
+  format: (date: Date, _formatStr: string) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   },
 }));
@@ -79,8 +79,14 @@ const mockStatsView: SessionStatsViewType = {
 };
 
 describe("SessionStatsView", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockClear();
   });
 
   describe("loading state", () => {

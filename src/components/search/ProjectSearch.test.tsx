@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProjectSearch } from "./ProjectSearch";
 
@@ -51,7 +51,9 @@ describe("ProjectSearch", () => {
       await user.type(input, "test");
 
       // 等待防抖
-      await vi.advanceTimersByTimeAsync(300);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
       await waitFor(() => {
         expect(mockOnSearch).toHaveBeenCalledWith("test");
       });
@@ -73,7 +75,9 @@ describe("ProjectSearch", () => {
       expect(mockOnSearch).not.toHaveBeenCalled();
 
       // 等待防抖完成
-      await vi.advanceTimersByTimeAsync(300);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
       await waitFor(() => {
         // 应该只调用一次，传入最终值
         expect(mockOnSearch).toHaveBeenCalledTimes(1);
@@ -90,11 +94,15 @@ describe("ProjectSearch", () => {
 
       const input = screen.getByPlaceholderText(/搜索.*项目/i);
       await user.type(input, "test");
-      await vi.advanceTimersByTimeAsync(300);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
 
       // 清空输入
       await user.clear(input);
-      await vi.advanceTimersByTimeAsync(300);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
 
       await waitFor(() => {
         expect(mockOnSearch).toHaveBeenLastCalledWith("");
@@ -113,4 +121,3 @@ describe("ProjectSearch", () => {
     });
   });
 });
-

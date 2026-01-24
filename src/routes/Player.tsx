@@ -584,7 +584,15 @@ export default function Player() {
       setRepoPath(null);
       setHasNoGit(true);
     }
-  }, [currentProject?.id, currentProject?.git_repo_path, currentProject?.has_git_repo, currentLogicalProject?.physical_path, currentLogicalProject?.has_git_repo, setCode]);
+  }, [
+    currentLogicalProject?.has_git_repo,
+    currentLogicalProject?.physical_path,
+    currentProject?.cwd,
+    currentProject?.git_repo_path,
+    currentProject?.has_git_repo,
+    currentProject?.id,
+    setCode,
+  ]);
 
   // 消息选中回调 (Story 2.7 AC #1, #6, FR-GIT-002, Story 2.12)
   // 统一标签管理：会话点击时打开历史版本标签
@@ -1107,4 +1115,3 @@ export default function Player() {
     </div>
   );
 }
-

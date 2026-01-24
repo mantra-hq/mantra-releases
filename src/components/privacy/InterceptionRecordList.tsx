@@ -5,7 +5,7 @@
  * 列表容器，支持分页、批量选择和删除
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2, FileX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,7 @@ export function InterceptionRecordList({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const records = data?.records ?? [];
+    const records = useMemo(() => data?.records ?? [], [data]);
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 0;
     const currentPage = data?.page ?? 1;
     const perPage = data?.per_page ?? 20;

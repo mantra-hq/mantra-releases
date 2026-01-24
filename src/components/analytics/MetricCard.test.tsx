@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Clock, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { MetricCard } from "./MetricCard";
 
 describe("MetricCard", () => {

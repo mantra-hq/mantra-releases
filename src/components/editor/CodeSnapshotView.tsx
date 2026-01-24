@@ -9,6 +9,8 @@
  * 文件不存在时显示 FileNotFoundBanner
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Editor, { DiffEditor, type OnMount, type DiffOnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
@@ -30,6 +32,36 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { CodeBlockWithCopy } from "@/components/common/CodeBlockWithCopy";
+
+type MonacoLanguage = {
+  id: string;
+  extensions?: string[];
+};
+
+type MonacoIRange = {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+};
+
+type MonacoRangeConstructor = new (
+  startLineNumber: number,
+  startColumn: number,
+  endLineNumber: number,
+  endColumn: number
+) => MonacoIRange;
+
+type MonacoGlobal = {
+  languages?: {
+    getLanguages?: () => MonacoLanguage[];
+  };
+  Range?: MonacoRangeConstructor;
+};
+
+type MonacoWindow = Window & {
+  monaco?: MonacoGlobal;
+};
 
 // 后备语言映射表 (Monaco 未加载时使用)
 const FALLBACK_LANGUAGE_MAP: Record<string, string> = {
@@ -76,7 +108,7 @@ let languageExtensionCache: Map<string, string> | null = null;
 function initLanguageCache(): Map<string, string> | null {
   if (languageExtensionCache) return languageExtensionCache;
 
-  const monaco = (window as any).monaco;
+  const monaco = (window as MonacoWindow).monaco;
   if (!monaco?.languages?.getLanguages) return null;
 
   languageExtensionCache = new Map();
@@ -448,7 +480,9 @@ export function CodeSnapshotView({
 
       // 计算 Diff 装饰器 (Story 2.7 AC #5)
       // 检查 monaco 是否已加载，避免 "Cannot read properties of undefined (reading 'Range')" 错误
-      if (editorRef.current && previousCode && (window as any).monaco) {
+      const monaco = (window as MonacoWindow).monaco;
+      const Range = monaco?.Range;
+      if (editorRef.current && previousCode && Range) {
         const diffDecorations = computeDiffDecorations(previousCode, code);
 
         if (diffDecorations.length > 0) {
@@ -458,7 +492,7 @@ export function CodeSnapshotView({
           decorationsRef.current = editorRef.current.deltaDecorations(
             decorationsRef.current,
             monacoDecorations.map((d) => ({
-              range: new (window as any).monaco.Range(
+              range: new Range(
                 d.range.startLineNumber,
                 d.range.startColumn,
                 d.range.endLineNumber,

@@ -8,7 +8,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { OriginalMessageCard } from "./OriginalMessageCard";
-import type { NarrativeMessage } from "@/types/message";
+import type { ContentBlock, NarrativeMessage } from "@/types/message";
 
 // Mock i18n
 vi.mock("react-i18next", () => ({
@@ -43,7 +43,17 @@ vi.mock("@/lib/token-counter", () => ({
 
 // Mock MessageActionButtons for simpler testing
 vi.mock("./MessageActionButtons", () => ({
-  MessageActionButtons: ({ messageId, onKeepClick, onDeleteClick, onEditClick }: any) => (
+  MessageActionButtons: ({
+    messageId,
+    onKeepClick,
+    onDeleteClick,
+    onEditClick,
+  }: {
+    messageId: string;
+    onKeepClick: () => void;
+    onDeleteClick: () => void;
+    onEditClick: () => void;
+  }) => (
     <div data-testid="mock-action-buttons" data-message-id={messageId}>
       <button data-testid="mock-keep" onClick={onKeepClick}>Keep</button>
       <button data-testid="mock-delete" onClick={onDeleteClick}>Delete</button>
@@ -58,7 +68,7 @@ describe("OriginalMessageCard", () => {
     content: string,
     contentType: "text" | "tool_use" | "tool_result" | "thinking" | "code_diff" = "text"
   ): NarrativeMessage => {
-    const contentBlocks: any[] = [];
+    const contentBlocks: ContentBlock[] = [];
     
     switch (contentType) {
       case "tool_use":

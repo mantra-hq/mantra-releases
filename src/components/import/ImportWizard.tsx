@@ -445,7 +445,17 @@ export function ImportWizard({
       setLoading(false);
       setIsCancelling(false);
     }
-  }, [selectedFiles, setStep, setLoading, setProgress, addResult, addError, updateImportedProjectsIsEmpty]);
+  }, [
+    addError,
+    addImportedProject,
+    addResult,
+    selectedFiles,
+    setLoading,
+    setProgress,
+    setStep,
+    source,
+    updateImportedProjectsIsEmpty,
+  ]);
 
   /**
    * 处理下一步
@@ -602,6 +612,7 @@ export function ImportWizard({
         data-testid="import-wizard"
         className="sm:max-w-[600px] max-h-[80vh] flex flex-col"
         aria-labelledby="import-wizard-title"
+        aria-label={t("import.title")}
       >
         {/* Header */}
         <DialogHeader>

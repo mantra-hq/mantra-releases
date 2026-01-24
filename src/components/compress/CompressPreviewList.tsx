@@ -6,6 +6,8 @@
  * 使用 @tanstack/react-virtual 实现虚拟化渲染
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";

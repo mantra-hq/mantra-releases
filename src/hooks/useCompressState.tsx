@@ -7,6 +7,8 @@
  * 使用 React Context 实现左右面板状态共享
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import * as React from "react";
 import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";

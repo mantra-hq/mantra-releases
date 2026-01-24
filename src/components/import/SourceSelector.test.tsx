@@ -7,7 +7,7 @@
 
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import { SourceSelector } from "./SourceSelector";
+import { SourceSelector, type ImportSource } from "./SourceSelector";
 
 // Mock Tauri IPC
 vi.mock("@/lib/import-ipc", () => ({
@@ -19,11 +19,21 @@ vi.mock("@/lib/import-ipc", () => ({
   }),
 }));
 
+const renderSourceSelector = async (
+  value: ImportSource | null,
+  onChange: (value: ImportSource) => void
+) => {
+  render(<SourceSelector value={value} onChange={onChange} />);
+  await waitFor(() => {
+    expect(screen.getByText("~/.claude")).toBeInTheDocument();
+  });
+};
+
 describe("SourceSelector", () => {
   // Task 2.2: 显示三种来源卡片
   describe("Source Cards", () => {
-    it("displays all three source options", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
+    it("displays all three source options", async () => {
+      await renderSourceSelector(null, vi.fn());
 
       expect(screen.getByText("Claude Code")).toBeInTheDocument();
       expect(screen.getByText("Gemini CLI")).toBeInTheDocument();
@@ -32,18 +42,13 @@ describe("SourceSelector", () => {
 
     // Task 2.3: 每个卡片显示图标、名称、默认路径说明
     it("displays default paths for each source", async () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
-
-      // 等待异步路径加载完成
-      await waitFor(() => {
-        expect(screen.getByText("~/.claude")).toBeInTheDocument();
-      });
+      await renderSourceSelector(null, vi.fn());
       expect(screen.getByText("~/.gemini")).toBeInTheDocument();
       expect(screen.getByText("~/.config/Cursor")).toBeInTheDocument();
     });
 
-    it("renders source icons", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
+    it("renders source icons", async () => {
+      await renderSourceSelector(null, vi.fn());
 
       // 检查每个来源卡片都有图标区域
       const claudeCard = screen.getByTestId("source-card-claude");
@@ -58,16 +63,16 @@ describe("SourceSelector", () => {
 
   // Task 2.4: 选中状态高亮
   describe("Selection State", () => {
-    it("highlights selected source card", () => {
-      render(<SourceSelector value="claude" onChange={vi.fn()} />);
+    it("highlights selected source card", async () => {
+      await renderSourceSelector("claude", vi.fn());
 
       const claudeCard = screen.getByTestId("source-card-claude");
       expect(claudeCard).toHaveAttribute("data-selected", "true");
     });
 
-    it("calls onChange when source is selected", () => {
+    it("calls onChange when source is selected", async () => {
       const onChange = vi.fn();
-      render(<SourceSelector value={null} onChange={onChange} />);
+      await renderSourceSelector(null, onChange);
 
       const claudeCard = screen.getByTestId("source-card-claude");
       fireEvent.click(claudeCard);
@@ -75,8 +80,8 @@ describe("SourceSelector", () => {
       expect(onChange).toHaveBeenCalledWith("claude");
     });
 
-    it("does not highlight unselected sources", () => {
-      render(<SourceSelector value="claude" onChange={vi.fn()} />);
+    it("does not highlight unselected sources", async () => {
+      await renderSourceSelector("claude", vi.fn());
 
       const geminiCard = screen.getByTestId("source-card-gemini");
       const cursorCard = screen.getByTestId("source-card-cursor");
@@ -88,8 +93,8 @@ describe("SourceSelector", () => {
 
   // Task 2.5: 启用状态测试
   describe("Enabled Sources", () => {
-    it("all sources are enabled", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
+    it("all sources are enabled", async () => {
+      await renderSourceSelector(null, vi.fn());
 
       const claudeCard = screen.getByTestId("source-card-claude");
       const geminiCard = screen.getByTestId("source-card-gemini");
@@ -100,9 +105,9 @@ describe("SourceSelector", () => {
       expect(cursorCard).toHaveAttribute("data-disabled", "false");
     });
 
-    it("calls onChange when clicking Gemini source", () => {
+    it("calls onChange when clicking Gemini source", async () => {
       const onChange = vi.fn();
-      render(<SourceSelector value={null} onChange={onChange} />);
+      await renderSourceSelector(null, onChange);
 
       const geminiCard = screen.getByTestId("source-card-gemini");
       fireEvent.click(geminiCard);
@@ -110,9 +115,9 @@ describe("SourceSelector", () => {
       expect(onChange).toHaveBeenCalledWith("gemini");
     });
 
-    it("calls onChange when clicking Cursor source", () => {
+    it("calls onChange when clicking Cursor source", async () => {
       const onChange = vi.fn();
-      render(<SourceSelector value={null} onChange={onChange} />);
+      await renderSourceSelector(null, onChange);
 
       const cursorCard = screen.getByTestId("source-card-cursor");
       fireEvent.click(cursorCard);
@@ -123,22 +128,19 @@ describe("SourceSelector", () => {
 
   // 无障碍测试
   describe("Accessibility", () => {
-    it("has role radiogroup", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
-
+    it("has role radiogroup", async () => {
+      await renderSourceSelector(null, vi.fn());
       expect(screen.getByRole("radiogroup")).toBeInTheDocument();
     });
 
-    it("has proper aria-label", () => {
-      render(<SourceSelector value={null} onChange={vi.fn()} />);
-
+    it("has proper aria-label", async () => {
+      await renderSourceSelector(null, vi.fn());
       const radiogroup = screen.getByRole("radiogroup");
       expect(radiogroup).toHaveAttribute("aria-label", "选择导入来源");
     });
 
-    it("marks selected source with aria-checked", () => {
-      render(<SourceSelector value="claude" onChange={vi.fn()} />);
-
+    it("marks selected source with aria-checked", async () => {
+      await renderSourceSelector("claude", vi.fn());
       const claudeCard = screen.getByTestId("source-card-claude");
       expect(claudeCard).toHaveAttribute("aria-checked", "true");
     });

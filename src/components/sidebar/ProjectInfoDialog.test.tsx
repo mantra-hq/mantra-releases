@@ -28,6 +28,44 @@ vi.mock("sonner", () => ({
     },
 }));
 
+// Mock useProjects hook - Story 1.12 paths management
+vi.mock("@/hooks/useProjects", () => ({
+    useProjectPaths: vi.fn(() => ({
+        paths: [],
+        isLoading: false,
+        refetch: vi.fn(),
+    })),
+    addProjectPath: vi.fn(() => Promise.resolve()),
+    removeProjectPath: vi.fn(() => Promise.resolve()),
+    getProjectPaths: vi.fn(() => Promise.resolve([])),
+    getProjectsByPhysicalPath: vi.fn(() => Promise.resolve([])),
+}));
+
+// Mock react-i18next
+vi.mock("react-i18next", () => ({
+    useTranslation: () => ({
+        t: (key: string, fallback?: string) => {
+            const translations: Record<string, string> = {
+                "projectInfo.paths": "项目路径",
+                "projectInfo.invalidCwdWarning": "无法识别的路径格式，请手动设置正确的工作目录",
+                "projectInfo.changePath": "更换路径",
+                "projectInfo.associatePath": "关联真实路径",
+                "projectInfo.aggregatedSources": "聚合来源",
+                "projectInfo.sessions": "会话",
+                "projectInfo.createdAt": "创建时间",
+                "projectInfo.lastActivity": "最后活动",
+                "projectInfo.gitRemoteUrl": "Git 仓库 URL",
+                "projectInfo.gitPath": "Git 仓库根目录",
+                "projectInfo.invalidCwdTitle": "无法识别的路径",
+                "projectInfo.description": "项目详细信息",
+                "common.loading": "加载中",
+            };
+            return translations[key] || fallback || key;
+        },
+        i18n: { language: "zh-CN" },
+    }),
+}));
+
 // Radix UI PointerEvent polyfill
 beforeAll(() => {
     class MockPointerEvent extends MouseEvent {
@@ -186,18 +224,18 @@ describe("ProjectInfoDialog", () => {
         });
     });
 
-    describe("Set CWD button (Task 8.4, 8.5)", () => {
-        it("shows set cwd button", async () => {
+    describe("Change path button (Task 8.4, 8.5, Story 1.12)", () => {
+        it("shows change path button", async () => {
             const project = createMockProject();
             render(<ProjectInfoDialog {...defaultProps} project={project} />);
 
             await waitFor(() => {
-                // Button should be present (look for the FolderEdit icon button)
+                // Button should be present (look for the FolderEdit icon button with title="更换路径")
                 const buttons = screen.getAllByRole("button");
-                const setCwdButton = buttons.find(
-                    (btn) => btn.getAttribute("title") === "设置工作目录"
+                const changePathButton = buttons.find(
+                    (btn) => btn.getAttribute("title") === "更换路径"
                 );
-                expect(setCwdButton).toBeTruthy();
+                expect(changePathButton).toBeTruthy();
             });
         });
 
@@ -206,28 +244,24 @@ describe("ProjectInfoDialog", () => {
             const mockOpen = open as ReturnType<typeof vi.fn>;
             mockOpen.mockResolvedValue("/new/path");
 
-            const { updateProjectCwd } = await import("@/lib/project-ipc");
-            const mockUpdate = updateProjectCwd as ReturnType<typeof vi.fn>;
-            mockUpdate.mockResolvedValue(createMockProject({ cwd: "/new/path" }));
-
             const project = createMockProject();
             const user = userEvent.setup();
             render(<ProjectInfoDialog {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 const buttons = screen.getAllByRole("button");
-                const setCwdButton = buttons.find(
-                    (btn) => btn.getAttribute("title") === "设置工作目录"
+                const changePathButton = buttons.find(
+                    (btn) => btn.getAttribute("title") === "更换路径"
                 );
-                expect(setCwdButton).toBeTruthy();
+                expect(changePathButton).toBeTruthy();
             });
 
             const buttons = screen.getAllByRole("button");
-            const setCwdButton = buttons.find(
-                (btn) => btn.getAttribute("title") === "设置工作目录"
+            const changePathButton = buttons.find(
+                (btn) => btn.getAttribute("title") === "更换路径"
             )!;
 
-            await user.click(setCwdButton);
+            await user.click(changePathButton);
 
             expect(mockOpen).toHaveBeenCalledWith({
                 directory: true,
@@ -258,12 +292,23 @@ describe("ProjectInfoDialog", () => {
             });
         });
 
-        it("shows session count", async () => {
+        it("shows aggregated sources section with session count", async () => {
+            // Story 1.12 V10: session count is now shown in "聚合来源" section
+            const mockGetSessions = vi.fn().mockResolvedValue([
+                { id: "s1", source: "claude", message_count: 10 },
+            ]);
             const project = createMockProject({ session_count: 10 });
-            render(<ProjectInfoDialog {...defaultProps} project={project} />);
+            render(
+                <ProjectInfoDialog
+                    {...defaultProps}
+                    project={project}
+                    getProjectSessions={mockGetSessions}
+                />
+            );
 
             await waitFor(() => {
-                expect(screen.getByText(/会话数量/)).toBeInTheDocument();
+                // Story 1.12 V10: Session info is shown in "聚合来源" section
+                expect(screen.getByText(/聚合来源/)).toBeInTheDocument();
             });
         });
     });

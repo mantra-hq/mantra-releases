@@ -3,7 +3,7 @@
  * Story 2.34: Code Review - M1 修复
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { ProjectStatsView } from "./ProjectStatsView";
 import type { ProjectAnalytics } from "@/types/analytics";
@@ -65,6 +65,18 @@ vi.mock("recharts", () => ({
   Tooltip: () => null,
 }));
 
+vi.mock("./ActivityTrendChart", () => ({
+  ActivityTrendChart: () => <div data-testid="activity-trend-chart" />,
+}));
+
+vi.mock("./ToolDistributionChart", () => ({
+  ToolDistributionChart: () => <div data-testid="tool-distribution-chart" />,
+}));
+
+vi.mock("./ToolTypesChart", () => ({
+  ToolTypesChart: () => <div data-testid="tool-types-chart" />,
+}));
+
 const mockAnalytics: ProjectAnalytics = {
   project_id: "test-project",
   time_range: "days7",
@@ -85,8 +97,14 @@ const mockAnalytics: ProjectAnalytics = {
 };
 
 describe("ProjectStatsView", () => {
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockClear();
   });
 
   describe("loading state", () => {

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { TokenStatistics } from "./TokenStatistics";
 import { CompressStateProvider, useCompressState, type CompressStateContextValue } from "@/hooks/useCompressState";
 import type { NarrativeMessage } from "@/types/message";
@@ -186,9 +186,11 @@ describe("TokenStatistics", () => {
 
       // 删除第一条消息 (11 tokens)
       if (setupContext.current) {
-        setupContext.current.setOperation("msg-1", {
-          type: "delete",
-          originalMessage: messages[0],
+        act(() => {
+          setupContext.current?.setOperation("msg-1", {
+            type: "delete",
+            originalMessage: messages[0],
+          });
         });
       }
 

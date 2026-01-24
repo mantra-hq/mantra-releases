@@ -50,9 +50,9 @@ describe('SystemRuleList', () => {
 
     it('should render rules grouped by type', async () => {
         const mockRules = [
-            { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
-            { name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token' },
-            { name: 'AWS Access Key', pattern: 'AKIA[0-9A-Z]+', sensitive_type: 'aws_key' },
+            { id: 'openai_key_1', name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key', enabled: true },
+            { id: 'github_token_1', name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token', enabled: true },
+            { id: 'aws_key_1', name: 'AWS Access Key', pattern: 'AKIA[0-9A-Z]+', sensitive_type: 'aws_key', enabled: true },
         ];
 
         vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
@@ -65,7 +65,8 @@ describe('SystemRuleList', () => {
 
         // Check header
         expect(screen.getByText('Built-in Rules')).toBeInTheDocument();
-        expect(screen.getByText('3 rules')).toBeInTheDocument();
+        // Component shows "3/3 enabled" format
+        expect(screen.getByText(/3\/3/)).toBeInTheDocument();
 
         // Check groups (first group is expanded by default)
         expect(screen.getByTestId('group-api_key')).toBeInTheDocument();
@@ -75,8 +76,8 @@ describe('SystemRuleList', () => {
 
     it('should expand/collapse groups on click', async () => {
         const mockRules = [
-            { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
-            { name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token' },
+            { id: 'openai_key_1', name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key', enabled: true },
+            { id: 'github_token_1', name: 'GitHub Token', pattern: 'ghp_[a-zA-Z0-9]+', sensitive_type: 'github_token', enabled: true },
         ];
 
         vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
@@ -87,20 +88,25 @@ describe('SystemRuleList', () => {
             expect(screen.getByTestId('system-rule-list')).toBeInTheDocument();
         });
 
-        // First group is expanded by default
-        expect(screen.getByTestId('rule-api_key-0')).toBeInTheDocument();
+        // Click to expand api_key group (groups are collapsed by default)
+        fireEvent.click(screen.getByTestId('group-api_key'));
+
+        await waitFor(() => {
+            // Component uses rule-{rule.id} format
+            expect(screen.getByTestId('rule-openai_key_1')).toBeInTheDocument();
+        });
 
         // Click to expand github_token group
         fireEvent.click(screen.getByTestId('group-github_token'));
 
         await waitFor(() => {
-            expect(screen.getByTestId('rule-github_token-0')).toBeInTheDocument();
+            expect(screen.getByTestId('rule-github_token_1')).toBeInTheDocument();
         });
     });
 
     it('should display rule pattern with monospace font', async () => {
         const mockRules = [
-            { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
+            { id: 'openai_key_1', name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key', enabled: true },
         ];
 
         vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
@@ -108,7 +114,14 @@ describe('SystemRuleList', () => {
         render(<SystemRuleList />);
 
         await waitFor(() => {
-            expect(screen.getByTestId('rule-api_key-0')).toBeInTheDocument();
+            expect(screen.getByTestId('system-rule-list')).toBeInTheDocument();
+        });
+
+        // Click to expand api_key group
+        fireEvent.click(screen.getByTestId('group-api_key'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('rule-openai_key_1')).toBeInTheDocument();
         });
 
         // Check pattern is displayed
@@ -128,7 +141,7 @@ describe('SystemRuleList', () => {
 
     it('should display lock icon for readonly rules', async () => {
         const mockRules = [
-            { name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key' },
+            { id: 'openai_key_1', name: 'OpenAI API Key', pattern: 'sk-[a-zA-Z0-9]+', sensitive_type: 'api_key', enabled: true },
         ];
 
         vi.mocked(sanitizerIpc.getPrivacyRules).mockResolvedValue(mockRules as never);
@@ -136,7 +149,14 @@ describe('SystemRuleList', () => {
         render(<SystemRuleList />);
 
         await waitFor(() => {
-            const ruleItem = screen.getByTestId('rule-api_key-0');
+            expect(screen.getByTestId('system-rule-list')).toBeInTheDocument();
+        });
+
+        // Click to expand api_key group
+        fireEvent.click(screen.getByTestId('group-api_key'));
+
+        await waitFor(() => {
+            const ruleItem = screen.getByTestId('rule-openai_key_1');
             expect(ruleItem).toBeInTheDocument();
             // Lock icon should be present (via Lucide React)
             expect(ruleItem.querySelector('svg')).toBeInTheDocument();

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import { GlobalSearch } from "./GlobalSearch";
@@ -62,12 +62,14 @@ describe("GlobalSearch", () => {
             expect(screen.queryByLabelText("全局搜索")).not.toBeInTheDocument();
         });
 
-        it("should render when isOpen is true", () => {
+        it("should render when isOpen is true", async () => {
             act(() => {
                 useSearchStore.getState().open();
             });
             renderGlobalSearch();
-            expect(screen.getByLabelText("全局搜索")).toBeInTheDocument();
+            await waitFor(() => {
+                expect(screen.getByLabelText("全局搜索")).toBeInTheDocument();
+            });
         });
     });
 
@@ -79,7 +81,7 @@ describe("GlobalSearch", () => {
             renderGlobalSearch();
 
             // Wait for focus
-            await vi.waitFor(() => {
+            await waitFor(() => {
                 const input = screen.getByPlaceholderText("搜索会话内容...");
                 expect(document.activeElement).toBe(input);
             });
@@ -94,7 +96,9 @@ describe("GlobalSearch", () => {
             const input = screen.getByPlaceholderText("搜索会话内容...");
             await userEvent.type(input, "test query");
 
-            expect(useSearchStore.getState().query).toBe("test query");
+            await waitFor(() => {
+                expect(useSearchStore.getState().query).toBe("test query");
+            });
         });
     });
 
@@ -148,10 +152,14 @@ describe("GlobalSearch", () => {
             const dialog = screen.getByLabelText("全局搜索");
             fireEvent.keyDown(dialog, { key: "ArrowDown" });
 
-            expect(useSearchStore.getState().selectedIndex).toBe(1);
+            await waitFor(() => {
+                expect(useSearchStore.getState().selectedIndex).toBe(1);
+            });
 
             fireEvent.keyDown(dialog, { key: "ArrowUp" });
-            expect(useSearchStore.getState().selectedIndex).toBe(0);
+            await waitFor(() => {
+                expect(useSearchStore.getState().selectedIndex).toBe(0);
+            });
         });
     });
 
@@ -165,12 +173,14 @@ describe("GlobalSearch", () => {
             const closeButton = screen.getByLabelText("关闭搜索");
             await userEvent.click(closeButton);
 
-            expect(useSearchStore.getState().isOpen).toBe(false);
+            await waitFor(() => {
+                expect(useSearchStore.getState().isOpen).toBe(false);
+            });
         });
     });
 
     describe("Recent Sessions", () => {
-        it("should display recent sessions when no query", () => {
+        it("should display recent sessions when no query", async () => {
             act(() => {
                 useSearchStore.setState({
                     isOpen: true,
@@ -188,13 +198,15 @@ describe("GlobalSearch", () => {
             });
             renderGlobalSearch();
 
-            expect(screen.getByText("最近访问")).toBeInTheDocument();
-            expect(screen.getByText("Recent Project")).toBeInTheDocument();
+            await waitFor(() => {
+                expect(screen.getByText("最近访问")).toBeInTheDocument();
+                expect(screen.getByText("Recent Project")).toBeInTheDocument();
+            });
         });
     });
 
     describe("Empty State", () => {
-        it("should show empty state when no results", () => {
+        it("should show empty state when no results", async () => {
             act(() => {
                 useSearchStore.setState({
                     isOpen: true,
@@ -205,7 +217,9 @@ describe("GlobalSearch", () => {
             });
             renderGlobalSearch();
 
-            expect(screen.getByText(/未找到包含/)).toBeInTheDocument();
+            await waitFor(() => {
+                expect(screen.getByText(/未找到包含/)).toBeInTheDocument();
+            });
         });
     });
 });
