@@ -54,6 +54,52 @@ jobs:
           echo "Pushing tag ${{ inputs.version }} to ${TARGET_REPO}..."
           git push public "${{ inputs.version }}"
 
+      - name: Generate Release Body
+        run: |
+          # 1. Create base template with download table
+          cat <<EOF > release_body.md
+          ## Mantra ${{ inputs.version }}
+          
+          ### 下载 / Download
+          
+          | 平台 / Platform | 文件 / File |
+          |-----------------|-------------|
+          | **macOS (Apple Silicon)** | \`Mantra_*_macos-arm64.dmg\` |
+          | **macOS (Intel)** | \`Mantra_*_macos-x64.dmg\` |
+          | **Windows** | \`.msi\` 或 \`.exe\` |
+          | **Linux** | \`.AppImage\`, \`.deb\` 或 \`.rpm\` |
+          
+          ---
+          
+          > 📦 同步自私有仓库 / Synced from private repository
+          
+          ### 更新日志 / Changelog
+          
+          EOF
+          
+          # 2. Extract Changelog for the specific version
+          VERSION="${{ inputs.version }}"
+          CHANGELOG_FILE="apps/client/CHANGELOG.md"
+          
+          if [ -f "$CHANGELOG_FILE" ]; then
+            echo "Extracting changelog for $VERSION from $CHANGELOG_FILE..."
+            # awk logic:
+            # 1. Match the version line (e.g., "## [v0.6.0]...") -> set flag=1, skip line
+            # 2. If flag is set and we hit the next version line (starts with "## [v") -> exit
+            # 3. If flag is set, print the line
+            awk -v ver="^## \[${VERSION}\]" '
+              $0 ~ ver { flag=1; next } 
+              /^## \[v/ && flag { flag=0; exit } 
+              flag { print }
+            ' "$CHANGELOG_FILE" >> release_body.md
+          else
+            echo "Warning: CHANGELOG.md not found at $CHANGELOG_FILE"
+            echo "No changelog details available." >> release_body.md
+          fi
+          
+          echo "Generated Release Body:"
+          cat release_body.md
+
       - name: Create Release in Public Repository
         uses: softprops/action-gh-release@v2
         with:
@@ -64,17 +110,6 @@ jobs:
           files: release-files/*
           draft: false
           prerelease: ${{ contains(inputs.version, '-') }}
-          # 2026 建议增加此参数，如果 tag 已存在则不报错
           make_latest: true
-          body: |
-            ## Mantra ${{ inputs.version }}
-            
-            ### 下载 / Download
-            
-            | 平台 / Platform | 文件 / File |
-            |-----------------|-------------|
-            | **macOS (Apple Silicon)** | `Mantra_*_macos-arm64.dmg` |
-            | **macOS (Intel)** | `Mantra_*_macos-x64.dmg` |
-            | **Windows** | `.msi` 或 `.exe` |
-            | **Linux** | `.AppImage`, `.deb` 或 `.rpm` |
+          body_path: release_body.md
 

@@ -2,6 +2,32 @@
 
 All notable changes to the `apps/client` module will be documented in this file.
 
+ 
+## [v0.6.0] - 2026-01-25
+
+### Added
+
+- **Project Management (Epic 1)**:
+    - **View-based Aggregation**: Implemented a dual-layer architecture separating the storage layer (original import structure) from the view layer (logical projects aggregated by physical path). This allows sessions from different AI tools (Claude, Gemini, Cursor) to be unified under a single workspace (Story 1.12).
+    - **Logical Project Renaming**: Added support for custom display names for logical projects, stored independently of the imported project names (Story 1.13).
+    - **Improved Project Identification**: Enhanced detection of path existence and type (Local, Virtual, Remote) to better manage "needs association" states for projects.
+    - **Unlinking Support**: Added the ability to unlink specific source projects from an aggregated logical project.
+
+- **IDE Support**: Expanded support for additional IDE configurations and environments.
+
+- **Documentation**: Integrated Gemini CLI context documentation for enhanced agent assistance.
+
+### Fixed
+
+- **UI/UX**:
+    - Resolved synchronization issues where the TopBar session list and project name did not update immediately after association.
+    - Fixed file tree display issues when associated paths are subdirectories of a Git repository.
+    - Addressed missing i18n translations for project renaming and unlinking actions.
+
+- **Packaging**:
+    - Fixed RPM build issues.
+    - Refined release documentation in the publishing workflow.
+
 ## [v0.5.2] - 2026-01-22
 
 ### Fixed
