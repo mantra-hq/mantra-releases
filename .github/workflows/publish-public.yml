@@ -76,7 +76,7 @@ jobs:
             | **macOS (Apple Silicon)** | `Mantra_*_macos-arm64.dmg` |
             | **macOS (Intel)** | `Mantra_*_macos-x64.dmg` |
             | **Windows** | `.msi` 或 `.exe` |
-            | **Linux** | `.AppImage` 或 `.deb` |
+            | **Linux** | `.AppImage`, `.deb` 或 `.rpm` |
             
             ---
             
