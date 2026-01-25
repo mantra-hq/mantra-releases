@@ -111,3 +111,34 @@ jobs:
           make_latest: true
           body_path: release_body.md
 
+      - name: Sync CHANGELOG to Public Repo Main
+        env:
+          PUBLIC_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          TARGET_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+          USER_EMAIL: ${{ secrets.GIT_USER_EMAIL || 'ci@mantra.app' }}
+          USER_NAME: ${{ secrets.GIT_USER_NAME || 'Mantra CI' }}
+        run: |
+          echo "Syncing CHANGELOG.md to public repository main branch..."
+          
+          # Clone public repo (depth 1 is enough)
+          git clone --depth 1 "https://x-access-token:${PUBLIC_TOKEN}@github.com/${TARGET_REPO}.git" public_repo
+          
+          # Copy CHANGELOG.md to root of public repo
+          cp apps/client/CHANGELOG.md public_repo/CHANGELOG.md
+          
+          cd public_repo
+          
+          # Configure git
+          git config user.name "$USER_NAME"
+          git config user.email "$USER_EMAIL"
+          
+          # Check for changes
+          if [[ -n $(git status -s) ]]; then
+            git add CHANGELOG.md
+            git commit -m "docs: update changelog for ${{ inputs.version }}"
+            git push origin main
+            echo "Successfully pushed CHANGELOG.md updates to main."
+          else
+            echo "CHANGELOG.md is already up to date."
+          fi
+
