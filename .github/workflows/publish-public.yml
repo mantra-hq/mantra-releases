@@ -77,7 +77,7 @@ jobs:
           
           # 2. Extract Changelog for the specific version
           VERSION="${{ inputs.version }}"
-          CHANGELOG_FILE="apps/client/CHANGELOG.md"
+          CHANGELOG_FILE="CHANGELOG.md"
           
           if [ -f "$CHANGELOG_FILE" ]; then
             echo "Extracting changelog for $VERSION from $CHANGELOG_FILE..."
@@ -124,7 +124,7 @@ jobs:
           git clone --depth 1 "https://x-access-token:${PUBLIC_TOKEN}@github.com/${TARGET_REPO}.git" public_repo
           
           # Copy CHANGELOG.md to root of public repo
-          cp apps/client/CHANGELOG.md public_repo/CHANGELOG.md
+          cp CHANGELOG.md public_repo/CHANGELOG.md
           
           cd public_repo
           
@@ -141,4 +141,6 @@ jobs:
           else
             echo "CHANGELOG.md is already up to date."
           fi
+
+
 
