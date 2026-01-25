@@ -77,7 +77,4 @@ jobs:
             | **macOS (Intel)** | `Mantra_*_macos-x64.dmg` |
             | **Windows** | `.msi` 或 `.exe` |
             | **Linux** | `.AppImage`, `.deb` 或 `.rpm` |
-            
-            ---
-            
-            > 📦 同步自私有仓库 / Synced from private repository
+
