@@ -1,6 +1,6 @@
-# Mantra - 更新日志 (Changelog)
+# Mantra - Changelog
 
-**Mantra (心法)** 是一个本地优先的 AI 辅助编程会话“时光机”。它将 AI 对话日志（来自 Claude Code、Cursor、Gemini CLI 等工具）与 Git 历史记录在统一的时间轴上对齐，允许开发者回放上下文并理解代码更改背后的“原因”。
+**Mantra** is a local-first "time machine" for AI-assisted coding sessions. It aligns AI conversation logs (from tools like Claude Code, Cursor, Gemini CLI, etc.) with Git history on a unified timeline, allowing developers to replay context and understand the "why" behind code changes.
 
 ---
 
