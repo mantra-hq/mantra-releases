@@ -780,7 +780,7 @@ impl<'a> ImportExecutor<'a> {
                 self.env_manager,
                 name,
                 value,
-                Some(&format!("Imported from MCP config")),
+                Some("Imported from MCP config"),
             ) {
                 errors.push(format!("Failed to set env var {}: {}", name, e));
             }
@@ -983,7 +983,6 @@ pub fn rollback_from_backups(backup_files: &[PathBuf]) -> io::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::TempDir;
 
     // ===== Task 1.1-1.6: 配置解析器测试 =====

@@ -216,7 +216,7 @@ pub fn env_variable_exists(name: String, state: State<'_, McpState>) -> Result<b
 /// 扫描结果，包含检测到的配置文件和服务
 #[tauri::command]
 pub fn scan_mcp_configs_cmd(project_path: Option<String>) -> Result<ScanResult, AppError> {
-    let path = project_path.as_ref().map(|p| PathBuf::from(p));
+    let path = project_path.as_ref().map(PathBuf::from);
     Ok(scan_mcp_configs(path.as_deref()))
 }
 
