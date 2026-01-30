@@ -150,6 +150,9 @@ impl Database {
         // Migration: Add logical_project_names table (Story 1.13)
         Self::run_logical_project_names_migration(conn)?;
 
+        // Migration: Add gateway_config table (Story 11.1)
+        Self::run_gateway_config_migration(conn)?;
+
         Ok(())
     }
 
@@ -449,6 +452,48 @@ impl Database {
                 -- 物理路径索引 (用于快速查询)
                 CREATE INDEX IF NOT EXISTS idx_logical_project_names_path ON logical_project_names(physical_path);
                 "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for gateway_config table (Story 11.1)
+    ///
+    /// Creates the gateway_config table for storing MCP Gateway configuration.
+    /// Uses a singleton pattern (id = 1) to ensure only one config record exists.
+    fn run_gateway_config_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if table already exists
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='gateway_config'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            conn.execute_batch(
+                r#"
+                -- gateway_config 表: MCP Gateway 配置 (Story 11.1)
+                CREATE TABLE IF NOT EXISTS gateway_config (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    port INTEGER,
+                    auth_token TEXT NOT NULL,
+                    enabled INTEGER DEFAULT 0,
+                    auto_start INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    CHECK (id = 1)
+                );
+                "#,
+            )?;
+
+            // Insert default config with UUID v4 token
+            let auth_token = uuid::Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO gateway_config (id, auth_token) VALUES (1, ?1)",
+                [&auth_token],
             )?;
         }
 

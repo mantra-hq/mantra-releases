@@ -5,9 +5,11 @@
 
 mod database;
 mod error;
+mod gateway;
 mod interception;
 mod repository;
 
 pub use database::Database;
 pub use error::StorageError;
+pub use gateway::{GatewayConfigRecord, GatewayConfigUpdate};
 pub use repository::{ContentType, LogicalProjectStats, SearchFilters, SearchResult, TimePreset};

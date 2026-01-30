@@ -4,6 +4,7 @@
 pub mod analytics;
 pub mod commands;
 pub mod error;
+pub mod gateway;
 pub mod git;
 pub mod local_server;
 pub mod models;
@@ -57,10 +58,14 @@ use commands::{
     // Story 3.11: Local API Server commands
     get_local_server_status, get_local_server_config, update_local_server_port,
     start_local_server, stop_local_server,
+    // Story 11.1: Gateway commands
+    get_gateway_status, get_gateway_config, update_gateway_config,
+    start_gateway, stop_gateway, restart_gateway, regenerate_gateway_token,
 };
 
 use storage::Database;
 use local_server::ServerManager;
+use gateway::{GatewayConfig, GatewayServerManager};
 
 /// Database file name
 const DATABASE_FILENAME: &str = "mantra.db";
@@ -68,6 +73,11 @@ const DATABASE_FILENAME: &str = "mantra.db";
 /// Local API Server state
 pub struct LocalServerState {
     pub manager: TokioMutex<ServerManager>,
+}
+
+/// Gateway Server state (Story 11.1)
+pub struct GatewayServerState {
+    pub manager: TokioMutex<GatewayServerManager>,
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -101,12 +111,32 @@ pub fn run() {
             app.manage(AppState { db: Mutex::new(Database::new(&db_path).expect("Failed to create second db connection")) });
 
             // Story 3.11: 启动本地 API Server（共享数据库连接）
-            let server_manager = ServerManager::with_database(app_data_dir.clone(), db_arc);
+            let server_manager = ServerManager::with_database(app_data_dir.clone(), db_arc.clone());
             app.manage(LocalServerState {
                 manager: TokioMutex::new(server_manager),
             });
 
-            // 在后台启动 Server（不阻塞 setup）
+            // Story 11.1: 初始化 Gateway Server
+            // 从数据库加载配置
+            let gateway_config = {
+                let db = db_arc.lock().map_err(|e| format!("Failed to lock db: {}", e))?;
+                match db.get_gateway_config() {
+                    Ok(config) => GatewayConfig {
+                        port: config.port.map(|p| p as u16).unwrap_or(0),
+                        auth_token: config.auth_token,
+                        enabled: config.enabled,
+                        auto_start: config.auto_start,
+                    },
+                    Err(_) => GatewayConfig::default(),
+                }
+            };
+
+            let gateway_manager = GatewayServerManager::new(gateway_config.clone());
+            app.manage(GatewayServerState {
+                manager: TokioMutex::new(gateway_manager),
+            });
+
+            // 在后台启动 Local Server（不阻塞 setup）
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<'_, LocalServerState> = app_handle.state();
@@ -120,6 +150,23 @@ pub fn run() {
                     }
                 }
             });
+
+            // Story 11.1: 如果 Gateway 配置为自动启动，则启动 Gateway Server
+            if gateway_config.auto_start && gateway_config.enabled {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, GatewayServerState> = app_handle.state();
+                    let mut manager = state.manager.lock().await;
+                    match manager.start().await {
+                        Ok(_) => {
+                            println!("[Mantra] Gateway Server started on port {}", manager.current_port());
+                        }
+                        Err(e) => {
+                            eprintln!("[Mantra] Failed to start Gateway Server: {}", e);
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -214,7 +261,15 @@ pub fn run() {
             get_local_server_config,
             update_local_server_port,
             start_local_server,
-            stop_local_server
+            stop_local_server,
+            // Story 11.1: Gateway Server
+            get_gateway_status,
+            get_gateway_config,
+            update_gateway_config,
+            start_gateway,
+            stop_gateway,
+            restart_gateway,
+            regenerate_gateway_token
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -69,3 +69,16 @@ CREATE INDEX IF NOT EXISTS idx_sessions_project_id ON sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_original_cwd ON sessions(original_cwd);
+
+-- gateway_config 表: MCP Gateway 配置 (Story 11.1)
+-- 存储 Gateway Server 配置信息，使用单例模式 (id = 1)
+CREATE TABLE IF NOT EXISTS gateway_config (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    port INTEGER,                          -- 监听端口 (NULL 表示自动分配)
+    auth_token TEXT NOT NULL,              -- 认证 Token (UUID v4)
+    enabled INTEGER DEFAULT 0,             -- 是否启用 Gateway
+    auto_start INTEGER DEFAULT 0,          -- 是否随应用自动启动
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    CHECK (id = 1)                         -- 确保只有一条配置记录
+);

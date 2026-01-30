@@ -3,6 +3,7 @@
 //! Exposes Rust functionality to the frontend via Tauri's IPC system.
 
 mod analytics;
+mod gateway;
 mod git;
 mod import;
 mod local_server;
@@ -12,6 +13,7 @@ mod sanitizer;
 mod tree;
 
 pub use analytics::*;
+pub use gateway::*;
 pub use git::*;
 pub use import::*;
 pub use local_server::*;
