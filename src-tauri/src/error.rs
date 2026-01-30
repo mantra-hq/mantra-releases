@@ -48,6 +48,10 @@ pub enum AppError {
     /// Invalid input error (Story 11.2)
     #[error("无效输入: {0}")]
     InvalidInput(String),
+
+    /// Tray error (Story 11.7)
+    #[error("托盘错误: {0}")]
+    TrayError(String),
 }
 
 /// Serializable error response for Tauri IPC
@@ -82,6 +86,7 @@ impl From<AppError> for ErrorResponse {
             AppError::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
             AppError::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
             AppError::InvalidInput(msg) => ("INVALID_INPUT".to_string(), msg.clone()),
+            AppError::TrayError(msg) => ("TRAY_ERROR".to_string(), msg.clone()),
         };
         Self { code, message }
     }
@@ -104,6 +109,7 @@ impl Serialize for AppError {
             Self::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
             Self::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
             Self::InvalidInput(msg) => ("INVALID_INPUT".to_string(), msg.clone()),
+            Self::TrayError(msg) => ("TRAY_ERROR".to_string(), msg.clone()),
         };
         ErrorResponse { code, message }.serialize(serializer)
     }

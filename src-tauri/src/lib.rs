@@ -13,6 +13,7 @@ pub mod sanitizer;
 pub mod scanner;
 pub mod services;
 pub mod storage;
+pub mod tray;
 
 use std::sync::{Arc, Mutex};
 
@@ -76,12 +77,15 @@ use commands::{
     validate_env_variable_name,
     // Story 11.3: MCP Config Import commands
     scan_mcp_configs_cmd, preview_mcp_import, execute_mcp_import, rollback_mcp_import,
+    // Story 11.7: Tray commands
+    get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
 };
 
 use storage::Database;
 use local_server::ServerManager;
 use gateway::{GatewayConfig, GatewayServerManager};
 use services::EnvManager;
+use tray::TrayState;
 
 /// Database file name
 const DATABASE_FILENAME: &str = "mantra.db";
@@ -159,6 +163,34 @@ pub fn run() {
                 db: Mutex::new(mcp_db),
                 env_manager,
             });
+
+            // Story 11.7: 初始化托盘状态
+            app.manage(TrayState::default());
+
+            // Story 11.7: 初始化系统托盘
+            match tray::init_tray(app.handle()) {
+                Ok(_tray) => {
+                    println!("[Mantra] System tray initialized");
+                }
+                Err(e) => {
+                    eprintln!("[Mantra] Failed to initialize system tray: {}", e);
+                }
+            }
+
+            // Story 11.7: 设置窗口关闭拦截（关闭时隐藏到托盘而非退出）
+            if let Some(main_window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                main_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // 阻止默认关闭行为
+                        api.prevent_close();
+                        // 隐藏窗口到托盘
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                });
+            }
 
             // 在后台启动 Local Server（不阻塞 setup）
             let app_handle = app.handle().clone();
@@ -326,7 +358,12 @@ pub fn run() {
             scan_mcp_configs_cmd,
             preview_mcp_import,
             execute_mcp_import,
-            rollback_mcp_import
+            rollback_mcp_import,
+            // Story 11.7: Tray
+            get_tray_status,
+            update_tray_gateway_status,
+            update_tray_project,
+            set_tray_error
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

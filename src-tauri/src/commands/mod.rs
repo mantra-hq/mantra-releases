@@ -12,6 +12,7 @@ mod parser;
 mod project;
 mod sanitizer;
 mod tree;
+mod tray;
 
 pub use analytics::*;
 pub use gateway::*;
@@ -23,3 +24,4 @@ pub use parser::*;
 pub use project::*;
 pub use sanitizer::*;
 pub use tree::*;
+pub use tray::*;
