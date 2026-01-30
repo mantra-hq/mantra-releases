@@ -162,8 +162,8 @@ export function McpConfigImportDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 扫描结果
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  // 扫描结果（保留用于后续回退/重试）
+  const [_scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
 
   // 用户选择
