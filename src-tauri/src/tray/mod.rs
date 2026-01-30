@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 
 pub use error::TrayError;
 pub use icons::TrayIconState;
-pub use menu::MenuIds;
+pub use menu::{MenuIds, ProjectInfo, build_tray_menu_with_projects};
 
 /// 托盘管理器
 pub struct TrayManager {

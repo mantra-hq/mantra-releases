@@ -2,14 +2,19 @@
 
 use tauri::tray::{MouseButton, TrayIcon, TrayIconEvent};
 use tauri::menu::MenuEvent;
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow};
 
 use super::menu::MenuIds;
+use super::icons::load_icon;
 use crate::GatewayServerState;
 
 /// 处理托盘图标事件（左键点击、双击等）
+///
+/// AC6: 左键点击显示主窗口
+/// AC7: 双击行为 (Windows) - 窗口置顶并获取焦点
 pub fn handle_tray_icon_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
     match event {
+        // AC6: 左键点击行为
         TrayIconEvent::Click {
             button: MouseButton::Left,
             ..
@@ -19,8 +24,10 @@ pub fn handle_tray_icon_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEve
                 show_window(&window);
             }
         }
+        // AC7: 双击行为 (Windows) - 仅在 Windows 平台处理双击
+        #[cfg(target_os = "windows")]
         TrayIconEvent::DoubleClick { .. } => {
-            // 双击：显示并聚焦主窗口（主要用于 Windows）
+            // Windows: 双击显示并聚焦主窗口
             if let Some(window) = tray.app_handle().get_webview_window("main") {
                 show_window(&window);
             }
@@ -59,13 +66,53 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             app.exit(0);
         }
         _ => {
-            // 处理项目切换（如果以 PROJECT_PREFIX 开头）
+            // AC4: 处理项目切换（如果以 PROJECT_PREFIX 开头）
             if id.starts_with(MenuIds::PROJECT_PREFIX) {
                 let project_id = &id[MenuIds::PROJECT_PREFIX.len()..];
-                println!("[Tray] Project selected: {}", project_id);
-                // TODO: 实现项目切换逻辑
+                // 跳过 "current" 标记（仅显示用）
+                if project_id != "current" {
+                    println!("[Tray] Project selected: {}", project_id);
+                    let app_handle = app.clone();
+                    let project_id_owned = project_id.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        switch_project(&app_handle, &project_id_owned).await;
+                    });
+                }
             }
         }
+    }
+}
+
+/// AC4: 切换项目上下文
+///
+/// 更新托盘显示的当前项目，后续 MCP 会话将基于此项目上下文
+async fn switch_project<R: Runtime>(app: &AppHandle<R>, project_id: &str) {
+    // 获取项目名称（从 project_id 解析）
+    // project_id 格式通常是项目路径或 UUID
+    let project_name = project_id.split('/').last().unwrap_or(project_id).to_string();
+    
+    println!("[Tray] Switching to project: {} ({})", project_name, project_id);
+    
+    // 更新托盘状态
+    let tray_state: tauri::State<'_, crate::tray::TrayState> = app.state();
+    {
+        let mut tray_manager = tray_state.manager.write().await;
+        tray_manager.set_current_project(Some(project_name.clone()));
+    }
+    
+    // AC4: 托盘 tooltip 更新显示当前项目名称
+    // 刷新托盘显示
+    if let Err(e) = refresh_tray(app).await {
+        eprintln!("[Tray] Failed to refresh tray after project switch: {}", e);
+    }
+    
+    // 发送事件到前端，通知项目切换
+    // 前端可以调用 gateway_set_project_context 来设置活跃会话的上下文
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("tray://project-switched", serde_json::json!({
+            "project_id": project_id,
+            "project_name": project_name,
+        }));
     }
 }
 
@@ -106,11 +153,47 @@ async fn toggle_gateway<R: Runtime>(app: &AppHandle<R>) {
                     tray_manager.set_error();
                 }
 
-                // 显示错误通知（如果可用）
+                // AC5: 显示错误通知
                 show_notification(app, "Gateway 启动失败", &e);
             }
         }
     }
+    
+    // 释放 manager 锁后刷新托盘
+    drop(manager);
+    
+    // 刷新托盘菜单以反映新状态
+    if let Err(e) = refresh_tray(app).await {
+        eprintln!("[Tray] Failed to refresh tray: {}", e);
+    }
+}
+
+/// 刷新托盘状态和菜单
+async fn refresh_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), super::TrayError> {
+    let tray_state: tauri::State<'_, crate::tray::TrayState> = app.state();
+    let manager = tray_state.manager.read().await;
+    
+    // 获取托盘图标实例
+    if let Some(tray) = app.tray_by_id("main") {
+        // 更新 tooltip
+        let tooltip = manager.get_tooltip();
+        tray.set_tooltip(Some(&tooltip))?;
+        
+        // 更新图标
+        let icon = load_icon(manager.icon_state)?;
+        tray.set_icon(Some(icon))?;
+        
+        // 更新菜单
+        let menu = super::menu::build_tray_menu(
+            app,
+            manager.gateway_running,
+            manager.connection_count,
+            manager.current_project.clone(),
+        )?;
+        tray.set_menu(Some(menu))?;
+    }
+    
+    Ok(())
 }
 
 /// 显示系统通知

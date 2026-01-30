@@ -15,7 +15,19 @@ impl MenuIds {
     pub const GATEWAY_CONNECTIONS: &'static str = "tray_gateway_connections";
     pub const TOGGLE_GATEWAY: &'static str = "tray_toggle_gateway";
     pub const PROJECT_PREFIX: &'static str = "tray_project_";
+    pub const NO_PROJECTS: &'static str = "tray_no_projects";
     pub const QUIT: &'static str = "tray_quit";
+}
+
+/// 项目信息（用于构建切换项目子菜单）
+#[derive(Debug, Clone)]
+pub struct ProjectInfo {
+    /// 项目 ID
+    pub id: String,
+    /// 项目显示名称
+    pub name: String,
+    /// 是否为当前选中项目
+    pub is_current: bool,
 }
 
 /// 构建托盘菜单
@@ -24,6 +36,20 @@ pub fn build_tray_menu<R: Runtime>(
     gateway_running: bool,
     connection_count: u32,
     current_project: Option<String>,
+) -> Result<Menu<R>, TrayError> {
+    // 使用空项目列表构建菜单（向后兼容）
+    build_tray_menu_with_projects(app, gateway_running, connection_count, current_project, vec![])
+}
+
+/// 构建托盘菜单（带项目列表）
+///
+/// AC3: 菜单包含 "切换项目" 子菜单列出最近项目
+pub fn build_tray_menu_with_projects<R: Runtime>(
+    app: &AppHandle<R>,
+    gateway_running: bool,
+    connection_count: u32,
+    current_project: Option<String>,
+    recent_projects: Vec<ProjectInfo>,
 ) -> Result<Menu<R>, TrayError> {
     // 状态指示器
     let status_emoji = if gateway_running {
@@ -67,6 +93,9 @@ pub fn build_tray_menu<R: Runtime>(
     )
     .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
 
+    // AC3: 构建"切换项目"子菜单
+    let projects_submenu = build_projects_submenu(app, &current_project, &recent_projects)?;
+
     // 切换 Gateway 按钮
     let toggle_text = if gateway_running {
         "停止 Gateway"
@@ -91,44 +120,69 @@ pub fn build_tray_menu<R: Runtime>(
     let quit_item = MenuItem::with_id(app, MenuIds::QUIT, "退出", true, None::<&str>)
         .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
 
-    // 根据是否有当前项目构建菜单
-    if let Some(project) = current_project {
-        let project_info = MenuItem::with_id(
+    // 构建完整菜单
+    Menu::with_items(
+        app,
+        &[
+            &open_item,
+            &separator1,
+            &gateway_submenu,
+            &projects_submenu,
+            &separator2,
+            &toggle_gateway_item,
+            &quit_item,
+        ],
+    )
+    .map_err(|e| TrayError::MenuBuildError(e.to_string()))
+}
+
+/// 构建"切换项目"子菜单
+fn build_projects_submenu<R: Runtime>(
+    app: &AppHandle<R>,
+    current_project: &Option<String>,
+    recent_projects: &[ProjectInfo],
+) -> Result<Submenu<R>, TrayError> {
+    // 如果没有项目，显示"无项目"
+    if recent_projects.is_empty() {
+        let no_projects_item = MenuItem::with_id(
             app,
-            &format!("{}{}", MenuIds::PROJECT_PREFIX, "current"),
-            &format!("📁 {}", project),
-            false, // 不可点击，仅显示
+            MenuIds::NO_PROJECTS,
+            "无项目",
+            false, // 不可点击
             None::<&str>,
         )
         .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
 
-        Menu::with_items(
-            app,
-            &[
-                &open_item,
-                &separator1,
-                &project_info,
-                &gateway_submenu,
-                &separator2,
-                &toggle_gateway_item,
-                &quit_item,
-            ],
-        )
-        .map_err(|e| TrayError::MenuBuildError(e.to_string()))
-    } else {
-        Menu::with_items(
-            app,
-            &[
-                &open_item,
-                &separator1,
-                &gateway_submenu,
-                &separator2,
-                &toggle_gateway_item,
-                &quit_item,
-            ],
-        )
-        .map_err(|e| TrayError::MenuBuildError(e.to_string()))
+        return Submenu::with_items(app, "切换项目", true, &[&no_projects_item])
+            .map_err(|e| TrayError::MenuBuildError(e.to_string()));
     }
+
+    // 使用 Submenu::new 和 append_items 来动态添加项目
+    let submenu = Submenu::new(app, "切换项目", true)
+        .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
+    
+    for project in recent_projects {
+        // 如果是当前项目，添加勾选标记
+        let label = if Some(&project.name) == current_project.as_ref() || project.is_current {
+            format!("✓ {}", project.name)
+        } else {
+            project.name.clone()
+        };
+        
+        let item = MenuItem::with_id(
+            app,
+            &format!("{}{}", MenuIds::PROJECT_PREFIX, project.id),
+            &label,
+            true, // 可点击
+            None::<&str>,
+        )
+        .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
+        
+        submenu.append(&item)
+            .map_err(|e| TrayError::MenuBuildError(e.to_string()))?;
+    }
+    
+    Ok(submenu)
 }
 
 #[cfg(test)]
@@ -142,6 +196,34 @@ mod tests {
         assert_eq!(MenuIds::GATEWAY_CONNECTIONS, "tray_gateway_connections");
         assert_eq!(MenuIds::TOGGLE_GATEWAY, "tray_toggle_gateway");
         assert_eq!(MenuIds::PROJECT_PREFIX, "tray_project_");
+        assert_eq!(MenuIds::NO_PROJECTS, "tray_no_projects");
         assert_eq!(MenuIds::QUIT, "tray_quit");
+    }
+
+    #[test]
+    fn test_project_info() {
+        let project = ProjectInfo {
+            id: "proj-123".to_string(),
+            name: "My Project".to_string(),
+            is_current: true,
+        };
+        
+        assert_eq!(project.id, "proj-123");
+        assert_eq!(project.name, "My Project");
+        assert!(project.is_current);
+    }
+
+    #[test]
+    fn test_project_info_clone() {
+        let project = ProjectInfo {
+            id: "proj-456".to_string(),
+            name: "Another Project".to_string(),
+            is_current: false,
+        };
+        
+        let cloned = project.clone();
+        assert_eq!(cloned.id, project.id);
+        assert_eq!(cloned.name, project.name);
+        assert_eq!(cloned.is_current, project.is_current);
     }
 }
