@@ -110,3 +110,5 @@ export {
     type Platform,
 } from "./usePlatform";
 
+// Story 11.4: 环境变量管理 hook
+export { useEnvVariables } from "./useEnvVariables";
