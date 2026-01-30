@@ -19,3 +19,4 @@ export { McpServiceList, type McpService } from "./McpServiceList";
 export { McpServiceForm } from "./McpServiceForm";
 export { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 export { ProjectServiceAssociation } from "./ProjectServiceAssociation";
+export { McpConfigImportDialog } from "./McpConfigImportDialog";

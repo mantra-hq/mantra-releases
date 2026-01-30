@@ -42,11 +42,13 @@ import {
   FileCode,
   Hand,
   Link2,
+  Download,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { McpServiceForm } from "./McpServiceForm";
 import { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
+import { McpConfigImportDialog } from "./McpConfigImportDialog";
 
 /**
  * MCP 服务类型
@@ -81,6 +83,9 @@ export function McpServiceList() {
   // 项目关联状态
   const [isAssociationOpen, setIsAssociationOpen] = useState(false);
   const [associationService, setAssociationService] = useState<McpService | null>(null);
+
+  // 导入配置状态
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   // 加载服务列表
   const loadServices = useCallback(async () => {
@@ -148,6 +153,11 @@ export function McpServiceList() {
     setIsAssociationOpen(true);
   }, []);
 
+  // 打开导入对话框
+  const handleOpenImport = useCallback(() => {
+    setIsImportOpen(true);
+  }, []);
+
   // 操作成功后刷新
   const handleSuccess = useCallback(() => {
     loadServices();
@@ -196,6 +206,15 @@ export function McpServiceList() {
               title={t("common.refresh")}
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenImport}
+              data-testid="mcp-config-import-button"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {t("hub.import.importConfig")}
             </Button>
             <Button
               size="sm"
@@ -338,6 +357,13 @@ export function McpServiceList() {
         open={isAssociationOpen}
         onOpenChange={setIsAssociationOpen}
         service={associationService}
+        onSuccess={handleSuccess}
+      />
+
+      {/* 配置导入对话框 */}
+      <McpConfigImportDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
         onSuccess={handleSuccess}
       />
     </Card>
