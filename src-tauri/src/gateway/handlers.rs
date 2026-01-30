@@ -117,13 +117,12 @@ impl JsonRpcResponse {
 pub struct GatewayAppState {
     pub state: Arc<RwLock<GatewayState>>,
     pub stats: Arc<GatewayStats>,
-    pub port: u16,
 }
 
 impl GatewayAppState {
     /// 创建应用状态
-    pub fn new(state: Arc<RwLock<GatewayState>>, stats: Arc<GatewayStats>, port: u16) -> Self {
-        Self { state, stats, port }
+    pub fn new(state: Arc<RwLock<GatewayState>>, stats: Arc<GatewayStats>) -> Self {
+        Self { state, stats }
     }
 }
 
@@ -619,7 +618,7 @@ mod tests {
     fn create_test_app_state() -> GatewayAppState {
         let state = Arc::new(RwLock::new(GatewayState::with_defaults()));
         let stats = Arc::new(GatewayStats::new());
-        GatewayAppState::new(state, stats, 39600)
+        GatewayAppState::new(state, stats)
     }
 
     /// 创建带有已注册会话的测试 GatewayAppState
@@ -630,7 +629,7 @@ mod tests {
 
         let state = Arc::new(RwLock::new(gateway_state));
         let stats = Arc::new(GatewayStats::new());
-        let app_state = GatewayAppState::new(state, stats, 39600);
+        let app_state = GatewayAppState::new(state, stats);
         (app_state, session_id)
     }
 

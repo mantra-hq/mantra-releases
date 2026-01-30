@@ -175,7 +175,7 @@ mod tests {
             source: McpServiceSource::Manual,
             source_file: None,
         };
-        let enabled = db.create_mcp_service(&enabled_req).unwrap();
+        let _enabled = db.create_mcp_service(&enabled_req).unwrap();
 
         let disabled_req = CreateMcpServiceRequest {
             name: "disabled-service".to_string(),
