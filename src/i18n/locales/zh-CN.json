@@ -39,7 +39,9 @@
     "comingSoon": "即将上线",
     "add": "添加",
     "validating": "验证中...",
-    "saving": "保存中..."
+    "saving": "保存中...",
+    "optional": "可选",
+    "refresh": "刷新"
   },
   "time": {
     "justNow": "刚刚",
@@ -945,6 +947,43 @@
       "critical": "高危",
       "warning": "警告",
       "info": "提示"
+    }
+  },
+  "hub": {
+    "envVariables": {
+      "title": "环境变量",
+      "description": "管理 MCP 服务所需的 API Keys 和敏感配置",
+      "add": "添加变量",
+      "addTitle": "添加环境变量",
+      "addDescription": "添加新的环境变量，值将被加密存储",
+      "editTitle": "编辑环境变量",
+      "editDescription": "修改环境变量的值或描述",
+      "deleteTitle": "删除环境变量",
+      "deleteConfirm": "确定要删除环境变量 \"{{name}}\" 吗？",
+      "nameLabel": "变量名",
+      "valueLabel": "变量值",
+      "valueHint": "值将被加密存储，只有本机可以解密",
+      "valueRequired": "变量值不能为空",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如：OpenAI API Key",
+      "showValue": "显示完整值",
+      "hideValue": "隐藏值",
+      "searchPlaceholder": "搜索变量名或描述...",
+      "empty": "暂无环境变量",
+      "emptyHint": "点击「添加变量」创建第一个环境变量",
+      "noSearchResults": "没有匹配的变量",
+      "count": "共 {{count}} 个变量",
+      "suggestion": "建议",
+      "addSuccess": "环境变量添加成功",
+      "addError": "添加环境变量失败",
+      "updateSuccess": "环境变量更新成功",
+      "updateError": "更新环境变量失败",
+      "deleteSuccess": "环境变量删除成功",
+      "deleteError": "删除环境变量失败",
+      "affectedServices": "受影响的 MCP 服务 ({{count}})",
+      "affectedServicesHint": "这些服务引用了此变量，删除后将无法正常启动",
+      "noAffectedServices": "没有服务引用此变量",
+      "disabled": "已禁用"
     }
   }
 }

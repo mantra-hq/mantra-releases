@@ -150,6 +150,19 @@ pub struct SetEnvVariableRequest {
     pub description: Option<String>,
 }
 
+/// 环境变量名称校验结果
+///
+/// Story 11.4: 环境变量管理 - Task 1.4
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvVariableNameValidation {
+    /// 是否有效
+    pub is_valid: bool,
+    /// 格式化建议（如果名称无效）
+    pub suggestion: Option<String>,
+    /// 错误信息（如果名称无效）
+    pub error_message: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,6 +289,25 @@ mod tests {
         let json = serde_json::to_string(&env_var).unwrap();
         assert!(json.contains("OPENAI_API_KEY"));
         assert!(json.contains("sk-****...****xyz"));
+    }
+
+    #[test]
+    fn test_env_variable_name_validation() {
+        let valid = EnvVariableNameValidation {
+            is_valid: true,
+            suggestion: None,
+            error_message: None,
+        };
+        assert!(valid.is_valid);
+        assert!(valid.suggestion.is_none());
+
+        let invalid = EnvVariableNameValidation {
+            is_valid: false,
+            suggestion: Some("OPENAI_API_KEY".to_string()),
+            error_message: Some("Name must be in SCREAMING_SNAKE_CASE format".to_string()),
+        };
+        assert!(!invalid.is_valid);
+        assert_eq!(invalid.suggestion, Some("OPENAI_API_KEY".to_string()));
     }
 
     #[test]

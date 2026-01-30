@@ -1,14 +1,18 @@
 //! 环境变量管理器
 //!
 //! Story 11.2: MCP 服务数据模型 - Task 5
+//! Story 11.4: 环境变量管理 - Task 2 (变量注入逻辑)
 //!
-//! 提供环境变量的加密存储和解密读取功能
+//! 提供环境变量的加密存储、解密读取和变量注入功能
 
+use std::collections::HashMap;
+
+use regex::Regex;
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 use rusqlite::params;
 
-use crate::models::mcp::EnvVariable;
+use crate::models::mcp::{EnvVariable, McpService};
 use crate::storage::{Database, StorageError};
 
 /// 环境变量管理器
@@ -190,6 +194,115 @@ pub fn mask_value(value: &str) -> String {
         let suffix = &value[value.len() - 4..];
         format!("{}****{}", prefix, suffix)
     }
+}
+
+// ===== Story 11.4: 变量注入逻辑 (Task 2) =====
+
+/// 解析环境变量引用
+///
+/// 将字符串中的环境变量引用替换为实际值
+///
+/// # 支持格式
+/// - `$VAR_NAME` - 简单格式
+/// - `${VAR_NAME}` - 带花括号格式（支持与其他文本连接）
+///
+/// # Arguments
+/// * `value` - 包含变量引用的字符串
+/// * `db` - 数据库连接
+/// * `env_manager` - 环境变量管理器
+///
+/// # Returns
+/// 解析后的字符串，变量引用被替换为实际值
+///
+/// # Note
+/// 如果变量不存在，保留原始引用不变
+pub fn resolve_env_references(
+    value: &str,
+    db: &Database,
+    env_manager: &EnvManager,
+) -> Result<String, StorageError> {
+    // 正则：匹配 ${VAR_NAME} 或 $VAR_NAME
+    // 先匹配带花括号的格式，再匹配简单格式
+    let re = Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)").unwrap();
+
+    let mut result = value.to_string();
+    let mut replacements: Vec<(String, String)> = Vec::new();
+
+    for cap in re.captures_iter(value) {
+        // 获取变量名（可能在第一个或第二个捕获组）
+        let var_name = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str());
+
+        if let Some(var_name) = var_name {
+            if let Some(decrypted) = db.get_env_variable(env_manager, var_name)? {
+                let full_match = cap.get(0).unwrap().as_str();
+                replacements.push((full_match.to_string(), decrypted));
+            }
+        }
+    }
+
+    // 应用替换（从后向前避免索引问题）
+    for (pattern, replacement) in replacements {
+        result = result.replace(&pattern, &replacement);
+    }
+
+    Ok(result)
+}
+
+/// 为 MCP 服务构建环境变量
+///
+/// 解析服务配置中的环境变量引用，构建可用于子进程的环境变量映射
+///
+/// # Arguments
+/// * `service` - MCP 服务配置
+/// * `db` - 数据库连接
+/// * `env_manager` - 环境变量管理器
+///
+/// # Returns
+/// 环境变量映射（key -> value）
+pub fn build_mcp_env(
+    service: &McpService,
+    db: &Database,
+    env_manager: &EnvManager,
+) -> Result<HashMap<String, String>, StorageError> {
+    let mut env = HashMap::new();
+
+    if let Some(env_config) = &service.env {
+        if let Some(obj) = env_config.as_object() {
+            for (key, value) in obj {
+                let resolved = if let Some(s) = value.as_str() {
+                    resolve_env_references(s, db, env_manager)?
+                } else {
+                    // 非字符串值直接转为字符串
+                    value.to_string()
+                };
+                env.insert(key.clone(), resolved);
+            }
+        }
+    }
+
+    Ok(env)
+}
+
+/// 提取字符串中引用的所有环境变量名
+///
+/// # Arguments
+/// * `value` - 包含变量引用的字符串
+///
+/// # Returns
+/// 引用的环境变量名列表
+pub fn extract_env_var_names(value: &str) -> Vec<String> {
+    let re = Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)").unwrap();
+    let mut names = Vec::new();
+
+    for cap in re.captures_iter(value) {
+        if let Some(var_name) = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str()) {
+            if !names.contains(&var_name.to_string()) {
+                names.push(var_name.to_string());
+            }
+        }
+    }
+
+    names
 }
 
 // ===== 数据库存储操作 =====
@@ -607,5 +720,162 @@ mod tests {
         let decrypted = manager.decrypt(&encrypted).unwrap();
 
         assert_eq!(decrypted, plaintext);
+    }
+
+    // ===== Story 11.4: 变量注入逻辑测试 =====
+
+    #[test]
+    fn test_resolve_env_references_simple_format() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        // 设置环境变量
+        db.set_env_variable(&manager, "API_KEY", "sk-secret123", None)
+            .unwrap();
+
+        // 解析简单格式
+        let result = resolve_env_references("$API_KEY", &db, &manager).unwrap();
+        assert_eq!(result, "sk-secret123");
+    }
+
+    #[test]
+    fn test_resolve_env_references_braced_format() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        db.set_env_variable(&manager, "BASE_URL", "https://api.example.com", None)
+            .unwrap();
+
+        // 解析带花括号格式
+        let result = resolve_env_references("${BASE_URL}/v1/chat", &db, &manager).unwrap();
+        assert_eq!(result, "https://api.example.com/v1/chat");
+    }
+
+    #[test]
+    fn test_resolve_env_references_multiple_vars() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        db.set_env_variable(&manager, "HOST", "localhost", None)
+            .unwrap();
+        db.set_env_variable(&manager, "PORT", "8080", None)
+            .unwrap();
+
+        let result = resolve_env_references("http://$HOST:$PORT", &db, &manager).unwrap();
+        assert_eq!(result, "http://localhost:8080");
+    }
+
+    #[test]
+    fn test_resolve_env_references_mixed_formats() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        db.set_env_variable(&manager, "USER", "admin", None)
+            .unwrap();
+        db.set_env_variable(&manager, "PASS", "secret", None)
+            .unwrap();
+
+        let result =
+            resolve_env_references("${USER}:$PASS@server", &db, &manager).unwrap();
+        assert_eq!(result, "admin:secret@server");
+    }
+
+    #[test]
+    fn test_resolve_env_references_missing_var() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        // 变量不存在时保留原始引用
+        let result = resolve_env_references("$NONEXISTENT_VAR", &db, &manager).unwrap();
+        assert_eq!(result, "$NONEXISTENT_VAR");
+    }
+
+    #[test]
+    fn test_resolve_env_references_no_vars() {
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        // 没有变量引用的字符串保持不变
+        let result = resolve_env_references("plain text", &db, &manager).unwrap();
+        assert_eq!(result, "plain text");
+    }
+
+    #[test]
+    fn test_build_mcp_env() {
+        use crate::models::mcp::{McpService, McpServiceSource};
+
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        // 设置环境变量
+        db.set_env_variable(&manager, "OPENAI_API_KEY", "sk-openai-key", None)
+            .unwrap();
+
+        // 创建 MCP 服务
+        let service = McpService {
+            id: "test-id".to_string(),
+            name: "openai-mcp".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "OPENAI_API_KEY": "$OPENAI_API_KEY",
+                "DEBUG": "true"
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+        };
+
+        let env = build_mcp_env(&service, &db, &manager).unwrap();
+
+        assert_eq!(env.get("OPENAI_API_KEY"), Some(&"sk-openai-key".to_string()));
+        assert_eq!(env.get("DEBUG"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_build_mcp_env_no_env() {
+        use crate::models::mcp::{McpService, McpServiceSource};
+
+        let db = Database::new_in_memory().unwrap();
+        let manager = create_test_env_manager();
+
+        let service = McpService {
+            id: "test-id".to_string(),
+            name: "simple-mcp".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+        };
+
+        let env = build_mcp_env(&service, &db, &manager).unwrap();
+        assert!(env.is_empty());
+    }
+
+    #[test]
+    fn test_extract_env_var_names() {
+        let names = extract_env_var_names("$API_KEY and ${BASE_URL}/path");
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"API_KEY".to_string()));
+        assert!(names.contains(&"BASE_URL".to_string()));
+    }
+
+    #[test]
+    fn test_extract_env_var_names_duplicates() {
+        let names = extract_env_var_names("$KEY $KEY ${KEY}");
+        assert_eq!(names.len(), 1);
+        assert_eq!(names[0], "KEY");
+    }
+
+    #[test]
+    fn test_extract_env_var_names_no_vars() {
+        let names = extract_env_var_names("no variables here");
+        assert!(names.is_empty());
     }
 }

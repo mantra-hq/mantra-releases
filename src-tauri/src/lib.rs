@@ -68,6 +68,9 @@ use commands::{
     toggle_mcp_service, link_mcp_service_to_project, unlink_mcp_service_from_project,
     get_project_mcp_services, get_mcp_service_projects, update_project_mcp_service_override,
     set_env_variable, list_env_variables, delete_env_variable, env_variable_exists,
+    // Story 11.4: Env Variable Management commands
+    get_env_variable_decrypted, get_affected_mcp_services, batch_set_env_variables,
+    validate_env_variable_name,
     // Story 11.3: MCP Config Import commands
     scan_mcp_configs_cmd, preview_mcp_import, execute_mcp_import, rollback_mcp_import,
 };
@@ -306,6 +309,11 @@ pub fn run() {
             list_env_variables,
             delete_env_variable,
             env_variable_exists,
+            // Story 11.4: Env Variable Management
+            get_env_variable_decrypted,
+            get_affected_mcp_services,
+            batch_set_env_variables,
+            validate_env_variable_name,
             // Story 11.3: MCP Config Import
             scan_mcp_configs_cmd,
             preview_mcp_import,

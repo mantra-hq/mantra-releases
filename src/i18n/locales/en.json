@@ -39,7 +39,9 @@
     "comingSoon": "Coming Soon",
     "add": "Add",
     "validating": "Validating...",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "optional": "Optional",
+    "refresh": "Refresh"
   },
   "time": {
     "justNow": "Just now",
@@ -940,6 +942,43 @@
       "critical": "Critical",
       "warning": "Warning",
       "info": "Info"
+    }
+  },
+  "hub": {
+    "envVariables": {
+      "title": "Environment Variables",
+      "description": "Manage API Keys and sensitive configurations for MCP services",
+      "add": "Add Variable",
+      "addTitle": "Add Environment Variable",
+      "addDescription": "Add a new environment variable. Values will be encrypted.",
+      "editTitle": "Edit Environment Variable",
+      "editDescription": "Modify the value or description of the environment variable",
+      "deleteTitle": "Delete Environment Variable",
+      "deleteConfirm": "Are you sure you want to delete environment variable \"{{name}}\"?",
+      "nameLabel": "Variable Name",
+      "valueLabel": "Value",
+      "valueHint": "Values are encrypted and can only be decrypted on this machine",
+      "valueRequired": "Value cannot be empty",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "e.g., OpenAI API Key",
+      "showValue": "Show full value",
+      "hideValue": "Hide value",
+      "searchPlaceholder": "Search by name or description...",
+      "empty": "No environment variables",
+      "emptyHint": "Click \"Add Variable\" to create your first environment variable",
+      "noSearchResults": "No matching variables",
+      "count": "{{count}} variables",
+      "suggestion": "Suggestion",
+      "addSuccess": "Environment variable added successfully",
+      "addError": "Failed to add environment variable",
+      "updateSuccess": "Environment variable updated successfully",
+      "updateError": "Failed to update environment variable",
+      "deleteSuccess": "Environment variable deleted successfully",
+      "deleteError": "Failed to delete environment variable",
+      "affectedServices": "Affected MCP Services ({{count}})",
+      "affectedServicesHint": "These services reference this variable and will fail to start after deletion",
+      "noAffectedServices": "No services reference this variable",
+      "disabled": "Disabled"
     }
   }
 }

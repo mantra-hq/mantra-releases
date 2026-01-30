@@ -5,6 +5,7 @@
  * Story 3-8: Task 6 - 添加隐私记录入口
  * Story 3.10: 合并内置规则展示（默认折叠）
  * Story 3.11: Task 4.5 - 本地 API 端口配置
+ * Story 11.4: Task 6 - 环境变量管理入口
  */
 
 import { useState, useCallback } from 'react';
@@ -18,6 +19,7 @@ import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { LocalServerConfig } from '@/components/settings/LocalServerConfig';
+import { EnvVariableManager } from '@/components/hub/EnvVariableManager';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
 import { feedback } from '@/lib/feedback';
@@ -111,6 +113,11 @@ export function Settings() {
                     {/* Story 3.11: 本地 API Server 端口配置 (AC #7) */}
                     <section className="rounded-lg border bg-card p-4">
                         <LocalServerConfig />
+                    </section>
+
+                    {/* Story 11.4: 环境变量管理 (Task 6) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <EnvVariableManager />
                     </section>
 
                     {/* Story 2.28: 帮助 - 复制运行日志 (AC #1, AC #3) */}

@@ -392,6 +392,38 @@ impl Database {
         Ok(())
     }
 
+    // ===== Story 11.4: 受影响服务查询 (Task 3) =====
+
+    /// 查找引用指定环境变量的 MCP 服务
+    ///
+    /// 通过搜索 env JSON 字段中的变量引用来查找受影响的服务
+    /// 支持 `$VAR_NAME` 和 `${VAR_NAME}` 两种格式
+    ///
+    /// # Arguments
+    /// * `var_name` - 环境变量名称
+    ///
+    /// # Returns
+    /// 引用该变量的 MCP 服务列表
+    pub fn find_services_using_env_var(&self, var_name: &str) -> Result<Vec<McpService>, StorageError> {
+        // 构建搜索模式：匹配 $VAR_NAME 或 ${VAR_NAME}
+        let pattern_simple = format!("%${}%", var_name);
+        let pattern_braced = format!("%${{{}}}%", var_name);
+
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+               FROM mcp_services
+               WHERE env LIKE ?1 OR env LIKE ?2
+               ORDER BY name ASC"#,
+        )?;
+
+        let services = stmt
+            .query_map(params![&pattern_simple, &pattern_braced], parse_mcp_service_row)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(services)
+    }
+
     /// 获取项目与服务的关联记录
     ///
     /// # Arguments
@@ -942,5 +974,131 @@ mod tests {
         // Link should be removed due to CASCADE
         let link = db.get_project_service_link("proj1", &service.id).unwrap();
         assert!(link.is_none());
+    }
+
+    // ===== Story 11.4: 受影响服务查询测试 =====
+
+    #[test]
+    fn test_find_services_using_env_var_simple_format() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建使用 $OPENAI_API_KEY 的服务
+        let request = CreateMcpServiceRequest {
+            name: "openai-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "OPENAI_API_KEY": "$OPENAI_API_KEY",
+                "DEBUG": "true"
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request).unwrap();
+
+        // 创建不使用该变量的服务
+        let request2 = CreateMcpServiceRequest {
+            name: "other-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "DEBUG": "true"
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request2).unwrap();
+
+        let affected = db.find_services_using_env_var("OPENAI_API_KEY").unwrap();
+        assert_eq!(affected.len(), 1);
+        assert_eq!(affected[0].name, "openai-service");
+    }
+
+    #[test]
+    fn test_find_services_using_env_var_braced_format() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建使用 ${ANTHROPIC_API_KEY} 的服务
+        let request = CreateMcpServiceRequest {
+            name: "anthropic-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "API_KEY": "${ANTHROPIC_API_KEY}",
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request).unwrap();
+
+        let affected = db.find_services_using_env_var("ANTHROPIC_API_KEY").unwrap();
+        assert_eq!(affected.len(), 1);
+        assert_eq!(affected[0].name, "anthropic-service");
+    }
+
+    #[test]
+    fn test_find_services_using_env_var_multiple_services() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建多个使用同一变量的服务
+        for name in ["service-a", "service-b", "service-c"] {
+            let request = CreateMcpServiceRequest {
+                name: name.to_string(),
+                command: "npx".to_string(),
+                args: None,
+                env: Some(serde_json::json!({
+                    "API_KEY": "$SHARED_KEY",
+                })),
+                source: McpServiceSource::Manual,
+                source_file: None,
+            };
+            db.create_mcp_service(&request).unwrap();
+        }
+
+        let affected = db.find_services_using_env_var("SHARED_KEY").unwrap();
+        assert_eq!(affected.len(), 3);
+        // 应该按名称排序
+        assert_eq!(affected[0].name, "service-a");
+        assert_eq!(affected[1].name, "service-b");
+        assert_eq!(affected[2].name, "service-c");
+    }
+
+    #[test]
+    fn test_find_services_using_env_var_no_match() {
+        let db = Database::new_in_memory().unwrap();
+
+        let request = CreateMcpServiceRequest {
+            name: "some-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "OTHER_VAR": "$OTHER_VAR",
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request).unwrap();
+
+        let affected = db.find_services_using_env_var("NONEXISTENT_VAR").unwrap();
+        assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn test_find_services_using_env_var_no_env() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建没有 env 字段的服务
+        let request = CreateMcpServiceRequest {
+            name: "no-env-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request).unwrap();
+
+        let affected = db.find_services_using_env_var("ANY_VAR").unwrap();
+        assert!(affected.is_empty());
     }
 }
