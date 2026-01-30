@@ -4,6 +4,7 @@
 //!
 //! 提供 mcp_services 表的 CRUD 操作
 
+use regex;
 use rusqlite::{params, Row};
 
 use super::database::Database;
@@ -406,6 +407,7 @@ impl Database {
     /// 引用该变量的 MCP 服务列表
     pub fn find_services_using_env_var(&self, var_name: &str) -> Result<Vec<McpService>, StorageError> {
         // 构建搜索模式：匹配 $VAR_NAME 或 ${VAR_NAME}
+        // 使用粗略的 SQL LIKE 预过滤，然后在应用层精确匹配
         let pattern_simple = format!("%${}%", var_name);
         let pattern_braced = format!("%${{{}}}%", var_name);
 
@@ -416,9 +418,27 @@ impl Database {
                ORDER BY name ASC"#,
         )?;
 
-        let services = stmt
+        // 用于提取环境变量引用的正则表达式
+        let extract_re = regex::Regex::new(r"\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)").unwrap();
+
+        let services: Vec<McpService> = stmt
             .query_map(params![&pattern_simple, &pattern_braced], parse_mcp_service_row)?
             .filter_map(|r| r.ok())
+            .filter(|service| {
+                // 在应用层进行精确匹配：提取所有变量引用，检查是否包含目标变量
+                if let Some(env) = &service.env {
+                    let env_str = env.to_string();
+                    for cap in extract_re.captures_iter(&env_str) {
+                        // 获取变量名（可能在第一个或第二个捕获组）
+                        if let Some(captured_name) = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str()) {
+                            if captured_name == var_name {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            })
             .collect();
 
         Ok(services)
@@ -1100,5 +1120,46 @@ mod tests {
 
         let affected = db.find_services_using_env_var("ANY_VAR").unwrap();
         assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn test_find_services_using_env_var_no_substring_false_positive() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建使用 $OPENAI_API_KEY 的服务（包含 API_KEY 子串）
+        let request1 = CreateMcpServiceRequest {
+            name: "openai-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "KEY": "$OPENAI_API_KEY",
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request1).unwrap();
+
+        // 创建使用 $API_KEY 的服务
+        let request2 = CreateMcpServiceRequest {
+            name: "api-key-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: Some(serde_json::json!({
+                "KEY": "$API_KEY",
+            })),
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        db.create_mcp_service(&request2).unwrap();
+
+        // 搜索 API_KEY 应该只返回 api-key-service，而不是 openai-service
+        let affected = db.find_services_using_env_var("API_KEY").unwrap();
+        assert_eq!(affected.len(), 1, "Should only match exact variable name, not substring");
+        assert_eq!(affected[0].name, "api-key-service");
+
+        // 搜索 OPENAI_API_KEY 应该只返回 openai-service
+        let affected = db.find_services_using_env_var("OPENAI_API_KEY").unwrap();
+        assert_eq!(affected.len(), 1);
+        assert_eq!(affected[0].name, "openai-service");
     }
 }
