@@ -1,8 +1,12 @@
 //! MCP 服务管理 Tauri 命令
 //!
 //! Story 11.2: MCP 服务数据模型 - Task 6
+//! Story 11.3: 配置导入与接管 - Task 7
 //!
-//! 提供 MCP 服务、项目关联和环境变量管理的 Tauri IPC 命令
+//! 提供 MCP 服务、项目关联、环境变量管理和配置导入的 Tauri IPC 命令
+
+use std::path::PathBuf;
+use std::sync::Mutex;
 
 use tauri::State;
 
@@ -11,10 +15,12 @@ use crate::models::mcp::{
     CreateMcpServiceRequest, EnvVariable, McpService, McpServiceSource, McpServiceWithOverride,
     UpdateMcpServiceRequest,
 };
+use crate::services::mcp_config::{
+    scan_mcp_configs, generate_import_preview, rollback_from_backups,
+    ImportExecutor, ImportPreview, ImportRequest, ImportResult, ScanResult,
+};
 use crate::services::EnvManager;
 use crate::storage::Database;
-
-use std::sync::Mutex;
 
 /// MCP 服务状态
 pub struct McpState {
@@ -195,4 +201,75 @@ pub fn delete_env_variable(name: String, state: State<'_, McpState>) -> Result<(
 pub fn env_variable_exists(name: String, state: State<'_, McpState>) -> Result<bool, AppError> {
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
     db.env_variable_exists(&name).map_err(AppError::from)
+}
+
+// ===== Story 11.3: 配置导入命令 =====
+
+/// 扫描 MCP 配置文件
+///
+/// 扫描指定项目路径和全局配置目录，检测所有 MCP 配置文件
+///
+/// # Arguments
+/// * `project_path` - 项目路径（可选）
+///
+/// # Returns
+/// 扫描结果，包含检测到的配置文件和服务
+#[tauri::command]
+pub fn scan_mcp_configs_cmd(project_path: Option<String>) -> Result<ScanResult, AppError> {
+    let path = project_path.as_ref().map(|p| PathBuf::from(p));
+    Ok(scan_mcp_configs(path.as_deref()))
+}
+
+/// 生成 MCP 配置导入预览
+///
+/// 分析扫描结果，检测冲突和需要的环境变量
+///
+/// # Arguments
+/// * `scan_result` - 扫描结果
+///
+/// # Returns
+/// 导入预览，包含冲突信息和环境变量需求
+#[tauri::command]
+pub fn preview_mcp_import(
+    scan_result: ScanResult,
+    state: State<'_, McpState>,
+) -> Result<ImportPreview, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    generate_import_preview(&scan_result.configs, &db).map_err(AppError::from)
+}
+
+/// 执行 MCP 配置导入
+///
+/// 根据预览结果和用户选择执行导入
+///
+/// # Arguments
+/// * `preview` - 导入预览
+/// * `request` - 导入请求（包含服务选择、冲突解决策略、环境变量值等）
+///
+/// # Returns
+/// 导入结果
+#[tauri::command]
+pub fn execute_mcp_import(
+    preview: ImportPreview,
+    request: ImportRequest,
+    state: State<'_, McpState>,
+) -> Result<ImportResult, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let executor = ImportExecutor::new(&db, &state.env_manager);
+    executor.execute(&preview, &request).map_err(AppError::from)
+}
+
+/// 回滚 MCP 配置导入
+///
+/// 从备份文件恢复原始配置
+///
+/// # Arguments
+/// * `backup_files` - 备份文件路径列表
+///
+/// # Returns
+/// 成功恢复的文件数量
+#[tauri::command]
+pub fn rollback_mcp_import(backup_files: Vec<String>) -> Result<usize, AppError> {
+    let paths: Vec<PathBuf> = backup_files.iter().map(PathBuf::from).collect();
+    rollback_from_backups(&paths).map_err(AppError::Io)
 }
