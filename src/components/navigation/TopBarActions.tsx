@@ -5,13 +5,14 @@
  * Story 2-26: i18n 国际化
  * Story 3.4: 脱敏预览主视图原生模式
  * Story 10.11: 三态模式切换集成
+ * Story 11.6: Task 1.4 (添加 Hub 导航入口)
  * Tech-Spec: 通知系统 Task 13
  *
- * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → 通知 → 设置 → 模式切换 → 主题切换
+ * 按钮顺序：搜索 → 脱敏预览 → 同步 → 导入 → Hub → 通知 → 设置 → 模式切换 → 主题切换
  */
 
 import { useEffect } from "react";
-import { RefreshCw, Plus, Search, Settings, Shield } from "lucide-react";
+import { RefreshCw, Plus, Search, Settings, Shield, Radio } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -159,6 +160,25 @@ export function TopBarActions({
           </TooltipTrigger>
           <TooltipContent side="bottom">
             <p>{t("import.importSession")}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Hub 按钮 (Story 11.6 AC #1) */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/hub")}
+              aria-label={t("hub.title")}
+              data-testid="topbar-hub-button"
+              className="h-8 w-8"
+            >
+              <Radio className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>{t("hub.title")}</p>
           </TooltipContent>
         </Tooltip>
 
