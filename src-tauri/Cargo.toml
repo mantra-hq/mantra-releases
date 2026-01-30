@@ -39,6 +39,8 @@ git2 = { version = "0.19", default-features = false, features = ["vendored-libgi
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 dirs = "5"
+ring = "0.17"
+hostname = "0.4"
 regex = "1.10"
 urlencoding = "2.1"
 once_cell = "1.19"

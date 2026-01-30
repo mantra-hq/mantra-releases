@@ -7,6 +7,7 @@ mod database;
 mod error;
 mod gateway;
 mod interception;
+mod mcp_service;
 mod repository;
 
 pub use database::Database;

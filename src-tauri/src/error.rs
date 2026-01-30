@@ -44,6 +44,10 @@ pub enum AppError {
     /// Validation error (Story 2.19)
     #[error("验证错误: {0}")]
     Validation(String),
+
+    /// Invalid input error (Story 11.2)
+    #[error("无效输入: {0}")]
+    InvalidInput(String),
 }
 
 /// Serializable error response for Tauri IPC
@@ -77,6 +81,7 @@ impl From<AppError> for ErrorResponse {
             AppError::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
             AppError::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
             AppError::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
+            AppError::InvalidInput(msg) => ("INVALID_INPUT".to_string(), msg.clone()),
         };
         Self { code, message }
     }
@@ -98,6 +103,7 @@ impl Serialize for AppError {
             Self::LockError => ("LOCK_ERROR".to_string(), "锁获取失败".to_string()),
             Self::NotFound(msg) => ("NOT_FOUND".to_string(), msg.clone()),
             Self::Validation(msg) => ("VALIDATION_ERROR".to_string(), msg.clone()),
+            Self::InvalidInput(msg) => ("INVALID_INPUT".to_string(), msg.clone()),
         };
         ErrorResponse { code, message }.serialize(serializer)
     }

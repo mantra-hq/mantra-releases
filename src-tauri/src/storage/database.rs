@@ -153,6 +153,9 @@ impl Database {
         // Migration: Add gateway_config table (Story 11.1)
         Self::run_gateway_config_migration(conn)?;
 
+        // Migration: Add MCP services tables (Story 11.2)
+        Self::run_mcp_services_migration(conn)?;
+
         Ok(())
     }
 
@@ -494,6 +497,109 @@ impl Database {
             conn.execute(
                 "INSERT INTO gateway_config (id, auth_token) VALUES (1, ?1)",
                 [&auth_token],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP services tables (Story 11.2)
+    ///
+    /// Creates:
+    /// - mcp_services table: MCP 服务配置
+    /// - project_mcp_services table: 项目与 MCP 服务的多对多关联
+    /// - env_variables table: 加密存储的环境变量
+    fn run_mcp_services_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if mcp_services table already exists
+        let mcp_services_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mcp_services'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !mcp_services_exists {
+            conn.execute_batch(
+                r#"
+                -- mcp_services 表: MCP 服务配置 (Story 11.2)
+                CREATE TABLE IF NOT EXISTS mcp_services (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    command TEXT NOT NULL,
+                    args TEXT,
+                    env TEXT,
+                    source TEXT NOT NULL CHECK(source IN ('imported', 'manual')),
+                    source_file TEXT,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+
+                -- 按名称索引，用于快速查找
+                CREATE INDEX IF NOT EXISTS idx_mcp_services_name ON mcp_services(name);
+                -- 按来源索引，用于筛选导入/手动服务
+                CREATE INDEX IF NOT EXISTS idx_mcp_services_source ON mcp_services(source);
+                "#,
+            )?;
+        }
+
+        // Check if project_mcp_services table already exists
+        let project_mcp_services_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='project_mcp_services'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !project_mcp_services_exists {
+            conn.execute_batch(
+                r#"
+                -- project_mcp_services 表: 项目与 MCP 服务的多对多关联 (Story 11.2)
+                CREATE TABLE IF NOT EXISTS project_mcp_services (
+                    project_id TEXT NOT NULL,
+                    service_id TEXT NOT NULL,
+                    config_override TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    PRIMARY KEY (project_id, service_id),
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                    FOREIGN KEY (service_id) REFERENCES mcp_services(id) ON DELETE CASCADE
+                );
+
+                -- 按项目 ID 索引
+                CREATE INDEX IF NOT EXISTS idx_project_mcp_services_project ON project_mcp_services(project_id);
+                -- 按服务 ID 索引
+                CREATE INDEX IF NOT EXISTS idx_project_mcp_services_service ON project_mcp_services(service_id);
+                "#,
+            )?;
+        }
+
+        // Check if env_variables table already exists
+        let env_variables_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='env_variables'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !env_variables_exists {
+            conn.execute_batch(
+                r#"
+                -- env_variables 表: 加密存储的环境变量 (Story 11.2)
+                CREATE TABLE IF NOT EXISTS env_variables (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    encrypted_value BLOB NOT NULL,
+                    description TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+
+                -- 按名称索引（唯一约束已提供）
+                CREATE INDEX IF NOT EXISTS idx_env_variables_name ON env_variables(name);
+                "#,
             )?;
         }
 
@@ -975,5 +1081,340 @@ mod tests {
             )
             .ok();
         assert!(result.is_none(), "Record should be deleted");
+    }
+
+    // ===== Story 11.2: MCP Services Migration Tests =====
+
+    #[test]
+    fn test_mcp_services_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify mcp_services table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM mcp_services LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(mcp_services)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"id".to_string()));
+        assert!(columns.contains(&"name".to_string()));
+        assert!(columns.contains(&"command".to_string()));
+        assert!(columns.contains(&"args".to_string()));
+        assert!(columns.contains(&"env".to_string()));
+        assert!(columns.contains(&"source".to_string()));
+        assert!(columns.contains(&"source_file".to_string()));
+        assert!(columns.contains(&"enabled".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+        assert!(columns.contains(&"updated_at".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_services_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='mcp_services'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_mcp_services_name".to_string()));
+        assert!(indexes.contains(&"idx_mcp_services_source".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_services_source_check_constraint() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Valid source values should work
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('s1', 'test', 'npx', 'imported')",
+                [],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('s2', 'test2', 'uvx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Invalid source value should fail
+        let result = db.connection().execute(
+            "INSERT INTO mcp_services (id, name, command, source) VALUES ('s3', 'test3', 'npx', 'invalid')",
+            [],
+        );
+        assert!(result.is_err(), "Invalid source value should be rejected");
+    }
+
+    #[test]
+    fn test_project_mcp_services_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify project_mcp_services table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM project_mcp_services LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(project_mcp_services)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"project_id".to_string()));
+        assert!(columns.contains(&"service_id".to_string()));
+        assert!(columns.contains(&"config_override".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+    }
+
+    #[test]
+    fn test_project_mcp_services_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='project_mcp_services'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_project_mcp_services_project".to_string()));
+        assert!(indexes.contains(&"idx_project_mcp_services_service".to_string()));
+    }
+
+    #[test]
+    fn test_project_mcp_services_composite_primary_key() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project and a service
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('svc1', 'Service 1', 'npx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Insert a link
+        db.connection()
+            .execute(
+                "INSERT INTO project_mcp_services (project_id, service_id) VALUES ('proj1', 'svc1')",
+                [],
+            )
+            .unwrap();
+
+        // Duplicate should fail
+        let result = db.connection().execute(
+            "INSERT INTO project_mcp_services (project_id, service_id) VALUES ('proj1', 'svc1')",
+            [],
+        );
+        assert!(result.is_err(), "Duplicate (project_id, service_id) should be rejected");
+    }
+
+    #[test]
+    fn test_project_mcp_services_cascade_delete_project() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project and a service
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('svc1', 'Service 1', 'npx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Insert a link
+        db.connection()
+            .execute(
+                "INSERT INTO project_mcp_services (project_id, service_id) VALUES ('proj1', 'svc1')",
+                [],
+            )
+            .unwrap();
+
+        // Delete the project
+        db.connection()
+            .execute("DELETE FROM projects WHERE id = 'proj1'", [])
+            .unwrap();
+
+        // Link should be deleted due to CASCADE
+        let count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM project_mcp_services WHERE project_id = 'proj1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "Link should be deleted when project is deleted");
+    }
+
+    #[test]
+    fn test_project_mcp_services_cascade_delete_service() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project and a service
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('svc1', 'Service 1', 'npx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Insert a link
+        db.connection()
+            .execute(
+                "INSERT INTO project_mcp_services (project_id, service_id) VALUES ('proj1', 'svc1')",
+                [],
+            )
+            .unwrap();
+
+        // Delete the service
+        db.connection()
+            .execute("DELETE FROM mcp_services WHERE id = 'svc1'", [])
+            .unwrap();
+
+        // Link should be deleted due to CASCADE
+        let count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM project_mcp_services WHERE service_id = 'svc1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "Link should be deleted when service is deleted");
+    }
+
+    #[test]
+    fn test_env_variables_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify env_variables table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM env_variables LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(env_variables)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"id".to_string()));
+        assert!(columns.contains(&"name".to_string()));
+        assert!(columns.contains(&"encrypted_value".to_string()));
+        assert!(columns.contains(&"description".to_string()));
+        assert!(columns.contains(&"created_at".to_string()));
+        assert!(columns.contains(&"updated_at".to_string()));
+    }
+
+    #[test]
+    fn test_env_variables_name_unique_constraint() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Insert first variable
+        db.connection()
+            .execute(
+                "INSERT INTO env_variables (id, name, encrypted_value) VALUES ('e1', 'API_KEY', X'0102030405')",
+                [],
+            )
+            .unwrap();
+
+        // Duplicate name should fail
+        let result = db.connection().execute(
+            "INSERT INTO env_variables (id, name, encrypted_value) VALUES ('e2', 'API_KEY', X'0607080910')",
+            [],
+        );
+        assert!(result.is_err(), "Duplicate name should be rejected");
+    }
+
+    #[test]
+    fn test_env_variables_index_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='env_variables'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_env_variables_name".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_services_allows_duplicate_names() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Insert two services with the same name (different sources)
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source, source_file) VALUES ('s1', 'git-mcp', 'npx', 'imported', '/home/user/.claude/mcp.json')",
+                [],
+            )
+            .unwrap();
+
+        let result = db.connection().execute(
+            "INSERT INTO mcp_services (id, name, command, source) VALUES ('s2', 'git-mcp', 'npx', 'manual')",
+            [],
+        );
+
+        // Should succeed - name is not unique
+        assert!(result.is_ok(), "Duplicate service names should be allowed");
     }
 }

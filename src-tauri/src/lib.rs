@@ -11,6 +11,7 @@ pub mod models;
 pub mod parsers;
 pub mod sanitizer;
 pub mod scanner;
+pub mod services;
 pub mod storage;
 
 use std::sync::{Arc, Mutex};
