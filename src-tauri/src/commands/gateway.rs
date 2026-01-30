@@ -37,15 +37,16 @@ pub async fn get_gateway_status(
 ) -> Result<GatewayStatusResponse, AppError> {
     let manager = gateway_state.manager.lock().await;
 
-    let (active_connections, total_connections, total_requests) = if let Some(state) = manager.state() {
-        let state_guard = state.read().await;
-        (
-            state_guard.active_connections(),
-            0u64, // Stats would need to be accessed from GatewayAppState
-            0u64,
-        )
-    } else {
-        (0, 0, 0)
+    let (active_connections, total_connections, total_requests) = match (manager.state(), manager.stats()) {
+        (Some(state), Some(stats)) => {
+            let state_guard = state.read().await;
+            (
+                state_guard.active_connections(),
+                stats.get_total_connections(),
+                stats.get_total_requests(),
+            )
+        }
+        _ => (0, 0, 0),
     };
 
     Ok(GatewayStatusResponse {
@@ -174,10 +175,19 @@ pub async fn regenerate_gateway_token(
     db.regenerate_gateway_token().map_err(|e| AppError::internal(e.to_string()))
 }
 
-/// 内部函数：获取状态
+/// 内部函数：获取状态（同步版本，用于启动/停止后立即返回）
 fn get_gateway_status_internal(
     manager: &GatewayServerManager,
 ) -> Result<GatewayStatusResponse, AppError> {
+    let (active_connections, total_connections, total_requests) = match manager.stats() {
+        Some(stats) => (
+            0, // 活跃连接数需要异步获取，这里简化处理
+            stats.get_total_connections(),
+            stats.get_total_requests(),
+        ),
+        None => (0, 0, 0),
+    };
+
     Ok(GatewayStatusResponse {
         running: manager.is_running(),
         port: if manager.is_running() {
@@ -186,8 +196,8 @@ fn get_gateway_status_internal(
             None
         },
         auth_token: manager.auth_token().to_string(),
-        active_connections: 0, // Simplified for now
-        total_connections: 0,
-        total_requests: 0,
+        active_connections,
+        total_connections,
+        total_requests,
     })
 }

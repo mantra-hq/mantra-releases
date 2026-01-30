@@ -90,6 +90,7 @@ fn unauthorized_response(error: GatewayError) -> Response {
 }
 
 /// 提取 Token 从请求中（用于日志或统计）
+#[allow(dead_code)]
 pub fn extract_token_from_query(uri: &str) -> Option<String> {
     let parts: Vec<&str> = uri.split('?').collect();
     if parts.len() < 2 {

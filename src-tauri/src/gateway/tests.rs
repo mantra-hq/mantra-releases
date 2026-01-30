@@ -71,7 +71,7 @@ mod unit_tests {
 
     #[test]
     fn test_client_session_creation() {
-        let session = ClientSession::new(8080);
+        let session = ClientSession::new();
         assert!(!session.session_id.is_empty());
         assert!(session.message_endpoint.contains(&session.session_id));
         assert!(session.message_endpoint.starts_with("/message?session_id="));
@@ -104,7 +104,7 @@ mod unit_tests {
         assert_eq!(state.active_connections(), 0);
 
         // Register session
-        let session = state.register_session(8080);
+        let session = state.register_session();
         assert_eq!(state.active_connections(), 1);
 
         // Get session
@@ -327,7 +327,7 @@ mod integration_tests {
             let state_clone = state.clone();
             handles.push(tokio::spawn(async move {
                 let mut state_guard = state_clone.write().await;
-                state_guard.register_session(8080)
+                state_guard.register_session()
             }));
         }
 

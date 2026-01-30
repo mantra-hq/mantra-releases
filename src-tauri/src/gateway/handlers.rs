@@ -23,17 +23,11 @@ use tokio_stream::StreamExt;
 
 use super::state::{GatewayState, GatewayStats};
 
-/// SSE 端点查询参数
-#[derive(Debug, Deserialize)]
-pub struct SseQuery {
-    pub token: Option<String>,
-}
-
 /// Message 端点查询参数
 #[derive(Debug, Deserialize)]
 pub struct MessageQuery {
     pub session_id: String,
-    pub token: Option<String>,
+    // Note: token 已在 auth 中间件中处理，此处不再需要
 }
 
 /// JSON-RPC 请求
@@ -42,7 +36,9 @@ pub struct JsonRpcRequest {
     pub jsonrpc: String,
     pub id: Option<serde_json::Value>,
     pub method: String,
+    /// 请求参数 (当前 Story 未使用，后续 Story 11.5 路由转发时使用)
     #[serde(default)]
+    #[allow(dead_code)]
     pub params: Option<serde_json::Value>,
 }
 
@@ -97,7 +93,8 @@ impl JsonRpcResponse {
         Self::error(id, -32601, "Method not found".to_string())
     }
 
-    /// 解析错误
+    /// 解析错误 (当 JSON 解析失败时使用)
+    #[allow(dead_code)]
     pub fn parse_error() -> Self {
         Self::error(None, -32700, "Parse error".to_string())
     }
@@ -116,6 +113,26 @@ pub struct GatewayAppState {
     pub port: u16,
 }
 
+/// 会话清理守卫
+/// 
+/// 当此结构体被 drop 时，自动从状态中移除对应的会话
+struct SessionCleanupGuard {
+    session_id: String,
+    state: Arc<RwLock<GatewayState>>,
+}
+
+impl Drop for SessionCleanupGuard {
+    fn drop(&mut self) {
+        let session_id = self.session_id.clone();
+        let state = self.state.clone();
+        // 在后台异步清理会话
+        tokio::spawn(async move {
+            let mut state_guard = state.write().await;
+            state_guard.remove_session(&session_id);
+        });
+    }
+}
+
 /// GET /sse - SSE 连接端点
 ///
 /// 建立 SSE 连接，发送 `endpoint` 事件包含 message 端点 URL
@@ -128,12 +145,19 @@ pub async fn sse_handler(
     // 注册新会话
     let session = {
         let mut state = app_state.state.write().await;
-        state.register_session(app_state.port)
+        state.register_session()
     };
 
     let session_id = session.session_id.clone();
     let message_endpoint = session.message_endpoint.clone();
     let state_clone = app_state.state.clone();
+    let state_for_cleanup = app_state.state.clone();
+
+    // 创建会话清理守卫 - 当流被 drop 时自动清理会话
+    let cleanup_guard = SessionCleanupGuard {
+        session_id: session_id.clone(),
+        state: state_for_cleanup,
+    };
 
     // 创建 SSE 事件流
     let stream = stream::once(async move {
@@ -159,7 +183,13 @@ pub async fn sse_handler(
                 });
                 Ok::<_, Infallible>(Event::default().comment("keepalive"))
             }),
-    );
+    )
+    // 包装流以确保在 drop 时触发清理
+    .map(move |event| {
+        // 保持 cleanup_guard 存活直到流结束
+        let _guard = &cleanup_guard;
+        event
+    });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
 }

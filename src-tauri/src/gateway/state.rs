@@ -24,7 +24,7 @@ pub struct ClientSession {
 
 impl ClientSession {
     /// 创建新的客户端会话
-    pub fn new(_port: u16) -> Self {
+    pub fn new() -> Self {
         let session_id = Uuid::new_v4().to_string();
         let message_endpoint = format!("/message?session_id={}", session_id);
         let now = chrono::Utc::now();
@@ -40,6 +40,12 @@ impl ClientSession {
     /// 更新最后活跃时间
     pub fn touch(&mut self) {
         self.last_active = chrono::Utc::now();
+    }
+}
+
+impl Default for ClientSession {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -96,8 +102,8 @@ impl GatewayState {
     }
 
     /// 注册新的客户端会话
-    pub fn register_session(&mut self, port: u16) -> ClientSession {
-        let session = ClientSession::new(port);
+    pub fn register_session(&mut self) -> ClientSession {
+        let session = ClientSession::new();
         self.sessions.insert(session.session_id.clone(), session.clone());
         session
     }
@@ -196,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_client_session_creation() {
-        let session = ClientSession::new(8080);
+        let session = ClientSession::new();
         assert!(!session.session_id.is_empty());
         assert!(session.message_endpoint.contains(&session.session_id));
     }
@@ -221,7 +227,7 @@ mod tests {
         let mut state = GatewayState::new(config);
 
         // 注册会话
-        let session = state.register_session(8080);
+        let session = state.register_session();
         assert_eq!(state.active_connections(), 1);
 
         // 获取会话

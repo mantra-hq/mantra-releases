@@ -33,6 +33,8 @@ pub struct GatewayServerHandle {
     port: u16,
     /// 共享状态引用
     state: Arc<RwLock<GatewayState>>,
+    /// 统计信息引用
+    stats: Arc<GatewayStats>,
 }
 
 impl GatewayServerHandle {
@@ -44,6 +46,11 @@ impl GatewayServerHandle {
     /// 获取共享状态引用
     pub fn state(&self) -> Arc<RwLock<GatewayState>> {
         self.state.clone()
+    }
+
+    /// 获取统计信息引用
+    pub fn stats(&self) -> Arc<GatewayStats> {
+        self.stats.clone()
     }
 
     /// 关闭 Server
@@ -92,24 +99,26 @@ impl GatewayServer {
     /// # Returns
     /// GatewayServerHandle 用于控制 Server 生命周期
     pub async fn start(&self, port: Option<u16>) -> Result<GatewayServerHandle, String> {
-        // 确定端口
-        let port = match port.or(if self.config.port > 0 {
+        // 确定要使用的端口并绑定 (原子操作，避免 TOCTOU 竞争)
+        let (listener, port) = match port.or(if self.config.port > 0 {
             Some(self.config.port)
         } else {
             None
         }) {
             Some(p) => {
                 // 尝试绑定指定端口
-                if Self::check_port_available(p).await {
-                    p
-                } else {
-                    // 指定端口被占用，尝试自动分配
-                    self.find_available_port().await?
+                let addr = SocketAddr::from(([127, 0, 0, 1], p));
+                match tokio::net::TcpListener::bind(addr).await {
+                    Ok(listener) => (listener, p),
+                    Err(_) => {
+                        // 指定端口被占用，尝试自动分配
+                        self.find_and_bind_port().await?
+                    }
                 }
             }
             None => {
                 // 自动分配端口
-                self.find_available_port().await?
+                self.find_and_bind_port().await?
             }
         };
 
@@ -122,7 +131,7 @@ impl GatewayServer {
         // 创建应用状态
         let app_state = GatewayAppState {
             state: state.clone(),
-            stats,
+            stats: stats.clone(),
             port,
         };
 
@@ -146,18 +155,10 @@ impl GatewayServer {
             )
             .with_state(app_state);
 
-        // 绑定地址 (仅本地 - 安全要求)
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
-
-        // 创建 TCP listener
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|e| format!("Failed to bind to port {}: {}", port, e))?;
-
         // 创建关闭信号
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-        // 在后台运行 Server
+        // 在后台运行 Server (使用已绑定的 listener)
         tokio::spawn(async move {
             let graceful = axum::serve(listener, app).with_graceful_shutdown(async {
                 let _ = shutdown_rx.await;
@@ -172,6 +173,7 @@ impl GatewayServer {
             shutdown_tx: Some(shutdown_tx),
             port,
             state,
+            stats,
         })
     }
 
@@ -182,17 +184,35 @@ impl GatewayServer {
             .is_ok()
     }
 
-    /// 在指定范围内查找可用端口
-    async fn find_available_port(&self) -> Result<u16, String> {
+    /// 在指定范围内查找可用端口并绑定
+    /// 
+    /// 返回已绑定的 TcpListener 以避免 TOCTOU 竞争条件
+    async fn find_and_bind_port(&self) -> Result<(tokio::net::TcpListener, u16), String> {
+        // 首先尝试在首选端口范围内绑定
         for port in DEFAULT_PORT_RANGE_START..=DEFAULT_PORT_RANGE_END {
-            if Self::check_port_available(port).await {
-                return Ok(port);
+            let addr = SocketAddr::from(([127, 0, 0, 1], port));
+            if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
+                return Ok((listener, port));
             }
         }
-        Err(format!(
-            "No available port found in range {}-{}",
-            DEFAULT_PORT_RANGE_START, DEFAULT_PORT_RANGE_END
-        ))
+        
+        // 如果首选范围都被占用，让操作系统分配端口
+        let addr = SocketAddr::from(([127, 0, 0, 1], 0));
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|e| format!("Failed to bind to any port: {}", e))?;
+        let port = listener.local_addr()
+            .map_err(|e| format!("Failed to get local address: {}", e))?
+            .port();
+        Ok((listener, port))
+    }
+
+    /// 在指定范围内查找可用端口 (向后兼容)
+    #[allow(dead_code)]
+    async fn find_available_port(&self) -> Result<u16, String> {
+        let (listener, port) = self.find_and_bind_port().await?;
+        drop(listener); // 释放端口供后续使用
+        Ok(port)
     }
 }
 
@@ -293,6 +313,11 @@ impl GatewayServerManager {
     /// 获取共享状态引用
     pub fn state(&self) -> Option<Arc<RwLock<GatewayState>>> {
         self.handle.as_ref().map(|h| h.state())
+    }
+
+    /// 获取统计信息引用
+    pub fn stats(&self) -> Option<Arc<GatewayStats>> {
+        self.handle.as_ref().map(|h| h.stats())
     }
 }
 
