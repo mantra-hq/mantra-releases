@@ -62,11 +62,18 @@ use commands::{
     // Story 11.1: Gateway commands
     get_gateway_status, get_gateway_config, update_gateway_config,
     start_gateway, stop_gateway, restart_gateway, regenerate_gateway_token,
+    // Story 11.2: MCP Service commands
+    McpState, list_mcp_services, list_mcp_services_by_source, get_mcp_service,
+    get_mcp_service_by_name, create_mcp_service, update_mcp_service, delete_mcp_service,
+    toggle_mcp_service, link_mcp_service_to_project, unlink_mcp_service_from_project,
+    get_project_mcp_services, get_mcp_service_projects, update_project_mcp_service_override,
+    set_env_variable, list_env_variables, delete_env_variable, env_variable_exists,
 };
 
 use storage::Database;
 use local_server::ServerManager;
 use gateway::{GatewayConfig, GatewayServerManager};
+use services::EnvManager;
 
 /// Database file name
 const DATABASE_FILENAME: &str = "mantra.db";
@@ -135,6 +142,14 @@ pub fn run() {
             let gateway_manager = GatewayServerManager::new(gateway_config.clone());
             app.manage(GatewayServerState {
                 manager: TokioMutex::new(gateway_manager),
+            });
+
+            // Story 11.2: 初始化 MCP 服务状态
+            let mcp_db = Database::new(&db_path).expect("Failed to create MCP db connection");
+            let env_manager = EnvManager::from_machine_id();
+            app.manage(McpState {
+                db: Mutex::new(mcp_db),
+                env_manager,
             });
 
             // 在后台启动 Local Server（不阻塞 setup）
@@ -270,7 +285,25 @@ pub fn run() {
             start_gateway,
             stop_gateway,
             restart_gateway,
-            regenerate_gateway_token
+            regenerate_gateway_token,
+            // Story 11.2: MCP Service
+            list_mcp_services,
+            list_mcp_services_by_source,
+            get_mcp_service,
+            get_mcp_service_by_name,
+            create_mcp_service,
+            update_mcp_service,
+            delete_mcp_service,
+            toggle_mcp_service,
+            link_mcp_service_to_project,
+            unlink_mcp_service_from_project,
+            get_project_mcp_services,
+            get_mcp_service_projects,
+            update_project_mcp_service_override,
+            set_env_variable,
+            list_env_variables,
+            delete_env_variable,
+            env_variable_exists
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

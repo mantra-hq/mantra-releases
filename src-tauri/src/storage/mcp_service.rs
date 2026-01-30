@@ -57,8 +57,8 @@ impl Database {
         let now = chrono::Utc::now().to_rfc3339();
 
         // 序列化 args 和 env 为 JSON
-        let args_json = request.args.as_ref().map(|a| serde_json::to_string(a).ok()).flatten();
-        let env_json = request.env.as_ref().map(|e| serde_json::to_string(e).ok()).flatten();
+        let args_json = request.args.as_ref().and_then(|a| serde_json::to_string(a).ok());
+        let env_json = request.env.as_ref().and_then(|e| serde_json::to_string(e).ok());
 
         self.connection().execute(
             r#"INSERT INTO mcp_services (id, name, command, args, env, source, source_file, enabled, created_at, updated_at)
@@ -188,8 +188,8 @@ impl Database {
         let enabled = update.enabled.unwrap_or(current.enabled);
 
         // 序列化 args 和 env 为 JSON
-        let args_json = args.map(|a| serde_json::to_string(a).ok()).flatten();
-        let env_json = env.map(|e| serde_json::to_string(e).ok()).flatten();
+        let args_json = args.and_then(|a| serde_json::to_string(a).ok());
+        let env_json = env.and_then(|e| serde_json::to_string(e).ok());
 
         self.connection().execute(
             r#"UPDATE mcp_services SET name = ?1, command = ?2, args = ?3, env = ?4, enabled = ?5, updated_at = ?6
@@ -265,9 +265,7 @@ impl Database {
         let now = chrono::Utc::now().to_rfc3339();
 
         // 序列化 config_override 为 JSON
-        let config_json = config_override
-            .map(|c| serde_json::to_string(c).ok())
-            .flatten();
+        let config_json = config_override.and_then(|c| serde_json::to_string(c).ok());
 
         self.connection().execute(
             r#"INSERT INTO project_mcp_services (project_id, service_id, config_override, created_at)
@@ -377,9 +375,7 @@ impl Database {
         service_id: &str,
         config_override: Option<&serde_json::Value>,
     ) -> Result<(), StorageError> {
-        let config_json = config_override
-            .map(|c| serde_json::to_string(c).ok())
-            .flatten();
+        let config_json = config_override.and_then(|c| serde_json::to_string(c).ok());
 
         let affected = self.connection().execute(
             "UPDATE project_mcp_services SET config_override = ?1 WHERE project_id = ?2 AND service_id = ?3",
