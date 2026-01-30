@@ -129,11 +129,7 @@ impl GatewayServer {
         let stats = Arc::new(GatewayStats::new());
 
         // 创建应用状态
-        let app_state = GatewayAppState {
-            state: state.clone(),
-            stats: stats.clone(),
-            port,
-        };
+        let app_state = GatewayAppState::new(state.clone(), stats.clone(), port);
 
         // 创建受保护路由（需要认证）
         let protected_routes = Router::new()

@@ -62,6 +62,9 @@ use commands::{
     // Story 11.1: Gateway commands
     get_gateway_status, get_gateway_config, update_gateway_config,
     start_gateway, stop_gateway, restart_gateway, regenerate_gateway_token,
+    // Story 11.5: Context Routing commands
+    gateway_set_project_context, gateway_clear_project_context,
+    gateway_get_session_context, gateway_list_sessions,
     // Story 11.2: MCP Service commands
     McpState, list_mcp_services, list_mcp_services_by_source, get_mcp_service,
     get_mcp_service_by_name, create_mcp_service, update_mcp_service, delete_mcp_service,
@@ -291,6 +294,11 @@ pub fn run() {
             stop_gateway,
             restart_gateway,
             regenerate_gateway_token,
+            // Story 11.5: Context Routing
+            gateway_set_project_context,
+            gateway_clear_project_context,
+            gateway_get_session_context,
+            gateway_list_sessions,
             // Story 11.2: MCP Service
             list_mcp_services,
             list_mcp_services_by_source,

@@ -1,15 +1,18 @@
 //! Gateway Tauri 命令
 //!
 //! Story 11.1: SSE Server 核心 - Task 7
+//! Story 11.5: 上下文路由 - Task 8 (Tauri IPC 命令支持)
 //!
 //! 提供 Gateway Server 的 Tauri IPC 命令
 
-use serde::Serialize;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::commands::AppState;
 use crate::error::AppError;
-use crate::gateway::GatewayServerManager;
+use crate::gateway::{GatewayServerManager, SessionProjectContext};
 use crate::storage::{GatewayConfigRecord, GatewayConfigUpdate};
 use crate::GatewayServerState;
 
@@ -200,4 +203,184 @@ fn get_gateway_status_internal(
         total_connections,
         total_requests,
     })
+}
+
+// ===== Story 11.5: 上下文路由 - Tauri IPC 命令 =====
+
+/// 会话上下文响应
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionContextResponse {
+    /// 会话 ID
+    pub session_id: String,
+    /// 工作目录
+    pub work_dir: Option<PathBuf>,
+    /// 项目上下文
+    pub project_context: Option<SessionProjectContext>,
+    /// 是否有手动覆盖
+    pub has_manual_override: bool,
+}
+
+/// 会话列表项
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionListItem {
+    /// 会话 ID
+    pub session_id: String,
+    /// 工作目录
+    pub work_dir: Option<PathBuf>,
+    /// 项目 ID（如果有）
+    pub project_id: Option<String>,
+    /// 项目名称（如果有）
+    pub project_name: Option<String>,
+    /// 是否有手动覆盖
+    pub has_manual_override: bool,
+    /// 连接时间
+    pub connected_at: String,
+    /// 最后活跃时间
+    pub last_active: String,
+}
+
+/// 设置项目上下文请求
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetProjectContextRequest {
+    /// 会话 ID
+    pub session_id: String,
+    /// 项目 ID
+    pub project_id: String,
+    /// 项目名称
+    pub project_name: String,
+}
+
+/// 设置会话的项目上下文（手动覆盖）
+///
+/// Story 11.5: 上下文路由 - Task 8.1 (AC: #2)
+///
+/// 用于系统托盘手动选择项目上下文
+#[tauri::command]
+pub async fn gateway_set_project_context(
+    gateway_state: State<'_, GatewayServerState>,
+    request: SetProjectContextRequest,
+) -> Result<SessionContextResponse, AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let state = manager
+        .state()
+        .ok_or_else(|| AppError::internal("Gateway not running"))?;
+
+    let mut state_guard = state.write().await;
+    let session = state_guard
+        .get_session_mut(&request.session_id)
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    // 设置手动覆盖
+    session.set_manual_override(request.project_id, request.project_name);
+
+    // 返回更新后的上下文
+    Ok(SessionContextResponse {
+        session_id: session.session_id.clone(),
+        work_dir: session.work_dir.clone(),
+        project_context: session.project_context.clone(),
+        has_manual_override: session.has_manual_override(),
+    })
+}
+
+/// 清除会话的手动覆盖
+///
+/// Story 11.5: 上下文路由 - Task 8.2 (AC: #2)
+///
+/// 清除后会回退到自动路由的上下文
+#[tauri::command]
+pub async fn gateway_clear_project_context(
+    gateway_state: State<'_, GatewayServerState>,
+    session_id: String,
+) -> Result<SessionContextResponse, AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let state = manager
+        .state()
+        .ok_or_else(|| AppError::internal("Gateway not running"))?;
+
+    let mut state_guard = state.write().await;
+    let session = state_guard
+        .get_session_mut(&session_id)
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    // 清除手动覆盖
+    session.clear_manual_override();
+
+    // 返回更新后的上下文
+    Ok(SessionContextResponse {
+        session_id: session.session_id.clone(),
+        work_dir: session.work_dir.clone(),
+        project_context: session.project_context.clone(),
+        has_manual_override: session.has_manual_override(),
+    })
+}
+
+/// 获取会话的上下文信息
+///
+/// Story 11.5: 上下文路由 - Task 8.3 (AC: #5)
+#[tauri::command]
+pub async fn gateway_get_session_context(
+    gateway_state: State<'_, GatewayServerState>,
+    session_id: String,
+) -> Result<SessionContextResponse, AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let state = manager
+        .state()
+        .ok_or_else(|| AppError::internal("Gateway not running"))?;
+
+    let state_guard = state.read().await;
+    let session = state_guard
+        .get_session(&session_id)
+        .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
+
+    Ok(SessionContextResponse {
+        session_id: session.session_id.clone(),
+        work_dir: session.work_dir.clone(),
+        project_context: session.project_context.clone(),
+        has_manual_override: session.has_manual_override(),
+    })
+}
+
+/// 列出所有活跃会话
+///
+/// Story 11.5: 上下文路由 - Task 8.4 (AC: #2)
+///
+/// 用于系统托盘显示所有活跃会话及其上下文
+#[tauri::command]
+pub async fn gateway_list_sessions(
+    gateway_state: State<'_, GatewayServerState>,
+) -> Result<Vec<SessionListItem>, AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let state = match manager.state() {
+        Some(s) => s,
+        None => return Ok(Vec::new()), // Gateway 未运行，返回空列表
+    };
+
+    let state_guard = state.read().await;
+    let sessions: Vec<SessionListItem> = state_guard
+        .sessions
+        .values()
+        .map(|session| {
+            let (project_id, project_name) = session
+                .project_context
+                .as_ref()
+                .map(|ctx| (Some(ctx.project_id.clone()), Some(ctx.project_name.clone())))
+                .unwrap_or((None, None));
+
+            SessionListItem {
+                session_id: session.session_id.clone(),
+                work_dir: session.work_dir.clone(),
+                project_id,
+                project_name,
+                has_manual_override: session.has_manual_override(),
+                connected_at: session.connected_at.to_rfc3339(),
+                last_active: session.last_active.to_rfc3339(),
+            }
+        })
+        .collect();
+
+    Ok(sessions)
 }

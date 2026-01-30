@@ -1,13 +1,33 @@
 //! Gateway 共享状态定义
 //!
 //! Story 11.1: SSE Server 核心
+//! Story 11.5: 上下文路由 - Task 3 (会话状态扩展)
+//!
 //! 使用 Arc<RwLock<>> 进行共享状态管理
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
+
+/// 会话项目上下文信息
+///
+/// Story 11.5: 上下文路由 - Task 3.1
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionProjectContext {
+    /// 项目 ID
+    pub project_id: String,
+    /// 项目名称
+    pub project_name: String,
+    /// 匹配的路径
+    pub matched_path: PathBuf,
+    /// 是否为手动覆盖
+    pub is_manual_override: bool,
+}
 
 /// SSE 客户端会话信息
 #[derive(Debug, Clone)]
@@ -20,6 +40,10 @@ pub struct ClientSession {
     pub connected_at: chrono::DateTime<chrono::Utc>,
     /// 最后活跃时间
     pub last_active: chrono::DateTime<chrono::Utc>,
+    /// 解析的工作目录 (Story 11.5)
+    pub work_dir: Option<PathBuf>,
+    /// 项目上下文（自动路由或手动覆盖）(Story 11.5)
+    pub project_context: Option<SessionProjectContext>,
 }
 
 impl ClientSession {
@@ -34,12 +58,77 @@ impl ClientSession {
             message_endpoint,
             connected_at: now,
             last_active: now,
+            work_dir: None,
+            project_context: None,
         }
     }
 
     /// 更新最后活跃时间
     pub fn touch(&mut self) {
         self.last_active = chrono::Utc::now();
+    }
+
+    /// 设置工作目录
+    ///
+    /// Story 11.5: 上下文路由 - Task 3.1
+    pub fn set_work_dir(&mut self, work_dir: PathBuf) {
+        self.work_dir = Some(work_dir);
+    }
+
+    /// 设置项目上下文（自动路由）
+    ///
+    /// Story 11.5: 上下文路由 - Task 3.3
+    pub fn set_auto_context(
+        &mut self,
+        project_id: String,
+        project_name: String,
+        matched_path: PathBuf,
+    ) {
+        self.project_context = Some(SessionProjectContext {
+            project_id,
+            project_name,
+            matched_path,
+            is_manual_override: false,
+        });
+    }
+
+    /// 设置手动覆盖上下文
+    ///
+    /// Story 11.5: 上下文路由 - Task 3.2
+    pub fn set_manual_override(&mut self, project_id: String, project_name: String) {
+        self.project_context = Some(SessionProjectContext {
+            project_id,
+            project_name,
+            matched_path: PathBuf::new(),
+            is_manual_override: true,
+        });
+    }
+
+    /// 清除手动覆盖
+    ///
+    /// 清除后会回退到自动路由的上下文
+    pub fn clear_manual_override(&mut self) {
+        if let Some(ctx) = &self.project_context {
+            if ctx.is_manual_override {
+                self.project_context = None;
+            }
+        }
+    }
+
+    /// 获取有效的项目上下文
+    ///
+    /// Story 11.5: 上下文路由 - Task 3.4
+    /// 返回当前生效的项目上下文（手动覆盖优先）
+    pub fn get_effective_project(&self) -> Option<&SessionProjectContext> {
+        self.project_context.as_ref()
+    }
+
+    /// 检查是否有手动覆盖
+    pub fn has_manual_override(&self) -> bool {
+        self.project_context
+            .as_ref()
+            .map(|ctx| ctx.is_manual_override)
+            .unwrap_or(false)
     }
 }
 
@@ -265,5 +354,140 @@ mod tests {
 
         assert_eq!(stats.get_total_connections(), 2);
         assert_eq!(stats.get_total_requests(), 1);
+    }
+
+    // ===== Story 11.5: 上下文路由测试 =====
+
+    #[test]
+    fn test_client_session_new_fields() {
+        let session = ClientSession::new();
+        assert!(session.work_dir.is_none());
+        assert!(session.project_context.is_none());
+    }
+
+    #[test]
+    fn test_set_work_dir() {
+        let mut session = ClientSession::new();
+        session.set_work_dir(PathBuf::from("/home/user/projects"));
+
+        assert!(session.work_dir.is_some());
+        assert_eq!(
+            session.work_dir.unwrap(),
+            PathBuf::from("/home/user/projects")
+        );
+    }
+
+    #[test]
+    fn test_set_auto_context() {
+        let mut session = ClientSession::new();
+        session.set_auto_context(
+            "proj-123".to_string(),
+            "My Project".to_string(),
+            PathBuf::from("/home/user/projects/myproject"),
+        );
+
+        let ctx = session.get_effective_project().unwrap();
+        assert_eq!(ctx.project_id, "proj-123");
+        assert_eq!(ctx.project_name, "My Project");
+        assert_eq!(
+            ctx.matched_path,
+            PathBuf::from("/home/user/projects/myproject")
+        );
+        assert!(!ctx.is_manual_override);
+        assert!(!session.has_manual_override());
+    }
+
+    #[test]
+    fn test_set_manual_override() {
+        let mut session = ClientSession::new();
+        session.set_manual_override("proj-456".to_string(), "Override Project".to_string());
+
+        let ctx = session.get_effective_project().unwrap();
+        assert_eq!(ctx.project_id, "proj-456");
+        assert_eq!(ctx.project_name, "Override Project");
+        assert!(ctx.is_manual_override);
+        assert!(session.has_manual_override());
+    }
+
+    #[test]
+    fn test_manual_override_replaces_auto_context() {
+        let mut session = ClientSession::new();
+
+        // 先设置自动上下文
+        session.set_auto_context(
+            "auto-proj".to_string(),
+            "Auto Project".to_string(),
+            PathBuf::from("/auto/path"),
+        );
+        assert_eq!(
+            session.get_effective_project().unwrap().project_id,
+            "auto-proj"
+        );
+
+        // 设置手动覆盖
+        session.set_manual_override("manual-proj".to_string(), "Manual Project".to_string());
+
+        // 应该返回手动覆盖的上下文
+        let ctx = session.get_effective_project().unwrap();
+        assert_eq!(ctx.project_id, "manual-proj");
+        assert!(ctx.is_manual_override);
+    }
+
+    #[test]
+    fn test_clear_manual_override() {
+        let mut session = ClientSession::new();
+
+        // 设置手动覆盖
+        session.set_manual_override("manual-proj".to_string(), "Manual Project".to_string());
+        assert!(session.has_manual_override());
+
+        // 清除手动覆盖
+        session.clear_manual_override();
+        assert!(!session.has_manual_override());
+        assert!(session.project_context.is_none());
+    }
+
+    #[test]
+    fn test_clear_manual_override_preserves_auto_context() {
+        let mut session = ClientSession::new();
+
+        // 设置自动上下文
+        session.set_auto_context(
+            "auto-proj".to_string(),
+            "Auto Project".to_string(),
+            PathBuf::from("/auto/path"),
+        );
+
+        // 清除手动覆盖不应该影响自动上下文
+        session.clear_manual_override();
+
+        // 自动上下文应该保持不变
+        let ctx = session.get_effective_project().unwrap();
+        assert_eq!(ctx.project_id, "auto-proj");
+        assert!(!ctx.is_manual_override);
+    }
+
+    #[test]
+    fn test_get_effective_project_none() {
+        let session = ClientSession::new();
+        assert!(session.get_effective_project().is_none());
+    }
+
+    #[test]
+    fn test_session_project_context_serialization() {
+        let ctx = SessionProjectContext {
+            project_id: "proj-123".to_string(),
+            project_name: "Test Project".to_string(),
+            matched_path: PathBuf::from("/test/path"),
+            is_manual_override: false,
+        };
+
+        let json = serde_json::to_string(&ctx).unwrap();
+        assert!(json.contains("proj-123"));
+        assert!(json.contains("Test Project"));
+
+        let deserialized: SessionProjectContext = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.project_id, ctx.project_id);
+        assert_eq!(deserialized.project_name, ctx.project_name);
     }
 }
