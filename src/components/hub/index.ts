@@ -28,3 +28,17 @@ export { McpServiceStatusDot, type McpServiceStatusDotProps, type ServiceStatus 
 
 // Story 11.10: 工具策略管理
 export { ToolPolicyEditor } from "./ToolPolicyEditor";
+
+// Story 11.11: MCP Inspector
+export {
+  InspectorDrawer,
+  type InspectorDrawerProps,
+  type McpResource,
+  ToolExplorer,
+  type ToolExplorerProps,
+  ToolTester,
+  type ToolTesterProps,
+  RpcLogViewer,
+  type RpcLogViewerProps,
+  type RpcLogEntry,
+} from "./inspector";

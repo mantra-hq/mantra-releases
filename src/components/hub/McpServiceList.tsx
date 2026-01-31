@@ -32,6 +32,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Plus,
   MoreVertical,
   Pencil,
@@ -43,12 +49,14 @@ import {
   Hand,
   Link2,
   Download,
+  Bug,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { McpServiceForm } from "./McpServiceForm";
 import { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 import { McpConfigImportDialog } from "./McpConfigImportDialog";
+import { InspectorDrawer } from "./inspector";
 
 /**
  * MCP 服务类型
@@ -86,6 +94,11 @@ export function McpServiceList() {
 
   // 导入配置状态
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Inspector 状态
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [inspectorService, setInspectorService] = useState<McpService | null>(null);
+  const [gatewayRunning, setGatewayRunning] = useState(false);
 
   // 加载服务列表
   const loadServices = useCallback(async () => {
@@ -158,15 +171,34 @@ export function McpServiceList() {
     setIsImportOpen(true);
   }, []);
 
+  // 检查 Gateway 状态
+  const checkGatewayStatus = useCallback(async () => {
+    try {
+      const status = await invoke<{ running: boolean }>("get_gateway_status");
+      setGatewayRunning(status.running);
+    } catch {
+      setGatewayRunning(false);
+    }
+  }, []);
+
+  // 打开 Inspector
+  const handleInspect = useCallback((service: McpService) => {
+    setInspectorService(service);
+    setIsInspectorOpen(true);
+  }, []);
+
   // 操作成功后刷新
   const handleSuccess = useCallback(() => {
     loadServices();
   }, [loadServices]);
 
-  // 初始加载
+  // 初始加载 + 定时检查 Gateway 状态
   useEffect(() => {
     loadServices();
-  }, [loadServices]);
+    checkGatewayStatus();
+    const interval = setInterval(checkGatewayStatus, 5000);
+    return () => clearInterval(interval);
+  }, [loadServices, checkGatewayStatus]);
 
   // 来源图标
   const getSourceIcon = (source: string) => {
@@ -288,18 +320,54 @@ export function McpServiceList() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            data-testid={`mcp-service-menu-${service.id}`}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                      <div className="flex items-center gap-1">
+                        {/* Inspect Button - AC1 */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleInspect(service)}
+                                disabled={!gatewayRunning || !service.enabled}
+                                data-testid={`mcp-service-inspect-${service.id}`}
+                              >
+                                <Bug className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {!gatewayRunning
+                                  ? t("hub.inspector.gatewayNotRunning")
+                                  : !service.enabled
+                                  ? t("hub.services.disabled")
+                                  : t("hub.inspector.inspectTooltip")}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`mcp-service-menu-${service.id}`}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleInspect(service)}
+                            disabled={!gatewayRunning || !service.enabled}
+                          >
+                            <Bug className="h-4 w-4 mr-2" />
+                            {t("hub.inspector.inspect")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleEdit(service)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             {t("hub.services.edit")}
@@ -317,7 +385,8 @@ export function McpServiceList() {
                             {t("hub.services.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
-                      </DropdownMenu>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -365,6 +434,14 @@ export function McpServiceList() {
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
         onSuccess={handleSuccess}
+      />
+
+      {/* MCP Inspector 抽屉 - Story 11.11 */}
+      <InspectorDrawer
+        open={isInspectorOpen}
+        onOpenChange={setIsInspectorOpen}
+        service={inspectorService}
+        gatewayRunning={gatewayRunning}
       />
     </Card>
   );

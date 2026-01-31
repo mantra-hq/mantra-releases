@@ -863,3 +863,165 @@ export function getProjectBySessionId(sessionId: string): Project | null {
   }
   return null;
 }
+
+// =============================================================================
+// Mock MCP Services (Story 11.11: Inspector E2E)
+// =============================================================================
+
+/**
+ * Mock MCP 服务列表
+ */
+export interface MockMcpService {
+  id: string;
+  name: string;
+  command: string;
+  args: string[] | null;
+  env: Record<string, string> | null;
+  source: "imported" | "manual";
+  source_file: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const MOCK_MCP_SERVICES: MockMcpService[] = [
+  {
+    id: "mock-mcp-git",
+    name: "git-mcp",
+    command: "npx",
+    args: ["--yes", "@anthropic/mcp-server-git"],
+    env: null,
+    source: "imported",
+    source_file: ".mcp.json",
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-15T10:00:00Z",
+  },
+  {
+    id: "mock-mcp-filesystem",
+    name: "filesystem-mcp",
+    command: "npx",
+    args: ["--yes", "@anthropic/mcp-server-filesystem", "/home/user/projects"],
+    env: null,
+    source: "manual",
+    source_file: null,
+    enabled: true,
+    created_at: "2026-01-05T00:00:00Z",
+    updated_at: "2026-01-10T08:00:00Z",
+  },
+  {
+    id: "mock-mcp-disabled",
+    name: "disabled-service",
+    command: "node",
+    args: ["server.js"],
+    env: { "API_KEY": "***" },
+    source: "manual",
+    source_file: null,
+    enabled: false,
+    created_at: "2026-01-08T00:00:00Z",
+    updated_at: "2026-01-08T00:00:00Z",
+  },
+];
+
+/**
+ * Mock Gateway 状态
+ */
+export interface MockGatewayStatus {
+  running: boolean;
+  port: number | null;
+  auth_token: string;
+  active_connections: number;
+  total_connections: number;
+  total_requests: number;
+}
+
+export const MOCK_GATEWAY_STATUS_RUNNING: MockGatewayStatus = {
+  running: true,
+  port: 3333,
+  auth_token: "mock-token-12345",
+  active_connections: 2,
+  total_connections: 15,
+  total_requests: 150,
+};
+
+export const MOCK_GATEWAY_STATUS_STOPPED: MockGatewayStatus = {
+  running: false,
+  port: null,
+  auth_token: "mock-token-12345",
+  active_connections: 0,
+  total_connections: 0,
+  total_requests: 0,
+};
+
+/**
+ * Mock MCP 工具定义
+ */
+export interface MockMcpTool {
+  name: string;
+  description?: string;
+  inputSchema?: {
+    type: "object";
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+export const MOCK_MCP_TOOLS: MockMcpTool[] = [
+  {
+    name: "git_status",
+    description: "Get the current git status of the repository",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "git_diff",
+    description: "Get the diff of staged or unstaged changes",
+    inputSchema: {
+      type: "object",
+      properties: {
+        staged: { type: "boolean", description: "Show staged changes only" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "git_log",
+    description: "Get the commit history",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Maximum number of commits to show" },
+        branch: { type: "string", description: "Branch name" },
+      },
+      required: [],
+    },
+  },
+];
+
+/**
+ * Mock MCP 资源定义
+ */
+export interface MockMcpResource {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+
+export const MOCK_MCP_RESOURCES: MockMcpResource[] = [
+  {
+    uri: "git://HEAD",
+    name: "Current HEAD",
+    description: "Current HEAD commit reference",
+    mimeType: "text/plain",
+  },
+  {
+    uri: "git://config",
+    name: "Git Config",
+    description: "Repository git configuration",
+    mimeType: "text/plain",
+  },
+];

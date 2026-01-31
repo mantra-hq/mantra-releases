@@ -15,6 +15,9 @@ import {
   MOCK_DEFAULT_PATHS,
   MOCK_DISCOVERED_FILES,
   MOCK_SEARCH_RESULTS,
+  MOCK_MCP_SERVICES,
+  MOCK_GATEWAY_STATUS_RUNNING,
+  MOCK_MCP_TOOLS,
   getSessionsByProjectId,
   getSessionById,
   getProjectBySessionId,
@@ -331,6 +334,43 @@ export async function mockInvoke<T>(cmd: string, args?: InvokeArgs): Promise<T> 
         return { ...project, cwd: newCwd } as T;
       }
       return null as T;
+    }
+
+    // ==========================================================================
+    // MCP 服务相关 Mock (Story 11.11: Inspector)
+    // ==========================================================================
+
+    case "list_mcp_services":
+      return MOCK_MCP_SERVICES as T;
+
+    case "get_gateway_status":
+      return MOCK_GATEWAY_STATUS_RUNNING as T;
+
+    case "toggle_mcp_service": {
+      const id = getArg<string>(args, "id");
+      const enabled = getArg<boolean>(args, "enabled");
+      const service = MOCK_MCP_SERVICES.find((s) => s.id === id);
+      if (service) {
+        return { ...service, enabled: enabled ?? !service.enabled } as T;
+      }
+      return null as T;
+    }
+
+    case "start_gateway":
+      return MOCK_GATEWAY_STATUS_RUNNING as T;
+
+    case "stop_gateway":
+      return { ...MOCK_GATEWAY_STATUS_RUNNING, running: false, port: null } as T;
+
+    case "regenerate_gateway_token":
+      return "new-mock-token-67890" as T;
+
+    case "discover_tools": {
+      return {
+        serviceId: getArg<string>(args, "serviceId") ?? "unknown",
+        tools: MOCK_MCP_TOOLS,
+        fromCache: false,
+      } as T;
     }
 
     // ==========================================================================
