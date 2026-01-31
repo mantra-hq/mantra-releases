@@ -2,6 +2,7 @@
  * Hub 组件导出
  * Story 11.4: 环境变量管理
  * Story 11.6: Mantra Hub UI
+ * Story 11.9: 项目详情页 MCP 集成
  */
 
 // 环境变量管理
@@ -20,3 +21,7 @@ export { McpServiceForm } from "./McpServiceForm";
 export { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 export { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 export { McpConfigImportDialog } from "./McpConfigImportDialog";
+
+// Story 11.9: 项目 MCP 上下文
+export { McpContextCard, type McpContextCardProps } from "./McpContextCard";
+export { McpServiceStatusDot, type McpServiceStatusDotProps, type ServiceStatus } from "./McpServiceStatusDot";

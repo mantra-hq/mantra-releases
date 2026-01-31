@@ -1133,6 +1133,22 @@
       "skipped": "已跳过",
       "backupFiles": "备份文件",
       "shadowConfigs": "影子配置文件"
+    },
+    "mcpContext": {
+      "title": "MCP 上下文",
+      "servicesActive": "{{count}} 个服务运行中",
+      "servicesCount": "{{count}} 个服务",
+      "noServicesLinked": "未关联任何服务",
+      "detected": "检测到：",
+      "configs": "个配置",
+      "importTakeover": "导入并接管",
+      "manageServices": "管理服务",
+      "addServices": "添加服务",
+      "noConfigsFound": "未配置 MCP 服务",
+      "addServicesHint": "添加 MCP 工具以增强 AI 编程体验",
+      "statusRunning": "运行中",
+      "statusStopped": "未运行",
+      "statusError": "错误"
     }
   }
 }

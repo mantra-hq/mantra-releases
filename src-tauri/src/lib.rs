@@ -77,6 +77,8 @@ use commands::{
     validate_env_variable_name,
     // Story 11.3: MCP Config Import commands
     scan_mcp_configs_cmd, preview_mcp_import, execute_mcp_import, rollback_mcp_import,
+    // Story 11.9: Project Detail MCP Integration commands
+    check_project_mcp_status,
     // Story 11.7: Tray commands
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
 };
@@ -359,6 +361,8 @@ pub fn run() {
             preview_mcp_import,
             execute_mcp_import,
             rollback_mcp_import,
+            // Story 11.9: Project Detail MCP Integration
+            check_project_mcp_status,
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,

@@ -1128,6 +1128,22 @@
       "skipped": "Skipped",
       "backupFiles": "Backup files",
       "shadowConfigs": "Shadow config files"
+    },
+    "mcpContext": {
+      "title": "MCP Context",
+      "servicesActive": "{{count}} Services Active",
+      "servicesCount": "{{count}} Services",
+      "noServicesLinked": "No services linked to project",
+      "detected": "Detected:",
+      "configs": "configs",
+      "importTakeover": "Import & Takeover",
+      "manageServices": "Manage Services",
+      "addServices": "Add Services",
+      "noConfigsFound": "No MCP services configured",
+      "addServicesHint": "Add MCP tools to enhance your AI coding experience.",
+      "statusRunning": "Running",
+      "statusStopped": "Stopped",
+      "statusError": "Error"
     }
   }
 }

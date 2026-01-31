@@ -6,8 +6,16 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { ProjectDrawer } from "./ProjectDrawer";
 import type { LogicalProjectStats } from "@/types/project";
+
+// Helper to render with router context
+const renderWithRouter = (ui: React.ReactElement) => {
+  return render(
+    <MemoryRouter>{ui}</MemoryRouter>
+  );
+};
 
 // Mock logical projects data (Story 1.12)
 const mockLogicalProjects: LogicalProjectStats[] = [
@@ -69,41 +77,41 @@ describe("ProjectDrawer", () => {
   };
 
   it("renders drawer when open", () => {
-    render(<ProjectDrawer {...defaultProps} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} />);
     expect(screen.getByTestId("project-drawer")).toBeInTheDocument();
     expect(screen.getByText("我的项目")).toBeInTheDocument();
   });
 
   it("does not render content when closed", () => {
-    render(<ProjectDrawer {...defaultProps} isOpen={false} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} isOpen={false} />);
     expect(screen.queryByText("我的项目")).not.toBeInTheDocument();
   });
 
   it("displays logical project list", () => {
-    render(<ProjectDrawer {...defaultProps} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} />);
     expect(screen.getByText("mantra")).toBeInTheDocument();
     expect(screen.getByText("other-project")).toBeInTheDocument();
   });
 
   it("shows empty state when no projects", () => {
-    render(<ProjectDrawer {...defaultProps} logicalProjects={[]} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} logicalProjects={[]} />);
     expect(screen.getByTestId("project-drawer-empty")).toBeInTheDocument();
     expect(screen.getByText("还没有导入任何项目")).toBeInTheDocument();
   });
 
   it("shows loading state", () => {
-    render(<ProjectDrawer {...defaultProps} logicalProjects={[]} isLoading={true} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} logicalProjects={[]} isLoading={true} />);
     expect(screen.getByText("加载中...")).toBeInTheDocument();
   });
 
   it("shows import button at bottom", () => {
-    render(<ProjectDrawer {...defaultProps} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} />);
     expect(screen.getByTestId("project-drawer-import-button")).toBeInTheDocument();
   });
 
   it("calls onImportClick when import button clicked", () => {
     const onImportClick = vi.fn();
-    render(<ProjectDrawer {...defaultProps} onImportClick={onImportClick} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} onImportClick={onImportClick} />);
 
     fireEvent.click(screen.getByTestId("project-drawer-import-button"));
     expect(onImportClick).toHaveBeenCalled();
@@ -111,7 +119,7 @@ describe("ProjectDrawer", () => {
 
   it("expands logical project and loads sessions on click", async () => {
     const getLogicalProjectSessions = vi.fn().mockResolvedValue(mockSessions);
-    render(
+    renderWithRouter(
       <ProjectDrawer {...defaultProps} getLogicalProjectSessions={getLogicalProjectSessions} />
     );
 
@@ -125,7 +133,7 @@ describe("ProjectDrawer", () => {
   });
 
   it("filters logical projects by search keyword", () => {
-    render(<ProjectDrawer {...defaultProps} />);
+    renderWithRouter(<ProjectDrawer {...defaultProps} />);
 
     const searchInput = screen.getByTestId("drawer-search-input");
     fireEvent.change(searchInput, { target: { value: "mantra" } });

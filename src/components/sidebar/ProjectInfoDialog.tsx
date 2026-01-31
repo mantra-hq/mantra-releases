@@ -3,6 +3,7 @@
  * Story 2.27: Task 1 - 项目元信息查看
  * Story 1.9: Task 8.4-8.8 - 设置工作目录功能
  * Story 1.12: 多路径支持
+ * Story 11.9: Task 4 - MCP 上下文集成
  *
  * 展示项目详细信息：名称、路径、来源、会话数、创建时间等
  * 支持手动设置工作目录（修复 Gemini 等占位符路径问题）
@@ -10,6 +11,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
     Dialog,
@@ -19,6 +21,7 @@ import {
     DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
     Tooltip,
     TooltipContent,
@@ -44,6 +47,8 @@ import { useProjectPaths, addProjectPath, removeProjectPath, getProjectPaths, ge
 import { SourceIcon } from "@/components/import/SourceIcons";
 import type { ProjectPath } from "@/types/project";
 import { toast } from "sonner";
+// Story 11.9: MCP 上下文卡片
+import { McpContextCard } from "@/components/hub";
 
 /**
  * ProjectInfoDialog Props
@@ -250,6 +255,7 @@ export function ProjectInfoDialog({
     onProjectUpdated,
 }: ProjectInfoDialogProps) {
     const { t, i18n } = useTranslation();
+    const navigate = useNavigate();
     const [sessions, setSessions] = React.useState<SessionSummary[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [currentProject, setCurrentProject] = React.useState<Project | null>(project ?? null);
@@ -722,6 +728,26 @@ export function ProjectInfoDialog({
                             />
                         )}
                     </div>
+
+                    {/* Story 11.9: MCP 上下文卡片 */}
+                    {!isPlaceholder && (currentProject || logicalProject) && (
+                        <>
+                            <Separator className="my-4" />
+                            <McpContextCard
+                                projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
+                                projectPath={
+                                    paths.find((p) => p.is_primary)?.path ??
+                                    paths[0]?.path ??
+                                    logicalProject?.physical_path ??
+                                    currentProject?.cwd
+                                }
+                                onNavigateToHub={(projectId) => {
+                                    onOpenChange(false); // 关闭对话框
+                                    navigate(`/hub?project=${projectId}`);
+                                }}
+                            />
+                        </>
+                    )}
 
                     {/* 无效 CWD 提示 */}
                     {isPlaceholder && (

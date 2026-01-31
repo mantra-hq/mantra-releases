@@ -2,12 +2,14 @@
 //!
 //! Story 11.2: MCP 服务数据模型 - Task 6
 //! Story 11.3: 配置导入与接管 - Task 7
+//! Story 11.9: 项目详情页 MCP 集成 - Task 1
 //!
 //! 提供 MCP 服务、项目关联、环境变量管理和配置导入的 Tauri IPC 命令
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::AppError;
@@ -15,12 +17,14 @@ use crate::models::mcp::{
     CreateMcpServiceRequest, EnvVariable, EnvVariableNameValidation, McpService, McpServiceSource,
     McpServiceWithOverride, SetEnvVariableRequest, UpdateMcpServiceRequest,
 };
+use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
 use crate::services::mcp_config::{
     scan_mcp_configs, generate_import_preview, rollback_from_backups,
     ImportExecutor, ImportPreview, ImportRequest, ImportResult, ScanResult,
 };
 use crate::services::EnvManager;
 use crate::storage::Database;
+use crate::GatewayServerState;
 
 /// MCP 服务状态
 pub struct McpState {
@@ -391,4 +395,189 @@ pub fn execute_mcp_import(
 pub fn rollback_mcp_import(backup_files: Vec<String>) -> Result<usize, AppError> {
     let paths: Vec<PathBuf> = backup_files.iter().map(PathBuf::from).collect();
     rollback_from_backups(&paths).map_err(AppError::Io)
+}
+
+// ===== Story 11.9: 项目详情页 MCP 集成命令 =====
+
+/// 项目 MCP 状态 (AC: 1, 2, 4, 5)
+///
+/// 用于前端 McpContextCard 组件显示项目的 MCP 上下文
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectMcpStatus {
+    /// 项目是否已接管 MCP 配置
+    pub is_taken_over: bool,
+    /// 已关联的服务列表 (来自 project_mcp_services)
+    pub associated_services: Vec<McpServiceSummary>,
+    /// 检测到的可接管配置文件 (来自 ToolAdapterRegistry)
+    pub detectable_configs: Vec<DetectableConfig>,
+}
+
+/// MCP 服务摘要信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServiceSummary {
+    /// 服务 ID
+    pub id: String,
+    /// 服务名称
+    pub name: String,
+    /// 适配器 ID: "claude" | "cursor" | "codex" | "gemini"
+    pub adapter_id: String,
+    /// 是否正在运行 (Gateway 子进程存活)
+    pub is_running: bool,
+    /// 错误信息 (如果启动失败)
+    pub error_message: Option<String>,
+}
+
+/// 检测到的可接管配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetectableConfig {
+    /// 适配器 ID: "claude" | "cursor" | "codex" | "gemini"
+    pub adapter_id: String,
+    /// 配置文件路径
+    pub config_path: String,
+    /// 配置作用域: "project" | "user"
+    pub scope: String,
+    /// 检测到的服务数量
+    pub service_count: usize,
+}
+
+/// 检查项目的 MCP 状态
+///
+/// Story 11.9: 项目详情页 MCP 集成 - Task 1
+///
+/// 扫描项目目录下的 MCP 配置文件，查询已接管状态和服务运行状态
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `project_path` - 项目路径 (用于扫描配置文件)
+///
+/// # Returns
+/// 项目的 MCP 状态，包含：
+/// - 是否已接管
+/// - 已关联的服务列表及运行状态
+/// - 可检测到的配置文件
+#[tauri::command]
+pub async fn check_project_mcp_status(
+    project_id: String,
+    project_path: Option<String>,
+    state: State<'_, McpState>,
+    gateway_state: State<'_, GatewayServerState>,
+) -> Result<ProjectMcpStatus, AppError> {
+    // 1. 查询项目已关联的 MCP 服务 (限制锁的作用域)
+    let project_services = {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_project_services(&project_id)?
+    };
+
+    // 2. 检查 Gateway 是否运行
+    let gateway_running = {
+        let manager = gateway_state.manager.lock().await;
+        manager.is_running()
+    };
+
+    // 3. 构建服务摘要列表 (含运行状态)
+    // 服务被视为"运行中"当：Gateway 运行 + 服务已启用
+    let mut associated_services = Vec::new();
+    for svc in &project_services {
+        // 如果 Gateway 运行且服务已启用，视为运行状态
+        let is_running = gateway_running && svc.service.enabled;
+        associated_services.push(McpServiceSummary {
+            id: svc.service.id.clone(),
+            name: svc.service.name.clone(),
+            adapter_id: svc.service.source_file
+                .as_ref()
+                .and_then(|path| infer_adapter_id_from_path(path))
+                .unwrap_or_else(|| "unknown".to_string()),
+            is_running,
+            error_message: None,
+        });
+    }
+
+    // 4. 扫描可检测的配置文件
+    let detectable_configs = if let Some(ref path) = project_path {
+        scan_detectable_configs(path)
+    } else {
+        Vec::new()
+    };
+
+    // 5. 判断是否已接管
+    let is_taken_over = !associated_services.is_empty();
+
+    Ok(ProjectMcpStatus {
+        is_taken_over,
+        associated_services,
+        detectable_configs,
+    })
+}
+
+/// 从配置文件路径推断适配器 ID
+fn infer_adapter_id_from_path(path: &str) -> Option<String> {
+    if path.contains(".mcp.json") || path.contains(".claude.json") {
+        Some("claude".to_string())
+    } else if path.contains(".cursor") {
+        Some("cursor".to_string())
+    } else if path.contains(".codex") {
+        Some("codex".to_string())
+    } else if path.contains(".gemini") {
+        Some("gemini".to_string())
+    } else {
+        None
+    }
+}
+
+/// 扫描项目目录下的可检测配置文件
+fn scan_detectable_configs(project_path: &str) -> Vec<DetectableConfig> {
+    let registry = ToolAdapterRegistry::new();
+    let project_path = PathBuf::from(project_path);
+    let mut detectable_configs = Vec::new();
+
+    // 获取用户主目录
+    let home_dir = dirs::home_dir();
+
+    for adapter in registry.all() {
+        for (scope, pattern) in adapter.scan_patterns() {
+            let full_path = match scope {
+                ConfigScope::Project => {
+                    // 项目级配置：相对于项目路径
+                    project_path.join(&pattern)
+                }
+                ConfigScope::User => {
+                    // 用户级配置：替换 ~ 为用户主目录
+                    if let Some(ref home) = home_dir {
+                        if pattern.starts_with('~') {
+                            home.join(pattern.trim_start_matches("~/"))
+                        } else {
+                            PathBuf::from(&pattern)
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            // 检查文件是否存在并读取内容
+            if full_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    // 解析配置文件获取服务数量
+                    let service_count = match adapter.parse(&full_path, &content, scope) {
+                        Ok(services) => services.len(),
+                        Err(_) => 0,
+                    };
+
+                    if service_count > 0 {
+                        detectable_configs.push(DetectableConfig {
+                            adapter_id: adapter.id().to_string(),
+                            config_path: full_path.to_string_lossy().to_string(),
+                            scope: match scope {
+                                ConfigScope::Project => "project".to_string(),
+                                ConfigScope::User => "user".to_string(),
+                            },
+                            service_count,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    detectable_configs
 }
