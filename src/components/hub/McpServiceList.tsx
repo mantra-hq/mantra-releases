@@ -204,14 +204,20 @@ export function McpServiceList() {
 
   // 加载 OAuth 状态 - Story 11.12
   const loadOAuthStatuses = useCallback(async (serviceIds: string[]) => {
-    const statuses: Record<string, OAuthServiceStatus> = {};
-    for (const id of serviceIds) {
-      try {
+    // 使用 Promise.all 并行获取所有服务的 OAuth 状态
+    const results = await Promise.allSettled(
+      serviceIds.map(async (id) => {
         const status = await invoke<OAuthServiceStatus>("oauth_get_status", { serviceId: id });
-        statuses[id] = status;
-      } catch {
-        // 忽略错误，服务可能不支持 OAuth
+        return { id, status };
+      })
+    );
+
+    const statuses: Record<string, OAuthServiceStatus> = {};
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        statuses[result.value.id] = result.value.status;
       }
+      // 忽略 rejected 的 promise，服务可能不支持 OAuth
     }
     setOAuthStatuses(statuses);
   }, []);

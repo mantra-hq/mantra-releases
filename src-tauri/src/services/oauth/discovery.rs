@@ -171,6 +171,7 @@ impl Default for OAuthDiscovery {
 }
 
 /// 常见 OAuth Provider 的预设配置
+#[allow(dead_code)]
 pub mod presets {
     use super::OAuthEndpoints;
 

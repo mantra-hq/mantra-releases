@@ -107,6 +107,7 @@ export function OAuthConfigDialog({
     if (open && serviceId) {
       loadStatus();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, serviceId]);
 
   const loadStatus = async () => {
