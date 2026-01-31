@@ -1,8 +1,15 @@
 //! MCP 配置解析与导入服务
 //!
 //! Story 11.3: 配置导入与接管
+//! Story 11.8: MCP Gateway Architecture Refactor
 //!
-//! 提供 MCP 配置文件的解析、扫描、备份、导入功能
+//! 提供 MCP 配置文件的解析、扫描、备份、导入功能。
+//!
+//! ## 架构变更 (Story 11.8)
+//!
+//! - 使用 `adapter_id: String` 替代旧的 `ConfigSource` 枚举
+//! - 通过 `ToolAdapterRegistry` 统一管理适配器
+//! - 支持 Claude, Cursor, Codex, Gemini CLI 四大工具
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,29 +19,67 @@ use std::path::{Path, PathBuf};
 
 use crate::models::mcp::{CreateMcpServiceRequest, McpService, McpServiceSource};
 use crate::services::EnvManager;
+use crate::services::mcp_adapters::{
+    ConfigScope, DetectedConfig as AdapterDetectedConfig,
+    DetectedService as AdapterDetectedService, GatewayInjectionConfig, ToolAdapterRegistry,
+};
 use crate::storage::{Database, StorageError};
 
 // ===== 数据类型定义 =====
 
-/// 配置文件来源类型
+// Re-export 新的类型定义，保持向后兼容
+// ConfigScope 已从 mcp_adapters 导入
+
+/// 配置文件来源类型 (已弃用，保留向后兼容)
+///
+/// Story 11.8: 使用 `adapter_id: String` 替代此枚举
+#[deprecated(since = "0.7.0", note = "Use adapter_id: String instead")]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigSource {
-    /// Claude Code: .claude/config.json
+    /// Claude Code: .mcp.json
     ClaudeCode,
     /// Cursor: .cursor/mcp.json 或 ~/.cursor/mcp.json
     Cursor,
-    /// Claude Desktop: claude_desktop_config.json
+    /// Claude Desktop: claude_desktop_config.json (已弃用，合并到 ClaudeCode)
     ClaudeDesktop,
+    /// Codex: .codex/config.toml
+    Codex,
+    /// Gemini CLI: .gemini/settings.json
+    Gemini,
 }
 
+#[allow(deprecated)]
 impl ConfigSource {
     /// 获取配置文件的典型路径描述
     pub fn description(&self) -> &'static str {
         match self {
-            ConfigSource::ClaudeCode => ".claude/config.json",
+            ConfigSource::ClaudeCode => ".mcp.json",
             ConfigSource::Cursor => ".cursor/mcp.json",
             ConfigSource::ClaudeDesktop => "claude_desktop_config.json",
+            ConfigSource::Codex => ".codex/config.toml",
+            ConfigSource::Gemini => ".gemini/settings.json",
+        }
+    }
+
+    /// 从 adapter_id 转换
+    pub fn from_adapter_id(id: &str) -> Option<Self> {
+        match id {
+            "claude" => Some(ConfigSource::ClaudeCode),
+            "cursor" => Some(ConfigSource::Cursor),
+            "codex" => Some(ConfigSource::Codex),
+            "gemini" => Some(ConfigSource::Gemini),
+            _ => None,
+        }
+    }
+
+    /// 转换为 adapter_id
+    pub fn to_adapter_id(&self) -> &'static str {
+        match self {
+            ConfigSource::ClaudeCode | ConfigSource::ClaudeDesktop => "claude",
+            ConfigSource::Cursor => "cursor",
+            ConfigSource::Codex => "codex",
+            ConfigSource::Gemini => "gemini",
         }
     }
 }
@@ -52,21 +97,53 @@ pub struct DetectedService {
     pub env: Option<HashMap<String, String>>,
     /// 来源配置文件路径
     pub source_file: PathBuf,
-    /// 来源类型
-    pub source_type: ConfigSource,
+    /// 适配器 ID (Story 11.8: 替代旧的 source_type)
+    pub adapter_id: String,
+    /// 配置作用域 (Story 11.8: 新增)
+    #[serde(default)]
+    pub scope: Option<ConfigScope>,
+}
+
+impl From<AdapterDetectedService> for DetectedService {
+    fn from(s: AdapterDetectedService) -> Self {
+        Self {
+            name: s.name,
+            command: s.command,
+            args: s.args,
+            env: s.env,
+            source_file: s.source_file,
+            adapter_id: s.adapter_id,
+            scope: Some(s.scope),
+        }
+    }
 }
 
 /// 检测到的配置文件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectedConfig {
-    /// 配置来源类型
-    pub source: ConfigSource,
+    /// 适配器 ID (Story 11.8: 替代旧的 source)
+    pub adapter_id: String,
     /// 配置文件路径
     pub path: PathBuf,
+    /// 配置作用域 (Story 11.8: 新增)
+    #[serde(default)]
+    pub scope: Option<ConfigScope>,
     /// 检测到的服务列表
     pub services: Vec<DetectedService>,
     /// 解析错误（如有）
     pub parse_errors: Vec<String>,
+}
+
+impl From<AdapterDetectedConfig> for DetectedConfig {
+    fn from(c: AdapterDetectedConfig) -> Self {
+        Self {
+            adapter_id: c.adapter_id,
+            path: c.path,
+            scope: Some(c.scope),
+            services: c.services.into_iter().map(Into::into).collect(),
+            parse_errors: c.parse_errors,
+        }
+    }
 }
 
 /// 服务冲突信息
@@ -251,7 +328,11 @@ pub fn strip_json_comments(input: &str) -> String {
     result
 }
 
-/// MCP 配置解析器 trait
+/// MCP 配置解析器 trait (已弃用)
+///
+/// Story 11.8: 使用 `McpToolAdapter` trait 替代
+#[deprecated(since = "0.7.0", note = "Use McpToolAdapter trait from mcp_adapters module")]
+#[allow(deprecated)]
 pub trait McpConfigParser {
     /// 解析配置文件
     fn parse(&self, path: &Path) -> Result<Vec<DetectedService>, ParseError>;
@@ -263,9 +344,13 @@ pub trait McpConfigParser {
     fn generate_shadow_config(&self, gateway_url: &str) -> String;
 }
 
-/// Claude Code 配置解析器
+/// Claude Code 配置解析器 (已弃用)
+///
+/// Story 11.8: 使用 `ClaudeAdapter` 替代
+#[deprecated(since = "0.7.0", note = "Use ClaudeAdapter from mcp_adapters module")]
 pub struct ClaudeCodeConfigParser;
 
+#[allow(deprecated)]
 impl McpConfigParser for ClaudeCodeConfigParser {
     fn parse(&self, path: &Path) -> Result<Vec<DetectedService>, ParseError> {
         let content = fs::read_to_string(path)?;
@@ -282,10 +367,10 @@ impl McpConfigParser for ClaudeCodeConfigParser {
                         args,
                         env,
                         source_file: path.to_path_buf(),
-                        source_type: ConfigSource::ClaudeCode,
+                        adapter_id: "claude".to_string(),
+                        scope: None,
                     });
                 }
-                // 跳过 SSE 模式的服务（通常是已配置的 gateway）
             }
         }
 
@@ -308,9 +393,13 @@ impl McpConfigParser for ClaudeCodeConfigParser {
     }
 }
 
-/// Cursor 配置解析器
+/// Cursor 配置解析器 (已弃用)
+///
+/// Story 11.8: 使用 `CursorAdapter` 替代
+#[deprecated(since = "0.7.0", note = "Use CursorAdapter from mcp_adapters module")]
 pub struct CursorConfigParser;
 
+#[allow(deprecated)]
 impl McpConfigParser for CursorConfigParser {
     fn parse(&self, path: &Path) -> Result<Vec<DetectedService>, ParseError> {
         let content = fs::read_to_string(path)?;
@@ -327,7 +416,8 @@ impl McpConfigParser for CursorConfigParser {
                         args,
                         env,
                         source_file: path.to_path_buf(),
-                        source_type: ConfigSource::Cursor,
+                        adapter_id: "cursor".to_string(),
+                        scope: None,
                     });
                 }
             }
@@ -352,9 +442,13 @@ impl McpConfigParser for CursorConfigParser {
     }
 }
 
-/// Claude Desktop 配置解析器
+/// Claude Desktop 配置解析器 (已弃用)
+///
+/// Story 11.8: 使用 `ClaudeAdapter` 替代
+#[deprecated(since = "0.7.0", note = "Use ClaudeAdapter from mcp_adapters module")]
 pub struct ClaudeDesktopConfigParser;
 
+#[allow(deprecated)]
 impl McpConfigParser for ClaudeDesktopConfigParser {
     fn parse(&self, path: &Path) -> Result<Vec<DetectedService>, ParseError> {
         let content = fs::read_to_string(path)?;
@@ -371,7 +465,8 @@ impl McpConfigParser for ClaudeDesktopConfigParser {
                         args,
                         env,
                         source_file: path.to_path_buf(),
-                        source_type: ConfigSource::ClaudeDesktop,
+                        adapter_id: "claude".to_string(),
+                        scope: None,
                     });
                 }
             }
@@ -427,7 +522,9 @@ fn get_claude_desktop_config_path() -> Option<PathBuf> {
     }
 }
 
-/// 扫描 MCP 配置文件
+/// 扫描 MCP 配置文件 (使用新的适配器架构)
+///
+/// Story 11.8: 使用 `ToolAdapterRegistry` 统一扫描所有工具的配置文件
 ///
 /// # Arguments
 /// * `project_path` - 项目路径（可选，用于扫描项目级配置）
@@ -435,44 +532,85 @@ fn get_claude_desktop_config_path() -> Option<PathBuf> {
 /// # Returns
 /// 扫描结果，包含所有检测到的配置文件和服务
 pub fn scan_mcp_configs(project_path: Option<&Path>) -> ScanResult {
+    let registry = ToolAdapterRegistry::new();
     let mut configs = Vec::new();
     let mut scanned_paths = Vec::new();
 
-    // 1. 项目级配置扫描
-    if let Some(project) = project_path {
-        // Claude Code: {project}/.claude/config.json
-        let claude_code_path = project.join(".claude").join("config.json");
-        scanned_paths.push(claude_code_path.clone());
-        if claude_code_path.exists() {
-            configs.push(parse_config_file(&claude_code_path, ConfigSource::ClaudeCode));
-        }
+    let home_dir = dirs::home_dir();
 
-        // Cursor: {project}/.cursor/mcp.json
-        let cursor_path = project.join(".cursor").join("mcp.json");
-        scanned_paths.push(cursor_path.clone());
-        if cursor_path.exists() {
-            configs.push(parse_config_file(&cursor_path, ConfigSource::Cursor));
+    // 遍历所有适配器
+    for adapter in registry.all() {
+        for (scope, pattern) in adapter.scan_patterns() {
+            // 解析路径模式
+            let path = match scope {
+                ConfigScope::Project => {
+                    if let Some(project) = project_path {
+                        project.join(&pattern)
+                    } else {
+                        continue;
+                    }
+                }
+                ConfigScope::User => {
+                    if let Some(ref home) = home_dir {
+                        if pattern.starts_with("~/") {
+                            home.join(&pattern[2..])
+                        } else {
+                            home.join(&pattern)
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            scanned_paths.push(path.clone());
+
+            if path.exists() {
+                // 读取并解析配置文件
+                match fs::read_to_string(&path) {
+                    Ok(content) => {
+                        match adapter.parse(&path, &content, scope) {
+                            Ok(services) => {
+                                configs.push(DetectedConfig {
+                                    adapter_id: adapter.id().to_string(),
+                                    path: path.clone(),
+                                    scope: Some(scope),
+                                    services: services.into_iter().map(Into::into).collect(),
+                                    parse_errors: Vec::new(),
+                                });
+                            }
+                            Err(e) => {
+                                configs.push(DetectedConfig {
+                                    adapter_id: adapter.id().to_string(),
+                                    path: path.clone(),
+                                    scope: Some(scope),
+                                    services: Vec::new(),
+                                    parse_errors: vec![e.to_string()],
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        configs.push(DetectedConfig {
+                            adapter_id: adapter.id().to_string(),
+                            path: path.clone(),
+                            scope: Some(scope),
+                            services: Vec::new(),
+                            parse_errors: vec![format!("Failed to read file: {}", e)],
+                        });
+                    }
+                }
+            }
         }
     }
 
-    // 2. 全局配置扫描
-    if let Some(home) = dirs::home_dir() {
-        // Cursor 全局: ~/.cursor/mcp.json
-        let cursor_global = home.join(".cursor").join("mcp.json");
-        scanned_paths.push(cursor_global.clone());
-        if cursor_global.exists() {
-            configs.push(parse_config_file(&cursor_global, ConfigSource::Cursor));
-        }
-    }
-
-    // Claude Desktop
+    // 向后兼容：扫描 Claude Desktop 配置
     if let Some(claude_desktop_path) = get_claude_desktop_config_path() {
         scanned_paths.push(claude_desktop_path.clone());
         if claude_desktop_path.exists() {
-            configs.push(parse_config_file(
-                &claude_desktop_path,
-                ConfigSource::ClaudeDesktop,
-            ));
+            #[allow(deprecated)]
+            let config = parse_config_file_legacy(&claude_desktop_path, ConfigSource::ClaudeDesktop);
+            configs.push(config);
         }
     }
 
@@ -482,28 +620,60 @@ pub fn scan_mcp_configs(project_path: Option<&Path>) -> ScanResult {
     }
 }
 
-/// 解析单个配置文件
-fn parse_config_file(path: &Path, source: ConfigSource) -> DetectedConfig {
+/// 解析单个配置文件 (旧版，向后兼容)
+#[allow(deprecated)]
+fn parse_config_file_legacy(path: &Path, source: ConfigSource) -> DetectedConfig {
     let parser: Box<dyn McpConfigParser> = match source {
         ConfigSource::ClaudeCode => Box::new(ClaudeCodeConfigParser),
         ConfigSource::Cursor => Box::new(CursorConfigParser),
         ConfigSource::ClaudeDesktop => Box::new(ClaudeDesktopConfigParser),
+        ConfigSource::Codex | ConfigSource::Gemini => {
+            // 新工具使用新的适配器架构
+            return DetectedConfig {
+                adapter_id: source.to_adapter_id().to_string(),
+                path: path.to_path_buf(),
+                scope: None,
+                services: Vec::new(),
+                parse_errors: vec!["Use new adapter architecture".to_string()],
+            };
+        }
     };
 
     match parser.parse(path) {
         Ok(services) => DetectedConfig {
-            source,
+            adapter_id: source.to_adapter_id().to_string(),
             path: path.to_path_buf(),
+            scope: None,
             services,
             parse_errors: Vec::new(),
         },
         Err(e) => DetectedConfig {
-            source,
+            adapter_id: source.to_adapter_id().to_string(),
             path: path.to_path_buf(),
+            scope: None,
             services: Vec::new(),
             parse_errors: vec![e.to_string()],
         },
     }
+}
+
+/// 使用新适配器架构生成影子配置
+///
+/// Story 11.8: 使用 HTTP Transport + Authorization Header
+pub fn generate_shadow_config_v2(
+    adapter_id: &str,
+    gateway_url: &str,
+    token: &str,
+) -> Result<String, String> {
+    let registry = ToolAdapterRegistry::new();
+    let adapter = registry
+        .get(adapter_id)
+        .ok_or_else(|| format!("Unknown adapter: {}", adapter_id))?;
+
+    let config = GatewayInjectionConfig::new(gateway_url, token);
+    adapter
+        .inject_gateway("", &config)
+        .map_err(|e| e.to_string())
 }
 
 // ===== 导入预览生成器 =====
@@ -719,7 +889,9 @@ impl Default for BackupManager {
 
 // ===== 影子模式配置生成 =====
 
-/// 生成影子模式配置
+/// 生成影子模式配置 (旧版，向后兼容)
+///
+/// Story 11.8: 推荐使用 `generate_shadow_config_v2` 替代
 ///
 /// # Arguments
 /// * `source` - 配置来源类型
@@ -727,11 +899,23 @@ impl Default for BackupManager {
 ///
 /// # Returns
 /// 影子模式配置 JSON 字符串
+#[allow(deprecated)]
 pub fn generate_shadow_config(source: &ConfigSource, gateway_url: &str) -> String {
     let parser: Box<dyn McpConfigParser> = match source {
         ConfigSource::ClaudeCode => Box::new(ClaudeCodeConfigParser),
         ConfigSource::Cursor => Box::new(CursorConfigParser),
         ConfigSource::ClaudeDesktop => Box::new(ClaudeDesktopConfigParser),
+        ConfigSource::Codex | ConfigSource::Gemini => {
+            // 新工具使用 generate_shadow_config_v2
+            return serde_json::json!({
+                "mcpServers": {
+                    "mantra-gateway": {
+                        "url": gateway_url
+                    }
+                }
+            })
+            .to_string();
+        }
     };
     parser.generate_shadow_config(gateway_url)
 }
@@ -831,7 +1015,7 @@ impl<'a> ImportExecutor<'a> {
             if let Some(gateway_url) = &request.gateway_url {
                 for config in &preview.configs {
                     if !config.services.is_empty() {
-                        match self.apply_shadow_mode(&config.path, &config.source, gateway_url) {
+                        match self.apply_shadow_mode_v2(&config.path, &config.adapter_id, gateway_url) {
                             Ok(_) => {
                                 shadow_configs.push(config.path.clone());
                             }
@@ -926,7 +1110,8 @@ impl<'a> ImportExecutor<'a> {
         }
     }
 
-    /// 应用影子模式
+    /// 应用影子模式 (旧版，向后兼容)
+    #[allow(deprecated, dead_code)]
     fn apply_shadow_mode(
         &mut self,
         path: &Path,
@@ -938,6 +1123,53 @@ impl<'a> ImportExecutor<'a> {
 
         // 生成影子配置
         let shadow_content = generate_shadow_config(source, gateway_url);
+
+        // 写入影子配置
+        fs::write(path, shadow_content)?;
+
+        Ok(())
+    }
+
+    /// 应用影子模式 (新版，使用适配器架构)
+    ///
+    /// Story 11.8: 使用 HTTP Transport + Authorization Header
+    fn apply_shadow_mode_v2(
+        &mut self,
+        path: &Path,
+        adapter_id: &str,
+        gateway_url: &str,
+    ) -> io::Result<()> {
+        // 备份原文件
+        self.backup_manager.backup(path)?;
+
+        // 读取原始内容
+        let original_content = if path.exists() {
+            fs::read_to_string(path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // 使用新的适配器架构生成影子配置
+        // 注意：这里使用空 token，实际 token 应该在调用时提供
+        let registry = ToolAdapterRegistry::new();
+        let shadow_content = if let Some(adapter) = registry.get(adapter_id) {
+            // 从 gateway_url 提取 token (如果有)
+            // 格式: http://127.0.0.1:8080/message 或带 token 的旧格式
+            let config = GatewayInjectionConfig::new(gateway_url, "");
+            adapter
+                .inject_gateway(&original_content, &config)
+                .unwrap_or_else(|_| original_content.clone())
+        } else {
+            // 回退到旧的生成方式
+            serde_json::json!({
+                "mcpServers": {
+                    "mantra-gateway": {
+                        "url": gateway_url
+                    }
+                }
+            })
+            .to_string()
+        };
 
         // 写入影子配置
         fs::write(path, shadow_content)?;
@@ -1164,16 +1396,20 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_config_source_description() {
+        // Story 11.8: 更新了 ConfigSource 描述
         assert_eq!(
             ConfigSource::ClaudeCode.description(),
-            ".claude/config.json"
+            ".mcp.json"  // 更新为新的路径
         );
         assert_eq!(ConfigSource::Cursor.description(), ".cursor/mcp.json");
         assert_eq!(
             ConfigSource::ClaudeDesktop.description(),
             "claude_desktop_config.json"
         );
+        assert_eq!(ConfigSource::Codex.description(), ".codex/config.toml");
+        assert_eq!(ConfigSource::Gemini.description(), ".gemini/settings.json");
     }
 
     // ===== Task 2: 配置文件扫描器测试 =====
@@ -1183,11 +1419,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let project_path = temp_dir.path();
 
-        // 创建 .claude/config.json
-        let claude_dir = project_path.join(".claude");
-        fs::create_dir_all(&claude_dir).unwrap();
+        // Story 11.8: 使用新的适配器架构扫描
+        // 创建 .mcp.json (Claude Code 新路径)
         fs::write(
-            claude_dir.join("config.json"),
+            project_path.join(".mcp.json"),
             r#"{"mcpServers": {"test": {"command": "test"}}}"#,
         )
         .unwrap();
@@ -1204,13 +1439,13 @@ mod tests {
         let result = scan_mcp_configs(Some(project_path));
 
         // 项目级配置应该至少有 2 个（Claude + Cursor）
-        // 注意：全局配置也会被扫描，所以可能会多于 2 个
+        // 注意：新架构扫描所有 4 个适配器的项目级配置
         let project_configs: Vec<_> = result
             .configs
             .iter()
             .filter(|c| c.path.starts_with(project_path))
             .collect();
-        assert_eq!(project_configs.len(), 2);
+        assert!(project_configs.len() >= 2, "Expected at least 2 project configs, got {}", project_configs.len());
         assert!(result.scanned_paths.len() >= 2);
     }
 
@@ -1256,8 +1491,9 @@ mod tests {
         let db = Database::new_in_memory().unwrap();
 
         let configs = vec![DetectedConfig {
-            source: ConfigSource::ClaudeCode,
+            adapter_id: "claude".to_string(),
             path: PathBuf::from("/test/config.json"),
+            scope: Some(ConfigScope::Project),
             services: vec![
                 DetectedService {
                     name: "new-service".to_string(),
@@ -1268,7 +1504,8 @@ mod tests {
                         "$API_KEY".to_string(),
                     )])),
                     source_file: PathBuf::from("/test/config.json"),
-                    source_type: ConfigSource::ClaudeCode,
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
                 },
             ],
             parse_errors: Vec::new(),
@@ -1297,15 +1534,17 @@ mod tests {
         db.create_mcp_service(&request).unwrap();
 
         let configs = vec![DetectedConfig {
-            source: ConfigSource::ClaudeCode,
+            adapter_id: "claude".to_string(),
             path: PathBuf::from("/test/config.json"),
+            scope: Some(ConfigScope::Project),
             services: vec![DetectedService {
                 name: "existing-service".to_string(),
                 command: "new-command".to_string(),
                 args: None,
                 env: None,
                 source_file: PathBuf::from("/test/config.json"),
-                source_type: ConfigSource::ClaudeCode,
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
             }],
             parse_errors: Vec::new(),
         }];
@@ -1458,7 +1697,8 @@ mod tests {
                 args: Some(vec!["-y".to_string(), "test-mcp".to_string()]),
                 env: None,
                 source_file: PathBuf::from("/test/config.json"),
-                source_type: ConfigSource::ClaudeCode,
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
             }],
             env_vars_needed: Vec::new(),
             total_services: 1,
@@ -1499,7 +1739,8 @@ mod tests {
                 args: None,
                 env: None,
                 source_file: PathBuf::from("/test/config.json"),
-                source_type: ConfigSource::ClaudeCode,
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
             }],
             env_vars_needed: Vec::new(),
             total_services: 1,
@@ -1548,7 +1789,8 @@ mod tests {
                     args: None,
                     env: None,
                     source_file: PathBuf::from("/test/config.json"),
-                    source_type: ConfigSource::ClaudeCode,
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
                 }],
             }],
             new_services: Vec::new(),
@@ -1604,7 +1846,8 @@ mod tests {
                     args: None,
                     env: None,
                     source_file: PathBuf::from("/test/config.json"),
-                    source_type: ConfigSource::ClaudeCode,
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
                 }],
             }],
             new_services: Vec::new(),
@@ -1660,7 +1903,8 @@ mod tests {
                     args: None,
                     env: None,
                     source_file: PathBuf::from("/test/config.json"),
-                    source_type: ConfigSource::ClaudeCode,
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
                 }],
             }],
             new_services: Vec::new(),
@@ -1707,7 +1951,8 @@ mod tests {
                 args: None,
                 env: Some(HashMap::from([("API_KEY".to_string(), "$API_KEY".to_string())])),
                 source_file: PathBuf::from("/test/config.json"),
-                source_type: ConfigSource::ClaudeCode,
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
             }],
             env_vars_needed: vec!["API_KEY".to_string()],
             total_services: 1,

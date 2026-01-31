@@ -1,12 +1,15 @@
 //! Token 认证中间件
 //!
 //! Story 11.1: SSE Server 核心 - Task 3
+//! Story 11.8: MCP Gateway Architecture Refactor - Task 8
 //!
-//! 实现 Axum 中间件，支持 URL Query 参数认证 (`?token=xxx`)
+//! 实现 Axum 中间件，支持:
+//! - Authorization Header 认证 (`Authorization: Bearer xxx`) - 推荐
+//! - URL Query 参数认证 (`?token=xxx`) - 向后兼容
 
 use axum::{
     extract::{Query, Request, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -43,19 +46,48 @@ impl AuthLayer {
     }
 }
 
+/// 从 Authorization Header 提取 Bearer Token
+///
+/// 支持格式: `Authorization: Bearer <token>`
+fn extract_bearer_token(request: &Request) -> Option<String> {
+    request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            let value = value.trim();
+            if value.to_lowercase().starts_with("bearer ") {
+                let token = value[7..].trim().to_string();
+                if token.is_empty() {
+                    None
+                } else {
+                    Some(token)
+                }
+            } else {
+                None
+            }
+        })
+}
+
 /// 认证中间件函数
 ///
-/// 检查请求中的 `token` 查询参数是否有效
+/// 检查请求中的 Token 是否有效
+/// 优先级: Authorization Header > Query Parameter
 pub async fn auth_middleware(
     State(state): State<Arc<RwLock<GatewayState>>>,
     Query(query): Query<TokenQuery>,
     request: Request,
     next: Next,
 ) -> Response {
+    // 优先从 Authorization Header 提取 Token
+    let token = extract_bearer_token(&request)
+        // 回退到 Query 参数（向后兼容）
+        .or_else(|| query.token.filter(|t| !t.is_empty()));
+
     // 检查 Token 是否存在
-    let token = match query.token {
-        Some(t) if !t.is_empty() => t,
-        _ => {
+    let token = match token {
+        Some(t) => t,
+        None => {
             return unauthorized_response(GatewayError::MissingToken);
         }
     };
@@ -116,6 +148,7 @@ pub fn extract_token_from_query(uri: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::gateway::state::GatewayConfig;
+    use axum::http::Request as HttpRequest;
 
     #[tokio::test]
     async fn test_auth_layer_validate() {
@@ -144,5 +177,90 @@ mod tests {
         );
         assert_eq!(extract_token_from_query("/sse"), None);
         assert_eq!(extract_token_from_query("/sse?other=value"), None);
+    }
+
+    #[test]
+    fn test_extract_bearer_token_valid() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "Bearer my-secret-token")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(
+            extract_bearer_token(&request),
+            Some("my-secret-token".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_bearer_token_case_insensitive() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "bearer my-token")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(
+            extract_bearer_token(&request),
+            Some("my-token".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_bearer_token_with_extra_spaces() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "  Bearer   my-token  ")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(
+            extract_bearer_token(&request),
+            Some("my-token".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_bearer_token_missing_header() {
+        let request = HttpRequest::builder()
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(extract_bearer_token(&request), None);
+    }
+
+    #[test]
+    fn test_extract_bearer_token_wrong_scheme() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "Basic dXNlcjpwYXNz")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(extract_bearer_token(&request), None);
+    }
+
+    #[test]
+    fn test_extract_bearer_token_empty_token() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "Bearer ")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(extract_bearer_token(&request), None);
+    }
+
+    #[test]
+    fn test_extract_bearer_token_only_bearer() {
+        let request = HttpRequest::builder()
+            .header(header::AUTHORIZATION, "Bearer")
+            .body(())
+            .unwrap();
+        let request = Request::from_parts(request.into_parts().0, axum::body::Body::empty());
+
+        assert_eq!(extract_bearer_token(&request), None);
     }
 }

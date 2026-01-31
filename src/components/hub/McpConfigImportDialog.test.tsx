@@ -82,12 +82,13 @@ import { feedback } from "@/lib/feedback";
 
 const mockInvokeFn = vi.mocked(invoke);
 
-// 测试数据
+// 测试数据 (Story 11.8: 更新为使用 adapter_id)
 const mockScanResult = {
   configs: [
     {
-      source: "claude_code" as const,
+      adapter_id: "claude",
       path: "/project/.claude/config.json",
+      scope: "project" as const,
       services: [
         {
           name: "git-mcp",
@@ -95,7 +96,8 @@ const mockScanResult = {
           args: ["--yes", "@anthropic/mcp-server-git"],
           env: null,
           source_file: "/project/.claude/config.json",
-          source_type: "claude_code" as const,
+          adapter_id: "claude",
+          scope: "project" as const,
         },
         {
           name: "postgres",
@@ -103,7 +105,8 @@ const mockScanResult = {
           args: ["--yes", "@anthropic/mcp-server-postgres"],
           env: { DATABASE_URL: "$DATABASE_URL" },
           source_file: "/project/.claude/config.json",
-          source_type: "claude_code" as const,
+          adapter_id: "claude",
+          scope: "project" as const,
         },
       ],
       parse_errors: [],

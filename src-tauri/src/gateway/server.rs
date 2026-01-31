@@ -1,10 +1,16 @@
 //! Gateway Server 实现
 //!
 //! Story 11.1: SSE Server 核心 - Task 5
+//! Story 11.8: MCP Gateway Architecture Refactor - Task 8
 //!
-//! 使用 Axum 创建 SSE Server，支持启动、停止和端口管理
+//! 使用 Axum 创建 HTTP Server，支持:
+//! - HTTP Transport (POST /message)
+//! - SSE Transport (GET /sse) - 向后兼容
+//! - Authorization Header 认证
+//! - 严格的 CORS 策略
 
 use axum::{
+    http::{header, HeaderValue, Method},
     middleware,
     routing::{get, post},
     Router,
@@ -12,7 +18,7 @@ use axum::{
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{oneshot, watch, RwLock};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 use super::auth::auth_middleware;
 use super::handlers::{health_handler, message_handler, sse_handler, GatewayAppState};
@@ -137,18 +143,29 @@ impl GatewayServer {
             .route("/message", post(message_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
+        // 创建 CORS 层 - 严格策略
+        // 仅允许 tauri://localhost 和开发模式下的 http://localhost
+        let cors = CorsLayer::new()
+            .allow_origin([
+                "tauri://localhost".parse::<HeaderValue>().unwrap(),
+                "http://localhost".parse::<HeaderValue>().unwrap(),
+                "http://127.0.0.1".parse::<HeaderValue>().unwrap(),
+            ])
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_headers([
+                header::CONTENT_TYPE,
+                header::AUTHORIZATION,
+                header::ACCEPT,
+            ])
+            .allow_credentials(false);
+
         // 创建完整路由
         let app = Router::new()
             // 公开端点（不需要认证）
             .route("/health", get(health_handler))
             // 合并受保护路由
             .merge(protected_routes)
-            .layer(
-                CorsLayer::new()
-                    .allow_origin(Any)
-                    .allow_methods(Any)
-                    .allow_headers(Any),
-            )
+            .layer(cors)
             .with_state(app_state);
 
         // 创建关闭信号

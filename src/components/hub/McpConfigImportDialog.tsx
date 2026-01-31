@@ -58,8 +58,8 @@ import { cn } from "@/lib/utils";
 
 // ===== 类型定义 =====
 
-/** 配置来源类型 */
-type ConfigSource = "claude_code" | "cursor" | "claude_desktop";
+/** 配置作用域 */
+type ConfigScope = "global" | "project";
 
 /** 检测到的 MCP 服务 */
 interface DetectedService {
@@ -68,13 +68,19 @@ interface DetectedService {
   args: string[] | null;
   env: Record<string, string> | null;
   source_file: string;
-  source_type: ConfigSource;
+  /** 适配器 ID (Story 11.8: 替代旧的 source_type) */
+  adapter_id: string;
+  /** 配置作用域 (Story 11.8: 新增) */
+  scope?: ConfigScope;
 }
 
 /** 检测到的配置文件 */
 interface DetectedConfig {
-  source: ConfigSource;
+  /** 适配器 ID (Story 11.8: 替代旧的 source) */
+  adapter_id: string;
   path: string;
+  /** 配置作用域 (Story 11.8: 新增) */
+  scope?: ConfigScope;
   services: DetectedService[];
   parse_errors: string[];
 }
@@ -325,18 +331,22 @@ export function McpConfigImportDialog({
     t,
   ]);
 
-  // 获取来源显示文本
+  // 获取来源显示文本 (Story 11.8: 支持 adapter_id)
   const getSourceText = useCallback(
-    (source: ConfigSource) => {
-      switch (source) {
-        case "claude_code":
+    (adapterId: string) => {
+      switch (adapterId) {
+        case "claude":
           return "Claude Code";
-        case "cursor":
-          return "Cursor";
         case "claude_desktop":
           return "Claude Desktop";
+        case "cursor":
+          return "Cursor";
+        case "codex":
+          return "Codex CLI";
+        case "gemini":
+          return "Gemini CLI";
         default:
-          return source;
+          return adapterId;
       }
     },
     []
@@ -529,7 +539,7 @@ export function McpConfigImportDialog({
                   <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 text-left hover:bg-muted/50 transition-colors">
                     <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-90" />
                     <Badge variant="outline" className="shrink-0">
-                      {getSourceText(config.source)}
+                      {getSourceText(config.adapter_id)}
                     </Badge>
                     <span className="text-xs text-muted-foreground truncate flex-1">
                       {config.path}
@@ -704,7 +714,7 @@ export function McpConfigImportDialog({
                         {conflict.candidates.map((candidate, index) => (
                           <SelectItem key={index} value={`replace_${index}`}>
                             {t("hub.import.useFrom", {
-                              source: getSourceText(candidate.source_type),
+                              source: getSourceText(candidate.adapter_id),
                             })}
                           </SelectItem>
                         ))}

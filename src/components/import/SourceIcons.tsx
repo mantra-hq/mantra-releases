@@ -75,10 +75,14 @@ export function CodexIcon({ className }: IconProps) {
 /**
  * 根据来源返回对应的图标组件
  * Story 2.25: AC3 - 复用官方图标
+ * Story 11.8: 支持 adapter_id 映射
  */
 export function SourceIcon({ source, className }: { source: string; className?: string }) {
-    switch (source.toLowerCase()) {
+    const normalizedSource = source.toLowerCase();
+    switch (normalizedSource) {
         case "claude":
+        case "claude_code":
+        case "claude_desktop":
             return <ClaudeIcon className={className} />;
         case "gemini":
             return <GeminiIcon className={className} />;
