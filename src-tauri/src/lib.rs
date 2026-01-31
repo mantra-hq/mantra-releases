@@ -83,6 +83,9 @@ use commands::{
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
     // Story 11.12: OAuth commands
     OAuthState, oauth_start_flow, oauth_get_status, oauth_disconnect, oauth_refresh_token,
+    // Story 11.11: MCP Inspector commands
+    McpProcessState, mcp_get_service_capabilities, mcp_call_tool, mcp_read_resource,
+    mcp_stop_service, mcp_list_running_services,
 };
 
 use storage::Database;
@@ -173,6 +176,9 @@ pub fn run() {
 
             // Story 11.12: 初始化 OAuth 状态
             app.manage(OAuthState::new());
+
+            // Story 11.11: 初始化 MCP 进程管理器状态
+            app.manage(McpProcessState::new());
 
             // Story 11.7: 初始化系统托盘
             match tray::init_tray(app.handle()) {
@@ -377,7 +383,13 @@ pub fn run() {
             oauth_start_flow,
             oauth_get_status,
             oauth_disconnect,
-            oauth_refresh_token
+            oauth_refresh_token,
+            // Story 11.11: MCP Inspector
+            mcp_get_service_capabilities,
+            mcp_call_tool,
+            mcp_read_resource,
+            mcp_stop_service,
+            mcp_list_running_services
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

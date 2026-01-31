@@ -10,7 +10,7 @@
 //! - 严格的 CORS 策略
 
 use axum::{
-    http::{header, HeaderValue, Method},
+    http::{header, Method},
     middleware,
     routing::{get, post},
     Router,
@@ -18,7 +18,7 @@ use axum::{
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{oneshot, watch, RwLock};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::auth::auth_middleware;
 use super::handlers::{health_handler, message_handler, sse_handler, GatewayAppState};
@@ -143,14 +143,24 @@ impl GatewayServer {
             .route("/message", post(message_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
-        // 创建 CORS 层 - 严格策略
-        // 仅允许 tauri://localhost 和开发模式下的 http://localhost
+        // 创建 CORS 层
+        // 允许 tauri://localhost 和开发模式下的 localhost/127.0.0.1 (任意端口)
         let cors = CorsLayer::new()
-            .allow_origin([
-                "tauri://localhost".parse::<HeaderValue>().unwrap(),
-                "http://localhost".parse::<HeaderValue>().unwrap(),
-                "http://127.0.0.1".parse::<HeaderValue>().unwrap(),
-            ])
+            .allow_origin(AllowOrigin::predicate(|origin, _| {
+                if let Ok(origin_str) = origin.to_str() {
+                    // 允许 Tauri 应用
+                    if origin_str == "tauri://localhost" {
+                        return true;
+                    }
+                    // 允许 localhost 和 127.0.0.1 的任意端口 (开发模式)
+                    if origin_str.starts_with("http://localhost")
+                        || origin_str.starts_with("http://127.0.0.1")
+                    {
+                        return true;
+                    }
+                }
+                false
+            }))
             .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
             .allow_headers([
                 header::CONTENT_TYPE,

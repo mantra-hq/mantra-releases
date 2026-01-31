@@ -778,3 +778,330 @@ pub fn update_project_tool_policy(
     db.update_project_service_override(&project_id, &service_id, Some(&new_config))
         .map_err(AppError::from)
 }
+
+// ===== Story 11.11: MCP Inspector 直接调用命令 =====
+
+use crate::gateway::McpProcessManager;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// MCP 进程管理器状态
+pub struct McpProcessState {
+    pub manager: Arc<RwLock<McpProcessManager>>,
+}
+
+impl McpProcessState {
+    pub fn new() -> Self {
+        Self {
+            manager: Arc::new(RwLock::new(McpProcessManager::new())),
+        }
+    }
+}
+
+impl Default for McpProcessState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// MCP 工具定义（JSON-RPC 返回格式）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpToolInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "inputSchema", skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<serde_json::Value>,
+}
+
+/// MCP 资源定义
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpResourceInfo {
+    pub uri: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+}
+
+/// MCP 服务能力响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpCapabilities {
+    pub tools: Vec<McpToolInfo>,
+    pub resources: Vec<McpResourceInfo>,
+}
+
+/// 启动 MCP 服务并获取其工具和资源列表
+///
+/// Story 11.11: MCP Inspector - Task 实现
+///
+/// 此命令会：
+/// 1. 根据服务配置启动 MCP 子进程
+/// 2. 发送 initialize 请求
+/// 3. 发送 tools/list 和 resources/list 请求
+/// 4. 返回服务的完整能力列表
+#[tauri::command]
+pub async fn mcp_get_service_capabilities(
+    service_id: String,
+    mcp_state: State<'_, McpState>,
+    process_state: State<'_, McpProcessState>,
+) -> Result<McpCapabilities, AppError> {
+    // 1. 从数据库获取服务配置
+    let service = {
+        let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_mcp_service(&service_id)?
+    };
+
+    // 2. 解析环境变量
+    let env = resolve_service_env(&service, &mcp_state)?;
+
+    // 3. 启动或获取进程
+    {
+        let manager = process_state.manager.read().await;
+        if !manager.is_running(&service_id).await {
+            drop(manager);
+            let manager = process_state.manager.write().await;
+            manager
+                .get_or_spawn(&service, env.clone())
+                .await
+                .map_err(|e| AppError::internal(e.to_string()))?;
+        }
+    }
+
+    // 4. 等待进程准备就绪（特别是对于需要网络连接的服务如 mcp-remote）
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    
+    // 检查进程是否仍在运行
+    {
+        let manager = process_state.manager.read().await;
+        if !manager.is_running(&service_id).await {
+            return Err(AppError::internal(format!(
+                "MCP service '{}' process exited before initialization. \
+                 Command: {} {:?}. \
+                 Please check if the service is correctly configured and all dependencies are installed.",
+                service.name,
+                service.command,
+                service.args
+            )));
+        }
+    }
+
+    // 5. 发送 initialize 请求
+    let init_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "mantra-inspector",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        }
+    });
+
+    {
+        let manager = process_state.manager.read().await;
+        let _ = manager
+            .send_request(&service_id, init_request)
+            .await
+            .map_err(|e| AppError::internal(format!(
+                "Initialize failed for '{}': {}. \
+                 Command: {} {:?}",
+                service.name,
+                e,
+                service.command,
+                service.args
+            )))?;
+    }
+
+    // 6. 发送 notifications/initialized
+    let initialized_notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    
+    {
+        let manager = process_state.manager.read().await;
+        // 通知不需要响应，忽略错误
+        let _ = manager.send_request(&service_id, initialized_notification).await;
+    }
+
+    // 7. 获取工具列表
+    let tools_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+
+    let tools: Vec<McpToolInfo> = {
+        let manager = process_state.manager.read().await;
+        match manager.send_request(&service_id, tools_request).await {
+            Ok(response) => {
+                response
+                    .get("result")
+                    .and_then(|r| r.get("tools"))
+                    .and_then(|t| serde_json::from_value(t.clone()).ok())
+                    .unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        }
+    };
+
+    // 8. 获取资源列表
+    let resources_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "resources/list",
+        "params": {}
+    });
+
+    let resources: Vec<McpResourceInfo> = {
+        let manager = process_state.manager.read().await;
+        match manager.send_request(&service_id, resources_request).await {
+            Ok(response) => {
+                response
+                    .get("result")
+                    .and_then(|r| r.get("resources"))
+                    .and_then(|t| serde_json::from_value(t.clone()).ok())
+                    .unwrap_or_default()
+            }
+            Err(_) => Vec::new(),
+        }
+    };
+
+    Ok(McpCapabilities { tools, resources })
+}
+
+/// 调用 MCP 工具
+///
+/// Story 11.11: MCP Inspector
+#[tauri::command]
+pub async fn mcp_call_tool(
+    service_id: String,
+    tool_name: String,
+    arguments: serde_json::Value,
+    process_state: State<'_, McpProcessState>,
+) -> Result<serde_json::Value, AppError> {
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": chrono::Utc::now().timestamp_millis(),
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments
+        }
+    });
+
+    let manager = process_state.manager.read().await;
+    let response = manager
+        .send_request(&service_id, request)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    // 检查是否有错误
+    if let Some(error) = response.get("error") {
+        return Err(AppError::internal(format!(
+            "Tool call failed: {}",
+            error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error")
+        )));
+    }
+
+    Ok(response.get("result").cloned().unwrap_or(serde_json::json!(null)))
+}
+
+/// 读取 MCP 资源
+///
+/// Story 11.11: MCP Inspector
+#[tauri::command]
+pub async fn mcp_read_resource(
+    service_id: String,
+    uri: String,
+    process_state: State<'_, McpProcessState>,
+) -> Result<serde_json::Value, AppError> {
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": chrono::Utc::now().timestamp_millis(),
+        "method": "resources/read",
+        "params": {
+            "uri": uri
+        }
+    });
+
+    let manager = process_state.manager.read().await;
+    let response = manager
+        .send_request(&service_id, request)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    // 检查是否有错误
+    if let Some(error) = response.get("error") {
+        return Err(AppError::internal(format!(
+            "Resource read failed: {}",
+            error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error")
+        )));
+    }
+
+    Ok(response.get("result").cloned().unwrap_or(serde_json::json!(null)))
+}
+
+/// 停止 MCP 服务进程
+///
+/// Story 11.11: MCP Inspector
+#[tauri::command]
+pub async fn mcp_stop_service(
+    service_id: String,
+    process_state: State<'_, McpProcessState>,
+) -> Result<(), AppError> {
+    let manager = process_state.manager.read().await;
+    manager.stop_process(&service_id).await;
+    Ok(())
+}
+
+/// 获取运行中的 MCP 服务列表
+///
+/// Story 11.11: MCP Inspector
+#[tauri::command]
+pub async fn mcp_list_running_services(
+    process_state: State<'_, McpProcessState>,
+) -> Result<Vec<String>, AppError> {
+    let manager = process_state.manager.read().await;
+    let running = manager.list_running().await;
+    Ok(running.into_iter().map(|p| p.service_id).collect())
+}
+
+/// 解析服务的环境变量
+fn resolve_service_env(
+    service: &McpService,
+    mcp_state: &State<'_, McpState>,
+) -> Result<HashMap<String, String>, AppError> {
+    let mut env = HashMap::new();
+
+    if let Some(env_config) = &service.env {
+        if let Some(obj) = env_config.as_object() {
+            let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+            
+            for (key, value) in obj {
+                let resolved_value = if let Some(s) = value.as_str() {
+                    if s.starts_with('$') {
+                        // 变量引用，从数据库获取
+                        let var_name = &s[1..];
+                        db.get_env_variable(&mcp_state.env_manager, var_name)?
+                            .unwrap_or_default()
+                    } else {
+                        s.to_string()
+                    }
+                } else {
+                    value.to_string()
+                };
+                env.insert(key.clone(), resolved_value);
+            }
+        }
+    }
+
+    Ok(env)
+}

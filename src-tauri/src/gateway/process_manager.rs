@@ -25,6 +25,10 @@ pub enum ProcessError {
     Timeout,
     #[error("Process exited unexpectedly")]
     ProcessExited,
+    #[error("Process exited immediately: {message}")]
+    ProcessExitedImmediately {
+        message: String,
+    },
     #[error("Service not found: {0}")]
     ServiceNotFound(String),
 }
@@ -130,7 +134,14 @@ impl McpProcessManager {
 
         let mut child = cmd
             .spawn()
-            .map_err(|e| ProcessError::SpawnError(e.to_string()))?;
+            .map_err(|e| ProcessError::SpawnError(format!(
+                "Failed to spawn '{}': {}",
+                service.command,
+                e
+            )))?;
+
+        // 获取 stderr 用于错误诊断
+        let stderr = child.stderr.take();
 
         let stdin = child
             .stdin
@@ -140,6 +151,53 @@ impl McpProcessManager {
             .stdout
             .take()
             .ok_or_else(|| ProcessError::SpawnError("Failed to get stdout".to_string()))?;
+
+        // 等待一段时间检查进程是否立即退出
+        // 对于需要网络连接的服务（如 mcp-remote），可能需要更长时间
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        
+        // 检查进程是否仍在运行
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // 进程已退出，收集 stderr 输出
+                let stderr_output = if let Some(mut stderr) = stderr {
+                    let mut output = String::new();
+                    use tokio::io::AsyncReadExt;
+                    let _ = stderr.read_to_string(&mut output).await;
+                    output.trim().to_string()
+                } else {
+                    String::new()
+                };
+                
+                let exit_code = status.code().map_or("unknown".to_string(), |c| c.to_string());
+                let message = if stderr_output.is_empty() {
+                    format!(
+                        "Exit code: {}. Command: {} {:?}",
+                        exit_code,
+                        service.command,
+                        service.args
+                    )
+                } else {
+                    format!("Exit code: {}. Error: {}", exit_code, stderr_output)
+                };
+                return Err(ProcessError::ProcessExitedImmediately { message });
+            }
+            Ok(None) => {
+                // 进程仍在运行，继续正常流程
+            }
+            Err(e) => {
+                return Err(ProcessError::SpawnError(format!(
+                    "Failed to check process status: {}",
+                    e
+                )));
+            }
+        }
+
+        // 启动 stderr 日志任务
+        if let Some(stderr) = stderr {
+            let service_id_for_stderr = service.id.clone();
+            tokio::spawn(Self::log_stderr(service_id_for_stderr, stderr));
+        }
 
         // 创建通信通道
         let (request_tx, request_rx) = mpsc::channel::<ProcessRequest>(32);
@@ -163,6 +221,16 @@ impl McpProcessManager {
         }
 
         Ok(())
+    }
+
+    /// 记录 stderr 输出
+    async fn log_stderr(service_id: String, stderr: tokio::process::ChildStderr) {
+        use tokio::io::AsyncBufReadExt;
+        let mut reader = BufReader::new(stderr).lines();
+        
+        while let Ok(Some(line)) = reader.next_line().await {
+            eprintln!("[MCP:{}] {}", service_id, line);
+        }
     }
 
     /// 进程 I/O 循环

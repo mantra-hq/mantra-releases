@@ -27,7 +27,8 @@ use super::state::{GatewayState, GatewayStats};
 /// Message 端点查询参数
 #[derive(Debug, Deserialize)]
 pub struct MessageQuery {
-    pub session_id: String,
+    /// 会话 ID（可选，如果不提供则创建临时会话）
+    pub session_id: Option<String>,
     // Note: token 已在 auth 中间件中处理，此处不再需要
 }
 
@@ -211,6 +212,10 @@ pub async fn sse_handler(
 ///
 /// 接收 JSON-RPC 请求并返回响应
 /// 此故事仅实现框架，实际消息转发逻辑在后续故事实现
+///
+/// 支持两种模式：
+/// - 带 session_id: 使用已存在的 SSE 会话
+/// - 不带 session_id: 创建临时会话（用于 Inspector 等简单测试场景）
 pub async fn message_handler(
     State(app_state): State<GatewayAppState>,
     Query(query): Query<MessageQuery>,
@@ -219,18 +224,28 @@ pub async fn message_handler(
     // 增加请求计数
     app_state.stats.increment_requests();
 
-    // 验证会话存在
-    {
-        let state = app_state.state.read().await;
-        if state.get_session(&query.session_id).is_none() {
-            let response = JsonRpcResponse::error(
-                request.id.clone(),
-                -32002,
-                format!("Session not found: {}", query.session_id),
-            );
-            return (StatusCode::NOT_FOUND, Json(response)).into_response();
+    // 获取或创建会话
+    let session_id = match &query.session_id {
+        Some(id) => {
+            // 验证会话存在
+            let state = app_state.state.read().await;
+            if state.get_session(id).is_none() {
+                let response = JsonRpcResponse::error(
+                    request.id.clone(),
+                    -32002,
+                    format!("Session not found: {}", id),
+                );
+                return (StatusCode::NOT_FOUND, Json(response)).into_response();
+            }
+            id.clone()
         }
-    }
+        None => {
+            // 创建临时会话（用于 Inspector 等简单测试场景）
+            let mut state = app_state.state.write().await;
+            let session = state.register_session();
+            session.session_id.clone()
+        }
+    };
 
     // 验证 JSON-RPC 版本
     if request.jsonrpc != "2.0" {
@@ -241,7 +256,7 @@ pub async fn message_handler(
     // 更新会话活跃时间
     {
         let mut state = app_state.state.write().await;
-        if let Some(session) = state.get_session_mut(&query.session_id) {
+        if let Some(session) = state.get_session_mut(&session_id) {
             session.touch();
         }
     }
@@ -249,17 +264,23 @@ pub async fn message_handler(
     // 根据方法路由处理
     let response = match request.method.as_str() {
         "initialize" => {
-            handle_initialize(&app_state, &query.session_id, &request).await
+            handle_initialize(&app_state, &session_id, &request).await
         }
         "ping" => {
             // 简单的 ping 方法
             JsonRpcResponse::success(request.id, serde_json::json!({}))
         }
         "tools/list" => {
-            handle_tools_list(&app_state, &query.session_id, &request).await
+            handle_tools_list(&app_state, &session_id, &request).await
         }
         "tools/call" => {
-            handle_tools_call(&app_state, &query.session_id, &request).await
+            handle_tools_call(&app_state, &session_id, &request).await
+        }
+        "resources/list" => {
+            handle_resources_list(&request).await
+        }
+        "resources/read" => {
+            handle_resources_read(&request).await
         }
         _ => {
             // 其他方法暂不支持
@@ -413,6 +434,50 @@ async fn handle_tools_list(
             "tools": tools
         }),
     )
+}
+
+/// 处理 resources/list 请求
+///
+/// 返回可用资源列表。当前返回空列表（占位实现）。
+async fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
+    // 当前返回空资源列表
+    // 完整实现将通过 MCP 子进程管理器获取实际资源
+    let resources: Vec<serde_json::Value> = Vec::new();
+
+    JsonRpcResponse::success(
+        request.id.clone(),
+        serde_json::json!({
+            "resources": resources
+        }),
+    )
+}
+
+/// 处理 resources/read 请求
+///
+/// 读取指定资源的内容。当前返回错误（占位实现）。
+async fn handle_resources_read(request: &JsonRpcRequest) -> JsonRpcResponse {
+    let uri = request
+        .params
+        .as_ref()
+        .and_then(|p| p.get("uri"))
+        .and_then(|v| v.as_str());
+
+    match uri {
+        Some(uri) => {
+            // 当前返回未实现错误
+            // 完整实现将通过 MCP 子进程管理器读取实际资源
+            JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                format!("Resource read not yet implemented for: {}", uri),
+            )
+        }
+        None => JsonRpcResponse::error(
+            request.id.clone(),
+            -32602,
+            "Missing uri parameter".to_string(),
+        ),
+    }
 }
 
 /// 处理 tools/call 请求
