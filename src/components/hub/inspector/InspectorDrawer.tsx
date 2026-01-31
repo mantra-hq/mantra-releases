@@ -13,7 +13,6 @@ import { useTranslation } from "react-i18next";
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
@@ -24,7 +23,6 @@ import {
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Maximize2,
   Minimize2,
@@ -289,33 +287,35 @@ export function InspectorDrawer({
         side="right"
         className={
           isFullscreen
-            ? "!w-full !max-w-none"
-            : "!w-[90vw] !max-w-[1400px] p-6"
+            ? "!w-full !max-w-none p-0 gap-0"
+            : "!w-[90vw] !max-w-[1400px] p-0 gap-0"
         }
       >
-        <SheetHeader className="flex-none">
-          <div className="flex items-center justify-between pr-8">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-md bg-amber-500/10">
-                <Bug className="h-5 w-5 text-amber-500" />
-              </div>
-              <div>
-                <SheetTitle className="flex items-center gap-2">
-                  {t("hub.inspector.title")}
-                  {service && (
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {service.name}
-                    </Badge>
-                  )}
-                </SheetTitle>
-                <SheetDescription>
-                  {t("hub.inspector.description")}
-                </SheetDescription>
-              </div>
+        {/* 头部区域 */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded-md bg-amber-500/10">
+              <Bug className="h-4 w-4 text-amber-500" />
             </div>
+            <div>
+              <SheetTitle className="flex items-center gap-2 text-base">
+                {t("hub.inspector.title")}
+                {service && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {service.name}
+                  </Badge>
+                )}
+              </SheetTitle>
+              <SheetDescription className="text-xs">
+                {t("hub.inspector.description")}
+              </SheetDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pr-8">
             <Button
               variant="ghost"
               size="icon"
+              className="h-8 w-8"
               onClick={toggleFullscreen}
               title={
                 isFullscreen
@@ -330,12 +330,10 @@ export function InspectorDrawer({
               )}
             </Button>
           </div>
-        </SheetHeader>
-
-        <Separator className="my-4" />
+        </div>
 
         {/* 主内容区 - 三栏布局 */}
-        <div className="flex-1 min-h-0 h-[calc(100vh-140px)]">
+        <div className="flex-1 min-h-0 h-[calc(100vh-60px)]">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
