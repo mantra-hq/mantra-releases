@@ -130,7 +130,7 @@ test.describe('MCP Inspector', () => {
 });
 
 test.describe('MCP Inspector - Gateway Offline', () => {
-  test('should show gateway not running message when gateway is stopped', async ({ page }) => {
+  test('should show gateway not running message when gateway is stopped', async ({ page: _page }) => {
     // 这个测试需要模拟 Gateway 停止状态
     // 在实际测试中，需要修改 mock 返回 MOCK_GATEWAY_STATUS_STOPPED
     // 此处作为示例，跳过或使用条件测试

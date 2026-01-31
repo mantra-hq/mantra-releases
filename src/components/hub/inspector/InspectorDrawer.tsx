@@ -152,6 +152,7 @@ export function InspectorDrawer({
     } finally {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service, gatewayRunning, loadGatewayInfo, t]);
 
   // 发送 JSON-RPC 请求并记录日志
