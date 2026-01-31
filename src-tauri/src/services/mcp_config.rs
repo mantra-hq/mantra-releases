@@ -199,6 +199,9 @@ pub struct ImportRequest {
     pub enable_shadow_mode: bool,
     /// 网关 URL（用于生成影子配置）
     pub gateway_url: Option<String>,
+    /// 网关认证 Token (Story 11.8: 用于 HTTP Transport Authorization Header)
+    #[serde(default)]
+    pub gateway_token: Option<String>,
 }
 
 /// 导入结果
@@ -263,69 +266,10 @@ pub struct McpConfigFile {
 /// 移除 JSON 注释（支持 JSONC）
 ///
 /// 支持移除 // 单行注释和 /* */ 块注释
+///
+/// Note: 此函数为向后兼容保留，新代码应使用 `mcp_adapters::common::strip_json_comments`
 pub fn strip_json_comments(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    let mut in_string = false;
-    let mut escape_next = false;
-
-    while let Some(c) = chars.next() {
-        if escape_next {
-            result.push(c);
-            escape_next = false;
-            continue;
-        }
-
-        if c == '\\' && in_string {
-            result.push(c);
-            escape_next = true;
-            continue;
-        }
-
-        if c == '"' && !escape_next {
-            in_string = !in_string;
-            result.push(c);
-            continue;
-        }
-
-        if in_string {
-            result.push(c);
-            continue;
-        }
-
-        // 不在字符串中，检查注释
-        if c == '/' {
-            if let Some(&next) = chars.peek() {
-                if next == '/' {
-                    // 单行注释，跳过到行末
-                    chars.next();
-                    while let Some(&nc) = chars.peek() {
-                        if nc == '\n' {
-                            break;
-                        }
-                        chars.next();
-                    }
-                    continue;
-                } else if next == '*' {
-                    // 块注释，跳过到 */
-                    chars.next();
-                    while let Some(nc) = chars.next() {
-                        if nc == '*' {
-                            if let Some(&'/' ) = chars.peek() {
-                                chars.next();
-                                break;
-                            }
-                        }
-                    }
-                    continue;
-                }
-            }
-        }
-
-        result.push(c);
-    }
-
-    result
+    crate::services::mcp_adapters::common::strip_json_comments(input)
 }
 
 /// MCP 配置解析器 trait (已弃用)
@@ -1013,9 +957,10 @@ impl<'a> ImportExecutor<'a> {
         // 4. 启用影子模式（如果请求）
         if request.enable_shadow_mode {
             if let Some(gateway_url) = &request.gateway_url {
+                let gateway_token = request.gateway_token.as_deref();
                 for config in &preview.configs {
                     if !config.services.is_empty() {
-                        match self.apply_shadow_mode_v2(&config.path, &config.adapter_id, gateway_url) {
+                        match self.apply_shadow_mode_v2(&config.path, &config.adapter_id, gateway_url, gateway_token) {
                             Ok(_) => {
                                 shadow_configs.push(config.path.clone());
                             }
@@ -1138,6 +1083,7 @@ impl<'a> ImportExecutor<'a> {
         path: &Path,
         adapter_id: &str,
         gateway_url: &str,
+        gateway_token: Option<&str>,
     ) -> io::Result<()> {
         // 备份原文件
         self.backup_manager.backup(path)?;
@@ -1150,12 +1096,10 @@ impl<'a> ImportExecutor<'a> {
         };
 
         // 使用新的适配器架构生成影子配置
-        // 注意：这里使用空 token，实际 token 应该在调用时提供
         let registry = ToolAdapterRegistry::new();
+        let token = gateway_token.unwrap_or("");
         let shadow_content = if let Some(adapter) = registry.get(adapter_id) {
-            // 从 gateway_url 提取 token (如果有)
-            // 格式: http://127.0.0.1:8080/message 或带 token 的旧格式
-            let config = GatewayInjectionConfig::new(gateway_url, "");
+            let config = GatewayInjectionConfig::new(gateway_url, token);
             adapter
                 .inject_gateway(&original_content, &config)
                 .unwrap_or_else(|_| original_content.clone())
@@ -1710,6 +1654,7 @@ mod tests {
             env_var_values: HashMap::new(),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);
@@ -1752,6 +1697,7 @@ mod tests {
             env_var_values: HashMap::new(),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);
@@ -1807,6 +1753,7 @@ mod tests {
             env_var_values: HashMap::new(),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);
@@ -1864,6 +1811,7 @@ mod tests {
             env_var_values: HashMap::new(),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);
@@ -1921,6 +1869,7 @@ mod tests {
             env_var_values: HashMap::new(),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);
@@ -1964,6 +1913,7 @@ mod tests {
             env_var_values: HashMap::from([("API_KEY".to_string(), "secret-key-123".to_string())]),
             enable_shadow_mode: false,
             gateway_url: None,
+            gateway_token: None,
         };
 
         let executor = ImportExecutor::new(&db, &env_manager);

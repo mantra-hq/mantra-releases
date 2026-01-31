@@ -58,8 +58,8 @@ import { cn } from "@/lib/utils";
 
 // ===== 类型定义 =====
 
-/** 配置作用域 */
-type ConfigScope = "global" | "project";
+/** 配置作用域 (与后端 Rust 保持一致) */
+type ConfigScope = "user" | "project";
 
 /** 检测到的 MCP 服务 */
 interface DetectedService {
@@ -132,6 +132,8 @@ interface ImportRequest {
   env_var_values: Record<string, string>;
   enable_shadow_mode: boolean;
   gateway_url: string | null;
+  /** 网关认证 Token (Story 11.8: 用于 HTTP Transport Authorization Header) */
+  gateway_token?: string | null;
 }
 
 /** 导入结果 */
