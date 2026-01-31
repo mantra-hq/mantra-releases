@@ -42,3 +42,6 @@ export {
   type RpcLogViewerProps,
   type RpcLogEntry,
 } from "./inspector";
+
+// Story 11.12: OAuth 配置
+export { OAuthConfigDialog, type OAuthServiceStatus, type OAuthConfig } from "./OAuthConfigDialog";

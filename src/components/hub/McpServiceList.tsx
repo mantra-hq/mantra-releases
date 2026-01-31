@@ -50,6 +50,9 @@ import {
   Link2,
   Download,
   Bug,
+  Shield,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { McpServiceForm } from "./McpServiceForm";
@@ -57,6 +60,7 @@ import { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 import { McpConfigImportDialog } from "./McpConfigImportDialog";
 import { InspectorDrawer } from "./inspector";
+import { OAuthConfigDialog, OAuthServiceStatus } from "./OAuthConfigDialog";
 
 /**
  * MCP 服务类型
@@ -99,6 +103,11 @@ export function McpServiceList() {
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [inspectorService, setInspectorService] = useState<McpService | null>(null);
   const [gatewayRunning, setGatewayRunning] = useState(false);
+
+  // OAuth 状态 - Story 11.12
+  const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
+  const [oauthService, setOAuthService] = useState<McpService | null>(null);
+  const [oauthStatuses, setOAuthStatuses] = useState<Record<string, OAuthServiceStatus>>({});
 
   // 加载服务列表
   const loadServices = useCallback(async () => {
@@ -187,6 +196,26 @@ export function McpServiceList() {
     setIsInspectorOpen(true);
   }, []);
 
+  // 打开 OAuth 配置 - Story 11.12
+  const handleOAuthConfig = useCallback((service: McpService) => {
+    setOAuthService(service);
+    setIsOAuthDialogOpen(true);
+  }, []);
+
+  // 加载 OAuth 状态 - Story 11.12
+  const loadOAuthStatuses = useCallback(async (serviceIds: string[]) => {
+    const statuses: Record<string, OAuthServiceStatus> = {};
+    for (const id of serviceIds) {
+      try {
+        const status = await invoke<OAuthServiceStatus>("oauth_get_status", { serviceId: id });
+        statuses[id] = status;
+      } catch {
+        // 忽略错误，服务可能不支持 OAuth
+      }
+    }
+    setOAuthStatuses(statuses);
+  }, []);
+
   // 操作成功后刷新
   const handleSuccess = useCallback(() => {
     loadServices();
@@ -199,6 +228,13 @@ export function McpServiceList() {
     const interval = setInterval(checkGatewayStatus, 5000);
     return () => clearInterval(interval);
   }, [loadServices, checkGatewayStatus]);
+
+  // 加载 OAuth 状态 - Story 11.12
+  useEffect(() => {
+    if (services.length > 0) {
+      loadOAuthStatuses(services.map((s) => s.id));
+    }
+  }, [services, loadOAuthStatuses]);
 
   // 来源图标
   const getSourceIcon = (source: string) => {
@@ -214,6 +250,40 @@ export function McpServiceList() {
     return source === "imported"
       ? t("hub.services.imported")
       : t("hub.services.manual");
+  };
+
+  // OAuth 状态徽章 - Story 11.12
+  const renderOAuthBadge = (serviceId: string) => {
+    const status = oauthStatuses[serviceId];
+    if (!status || status.status === "disconnected") {
+      return null;
+    }
+
+    if (status.status === "connected") {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          OAuth
+        </Badge>
+      );
+    }
+
+    if (status.status === "expired") {
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/30"
+        >
+          <AlertCircle className="h-3 w-3" />
+          {t("hub.oauth.statusExpired")}
+        </Badge>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -286,7 +356,12 @@ export function McpServiceList() {
               <TableBody>
                 {services.map((service) => (
                   <TableRow key={service.id} data-testid={`mcp-service-row-${service.id}`}>
-                    <TableCell className="font-medium">{service.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {service.name}
+                        {renderOAuthBadge(service.id)}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
                         {service.command}
@@ -376,6 +451,10 @@ export function McpServiceList() {
                             <Link2 className="h-4 w-4 mr-2" />
                             {t("hub.services.linkProjects")}
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOAuthConfig(service)}>
+                            <Shield className="h-4 w-4 mr-2" />
+                            {t("hub.oauth.configure")}
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleDelete(service)}
@@ -443,6 +522,17 @@ export function McpServiceList() {
         service={inspectorService}
         gatewayRunning={gatewayRunning}
       />
+
+      {/* OAuth 配置对话框 - Story 11.12 */}
+      {oauthService && (
+        <OAuthConfigDialog
+          open={isOAuthDialogOpen}
+          onOpenChange={setIsOAuthDialogOpen}
+          serviceId={oauthService.id}
+          serviceName={oauthService.name}
+          onSuccess={() => loadOAuthStatuses([oauthService.id])}
+        />
+      )}
     </Card>
   );
 }

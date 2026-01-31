@@ -2,17 +2,23 @@
 //!
 //! Story 11.1: SSE Server 核心 - Task 7
 //! Story 11.5: 上下文路由 - Task 8 (Tauri IPC 命令支持)
+//! Story 11.12: Remote MCP OAuth Support - Task 6 (OAuth IPC 命令)
 //!
 //! 提供 Gateway Server 的 Tauri IPC 命令
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::AppState;
 use crate::error::AppError;
 use crate::gateway::{GatewayServerManager, SessionProjectContext};
+use crate::services::oauth::{
+    CallbackResult, InMemoryTokenStore, OAuthConfig, OAuthManager, OAuthServiceStatus,
+};
 use crate::storage::{GatewayConfigRecord, GatewayConfigUpdate};
 use crate::GatewayServerState;
 
@@ -383,4 +389,219 @@ pub async fn gateway_list_sessions(
         .collect();
 
     Ok(sessions)
+}
+
+// ===== Story 11.12: OAuth IPC 命令 =====
+
+/// OAuth 状态
+pub struct OAuthState {
+    pub manager: Arc<OAuthManager>,
+}
+
+impl OAuthState {
+    /// 创建新的 OAuth 状态
+    pub fn new() -> Self {
+        // 使用内存存储作为默认实现
+        // 生产环境应使用 EncryptedTokenStore 或 KeyringTokenStore
+        let token_store = Arc::new(InMemoryTokenStore::new());
+        Self {
+            manager: Arc::new(OAuthManager::new(token_store)),
+        }
+    }
+}
+
+impl Default for OAuthState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// OAuth 启动流程请求
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuthStartFlowRequest {
+    /// 服务 ID
+    pub service_id: String,
+    /// Client ID
+    pub client_id: String,
+    /// Client Secret (可选)
+    pub client_secret: Option<String>,
+    /// Authorization URL
+    pub authorization_url: String,
+    /// Token URL
+    pub token_url: String,
+    /// Revoke URL (可选)
+    pub revoke_url: Option<String>,
+    /// 请求的 scopes
+    pub scopes: Vec<String>,
+    /// 回调端口 (0 表示动态分配)
+    #[serde(default)]
+    pub callback_port: u16,
+}
+
+/// OAuth 启动流程响应
+#[derive(Debug, Clone, Serialize)]
+pub struct OAuthStartFlowResponse {
+    /// 授权 URL
+    pub authorization_url: String,
+    /// 回调端口
+    pub callback_port: u16,
+}
+
+/// OAuth 回调处理请求
+#[derive(Debug, Clone, Deserialize)]
+pub struct OAuthCallbackRequest {
+    /// 服务 ID
+    pub service_id: String,
+    /// Authorization code
+    pub code: String,
+    /// State 参数
+    pub state: String,
+    /// 回调端口
+    pub callback_port: u16,
+    /// OAuth 配置 (用于 token exchange)
+    pub config: OAuthStartFlowRequest,
+}
+
+/// 启动 OAuth 授权流程
+///
+/// Story 11.12: Remote MCP OAuth Support - Task 6.1 (AC: 1)
+///
+/// 1. 生成 PKCE challenge
+/// 2. 启动回调服务器
+/// 3. 返回授权 URL
+/// 4. 打开系统浏览器
+#[tauri::command]
+pub async fn oauth_start_flow(
+    oauth_state: State<'_, OAuthState>,
+    app_handle: tauri::AppHandle,
+    request: OAuthStartFlowRequest,
+) -> Result<OAuthStartFlowResponse, AppError> {
+    let config = OAuthConfig {
+        service_id: request.service_id,
+        client_id: request.client_id,
+        client_secret: request.client_secret,
+        authorization_url: request.authorization_url,
+        token_url: request.token_url,
+        revoke_url: request.revoke_url,
+        scopes: request.scopes,
+        callback_port: request.callback_port,
+    };
+
+    // 启动 OAuth 流程
+    let (auth_url, callback_handle) = oauth_state
+        .manager
+        .start_flow(&config)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    let callback_port = callback_handle.port();
+
+    // 打开系统浏览器
+    app_handle
+        .opener()
+        .open_url(&auth_url, None::<&str>)
+        .map_err(|e| AppError::internal(format!("Failed to open browser: {}", e)))?;
+
+    // 在后台等待回调
+    let manager = oauth_state.manager.clone();
+    let config_clone = config.clone();
+    tokio::spawn(async move {
+        if let Some(result) = callback_handle
+            .wait_for_callback(std::time::Duration::from_secs(300))
+            .await
+        {
+            match result {
+                CallbackResult::Success { code, state } => {
+                    // 处理回调
+                    let _ = manager
+                        .handle_callback(&config_clone, &code, &state, callback_port)
+                        .await;
+                }
+                CallbackResult::Denied { error, description } => {
+                    eprintln!("[OAuth] Authorization denied: {} - {}", error, description);
+                }
+            }
+        }
+    });
+
+    Ok(OAuthStartFlowResponse {
+        authorization_url: auth_url,
+        callback_port,
+    })
+}
+
+/// 获取服务的 OAuth 状态
+///
+/// Story 11.12: Remote MCP OAuth Support - Task 6.2 (AC: 7)
+#[tauri::command]
+pub async fn oauth_get_status(
+    oauth_state: State<'_, OAuthState>,
+    service_id: String,
+) -> Result<OAuthServiceStatus, AppError> {
+    oauth_state
+        .manager
+        .get_status(&service_id)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))
+}
+
+/// 断开服务的 OAuth 连接
+///
+/// Story 11.12: Remote MCP OAuth Support - Task 6.3 (AC: 7)
+#[tauri::command]
+pub async fn oauth_disconnect(
+    oauth_state: State<'_, OAuthState>,
+    service_id: String,
+    config: OAuthStartFlowRequest,
+) -> Result<(), AppError> {
+    let oauth_config = OAuthConfig {
+        service_id: config.service_id,
+        client_id: config.client_id,
+        client_secret: config.client_secret,
+        authorization_url: config.authorization_url,
+        token_url: config.token_url,
+        revoke_url: config.revoke_url,
+        scopes: config.scopes,
+        callback_port: config.callback_port,
+    };
+
+    oauth_state
+        .manager
+        .disconnect(&oauth_config, &service_id)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))
+}
+
+/// 手动刷新 OAuth Token
+///
+/// Story 11.12: Remote MCP OAuth Support - Task 6.4 (AC: 6)
+#[tauri::command]
+pub async fn oauth_refresh_token(
+    oauth_state: State<'_, OAuthState>,
+    service_id: String,
+    config: OAuthStartFlowRequest,
+) -> Result<OAuthServiceStatus, AppError> {
+    let oauth_config = OAuthConfig {
+        service_id: config.service_id.clone(),
+        client_id: config.client_id,
+        client_secret: config.client_secret,
+        authorization_url: config.authorization_url,
+        token_url: config.token_url,
+        revoke_url: config.revoke_url,
+        scopes: config.scopes,
+        callback_port: config.callback_port,
+    };
+
+    oauth_state
+        .manager
+        .refresh_token(&oauth_config, &service_id)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    // 返回更新后的状态
+    oauth_state
+        .manager
+        .get_status(&service_id)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))
 }
