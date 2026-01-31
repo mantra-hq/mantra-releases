@@ -1,11 +1,13 @@
 /**
  * 项目关联配置组件
  * Story 11.6: Task 6 - 项目关联配置 (AC: #7)
+ * Story 11.10: Task 4 - 工具策略编辑器集成 (AC: #3)
  *
  * 用于管理 MCP 服务与项目的关联：
  * - 显示服务当前关联的项目列表
  * - 项目选择对话框（多选）
  * - 项目级 config_override 编辑器
+ * - 工具策略编辑器
  */
 
 import { useState, useCallback, useEffect } from "react";
@@ -23,11 +25,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Folder, Link2 } from "lucide-react";
+import { Loader2, Folder, Link2, Shield, Code } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import type { McpService } from "./McpServiceList";
+import { ToolPolicyEditor } from "./ToolPolicyEditor";
 
 /**
  * 项目信息
@@ -317,12 +321,12 @@ export function ProjectServiceAssociation({
         </DialogContent>
       </Dialog>
 
-      {/* 配置覆盖编辑对话框 */}
+      {/* 配置覆盖编辑对话框 - 包含工具策略编辑器 */}
       <Dialog
         open={!!editOverrideProject}
         onOpenChange={(open) => !open && setEditOverrideProject(null)}
       >
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>{t("hub.projectAssociation.overrideTitle")}</DialogTitle>
             <DialogDescription>
@@ -330,32 +334,62 @@ export function ProjectServiceAssociation({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2">
-            <Label>{t("hub.projectAssociation.overrideLabel")}</Label>
-            <Textarea
-              value={overrideText}
-              onChange={(e) => setOverrideText(e.target.value)}
-              placeholder={t("hub.projectAssociation.overridePlaceholder")}
-              className="font-mono text-sm min-h-[150px]"
-              data-testid="config-override-input"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("hub.projectAssociation.overrideHint")}
-            </p>
-            {overrideError && (
-              <p className="text-xs text-destructive">{overrideError}</p>
-            )}
-          </div>
+          <Tabs defaultValue="toolPolicy" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="toolPolicy" className="gap-2">
+                <Shield className="h-4 w-4" />
+                {t("hub.mcpContext.toolPolicy.title")}
+              </TabsTrigger>
+              <TabsTrigger value="advanced" className="gap-2">
+                <Code className="h-4 w-4" />
+                {t("hub.projectAssociation.advancedTab", "Advanced")}
+              </TabsTrigger>
+            </TabsList>
 
-          <DialogFooter>
+            <TabsContent value="toolPolicy" className="mt-4">
+              {service && editOverrideProject && (
+                <ToolPolicyEditor
+                  serviceId={service.id}
+                  projectId={editOverrideProject}
+                  onSaved={() => {
+                    feedback.success(t("hub.projectAssociation.overrideSaveSuccess"));
+                  }}
+                />
+              )}
+            </TabsContent>
+
+            <TabsContent value="advanced" className="mt-4">
+              <div className="space-y-2">
+                <Label>{t("hub.projectAssociation.overrideLabel")}</Label>
+                <Textarea
+                  value={overrideText}
+                  onChange={(e) => setOverrideText(e.target.value)}
+                  placeholder={t("hub.projectAssociation.overridePlaceholder")}
+                  className="font-mono text-sm min-h-[150px]"
+                  data-testid="config-override-input"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("hub.projectAssociation.overrideHint")}
+                </p>
+                {overrideError && (
+                  <p className="text-xs text-destructive">{overrideError}</p>
+                )}
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <Button onClick={handleSaveOverride} data-testid="config-override-save">
+                  {t("common.save")}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="border-t pt-4 mt-2">
             <Button
               variant="outline"
               onClick={() => setEditOverrideProject(null)}
             >
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={handleSaveOverride} data-testid="config-override-save">
-              {t("common.save")}
+              {t("common.close", "Close")}
             </Button>
           </DialogFooter>
         </DialogContent>

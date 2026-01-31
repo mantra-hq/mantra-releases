@@ -581,3 +581,183 @@ fn scan_detectable_configs(project_path: &str) -> Vec<DetectableConfig> {
 
     detectable_configs
 }
+
+// ===== Story 11.10: 工具管理命令 =====
+
+use crate::models::mcp::ToolPolicy;
+use crate::services::{ToolDefinition, ToolDiscoveryResult};
+
+/// 获取 MCP 服务的工具列表（带缓存）
+///
+/// Story 11.10: Project-Level Tool Management - Task 2.5
+///
+/// 首先尝试从缓存获取，如果缓存不存在或已过期，返回空列表
+/// 前端需要调用 refresh_service_tools 强制刷新
+///
+/// # Arguments
+/// * `service_id` - 服务 ID
+///
+/// # Returns
+/// 工具发现结果，包含工具列表和缓存状态
+#[tauri::command]
+pub async fn fetch_service_tools(
+    service_id: String,
+    state: State<'_, McpState>,
+) -> Result<ToolDiscoveryResult, AppError> {
+    // 尝试获取缓存，直接从数据库获取
+    let cached_tools = {
+        let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
+        db_lock.get_cached_service_tools(&service_id)?
+    };
+
+    if cached_tools.is_empty() {
+        // 无缓存，返回空列表
+        Ok(ToolDiscoveryResult {
+            service_id,
+            tools: Vec::new(),
+            from_cache: false,
+            cached_at: None,
+        })
+    } else {
+        // 检查是否过期 (5 分钟 TTL)
+        let ttl_seconds = 300;
+        let is_expired = cached_tools.first().map(|t| t.is_expired(ttl_seconds)).unwrap_or(true);
+
+        if is_expired {
+            Ok(ToolDiscoveryResult {
+                service_id,
+                tools: Vec::new(),
+                from_cache: false,
+                cached_at: cached_tools.first().map(|t| t.cached_at.clone()),
+            })
+        } else {
+            let tools: Vec<ToolDefinition> = cached_tools
+                .into_iter()
+                .map(|t| ToolDefinition {
+                    name: t.name,
+                    description: t.description,
+                    input_schema: t.input_schema,
+                })
+                .collect();
+
+            Ok(ToolDiscoveryResult {
+                service_id,
+                tools,
+                from_cache: true,
+                cached_at: None,
+            })
+        }
+    }
+}
+
+/// 缓存 MCP 服务的工具列表
+///
+/// Story 11.10: Project-Level Tool Management - Task 2.5
+///
+/// 前端在调用 MCP 服务的 tools/list 后，将结果通过此命令缓存
+///
+/// # Arguments
+/// * `service_id` - 服务 ID
+/// * `tools` - 工具列表
+#[tauri::command]
+pub async fn cache_service_tools(
+    service_id: String,
+    tools: Vec<ToolDefinition>,
+    state: State<'_, McpState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    let tool_data: Vec<(String, Option<String>, Option<serde_json::Value>)> = tools
+        .into_iter()
+        .map(|t| (t.name, t.description, t.input_schema))
+        .collect();
+
+    db.cache_service_tools(&service_id, &tool_data)
+        .map_err(AppError::from)
+}
+
+/// 刷新 MCP 服务的工具缓存
+///
+/// Story 11.10: Project-Level Tool Management - Task 2.5
+///
+/// 清除指定服务的工具缓存，强制下次获取时重新从服务获取
+///
+/// # Arguments
+/// * `service_id` - 服务 ID
+#[tauri::command]
+pub async fn refresh_service_tools(
+    service_id: String,
+    state: State<'_, McpState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.clear_service_tools_cache(&service_id)
+        .map_err(AppError::from)
+}
+
+/// 获取项目的 Tool Policy
+///
+/// Story 11.10: Project-Level Tool Management - AC 1
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `service_id` - 服务 ID
+///
+/// # Returns
+/// Tool Policy 配置
+#[tauri::command]
+pub fn get_project_tool_policy(
+    project_id: String,
+    service_id: String,
+    state: State<'_, McpState>,
+) -> Result<ToolPolicy, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    let link = db.get_project_service_link(&project_id, &service_id)?;
+    match link {
+        Some(pms) => Ok(pms.get_tool_policy()),
+        None => Ok(ToolPolicy::default()),
+    }
+}
+
+/// 更新项目的 Tool Policy
+///
+/// Story 11.10: Project-Level Tool Management - AC 3
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `service_id` - 服务 ID
+/// * `policy` - Tool Policy 配置
+#[tauri::command]
+pub fn update_project_tool_policy(
+    project_id: String,
+    service_id: String,
+    policy: ToolPolicy,
+    state: State<'_, McpState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    // 获取现有的 config_override
+    let existing_link = db.get_project_service_link(&project_id, &service_id)?;
+
+    // 构建新的 config_override
+    let policy_value = serde_json::to_value(&policy).unwrap_or_default();
+    let new_config = match existing_link {
+        Some(link) => {
+            let mut config = link.config_override.unwrap_or_else(|| serde_json::json!({}));
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert("toolPolicy".to_string(), policy_value);
+            }
+            config
+        }
+        None => {
+            // 链接不存在，返回错误
+            return Err(AppError::NotFound(format!(
+                "Project-service link not found: {} - {}",
+                project_id, service_id
+            )));
+        }
+    };
+
+    db.update_project_service_override(&project_id, &service_id, Some(&new_config))
+        .map_err(AppError::from)
+}

@@ -156,6 +156,9 @@ impl Database {
         // Migration: Add MCP services tables (Story 11.2)
         Self::run_mcp_services_migration(conn)?;
 
+        // Migration: Add MCP service tools cache table (Story 11.10)
+        Self::run_mcp_service_tools_migration(conn)?;
+
         Ok(())
     }
 
@@ -599,6 +602,43 @@ impl Database {
 
                 -- 按名称索引（唯一约束已提供）
                 CREATE INDEX IF NOT EXISTS idx_env_variables_name ON env_variables(name);
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP service tools cache table (Story 11.10)
+    ///
+    /// Creates:
+    /// - mcp_service_tools table: 缓存 MCP 服务的工具列表
+    fn run_mcp_service_tools_migration(conn: &Connection) -> Result<(), StorageError> {
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mcp_service_tools'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            conn.execute_batch(
+                r#"
+                -- mcp_service_tools 表: MCP 服务工具缓存 (Story 11.10)
+                CREATE TABLE IF NOT EXISTS mcp_service_tools (
+                    id TEXT PRIMARY KEY,
+                    service_id TEXT NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    description TEXT,
+                    input_schema TEXT,
+                    cached_at TEXT NOT NULL,
+                    UNIQUE(service_id, tool_name),
+                    FOREIGN KEY (service_id) REFERENCES mcp_services(id) ON DELETE CASCADE
+                );
+
+                -- 按服务 ID 索引
+                CREATE INDEX IF NOT EXISTS idx_mcp_service_tools_service ON mcp_service_tools(service_id);
                 "#,
             )?;
         }

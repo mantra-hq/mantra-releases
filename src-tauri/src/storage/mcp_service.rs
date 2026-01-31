@@ -10,7 +10,7 @@ use rusqlite::{params, Row};
 use super::database::Database;
 use super::error::StorageError;
 use crate::models::mcp::{
-    CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceWithOverride,
+    CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceTool, McpServiceWithOverride,
     ProjectMcpService, UpdateMcpServiceRequest,
 };
 
@@ -479,6 +479,133 @@ impl Database {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(StorageError::Database(e)),
         }
+    }
+
+    // ===== Story 11.10: MCP 服务工具缓存 =====
+
+    /// 获取服务的缓存工具列表
+    ///
+    /// Story 11.10: Project-Level Tool Management - Task 2.4
+    ///
+    /// # Arguments
+    /// * `service_id` - 服务 ID
+    ///
+    /// # Returns
+    /// 缓存的工具列表
+    pub fn get_cached_service_tools(
+        &self,
+        service_id: &str,
+    ) -> Result<Vec<McpServiceTool>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, service_id, tool_name, description, input_schema, cached_at
+               FROM mcp_service_tools WHERE service_id = ?1
+               ORDER BY tool_name ASC"#,
+        )?;
+
+        let tools = stmt
+            .query_map([service_id], |row| {
+                let input_schema_json: Option<String> = row.get(4)?;
+                let input_schema = input_schema_json.and_then(|s| serde_json::from_str(&s).ok());
+
+                Ok(McpServiceTool {
+                    id: row.get(0)?,
+                    service_id: row.get(1)?,
+                    name: row.get(2)?,
+                    description: row.get(3)?,
+                    input_schema,
+                    cached_at: row.get(5)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(tools)
+    }
+
+    /// 缓存服务的工具列表
+    ///
+    /// Story 11.10: Project-Level Tool Management - Task 2.4
+    ///
+    /// 替换该服务的所有缓存工具（先删后插）
+    ///
+    /// # Arguments
+    /// * `service_id` - 服务 ID
+    /// * `tools` - 工具列表（名称、描述、输入 Schema）
+    pub fn cache_service_tools(
+        &self,
+        service_id: &str,
+        tools: &[(String, Option<String>, Option<serde_json::Value>)],
+    ) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 删除旧缓存
+        self.connection().execute(
+            "DELETE FROM mcp_service_tools WHERE service_id = ?1",
+            [service_id],
+        )?;
+
+        // 插入新工具
+        let mut stmt = self.connection().prepare(
+            r#"INSERT INTO mcp_service_tools (id, service_id, tool_name, description, input_schema, cached_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6)"#,
+        )?;
+
+        for (name, description, input_schema) in tools {
+            let id = uuid::Uuid::new_v4().to_string();
+            let input_schema_json = input_schema
+                .as_ref()
+                .and_then(|s| serde_json::to_string(s).ok());
+
+            stmt.execute(params![
+                &id,
+                service_id,
+                name,
+                description,
+                &input_schema_json,
+                &now,
+            ])?;
+        }
+
+        Ok(())
+    }
+
+    /// 清除服务的工具缓存
+    ///
+    /// Story 11.10: Project-Level Tool Management
+    ///
+    /// # Arguments
+    /// * `service_id` - 服务 ID
+    pub fn clear_service_tools_cache(&self, service_id: &str) -> Result<(), StorageError> {
+        self.connection().execute(
+            "DELETE FROM mcp_service_tools WHERE service_id = ?1",
+            [service_id],
+        )?;
+        Ok(())
+    }
+
+    /// 获取所有服务的工具缓存时间
+    ///
+    /// Story 11.10: Project-Level Tool Management
+    ///
+    /// 用于检查哪些缓存已过期
+    ///
+    /// # Returns
+    /// 服务 ID -> 最新缓存时间 的映射
+    pub fn get_service_tools_cache_times(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT service_id, MAX(cached_at) as latest_cached_at
+               FROM mcp_service_tools
+               GROUP BY service_id"#,
+        )?;
+
+        let times = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(times)
     }
 }
 

@@ -25,3 +25,6 @@ export { McpConfigImportDialog } from "./McpConfigImportDialog";
 // Story 11.9: 项目 MCP 上下文
 export { McpContextCard, type McpContextCardProps } from "./McpContextCard";
 export { McpServiceStatusDot, type McpServiceStatusDotProps, type ServiceStatus } from "./McpServiceStatusDot";
+
+// Story 11.10: 工具策略管理
+export { ToolPolicyEditor } from "./ToolPolicyEditor";

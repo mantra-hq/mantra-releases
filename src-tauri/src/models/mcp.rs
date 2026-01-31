@@ -107,9 +107,48 @@ pub struct ProjectMcpService {
     /// 关联的服务 ID
     pub service_id: String,
     /// 项目级配置覆盖，JSON 对象格式
+    /// 支持 `toolPolicy` 字段 (Story 11.10)
     pub config_override: Option<serde_json::Value>,
     /// 创建时间 (ISO 8601)
     pub created_at: String,
+}
+
+impl ProjectMcpService {
+    /// 获取项目的 Tool Policy
+    ///
+    /// Story 11.10: Project-Level Tool Management - AC 1, AC 6
+    ///
+    /// 从 `config_override.toolPolicy` 解析 Tool Policy。
+    /// 如果未配置或解析失败，返回默认策略 (AllowAll)。
+    pub fn get_tool_policy(&self) -> ToolPolicy {
+        self.config_override
+            .as_ref()
+            .and_then(|config| config.get("toolPolicy"))
+            .and_then(|policy_value| serde_json::from_value(policy_value.clone()).ok())
+            .unwrap_or_default()
+    }
+
+    /// 设置 Tool Policy
+    ///
+    /// Story 11.10: Project-Level Tool Management
+    ///
+    /// 更新 `config_override.toolPolicy` 字段。
+    pub fn set_tool_policy(&mut self, policy: &ToolPolicy) {
+        let policy_value = serde_json::to_value(policy).unwrap_or_default();
+
+        match &mut self.config_override {
+            Some(config) => {
+                if let Some(obj) = config.as_object_mut() {
+                    obj.insert("toolPolicy".to_string(), policy_value);
+                }
+            }
+            None => {
+                self.config_override = Some(serde_json::json!({
+                    "toolPolicy": policy_value
+                }));
+            }
+        }
+    }
 }
 
 /// MCP 服务及其项目级配置覆盖
@@ -161,6 +200,136 @@ pub struct EnvVariableNameValidation {
     pub suggestion: Option<String>,
     /// 错误信息（如果名称无效）
     pub error_message: Option<String>,
+}
+
+// ===== Story 11.10: Project-Level Tool Management =====
+
+/// Tool Policy 模式
+///
+/// Story 11.10: Project-Level Tool Management - AC 1
+///
+/// 定义工具策略的三种模式:
+/// - `allow_all`: 允许所有工具（默认）
+/// - `deny_all`: 禁止所有工具
+/// - `custom`: 自定义模式，需配合 allowed_tools 和 denied_tools 使用
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPolicyMode {
+    #[default]
+    AllowAll,
+    DenyAll,
+    Custom,
+}
+
+/// Tool Policy 配置
+///
+/// Story 11.10: Project-Level Tool Management - AC 1
+///
+/// 用于控制项目级别的 MCP 工具访问权限。
+///
+/// ## 优先级规则
+/// `denied_tools` > `allowed_tools` > `mode`
+///
+/// 即:
+/// 1. 如果工具在 `denied_tools` 中，无论其他设置如何都被禁止
+/// 2. 当 `mode = custom` 时，工具必须在 `allowed_tools` 中且不在 `denied_tools` 中才可用
+/// 3. 当 `mode = allow_all` 时，允许所有不在 `denied_tools` 中的工具
+/// 4. 当 `mode = deny_all` 时，禁止所有工具
+///
+/// ## 示例
+/// ```json
+/// {
+///   "toolPolicy": {
+///     "mode": "custom",
+///     "allowedTools": ["git-mcp/read_file", "git-mcp/list_commits"],
+///     "deniedTools": ["git-mcp/write_file", "git-mcp/execute_command"]
+///   }
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolPolicy {
+    /// 策略模式
+    #[serde(default)]
+    pub mode: ToolPolicyMode,
+    /// 允许的工具列表（仅在 Custom 模式下生效）
+    /// 格式: "tool_name" (不含 service 前缀)
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+    /// 禁止的工具列表（优先级最高）
+    /// 格式: "tool_name" (不含 service 前缀)
+    #[serde(default)]
+    pub denied_tools: Vec<String>,
+}
+
+impl ToolPolicy {
+    /// 检查工具是否被允许
+    ///
+    /// ## 优先级规则
+    /// 1. `denied_tools` 优先级最高 - 任何在此列表中的工具都被禁止
+    /// 2. 根据 `mode` 判断:
+    ///    - `AllowAll`: 允许所有工具
+    ///    - `DenyAll`: 禁止所有工具
+    ///    - `Custom`: 仅允许在 `allowed_tools` 中的工具
+    pub fn is_tool_allowed(&self, tool_name: &str) -> bool {
+        // 1. denied_tools 优先级最高
+        if self.denied_tools.iter().any(|t| t == tool_name) {
+            return false;
+        }
+
+        // 2. 根据 mode 判断
+        match self.mode {
+            ToolPolicyMode::AllowAll => true,
+            ToolPolicyMode::DenyAll => false,
+            ToolPolicyMode::Custom => self.allowed_tools.iter().any(|t| t == tool_name),
+        }
+    }
+
+    /// 过滤工具列表，返回被允许的工具
+    pub fn filter_tools<'a, T>(&self, tools: &'a [T], get_name: impl Fn(&T) -> &str) -> Vec<&'a T> {
+        tools
+            .iter()
+            .filter(|tool| self.is_tool_allowed(get_name(tool)))
+            .collect()
+    }
+}
+
+/// MCP 服务工具定义
+///
+/// Story 11.10: Project-Level Tool Management - AC 2
+///
+/// 用于缓存 MCP 服务提供的工具信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServiceTool {
+    /// 唯一标识符 (UUID)
+    pub id: String,
+    /// 关联的服务 ID
+    pub service_id: String,
+    /// 工具名称
+    pub name: String,
+    /// 工具描述
+    pub description: Option<String>,
+    /// 输入参数 JSON Schema
+    pub input_schema: Option<serde_json::Value>,
+    /// 缓存时间 (ISO 8601)
+    pub cached_at: String,
+}
+
+impl McpServiceTool {
+    /// 检查缓存是否已过期
+    ///
+    /// # Arguments
+    /// * `ttl_seconds` - 缓存有效期（秒）
+    pub fn is_expired(&self, ttl_seconds: i64) -> bool {
+        if let Ok(cached_at) = chrono::DateTime::parse_from_rfc3339(&self.cached_at) {
+            let now = chrono::Utc::now();
+            let elapsed = now.signed_duration_since(cached_at);
+            elapsed.num_seconds() > ttl_seconds
+        } else {
+            true // 无法解析时间，视为过期
+        }
+    }
 }
 
 #[cfg(test)]
@@ -334,5 +503,216 @@ mod tests {
         // 由于 #[serde(flatten)]，service 字段会被展开
         assert!(json.contains("git-mcp"));
         assert!(json.contains("--verbose"));
+    }
+
+    // ===== Story 11.10: Tool Policy 测试 =====
+
+    #[test]
+    fn test_tool_policy_mode_serialization() {
+        // 测试序列化
+        assert_eq!(
+            serde_json::to_string(&ToolPolicyMode::AllowAll).unwrap(),
+            r#""allow_all""#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolPolicyMode::DenyAll).unwrap(),
+            r#""deny_all""#
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolPolicyMode::Custom).unwrap(),
+            r#""custom""#
+        );
+
+        // 测试反序列化
+        let allow_all: ToolPolicyMode = serde_json::from_str(r#""allow_all""#).unwrap();
+        assert_eq!(allow_all, ToolPolicyMode::AllowAll);
+        let deny_all: ToolPolicyMode = serde_json::from_str(r#""deny_all""#).unwrap();
+        assert_eq!(deny_all, ToolPolicyMode::DenyAll);
+        let custom: ToolPolicyMode = serde_json::from_str(r#""custom""#).unwrap();
+        assert_eq!(custom, ToolPolicyMode::Custom);
+    }
+
+    #[test]
+    fn test_tool_policy_default() {
+        let policy = ToolPolicy::default();
+        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+        assert!(policy.allowed_tools.is_empty());
+        assert!(policy.denied_tools.is_empty());
+    }
+
+    #[test]
+    fn test_tool_policy_is_tool_allowed_allow_all_mode() {
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::AllowAll,
+            allowed_tools: vec![],
+            denied_tools: vec![],
+        };
+
+        // AllowAll 模式下，所有工具都被允许
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(policy.is_tool_allowed("write_file"));
+        assert!(policy.is_tool_allowed("execute_command"));
+    }
+
+    #[test]
+    fn test_tool_policy_is_tool_allowed_deny_all_mode() {
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::DenyAll,
+            allowed_tools: vec![],
+            denied_tools: vec![],
+        };
+
+        // DenyAll 模式下，所有工具都被禁止
+        assert!(!policy.is_tool_allowed("read_file"));
+        assert!(!policy.is_tool_allowed("write_file"));
+        assert!(!policy.is_tool_allowed("execute_command"));
+    }
+
+    #[test]
+    fn test_tool_policy_is_tool_allowed_custom_mode() {
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::Custom,
+            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
+            denied_tools: vec![],
+        };
+
+        // Custom 模式下，只有 allowed_tools 中的工具被允许
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(policy.is_tool_allowed("list_commits"));
+        assert!(!policy.is_tool_allowed("write_file"));
+        assert!(!policy.is_tool_allowed("execute_command"));
+    }
+
+    #[test]
+    fn test_tool_policy_denied_tools_highest_priority() {
+        // denied_tools 优先级最高，即使在 AllowAll 模式下也应该被禁止
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::AllowAll,
+            allowed_tools: vec![],
+            denied_tools: vec!["write_file".to_string(), "execute_command".to_string()],
+        };
+
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(!policy.is_tool_allowed("write_file"));
+        assert!(!policy.is_tool_allowed("execute_command"));
+    }
+
+    #[test]
+    fn test_tool_policy_denied_overrides_allowed() {
+        // denied_tools 优先于 allowed_tools
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::Custom,
+            allowed_tools: vec![
+                "read_file".to_string(),
+                "write_file".to_string(),
+                "execute_command".to_string(),
+            ],
+            denied_tools: vec!["write_file".to_string()],
+        };
+
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(!policy.is_tool_allowed("write_file")); // denied 优先
+        assert!(policy.is_tool_allowed("execute_command"));
+    }
+
+    #[test]
+    fn test_tool_policy_serialization() {
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::Custom,
+            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
+            denied_tools: vec!["write_file".to_string()],
+        };
+
+        let json = serde_json::to_string(&policy).unwrap();
+        assert!(json.contains("custom"));
+        assert!(json.contains("read_file"));
+        assert!(json.contains("write_file"));
+
+        let deserialized: ToolPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.mode, ToolPolicyMode::Custom);
+        assert_eq!(deserialized.allowed_tools.len(), 2);
+        assert_eq!(deserialized.denied_tools.len(), 1);
+    }
+
+    #[test]
+    fn test_tool_policy_from_config_override() {
+        // 测试从 config_override JSON 中解析 ToolPolicy
+        let config_override = serde_json::json!({
+            "toolPolicy": {
+                "mode": "custom",
+                "allowedTools": ["read_file", "list_commits"],
+                "deniedTools": ["write_file"]
+            }
+        });
+
+        let tool_policy_value = config_override.get("toolPolicy").unwrap();
+        let policy: ToolPolicy = serde_json::from_value(tool_policy_value.clone()).unwrap();
+
+        assert_eq!(policy.mode, ToolPolicyMode::Custom);
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(policy.is_tool_allowed("list_commits"));
+        assert!(!policy.is_tool_allowed("write_file"));
+    }
+
+    #[test]
+    fn test_tool_policy_missing_fields_use_defaults() {
+        // 测试缺少字段时使用默认值
+        let partial_json = r#"{"mode": "custom"}"#;
+        let policy: ToolPolicy = serde_json::from_str(partial_json).unwrap();
+
+        assert_eq!(policy.mode, ToolPolicyMode::Custom);
+        assert!(policy.allowed_tools.is_empty());
+        assert!(policy.denied_tools.is_empty());
+    }
+
+    #[test]
+    fn test_project_mcp_service_get_tool_policy_none() {
+        let service = ProjectMcpService {
+            project_id: "proj-123".to_string(),
+            service_id: "service-456".to_string(),
+            config_override: None,
+            created_at: "2026-01-31T00:00:00Z".to_string(),
+        };
+
+        // 无配置时返回默认策略 (AllowAll)
+        let policy = service.get_tool_policy();
+        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+    }
+
+    #[test]
+    fn test_project_mcp_service_get_tool_policy_with_override() {
+        let service = ProjectMcpService {
+            project_id: "proj-123".to_string(),
+            service_id: "service-456".to_string(),
+            config_override: Some(serde_json::json!({
+                "toolPolicy": {
+                    "mode": "custom",
+                    "allowedTools": ["read_file"],
+                    "deniedTools": ["write_file"]
+                }
+            })),
+            created_at: "2026-01-31T00:00:00Z".to_string(),
+        };
+
+        let policy = service.get_tool_policy();
+        assert_eq!(policy.mode, ToolPolicyMode::Custom);
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(!policy.is_tool_allowed("write_file"));
+    }
+
+    #[test]
+    fn test_project_mcp_service_get_tool_policy_invalid_json() {
+        // 如果 toolPolicy 格式无效，应该返回默认策略
+        let service = ProjectMcpService {
+            project_id: "proj-123".to_string(),
+            service_id: "service-456".to_string(),
+            config_override: Some(serde_json::json!({
+                "toolPolicy": "invalid_not_an_object"
+            })),
+            created_at: "2026-01-31T00:00:00Z".to_string(),
+        };
+
+        let policy = service.get_tool_policy();
+        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
     }
 }

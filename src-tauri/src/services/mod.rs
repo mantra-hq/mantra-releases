@@ -6,6 +6,7 @@ pub mod env_manager;
 pub mod mcp_adapters;
 pub mod mcp_config;
 pub mod mcp_registry;
+pub mod mcp_tool_discovery;
 
 pub use env_manager::EnvManager;
 pub use mcp_adapters::{
@@ -13,4 +14,5 @@ pub use mcp_adapters::{
     McpToolAdapter, ToolAdapterRegistry,
 };
 pub use mcp_registry::McpRegistry;
+pub use mcp_tool_discovery::{McpToolDiscovery, ToolDefinition, ToolDiscoveryResult};
 

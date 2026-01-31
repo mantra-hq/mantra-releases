@@ -1040,7 +1040,8 @@
       "overrideMustBeObject": "Config override must be a JSON object",
       "loadOverrideError": "Failed to load config override",
       "overrideSaveSuccess": "Config override saved",
-      "overrideSaveError": "Failed to save config override"
+      "overrideSaveError": "Failed to save config override",
+      "advancedTab": "Advanced"
     },
     "envVariables": {
       "title": "Environment Variables",
@@ -1143,7 +1144,57 @@
       "addServicesHint": "Add MCP tools to enhance your AI coding experience.",
       "statusRunning": "Running",
       "statusStopped": "Stopped",
-      "statusError": "Error"
+      "statusError": "Error",
+      "toolPolicy": {
+        "title": "Tool Policy",
+        "description": "Control tool access permissions for this service",
+        "mode": {
+          "label": "Access Mode",
+          "allowAll": "Allow All",
+          "allowAllDesc": "All tools are accessible",
+          "denyAll": "Deny All",
+          "denyAllDesc": "All tools are blocked",
+          "custom": "Custom",
+          "customDesc": "Fine-grained control per tool"
+        },
+        "toolList": {
+          "title": "Tool List",
+          "empty": "No tools discovered",
+          "loading": "Loading tools...",
+          "refresh": "Refresh Tools",
+          "refreshing": "Refreshing...",
+          "allow": "Allow",
+          "deny": "Deny",
+          "allowed": "Allowed",
+          "denied": "Denied"
+        }
+      }
+    },
+    "toolPolicy": {
+      "title": "Tool Policy",
+      "description": "Configure tool access permissions for {{service}}",
+      "mode": "Policy Mode",
+      "modeAllowAll": "Allow All Tools",
+      "modeDenyAll": "Deny All Tools",
+      "modeCustom": "Custom",
+      "modeDescription": {
+        "allow_all": "Allow AI to call all tools from this service (except explicitly denied)",
+        "deny_all": "Block AI from calling any tools from this service",
+        "custom": "Only allow AI to call explicitly allowed tools"
+      },
+      "tools": "Tool List",
+      "refreshTools": "Refresh Tools",
+      "refreshing": "Refreshing tool list...",
+      "refreshSuccess": "Tool list refreshed",
+      "refreshError": "Failed to refresh tool list",
+      "noTools": "No tool information available",
+      "noToolsHint": "Click 'Refresh Tools' to fetch tools from the service",
+      "noToolsCached": "No cached tools, ensure the service is running",
+      "cachedAt": "Cached at {{time}}",
+      "blocked": "Blocked",
+      "loadError": "Failed to load tool policy",
+      "saveSuccess": "Tool policy saved",
+      "saveError": "Failed to save tool policy"
     }
   }
 }

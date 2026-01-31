@@ -1045,7 +1045,8 @@
       "overrideMustBeObject": "配置覆盖必须是 JSON 对象格式",
       "loadOverrideError": "加载配置覆盖失败",
       "overrideSaveSuccess": "配置覆盖已保存",
-      "overrideSaveError": "保存配置覆盖失败"
+      "overrideSaveError": "保存配置覆盖失败",
+      "advancedTab": "高级设置"
     },
     "envVariables": {
       "title": "环境变量",
@@ -1149,6 +1150,32 @@
       "statusRunning": "运行中",
       "statusStopped": "未运行",
       "statusError": "错误"
+    },
+    "toolPolicy": {
+      "title": "工具策略",
+      "description": "为 {{service}} 配置工具访问权限",
+      "mode": "策略模式",
+      "modeAllowAll": "允许所有工具",
+      "modeDenyAll": "禁止所有工具",
+      "modeCustom": "自定义",
+      "modeDescription": {
+        "allow_all": "允许 AI 调用此服务的所有工具（除了明确禁止的）",
+        "deny_all": "禁止 AI 调用此服务的任何工具",
+        "custom": "仅允许 AI 调用明确允许的工具"
+      },
+      "tools": "工具列表",
+      "refreshTools": "刷新工具",
+      "refreshing": "正在刷新工具列表...",
+      "refreshSuccess": "工具列表已刷新",
+      "refreshError": "刷新工具列表失败",
+      "noTools": "暂无工具信息",
+      "noToolsHint": "点击「刷新工具」从服务获取工具列表",
+      "noToolsCached": "无缓存的工具列表，请确保服务正在运行",
+      "cachedAt": "缓存于 {{time}}",
+      "blocked": "已禁止",
+      "loadError": "加载工具策略失败",
+      "saveSuccess": "工具策略已保存",
+      "saveError": "保存工具策略失败"
     }
   }
 }
