@@ -107,10 +107,10 @@ export function ToolExplorer({
   };
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 overflow-hidden" data-testid="tool-explorer">
+    <div className="flex flex-col h-full w-full overflow-hidden" data-testid="tool-explorer">
       {/* 搜索框 */}
-      <div className="p-3 border-b shrink-0 min-w-0">
-        <div className="relative min-w-0">
+      <div className="p-3 border-b shrink-0">
+        <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder={t("hub.inspector.searchPlaceholder")}
@@ -134,10 +134,10 @@ export function ToolExplorer({
 
       {/* 列表区域 */}
       <ScrollArea className="flex-1 min-h-0 w-full">
-        <div className="p-2 space-y-1 min-w-0">
+        <div className="p-2 space-y-1">
           {/* Tools 分组 */}
           <Collapsible open={toolsExpanded} onOpenChange={setToolsExpanded}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-sm font-medium min-w-0">
+            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-sm font-medium">
               {toolsExpanded ? (
                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
@@ -150,7 +150,7 @@ export function ToolExplorer({
               </Badge>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="ml-4 space-y-0.5 min-w-0">
+              <div className="ml-4 space-y-0.5">
                 {filteredTools.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-2 px-2">
                     {search
@@ -164,7 +164,7 @@ export function ToolExplorer({
                         <TooltipTrigger asChild>
                           <button
                             className={cn(
-                              "flex items-center gap-2 w-full p-2 rounded-md text-sm text-left transition-colors min-w-0",
+                              "flex items-center gap-2 w-full p-2 rounded-md text-sm text-left transition-colors",
                               selectedTool?.name === tool.name
                                 ? "bg-accent text-accent-foreground"
                                 : "hover:bg-muted/50"
@@ -173,7 +173,7 @@ export function ToolExplorer({
                             data-testid={`tool-item-${tool.name}`}
                           >
                             <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="truncate font-mono text-xs min-w-0 flex-1">
+                            <span className="truncate font-mono text-xs flex-1">
                               {tool.name}
                             </span>
                             {getParamCount(tool) > 0 && (
@@ -204,7 +204,7 @@ export function ToolExplorer({
 
           {/* Resources 分组 */}
           <Collapsible open={resourcesExpanded} onOpenChange={setResourcesExpanded}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-sm font-medium min-w-0">
+            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-sm font-medium">
               {resourcesExpanded ? (
                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
@@ -217,7 +217,7 @@ export function ToolExplorer({
               </Badge>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="ml-4 space-y-0.5 min-w-0">
+              <div className="ml-4 space-y-0.5">
                 {filteredResources.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-2 px-2">
                     {search
@@ -231,7 +231,7 @@ export function ToolExplorer({
                         <TooltipTrigger asChild>
                           <button
                             className={cn(
-                              "flex items-center gap-2 w-full p-2 rounded-md text-sm text-left transition-colors min-w-0",
+                              "flex items-center gap-2 w-full p-2 rounded-md text-sm text-left transition-colors",
                               selectedResource?.uri === resource.uri
                                 ? "bg-accent text-accent-foreground"
                                 : "hover:bg-muted/50"
@@ -240,7 +240,7 @@ export function ToolExplorer({
                             data-testid={`resource-item-${resource.name}`}
                           >
                             <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="truncate font-mono text-xs min-w-0 flex-1">
+                            <span className="truncate font-mono text-xs flex-1">
                               {resource.name}
                             </span>
                             {resource.mimeType && (

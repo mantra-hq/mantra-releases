@@ -289,8 +289,8 @@ export function InspectorDrawer({
         side="right"
         className={
           isFullscreen
-            ? "w-full max-w-none sm:max-w-none"
-            : "w-[90vw] max-w-[1200px] sm:max-w-[1200px]"
+            ? "!w-full !max-w-none"
+            : "!w-[90vw] !max-w-[1400px] p-6"
         }
       >
         <SheetHeader className="flex-none">
@@ -358,15 +358,19 @@ export function InspectorDrawer({
               </Button>
             </div>
           ) : (
-            <ResizablePanelGroup orientation="horizontal" className="h-full w-full rounded-lg border">
+            <ResizablePanelGroup 
+                id="inspector-horizontal" 
+                orientation="horizontal" 
+                disabled={false}
+                className="h-full w-full"
+              >
               {/* 左侧 - 工具/资源列表 */}
               <ResizablePanel 
-                defaultSize={30} 
-                minSize={15} 
-                maxSize={60}
-                className="min-w-0"
+                id="inspector-left"
+                defaultSize={35} 
+                minSize={15}
               >
-                <div className="h-full w-full overflow-hidden">
+                <div className="h-full w-full">
                   <ToolExplorer
                     tools={tools}
                     resources={resources}
@@ -378,13 +382,13 @@ export function InspectorDrawer({
                 </div>
               </ResizablePanel>
 
-              <ResizableHandle withHandle className="bg-border w-1.5 hover:bg-accent transition-colors" />
+              <ResizableHandle withHandle orientation="horizontal" />
 
               {/* 右侧 - 交互面板和日志 */}
-              <ResizablePanel defaultSize={70} minSize={30} className="min-w-0">
-                <ResizablePanelGroup orientation="vertical" className="h-full">
+              <ResizablePanel id="inspector-right" defaultSize={65} minSize={15}>
+                <ResizablePanelGroup id="inspector-vertical" orientation="vertical" className="h-full">
                   {/* 上部 - 交互面板 */}
-                  <ResizablePanel defaultSize={60} minSize={20}>
+                  <ResizablePanel id="inspector-top" defaultSize={60} minSize={20}>
                     <ToolTester
                       selectedTool={selectedTool}
                       selectedResource={selectedResource}
@@ -393,10 +397,10 @@ export function InspectorDrawer({
                     />
                   </ResizablePanel>
 
-                  <ResizableHandle className="bg-border h-1.5 hover:bg-accent transition-colors" />
+                  <ResizableHandle withHandle orientation="vertical" />
 
                   {/* 下部 - 日志面板 */}
-                  <ResizablePanel defaultSize={40} minSize={15}>
+                  <ResizablePanel id="inspector-bottom" defaultSize={40} minSize={15}>
                     <RpcLogViewer logs={logs} onClear={handleClearLogs} />
                   </ResizablePanel>
                 </ResizablePanelGroup>
