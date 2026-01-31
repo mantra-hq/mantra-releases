@@ -596,14 +596,31 @@ use crate::services::{ToolDefinition, ToolDiscoveryResult};
 ///
 /// # Arguments
 /// * `service_id` - 服务 ID
+/// * `force_refresh` - 是否强制刷新（清除缓存）
 ///
 /// # Returns
 /// 工具发现结果，包含工具列表和缓存状态
 #[tauri::command]
 pub async fn fetch_service_tools(
     service_id: String,
+    force_refresh: Option<bool>,
     state: State<'_, McpState>,
 ) -> Result<ToolDiscoveryResult, AppError> {
+    // 如果强制刷新，先清除缓存
+    if force_refresh.unwrap_or(false) {
+        let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
+        db_lock.clear_service_tools_cache(&service_id)?;
+        drop(db_lock);
+        
+        // 强制刷新时返回空列表，前端需要通过其他方式获取实际工具列表
+        return Ok(ToolDiscoveryResult {
+            service_id,
+            tools: Vec::new(),
+            from_cache: false,
+            cached_at: None,
+        });
+    }
+
     // 尝试获取缓存，直接从数据库获取
     let cached_tools = {
         let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;

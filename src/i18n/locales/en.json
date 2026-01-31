@@ -1144,31 +1144,7 @@
       "addServicesHint": "Add MCP tools to enhance your AI coding experience.",
       "statusRunning": "Running",
       "statusStopped": "Stopped",
-      "statusError": "Error",
-      "toolPolicy": {
-        "title": "Tool Policy",
-        "description": "Control tool access permissions for this service",
-        "mode": {
-          "label": "Access Mode",
-          "allowAll": "Allow All",
-          "allowAllDesc": "All tools are accessible",
-          "denyAll": "Deny All",
-          "denyAllDesc": "All tools are blocked",
-          "custom": "Custom",
-          "customDesc": "Fine-grained control per tool"
-        },
-        "toolList": {
-          "title": "Tool List",
-          "empty": "No tools discovered",
-          "loading": "Loading tools...",
-          "refresh": "Refresh Tools",
-          "refreshing": "Refreshing...",
-          "allow": "Allow",
-          "deny": "Deny",
-          "allowed": "Allowed",
-          "denied": "Denied"
-        }
-      }
+      "statusError": "Error"
     },
     "toolPolicy": {
       "title": "Tool Policy",

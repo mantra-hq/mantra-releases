@@ -508,15 +508,15 @@ async fn handle_tools_call(
 ///
 /// Story 11.10: Project-Level Tool Management - AC 5
 ///
+/// 此函数用于 Gateway 拦截逻辑。当前为占位实现，
+/// 完整集成需要通过 Tauri IPC 查询 Tool Policy 后调用。
+///
 /// # Arguments
-/// * `project_id` - 项目 ID
-/// * `service_id` - 服务 ID
 /// * `tool_name` - 工具名称
 /// * `policy` - Tool Policy 配置
 ///
 /// # Returns
 /// `true` 如果工具被阻止，`false` 如果允许
-#[allow(dead_code)]
 pub fn is_tool_blocked(tool_name: &str, policy: &crate::models::mcp::ToolPolicy) -> bool {
     !policy.is_tool_allowed(tool_name)
 }
@@ -524,6 +524,9 @@ pub fn is_tool_blocked(tool_name: &str, policy: &crate::models::mcp::ToolPolicy)
 /// 创建工具被阻止的 JSON-RPC 错误响应
 ///
 /// Story 11.10: Project-Level Tool Management - AC 5
+///
+/// 此函数用于 Gateway 拦截逻辑。当工具被 Tool Policy 禁止时，
+/// 返回标准的 JSON-RPC -32601 错误（伪装为 "Tool not found"）。
 ///
 /// # Arguments
 /// * `id` - 请求 ID
@@ -536,6 +539,9 @@ pub fn tool_blocked_error(id: Option<serde_json::Value>, tool_name: &str) -> Jso
 ///
 /// Story 11.10: Project-Level Tool Management - AC 5
 ///
+/// 此函数用于 Gateway 拦截逻辑。当工具被阻止时，
+/// 生成审计日志条目用于后续持久化存储。
+///
 /// # Arguments
 /// * `project_id` - 项目 ID
 /// * `service_id` - 服务 ID
@@ -543,7 +549,6 @@ pub fn tool_blocked_error(id: Option<serde_json::Value>, tool_name: &str) -> Jso
 ///
 /// # Returns
 /// 审计日志条目（用于持久化存储）
-#[allow(dead_code)]
 pub fn log_tool_blocked(project_id: &str, service_id: &str, tool_name: &str) -> serde_json::Value {
     let timestamp = chrono::Utc::now().to_rfc3339();
     serde_json::json!({

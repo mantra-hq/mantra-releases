@@ -338,7 +338,7 @@ export function ProjectServiceAssociation({
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="toolPolicy" className="gap-2">
                 <Shield className="h-4 w-4" />
-                {t("hub.mcpContext.toolPolicy.title")}
+                {t("hub.toolPolicy.title")}
               </TabsTrigger>
               <TabsTrigger value="advanced" className="gap-2">
                 <Code className="h-4 w-4" />
@@ -351,6 +351,7 @@ export function ProjectServiceAssociation({
                 <ToolPolicyEditor
                   serviceId={service.id}
                   projectId={editOverrideProject}
+                  serviceName={service.name}
                   onSaved={() => {
                     feedback.success(t("hub.projectAssociation.overrideSaveSuccess"));
                   }}
