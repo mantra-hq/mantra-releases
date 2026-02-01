@@ -304,8 +304,9 @@ export function McpConfigImportDialog({
         }
       }
 
-      // Story 11.15: 导入即接管，始终获取 Gateway URL
+      // Story 11.15: 导入即接管，始终获取 Gateway URL 和 Token
       let gatewayUrl: string | null = null;
+      let gatewayToken: string | null = null;
       let isGatewayRunning = false;
       try {
         const gatewayStatus = await invoke<{ running: boolean; port: number | null; auth_token: string }>(
@@ -313,6 +314,7 @@ export function McpConfigImportDialog({
         );
         if (gatewayStatus.running && gatewayStatus.port) {
           gatewayUrl = `http://127.0.0.1:${gatewayStatus.port}/mcp`;
+          gatewayToken = gatewayStatus.auth_token || null;
           isGatewayRunning = true;
         }
       } catch (gwErr) {
@@ -326,6 +328,7 @@ export function McpConfigImportDialog({
         env_var_values: envVarValues,
         enable_shadow_mode: true,
         gateway_url: gatewayUrl,
+        gateway_token: gatewayToken,
       };
 
       const result = await invoke<ImportResult>("execute_mcp_import", {
