@@ -808,21 +808,33 @@ async fn handle_mcp_request(
         }
     }
 
-    // 验证 MCP-Protocol-Version Header (Task 4 会详细实现)
+    // 验证并存储 MCP-Protocol-Version Header (AC4)
+    // 支持的协议版本
+    const SUPPORTED_VERSIONS: &[&str] = &["2025-03-26", "2024-11-05"];
+    const DEFAULT_VERSION: &str = "2025-03-26";
+
     let protocol_version = headers
         .get("mcp-protocol-version")
-        .and_then(|v| v.to_str().ok());
-    if let Some(version) = protocol_version {
-        if version != "2025-03-26" && version != "2024-11-05" {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(JsonRpcResponse::error(
-                    id,
-                    -32001,
-                    format!("Unsupported protocol version: {}", version),
-                )),
-            )
-                .into_response();
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or(DEFAULT_VERSION); // 如果 Header 缺失，默认使用 2025-03-26
+
+    if !SUPPORTED_VERSIONS.contains(&protocol_version) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(JsonRpcResponse::error(
+                id,
+                -32001,
+                format!("Unsupported protocol version: {}", protocol_version),
+            )),
+        )
+            .into_response();
+    }
+
+    // 将协商后的协议版本存储到会话状态 (AC4)
+    {
+        let mut store = app_state.mcp_sessions.write().await;
+        if let Some(session) = store.get_session_mut(&session_id) {
+            session.set_protocol_version(protocol_version.to_string());
         }
     }
 
@@ -979,6 +991,28 @@ async fn handle_mcp_notification(
     (StatusCode::ACCEPTED, "").into_response()
 }
 
+/// MCP Session 清理守卫
+///
+/// 当此结构体被 drop 时，自动从 MCP Session Store 中移除对应的会话
+struct McpSessionCleanupGuard {
+    session_id: Option<String>,
+    session_store: SharedMcpSessionStore,
+}
+
+impl Drop for McpSessionCleanupGuard {
+    fn drop(&mut self) {
+        if let Some(ref session_id) = self.session_id {
+            let sid = session_id.clone();
+            let store = self.session_store.clone();
+            // 在后台异步清理会话
+            tokio::spawn(async move {
+                let mut store = store.write().await;
+                store.remove_session(&sid);
+            });
+        }
+    }
+}
+
 /// GET /mcp - MCP Streamable HTTP SSE 端点
 ///
 /// 建立 SSE 流用于服务端推送消息。
@@ -1035,7 +1069,15 @@ pub async fn mcp_get_handler(
     // 发送 priming event（规范要求：立即发送包含 event ID 和空 data 的初始事件）
     let priming_event_id = uuid::Uuid::new_v4().to_string();
     let session_id_for_heartbeat = mcp_session_id.clone();
+    let session_id_for_cleanup = mcp_session_id.clone();
     let sessions_for_heartbeat = app_state.mcp_sessions.clone();
+    let sessions_for_cleanup = app_state.mcp_sessions.clone();
+
+    // 创建 MCP Session 清理守卫 - 当 SSE 流被 drop 时自动清理会话 (M3 修复)
+    let cleanup_guard = McpSessionCleanupGuard {
+        session_id: session_id_for_cleanup,
+        session_store: sessions_for_cleanup,
+    };
 
     let stream = stream::once(async move {
         // Priming event: 空 data + event ID，用于客户端断线重连
@@ -1062,7 +1104,13 @@ pub async fn mcp_get_handler(
                 }
                 Ok::<_, Infallible>(Event::default().comment("keepalive"))
             }),
-    );
+    )
+    // 包装流以确保在 drop 时触发 MCP Session 清理
+    .map(move |event| {
+        // 保持 cleanup_guard 存活直到流结束
+        let _guard = &cleanup_guard;
+        event
+    });
 
     // 5. 构建 SSE 响应，带 MCP-Session-Id Header（如果有）
     let sse = Sse::new(stream).keep_alive(KeepAlive::default());
