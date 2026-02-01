@@ -58,6 +58,9 @@ vi.mock("react-i18next", () => ({
         "hub.import.skipped": "已跳过",
         "hub.import.backupFiles": "备份文件",
         "hub.import.shadowConfigs": "影子配置文件",
+        "hub.import.takeoverTools": `已接管 ${params?.count || 0} 个工具配置`,
+        "hub.import.takenOver": "已接管",
+        "hub.import.takeoverHint": "原配置已自动备份，您可以随时在 Hub 页面恢复原始配置",
         // Story 11.13: 新增翻译键
         "hub.import.actionAdd": "将添加",
         "hub.import.actionConflict": "需处理冲突",
@@ -177,7 +180,7 @@ const mockImportResult = {
   imported_count: 2,
   skipped_count: 0,
   backup_files: ["/project/.claude/config.json.mantra-backup"],
-  shadow_configs: [],
+  shadow_configs: ["/home/user/.claude/config.json"],
   errors: [],
   imported_service_ids: ["new-1", "new-2"],
 };
@@ -543,7 +546,7 @@ describe("McpConfigImportDialog", () => {
       });
     });
 
-    it("应该显示备份文件列表", async () => {
+    it("应该显示已接管的工具配置", async () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
@@ -555,8 +558,11 @@ describe("McpConfigImportDialog", () => {
       await navigateToResult(user);
 
       await waitFor(() => {
-        expect(screen.getByText((content) => content.includes("备份文件"))).toBeInTheDocument();
-        expect(screen.getByText("/project/.claude/config.json.mantra-backup")).toBeInTheDocument();
+        // 验证已接管工具信息 (Story 11.15 改进的 UI)
+        // 使用 getAllByText 处理多个 "已接管" 元素
+        expect(screen.getAllByText((content) => content.includes("已接管")).length).toBeGreaterThan(0);
+        expect(screen.getByText("Claude Code")).toBeInTheDocument();
+        expect(screen.getByText("/home/user/.claude/config.json")).toBeInTheDocument();
       });
     });
 

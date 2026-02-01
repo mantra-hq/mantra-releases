@@ -77,7 +77,12 @@ export function CodexIcon({ className }: IconProps) {
  * Story 2.25: AC3 - 复用官方图标
  * Story 11.8: 支持 adapter_id 映射
  */
-export function SourceIcon({ source, className }: { source: string; className?: string }) {
+export function SourceIcon({ source, className }: { source: string | undefined | null; className?: string }) {
+    // 空值保护
+    if (!source) {
+        return <ClaudeIcon className={className} />;
+    }
+
     const normalizedSource = source.toLowerCase();
     switch (normalizedSource) {
         case "claude":

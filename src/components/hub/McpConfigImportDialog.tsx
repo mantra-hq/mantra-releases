@@ -53,11 +53,14 @@ import {
   Eye,
   EyeOff,
   Play,
+  Archive,
+  Info,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { ConfigDiffView } from "./ConfigDiffView";
 import { ImportStepper } from "./ImportStepper";
+import { SourceIcon } from "@/components/import/SourceIcons";
 
 // ===== 类型定义 =====
 
@@ -990,6 +993,26 @@ export function McpConfigImportDialog({
     const hasErrors = importResult.errors.length > 0;
     const isPartialSuccess =
       importResult.imported_count > 0 && importResult.skipped_count > 0;
+    const hasTakeover = importResult.shadow_configs.length > 0;
+
+    // 从 shadow_configs 路径中提取工具类型
+    const getTakeoverTools = () => {
+      const tools: { name: string; path: string; adapterId: string }[] = [];
+      importResult.shadow_configs.forEach((path) => {
+        if (path.includes(".claude")) {
+          tools.push({ name: "Claude Code", path, adapterId: "claude" });
+        } else if (path.includes(".cursor")) {
+          tools.push({ name: "Cursor", path, adapterId: "cursor" });
+        } else if (path.includes(".codex")) {
+          tools.push({ name: "Codex", path, adapterId: "codex" });
+        } else if (path.includes(".gemini")) {
+          tools.push({ name: "Gemini CLI", path, adapterId: "gemini" });
+        }
+      });
+      return tools;
+    };
+
+    const takeoverTools = getTakeoverTools();
 
     return (
       <div className="space-y-4">
@@ -1031,31 +1054,41 @@ export function McpConfigImportDialog({
           </div>
         </div>
 
-        {/* 备份文件列表 */}
-        {importResult.backup_files.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-sm">
-              {t("hub.import.backupFiles")} ({importResult.backup_files.length})
-            </Label>
-            <div className="text-xs text-muted-foreground bg-muted p-2 rounded max-h-20 overflow-auto">
-              {importResult.backup_files.map((file, i) => (
-                <div key={i}>{file}</div>
+        {/* 已接管的工具配置 */}
+        {hasTakeover && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Archive className="h-4 w-4 text-blue-500" />
+              <Label className="text-sm font-medium">
+                {t("hub.import.takeoverTools", { count: takeoverTools.length })}
+              </Label>
+            </div>
+            <div className="space-y-2">
+              {takeoverTools.map((tool, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
+                >
+                  <SourceIcon source={tool.adapterId} className="h-5 w-5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{tool.name}</p>
+                    <code className="text-xs text-muted-foreground truncate block">
+                      {tool.path}
+                    </code>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-xs bg-blue-500/10 text-blue-500 border-blue-500/20">
+                    {t("hub.import.takenOver")}
+                  </Badge>
+                </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* 影子配置文件列表 */}
-        {importResult.shadow_configs.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-sm">
-              {t("hub.import.shadowConfigs")} ({importResult.shadow_configs.length})
-            </Label>
-            <div className="text-xs text-muted-foreground bg-muted p-2 rounded max-h-20 overflow-auto">
-              {importResult.shadow_configs.map((file, i) => (
-                <div key={i}>{file}</div>
-              ))}
-            </div>
+            {/* 备份恢复提示 */}
+            <Alert className="bg-muted/50">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                {t("hub.import.takeoverHint")}
+              </AlertDescription>
+            </Alert>
           </div>
         )}
 

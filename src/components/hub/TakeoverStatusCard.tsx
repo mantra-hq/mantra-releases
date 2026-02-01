@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { zhCN, enUS } from "date-fns/locale";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -93,8 +93,21 @@ function toolTypeToAdapterId(toolType: ToolType): string {
 /**
  * 格式化日期时间（使用 i18n locale）
  */
-function formatDateTime(isoString: string, locale: string): string {
-  const date = new Date(isoString);
+function formatDateTime(isoString: string | undefined | null, locale: string): string {
+  // 空值检查
+  if (!isoString) {
+    return "-";
+  }
+
+  // 使用 parseISO 解析 ISO 字符串，比 new Date() 更可靠
+  const date = parseISO(isoString);
+
+  // 验证日期是否有效
+  if (!isValid(date)) {
+    console.warn("[TakeoverStatusCard] Invalid date string:", isoString);
+    return isoString; // 回退到原始字符串
+  }
+
   const dateLocale = locale === "zh-CN" ? zhCN : enUS;
   return format(date, "PPp", { locale: dateLocale });
 }

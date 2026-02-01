@@ -1018,7 +1018,12 @@
         "envPlaceholder": "{\"GITHUB_TOKEN\": \"$GITHUB_TOKEN\"}",
         "envHint": "Optional, use $VAR_NAME to reference stored variables",
         "envMustBeObject": "Environment variables must be a JSON object",
-        "invalidJson": "Invalid JSON format"
+        "invalidJson": "Invalid JSON format",
+        "transportTypeLabel": "Transport Type",
+        "transportStdio": "stdio (Local Command)",
+        "transportHttp": "http (Remote URL)",
+        "transportStdioHint": "Run a local command to start the MCP server",
+        "transportHttpHint": "Connect to a remote MCP server via HTTP"
       }
     },
     "projectAssociation": {
@@ -1147,8 +1152,9 @@
       "resultError": "Import failed",
       "imported": "Imported",
       "skipped": "Skipped",
-      "backupFiles": "Backup files",
-      "shadowConfigs": "Shadow config files",
+      "takeoverTools": "{{count}} tool configs taken over",
+      "takenOver": "Taken over",
+      "takeoverHint": "Original configs have been backed up. You can restore them anytime in Hub.",
       "actionAdd": "Will add",
       "actionConflict": "Needs resolution",
       "actionSkip": "Will skip",
