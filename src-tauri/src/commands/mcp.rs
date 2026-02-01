@@ -472,6 +472,65 @@ pub fn get_active_takeover(
     db.get_active_takeover_by_tool(&tool).map_err(AppError::from)
 }
 
+/// 获取指定项目的所有活跃接管 (Story 11.16)
+///
+/// # Arguments
+/// * `project_path` - 项目路径
+///
+/// # Returns
+/// 该项目的所有活跃接管备份记录
+#[tauri::command]
+pub fn get_active_takeovers_by_project(
+    project_path: String,
+    state: State<'_, McpState>,
+) -> Result<Vec<TakeoverBackup>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_active_takeovers_by_project(&project_path)
+        .map_err(AppError::from)
+}
+
+/// 读取配置文件内容用于预览 (Story 11.16 - AC5)
+///
+/// Security: 仅允许读取已知接管备份记录中的 original_path 或 backup_path，
+/// 防止路径遍历攻击读取任意系统文件。
+///
+/// # Arguments
+/// * `path` - 文件路径（必须是已知接管记录中的路径）
+///
+/// # Returns
+/// 文件内容字符串
+#[tauri::command]
+pub fn read_config_file_content(
+    path: String,
+    state: State<'_, McpState>,
+) -> Result<String, AppError> {
+    let requested_path = PathBuf::from(&path);
+
+    // Security: 验证路径属于已知的接管备份记录
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let backups = db.get_takeover_backups(None).map_err(AppError::from)?;
+
+    let is_known_path = backups.iter().any(|b| {
+        b.original_path == requested_path || b.backup_path == requested_path
+    });
+
+    if !is_known_path {
+        return Err(AppError::InvalidInput(
+            "Access denied: path is not a known takeover config file".to_string(),
+        ));
+    }
+
+    let file_path = std::path::Path::new(&path);
+
+    if !file_path.exists() {
+        return Err(AppError::NotFound(format!("File not found: {}", path)));
+    }
+
+    std::fs::read_to_string(file_path).map_err(|e| {
+        AppError::internal(format!("Failed to read {}: {}", path, e))
+    })
+}
+
 // ===== Story 11.9: 项目详情页 MCP 集成命令 =====
 
 /// 项目 MCP 状态 (AC: 1, 2, 4, 5)

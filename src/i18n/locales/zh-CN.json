@@ -1204,7 +1204,15 @@
       "restoreWillDo1": "将备份内容恢复到原始位置",
       "restoreWillDo2": "从 Gateway 中注销相关服务",
       "restoreWillDo3": "您可以重新导入配置",
-      "restoreConfirm": "确认恢复"
+      "restoreConfirm": "确认恢复",
+      "restore": "恢复",
+      "userLevel": "用户级配置",
+      "projectLevel": "项目级配置",
+      "currentConfig": "当前配置",
+      "originalBackup": "原始备份",
+      "preview": "预览",
+      "filePreview": "文件预览",
+      "previewError": "无法读取文件"
     },
     "toolPolicy": {
       "title": "工具策略",

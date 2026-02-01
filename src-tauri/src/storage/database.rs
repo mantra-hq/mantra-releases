@@ -165,6 +165,9 @@ impl Database {
         // Migration: Add MCP takeover backups table (Story 11.15)
         Self::run_mcp_takeover_backups_migration(conn)?;
 
+        // Migration: Add scope and project_path to takeover backups (Story 11.16)
+        Self::run_mcp_takeover_scope_migration(conn)?;
+
         Ok(())
     }
 
@@ -716,6 +719,41 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_takeover_status ON mcp_takeover_backups(status);
                 -- 按工具类型索引 (按工具筛选)
                 CREATE INDEX IF NOT EXISTS idx_takeover_tool ON mcp_takeover_backups(tool_type);
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP takeover scope support (Story 11.16)
+    ///
+    /// Adds:
+    /// - scope column: 'user' (default) or 'project'
+    /// - project_path column: project path for project-level takeovers
+    /// - Indexes for efficient querying by scope and project_path
+    fn run_mcp_takeover_scope_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if scope column exists
+        let has_scope: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('mcp_takeover_backups') WHERE name = 'scope'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_scope {
+            conn.execute_batch(
+                r#"
+                -- 添加 scope 字段（默认 'user'）
+                ALTER TABLE mcp_takeover_backups ADD COLUMN scope TEXT NOT NULL DEFAULT 'user'
+                    CHECK(scope IN ('user', 'project'));
+                -- 添加 project_path 字段
+                ALTER TABLE mcp_takeover_backups ADD COLUMN project_path TEXT;
+                -- 创建 scope 索引
+                CREATE INDEX IF NOT EXISTS idx_takeover_scope ON mcp_takeover_backups(scope);
+                -- 创建 project_path 索引
+                CREATE INDEX IF NOT EXISTS idx_takeover_project_path ON mcp_takeover_backups(project_path);
                 "#,
             )?;
         }
@@ -1720,5 +1758,240 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 0, "Record should be deleted");
+    }
+
+    // ===== Story 11.16: MCP Takeover Scope Migration Tests =====
+
+    #[test]
+    fn test_mcp_takeover_backups_scope_column_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify scope column exists
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(mcp_takeover_backups)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"scope".to_string()));
+        assert!(columns.contains(&"project_path".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_scope_default_value() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Insert without specifying scope
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at) VALUES ('b1', 'claude_code', '/original', '/backup', ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // Verify default scope is 'user'
+        let scope: String = db
+            .connection()
+            .query_row(
+                "SELECT scope FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(scope, "user", "Default scope should be 'user'");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_scope_check_constraint() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Valid scope values should work
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope) VALUES ('b1', 'claude_code', '/original1', '/backup1', ?1, 'user')",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('b2', 'cursor', '/original2', '/backup2', ?1, 'project', '/path/to/project')",
+                [&now],
+            )
+            .unwrap();
+
+        // Invalid scope should fail
+        let result = db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope) VALUES ('b3', 'codex', '/original3', '/backup3', ?1, 'invalid')",
+            [&now],
+        );
+        assert!(result.is_err(), "Invalid scope should be rejected");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_scope_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='mcp_takeover_backups'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_takeover_scope".to_string()));
+        assert!(indexes.contains(&"idx_takeover_project_path".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_project_scope_with_path() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create project-level takeover
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('b1', 'claude_code', '/project/.mcp.json', '/project/.mcp.json.backup', ?1, 'project', '/home/user/my-project')",
+                [&now],
+            )
+            .unwrap();
+
+        // Verify
+        let (scope, project_path): (String, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT scope, project_path FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(scope, "project");
+        assert_eq!(project_path, Some("/home/user/my-project".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_user_scope_null_project_path() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create user-level takeover (project_path should be NULL)
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope) VALUES ('b1', 'claude_code', '~/.claude.json', '~/.claude.json.backup', ?1, 'user')",
+                [&now],
+            )
+            .unwrap();
+
+        // Verify project_path is NULL
+        let project_path: Option<String> = db
+            .connection()
+            .query_row(
+                "SELECT project_path FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(project_path.is_none(), "User-level takeover should have NULL project_path");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_query_by_scope() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create mixed scope takeovers
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope) VALUES ('u1', 'claude_code', '/u1', '/b1', ?1, 'user')",
+                [&now],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope) VALUES ('u2', 'cursor', '/u2', '/b2', ?1, 'user')",
+                [&now],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('p1', 'claude_code', '/p1', '/b3', ?1, 'project', '/project1')",
+                [&now],
+            )
+            .unwrap();
+
+        // Query by scope
+        let user_count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE scope = 'user'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(user_count, 2);
+
+        let project_count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE scope = 'project'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(project_count, 1);
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_query_by_project_path() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create project-level takeovers for different projects
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('p1', 'claude_code', '/p1', '/b1', ?1, 'project', '/home/user/project-a')",
+                [&now],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('p2', 'cursor', '/p2', '/b2', ?1, 'project', '/home/user/project-a')",
+                [&now],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, scope, project_path) VALUES ('p3', 'codex', '/p3', '/b3', ?1, 'project', '/home/user/project-b')",
+                [&now],
+            )
+            .unwrap();
+
+        // Query by project_path
+        let project_a_count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE project_path = '/home/user/project-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(project_a_count, 2);
+
+        let project_b_count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE project_path = '/home/user/project-b'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(project_b_count, 1);
     }
 }

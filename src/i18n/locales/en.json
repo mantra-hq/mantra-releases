@@ -1198,7 +1198,15 @@
       "restoreWillDo1": "Restore backup content to original location",
       "restoreWillDo2": "Unregister related services from Gateway",
       "restoreWillDo3": "You can re-import configuration later",
-      "restoreConfirm": "Restore"
+      "restoreConfirm": "Restore",
+      "restore": "Restore",
+      "userLevel": "User Level",
+      "projectLevel": "Project Level",
+      "currentConfig": "Current Config",
+      "originalBackup": "Original Backup",
+      "preview": "Preview",
+      "filePreview": "File Preview",
+      "previewError": "Unable to read file"
     },
     "toolPolicy": {
       "title": "Tool Policy",

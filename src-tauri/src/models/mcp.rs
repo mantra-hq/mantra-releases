@@ -496,9 +496,44 @@ impl TakeoverStatus {
     }
 }
 
+/// 接管作用域
+///
+/// Story 11.16: 接管状态模块系统性重构 - AC 1, AC 2
+///
+/// 区分用户级和项目级配置接管
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TakeoverScope {
+    /// 用户级配置（如 ~/.claude.json）
+    #[default]
+    User,
+    /// 项目级配置（如 project/.mcp.json）
+    Project,
+}
+
+impl TakeoverScope {
+    /// 转换为数据库存储的字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TakeoverScope::User => "user",
+            TakeoverScope::Project => "project",
+        }
+    }
+
+    /// 从数据库字符串解析
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "user" => Some(TakeoverScope::User),
+            "project" => Some(TakeoverScope::Project),
+            _ => None,
+        }
+    }
+}
+
 /// 接管备份记录
 ///
 /// Story 11.15: MCP 接管流程重构 - AC 3, AC 4, AC 5
+/// Story 11.16: 接管状态模块系统性重构 - AC 1, AC 2
 ///
 /// 记录 MCP 配置接管的备份信息，支持一键恢复
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -508,6 +543,11 @@ pub struct TakeoverBackup {
     pub id: String,
     /// 工具类型
     pub tool_type: ToolType,
+    /// 接管作用域 (Story 11.16)
+    #[serde(default)]
+    pub scope: TakeoverScope,
+    /// 项目路径（仅项目级接管时有值）(Story 11.16)
+    pub project_path: Option<PathBuf>,
     /// 原始配置文件路径
     pub original_path: PathBuf,
     /// 备份文件路径
@@ -526,6 +566,29 @@ impl TakeoverBackup {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             tool_type,
+            scope: TakeoverScope::User,
+            project_path: None,
+            original_path,
+            backup_path,
+            taken_over_at: chrono::Utc::now().to_rfc3339(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        }
+    }
+
+    /// 创建带作用域的备份记录 (Story 11.16)
+    pub fn new_with_scope(
+        tool_type: ToolType,
+        original_path: PathBuf,
+        backup_path: PathBuf,
+        scope: TakeoverScope,
+        project_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool_type,
+            scope,
+            project_path,
             original_path,
             backup_path,
             taken_over_at: chrono::Utc::now().to_rfc3339(),
@@ -542,6 +605,16 @@ impl TakeoverBackup {
     /// 检查是否可以恢复
     pub fn can_restore(&self) -> bool {
         self.status == TakeoverStatus::Active && self.backup_exists()
+    }
+
+    /// 检查是否是项目级接管 (Story 11.16)
+    pub fn is_project_level(&self) -> bool {
+        self.scope == TakeoverScope::Project
+    }
+
+    /// 检查是否是用户级接管 (Story 11.16)
+    pub fn is_user_level(&self) -> bool {
+        self.scope == TakeoverScope::User
     }
 }
 
@@ -1145,6 +1218,8 @@ mod tests {
         let backup = TakeoverBackup {
             id: "backup-123".to_string(),
             tool_type: ToolType::Cursor,
+            scope: TakeoverScope::User,
+            project_path: None,
             original_path: PathBuf::from("/home/user/.cursor/mcp.json"),
             backup_path: PathBuf::from("/home/user/.cursor/mcp.json.mantra-backup.20260201"),
             taken_over_at: "2026-02-01T10:00:00Z".to_string(),
@@ -1170,6 +1245,8 @@ mod tests {
         let backup = TakeoverBackup {
             id: "backup-123".to_string(),
             tool_type: ToolType::ClaudeCode,
+            scope: TakeoverScope::User,
+            project_path: None,
             original_path: PathBuf::from("/nonexistent/original.json"),
             backup_path: PathBuf::from("/nonexistent/backup.json"),
             taken_over_at: "2026-02-01T10:00:00Z".to_string(),
@@ -1182,6 +1259,8 @@ mod tests {
         let restored_backup = TakeoverBackup {
             id: "backup-456".to_string(),
             tool_type: ToolType::Cursor,
+            scope: TakeoverScope::User,
+            project_path: None,
             original_path: PathBuf::from("/home/user/.cursor/mcp.json"),
             backup_path: PathBuf::from("/home/user/.cursor/mcp.json.backup"),
             taken_over_at: "2026-02-01T10:00:00Z".to_string(),
@@ -1189,5 +1268,107 @@ mod tests {
             status: TakeoverStatus::Restored,
         };
         assert!(!restored_backup.can_restore()); // 已恢复
+    }
+
+    // ===== Story 11.16: TakeoverScope 模型测试 =====
+
+    #[test]
+    fn test_takeover_scope_serialization() {
+        assert_eq!(serde_json::to_string(&TakeoverScope::User).unwrap(), r#""user""#);
+        assert_eq!(serde_json::to_string(&TakeoverScope::Project).unwrap(), r#""project""#);
+    }
+
+    #[test]
+    fn test_takeover_scope_deserialization() {
+        let user: TakeoverScope = serde_json::from_str(r#""user""#).unwrap();
+        assert_eq!(user, TakeoverScope::User);
+        let project: TakeoverScope = serde_json::from_str(r#""project""#).unwrap();
+        assert_eq!(project, TakeoverScope::Project);
+    }
+
+    #[test]
+    fn test_takeover_scope_as_str() {
+        assert_eq!(TakeoverScope::User.as_str(), "user");
+        assert_eq!(TakeoverScope::Project.as_str(), "project");
+    }
+
+    #[test]
+    fn test_takeover_scope_from_str() {
+        assert_eq!(TakeoverScope::from_str("user"), Some(TakeoverScope::User));
+        assert_eq!(TakeoverScope::from_str("project"), Some(TakeoverScope::Project));
+        assert_eq!(TakeoverScope::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_takeover_scope_default() {
+        let scope = TakeoverScope::default();
+        assert_eq!(scope, TakeoverScope::User);
+    }
+
+    #[test]
+    fn test_takeover_backup_new_default_scope() {
+        let backup = TakeoverBackup::new(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.claude.json.backup"),
+        );
+        assert_eq!(backup.scope, TakeoverScope::User);
+        assert!(backup.project_path.is_none());
+        assert!(backup.is_user_level());
+        assert!(!backup.is_project_level());
+    }
+
+    #[test]
+    fn test_takeover_backup_new_with_scope_user() {
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.claude.json.backup"),
+            TakeoverScope::User,
+            None,
+        );
+        assert_eq!(backup.scope, TakeoverScope::User);
+        assert!(backup.project_path.is_none());
+        assert!(backup.is_user_level());
+    }
+
+    #[test]
+    fn test_takeover_backup_new_with_scope_project() {
+        let project_path = PathBuf::from("/home/user/my-project");
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/my-project/.mcp.json"),
+            PathBuf::from("/home/user/my-project/.mcp.json.backup"),
+            TakeoverScope::Project,
+            Some(project_path.clone()),
+        );
+        assert_eq!(backup.scope, TakeoverScope::Project);
+        assert_eq!(backup.project_path, Some(project_path));
+        assert!(backup.is_project_level());
+        assert!(!backup.is_user_level());
+    }
+
+    #[test]
+    fn test_takeover_backup_serialization_with_scope() {
+        let backup = TakeoverBackup {
+            id: "backup-789".to_string(),
+            tool_type: ToolType::ClaudeCode,
+            scope: TakeoverScope::Project,
+            project_path: Some(PathBuf::from("/home/user/my-project")),
+            original_path: PathBuf::from("/home/user/my-project/.mcp.json"),
+            backup_path: PathBuf::from("/home/user/my-project/.mcp.json.backup"),
+            taken_over_at: "2026-02-01T10:00:00Z".to_string(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        };
+
+        let json = serde_json::to_string(&backup).unwrap();
+        assert!(json.contains(r#""scope":"project""#));
+        assert!(json.contains("projectPath"));
+        assert!(json.contains("my-project"));
+
+        let deserialized: TakeoverBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.scope, TakeoverScope::Project);
+        assert_eq!(deserialized.project_path, Some(PathBuf::from("/home/user/my-project")));
     }
 }

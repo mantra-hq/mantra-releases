@@ -180,8 +180,7 @@ export function McpConfigImportDialog({
   const [error, setError] = useState<string | null>(null);
 
   // 扫描结果（保留用于后续回退/重试）
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [, setScanResult] = useState<ScanResult | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
 
   // 用户选择

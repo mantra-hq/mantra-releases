@@ -17,7 +17,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::models::mcp::{CreateMcpServiceRequest, McpService, McpServiceSource, TakeoverBackup, ToolType};
+use crate::models::mcp::{
+    CreateMcpServiceRequest, McpService, McpServiceSource, TakeoverBackup, TakeoverScope, ToolType,
+};
 use crate::services::EnvManager;
 use crate::services::mcp_adapters::{
     ConfigScope, DetectedConfig as AdapterDetectedConfig,
@@ -993,37 +995,68 @@ impl<'a> ImportExecutor<'a> {
             }
         }
 
-        // 4. 强制接管所有检测到的工具配置 (Story 11.15)
+        // 4. 强制接管所有检测到的工具配置 (Story 11.15, 11.16)
         // 移除 enable_shadow_mode 开关检查，总是执行接管
+        // Story 11.16: 同时处理用户级和项目级配置
         let mut takeover_backup_ids = Vec::new();
 
-        // 收集需要接管的工具类型（按 adapter_id 去重）
-        let mut adapter_ids_to_takeover: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for config in &preview.configs {
-            if !config.services.is_empty() {
-                adapter_ids_to_takeover.insert(config.adapter_id.clone());
-            }
-        }
-
         // 只有当有需要接管的配置时才需要 gateway_url
-        if !adapter_ids_to_takeover.is_empty() {
+        let has_configs_to_takeover = preview.configs.iter().any(|c| !c.services.is_empty());
+        if has_configs_to_takeover {
             if let Some(gateway_url) = &request.gateway_url {
                 let gateway_token = request.gateway_token.as_deref();
 
-                // 对每个工具类型，写入用户级配置
-                for adapter_id in adapter_ids_to_takeover {
-                    if let Some(tool_type) = ToolType::from_adapter_id(&adapter_id) {
-                        let user_config_path = tool_type.get_user_config_path();
+                // Story 11.16: 遍历每个配置文件，根据其 scope 进行接管
+                for config in &preview.configs {
+                    if config.services.is_empty() {
+                        continue;
+                    }
 
-                        match self.apply_takeover(&user_config_path, &adapter_id, gateway_url, gateway_token, &tool_type) {
+                    if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
+                        // 确定 scope 和 project_path
+                        let (scope, project_path) = match &config.scope {
+                            Some(ConfigScope::Project) => {
+                                // 项目级配置：使用配置文件所在的项目路径
+                                let proj_path = config.path.parent().and_then(|p| {
+                                    // 如果路径类似 /project/.mcp.json，取 /project
+                                    // 如果路径类似 /project/.cursor/mcp.json，取 /project
+                                    let path_str = p.to_string_lossy();
+                                    if path_str.contains(".cursor") || path_str.contains(".codex") || path_str.contains(".gemini") {
+                                        p.parent().map(|pp| pp.to_path_buf())
+                                    } else {
+                                        Some(p.to_path_buf())
+                                    }
+                                });
+                                (TakeoverScope::Project, proj_path)
+                            }
+                            _ => {
+                                // 用户级配置
+                                (TakeoverScope::User, None)
+                            }
+                        };
+
+                        // 使用实际检测到的配置文件路径
+                        let config_path = &config.path;
+
+                        match self.apply_takeover(
+                            config_path,
+                            &config.adapter_id,
+                            gateway_url,
+                            gateway_token,
+                            &tool_type,
+                            scope,
+                            project_path,
+                        ) {
                             Ok(backup_id) => {
-                                shadow_configs.push(user_config_path);
+                                shadow_configs.push(config_path.clone());
                                 takeover_backup_ids.push(backup_id);
                             }
                             Err(e) => {
                                 errors.push(format!(
-                                    "Failed to takeover {} config: {}",
-                                    tool_type.display_name(), e
+                                    "Failed to takeover {} config at {:?}: {}",
+                                    tool_type.display_name(),
+                                    config_path,
+                                    e
                                 ));
                             }
                         }
@@ -1192,11 +1225,13 @@ impl<'a> ImportExecutor<'a> {
     /// 3. 将备份记录存储到数据库
     ///
     /// # Arguments
-    /// * `path` - 用户级配置文件路径
+    /// * `path` - 配置文件路径
     /// * `adapter_id` - 适配器 ID
     /// * `gateway_url` - Gateway URL
     /// * `gateway_token` - Gateway 认证 Token
     /// * `tool_type` - 工具类型
+    /// * `scope` - 接管作用域 (Story 11.16)
+    /// * `project_path` - 项目路径（仅项目级时有值）(Story 11.16)
     ///
     /// # Returns
     /// 备份记录 ID
@@ -1207,12 +1242,19 @@ impl<'a> ImportExecutor<'a> {
         gateway_url: &str,
         gateway_token: Option<&str>,
         tool_type: &ToolType,
+        scope: TakeoverScope,
+        project_path: Option<PathBuf>,
     ) -> Result<String, StorageError> {
         // 1. 生成备份文件路径
         let backup_path = self.generate_backup_path(path);
 
-        // 2. 检查是否已有活跃的接管记录
-        if let Ok(Some(_)) = self.db.get_active_takeover_by_tool(tool_type) {
+        // 2. 检查是否已有活跃的接管记录 (Story 11.16: 按 scope 和 project_path 检查)
+        let project_path_str = project_path.as_ref().map(|p| p.to_string_lossy().to_string());
+        if let Ok(Some(_)) = self.db.get_active_takeover_by_tool_and_scope(
+            tool_type,
+            &scope,
+            project_path_str.as_deref(),
+        ) {
             // 已经接管过，跳过（但不报错）
             // 这里我们仍然更新配置文件，但不创建新的备份
         } else if path.exists() {
@@ -1264,11 +1306,13 @@ impl<'a> ImportExecutor<'a> {
             StorageError::InvalidInput(format!("Failed to write config file: {}", e))
         })?;
 
-        // 8. 创建备份记录并存储到数据库
-        let backup = TakeoverBackup::new(
+        // 8. 创建备份记录并存储到数据库 (Story 11.16: 使用 new_with_scope)
+        let backup = TakeoverBackup::new_with_scope(
             tool_type.clone(),
             path.to_path_buf(),
             backup_path,
+            scope,
+            project_path,
         );
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;

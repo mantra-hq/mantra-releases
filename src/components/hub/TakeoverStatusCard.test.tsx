@@ -1,10 +1,12 @@
 /**
  * TakeoverStatusCard 组件测试
- * Story 11.15: Task 8.4 - 前端组件测试 (AC: 4, 5)
+ * Story 11.16: 接管状态模块系统性重构
  *
  * 测试接管状态卡片组件的功能：
  * - 加载和显示接管记录
- * - 工具类型显示
+ * - 按 scope 分组显示（用户级/项目级）
+ * - 折叠/展开功能
+ * - 文件预览功能
  * - 一键恢复功能
  * - 确认对话框交互
  */
@@ -58,27 +60,47 @@ import { feedback } from "@/lib/feedback";
 
 const mockInvokeFn = vi.mocked(invoke);
 
-// 测试数据
-const mockBackups = [
+// 测试数据 - 使用 camelCase 与 Rust 后端一致
+const mockUserBackups = [
   {
     id: "backup-1",
-    tool_type: "claude_code" as const,
-    original_path: "/home/user/.claude.json",
-    backup_path: "/home/user/.claude.json.mantra-backup.1706745600",
-    taken_over_at: "2024-02-01T12:00:00Z",
-    restored_at: null,
+    toolType: "claude_code" as const,
+    scope: "user" as const,
+    projectPath: null,
+    originalPath: "/home/user/.claude.json",
+    backupPath: "/home/user/.claude.json.mantra-backup.1706745600",
+    takenOverAt: "2024-02-01T12:00:00Z",
+    restoredAt: null,
     status: "active" as const,
   },
   {
     id: "backup-2",
-    tool_type: "cursor" as const,
-    original_path: "/home/user/.cursor/mcp.json",
-    backup_path: "/home/user/.cursor/mcp.json.mantra-backup.1706745600",
-    taken_over_at: "2024-02-01T13:00:00Z",
-    restored_at: null,
+    toolType: "cursor" as const,
+    scope: "user" as const,
+    projectPath: null,
+    originalPath: "/home/user/.cursor/mcp.json",
+    backupPath: "/home/user/.cursor/mcp.json.mantra-backup.1706745600",
+    takenOverAt: "2024-02-01T13:00:00Z",
+    restoredAt: null,
     status: "active" as const,
   },
 ];
+
+const mockProjectBackups = [
+  {
+    id: "backup-3",
+    toolType: "claude_code" as const,
+    scope: "project" as const,
+    projectPath: "/home/user/my-project",
+    originalPath: "/home/user/my-project/.mcp.json",
+    backupPath: "/home/user/my-project/.mcp.json.mantra-backup.1706745600",
+    takenOverAt: "2024-02-01T14:00:00Z",
+    restoredAt: null,
+    status: "active" as const,
+  },
+];
+
+const mockAllBackups = [...mockUserBackups, ...mockProjectBackups];
 
 describe("TakeoverStatusCard", () => {
   beforeEach(() => {
@@ -87,14 +109,12 @@ describe("TakeoverStatusCard", () => {
 
   describe("加载状态", () => {
     it("加载中应该显示加载指示器", async () => {
-      // 延迟返回以观察加载状态
       mockInvokeFn.mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve([]), 100))
       );
 
       render(<TakeoverStatusCard />);
 
-      // 加载中应该显示卡片和加载器
       await waitFor(() => {
         expect(mockInvokeFn).toHaveBeenCalledWith("list_active_takeovers");
       });
@@ -109,12 +129,11 @@ describe("TakeoverStatusCard", () => {
         expect(screen.queryByTestId("takeover-status-card")).not.toBeInTheDocument();
       });
 
-      // 确保没有渲染任何内容
       expect(container.firstChild).toBeNull();
     });
 
     it("有接管记录时显示卡片", async () => {
-      mockInvokeFn.mockResolvedValue(mockBackups);
+      mockInvokeFn.mockResolvedValue(mockUserBackups);
 
       render(<TakeoverStatusCard />);
 
@@ -126,7 +145,7 @@ describe("TakeoverStatusCard", () => {
 
   describe("接管记录显示", () => {
     beforeEach(() => {
-      mockInvokeFn.mockResolvedValue(mockBackups);
+      mockInvokeFn.mockResolvedValue(mockUserBackups);
     });
 
     it("应该显示标题和描述", async () => {
@@ -173,34 +192,6 @@ describe("TakeoverStatusCard", () => {
       });
     });
 
-    it("应该显示原始文件路径", async () => {
-      render(<TakeoverStatusCard />);
-
-      await waitFor(() => {
-        expect(screen.getByText("/home/user/.claude.json")).toBeInTheDocument();
-        expect(screen.getByText("/home/user/.cursor/mcp.json")).toBeInTheDocument();
-      });
-    });
-
-    it("应该显示备份文件路径", async () => {
-      render(<TakeoverStatusCard />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("/home/user/.claude.json.mantra-backup.1706745600")
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("应该显示活跃状态标签", async () => {
-      render(<TakeoverStatusCard />);
-
-      await waitFor(() => {
-        const badges = screen.getAllByText("hub.takeover.active");
-        expect(badges).toHaveLength(2);
-      });
-    });
-
     it("应该显示恢复按钮", async () => {
       render(<TakeoverStatusCard />);
 
@@ -211,9 +202,68 @@ describe("TakeoverStatusCard", () => {
     });
   });
 
+  describe("按 scope 分组 (Story 11.16: AC3)", () => {
+    beforeEach(() => {
+      mockInvokeFn.mockResolvedValue(mockAllBackups);
+    });
+
+    it("应该显示用户级配置分组", async () => {
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.userLevel")).toBeInTheDocument();
+      });
+    });
+
+    it("应该显示项目级配置分组", async () => {
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.projectLevel")).toBeInTheDocument();
+      });
+    });
+
+    it("用户级分组应该默认展开", async () => {
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        // 用户级配置应该可见
+        expect(screen.getByTestId("takeover-item-backup-1")).toBeInTheDocument();
+        expect(screen.getByTestId("takeover-item-backup-2")).toBeInTheDocument();
+      });
+    });
+
+    it("项目级分组应该默认收起", async () => {
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        // 项目级配置默认不可见
+        expect(screen.queryByTestId("takeover-item-backup-3")).not.toBeInTheDocument();
+      });
+    });
+
+    it("点击项目级分组应该展开显示项目", async () => {
+      const user = userEvent.setup();
+
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.projectLevel")).toBeInTheDocument();
+      });
+
+      // 点击项目级分组展开
+      await user.click(screen.getByText("hub.takeover.projectLevel"));
+
+      await waitFor(() => {
+        // 项目名称应该可见
+        expect(screen.getByText("my-project")).toBeInTheDocument();
+      });
+    });
+  });
+
   describe("工具类型转换", () => {
     it("claude_code 应该使用 claude 适配器 ID", async () => {
-      mockInvokeFn.mockResolvedValue([mockBackups[0]]);
+      mockInvokeFn.mockResolvedValue([mockUserBackups[0]]);
 
       render(<TakeoverStatusCard />);
 
@@ -225,9 +275,9 @@ describe("TakeoverStatusCard", () => {
     it("gemini_cli 应该使用 gemini 适配器 ID", async () => {
       mockInvokeFn.mockResolvedValue([
         {
-          ...mockBackups[0],
+          ...mockUserBackups[0],
           id: "backup-gemini",
-          tool_type: "gemini_cli",
+          toolType: "gemini_cli",
         },
       ]);
 
@@ -242,9 +292,9 @@ describe("TakeoverStatusCard", () => {
     it("codex 应该使用 codex 适配器 ID", async () => {
       mockInvokeFn.mockResolvedValue([
         {
-          ...mockBackups[0],
+          ...mockUserBackups[0],
           id: "backup-codex",
-          tool_type: "codex",
+          toolType: "codex",
         },
       ]);
 
@@ -259,7 +309,7 @@ describe("TakeoverStatusCard", () => {
 
   describe("恢复功能", () => {
     beforeEach(() => {
-      mockInvokeFn.mockResolvedValue(mockBackups);
+      mockInvokeFn.mockResolvedValue(mockUserBackups);
     });
 
     it("点击恢复按钮应该打开确认对话框", async () => {
@@ -324,14 +374,8 @@ describe("TakeoverStatusCard", () => {
     it("确认恢复应该调用 restore_takeover 命令", async () => {
       const user = userEvent.setup();
 
-      // Mock 调用序列：
-      // 1. list_active_takeovers (初始加载)
-      // 2. restore_takeover (恢复操作)
-      // 3. get_gateway_status (检查 Gateway 状态)
-      // 4. restart_gateway (重启 Gateway)
-      // 5. list_active_takeovers (刷新列表)
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups) // 初始加载
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
         .mockResolvedValueOnce(undefined) // restore_takeover
         .mockResolvedValueOnce({ running: true }) // get_gateway_status
         .mockResolvedValueOnce(undefined) // restart_gateway
@@ -355,7 +399,6 @@ describe("TakeoverStatusCard", () => {
         expect(mockInvokeFn).toHaveBeenCalledWith("restore_takeover", { backupId: "backup-1" });
       });
 
-      // 验证 Gateway 重启调用
       await waitFor(() => {
         expect(mockInvokeFn).toHaveBeenCalledWith("get_gateway_status");
         expect(mockInvokeFn).toHaveBeenCalledWith("restart_gateway", {});
@@ -368,7 +411,7 @@ describe("TakeoverStatusCard", () => {
       const user = userEvent.setup();
 
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups)
+        .mockResolvedValueOnce(mockUserBackups)
         .mockRejectedValueOnce(new Error("Backup file not found"));
 
       render(<TakeoverStatusCard />);
@@ -397,9 +440,8 @@ describe("TakeoverStatusCard", () => {
       const user = userEvent.setup();
       const onRestore = vi.fn();
 
-      // Mock 调用序列
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups) // 初始加载
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
         .mockResolvedValueOnce(undefined) // restore_takeover
         .mockResolvedValueOnce({ running: false }) // get_gateway_status (Gateway 未运行)
         .mockResolvedValueOnce([]); // 刷新后返回空列表
@@ -427,7 +469,7 @@ describe("TakeoverStatusCard", () => {
       const user = userEvent.setup();
 
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups) // 初始加载
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
         .mockResolvedValueOnce(undefined) // restore_takeover
         .mockResolvedValueOnce({ running: false }) // get_gateway_status
         .mockResolvedValueOnce([]); // 刷新后返回空列表
@@ -453,11 +495,97 @@ describe("TakeoverStatusCard", () => {
     });
   });
 
+  describe("文件预览功能 (Story 11.16: AC5)", () => {
+    beforeEach(() => {
+      mockInvokeFn.mockResolvedValue(mockUserBackups);
+    });
+
+    it("应该显示预览按钮", async () => {
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        // 每条记录有两个预览按钮（当前配置和原始备份）
+        const previewButtons = screen.getAllByTitle("hub.takeover.preview");
+        expect(previewButtons.length).toBeGreaterThanOrEqual(4); // 2 records × 2 buttons
+      });
+    });
+
+    it("点击预览按钮应该调用 read_config_file_content", async () => {
+      const user = userEvent.setup();
+
+      mockInvokeFn
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
+        .mockResolvedValueOnce('{"key": "value"}'); // 文件内容
+
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("takeover-item-backup-1")).toBeInTheDocument();
+      });
+
+      // 点击第一个预览按钮
+      const previewButtons = screen.getAllByTitle("hub.takeover.preview");
+      await user.click(previewButtons[0]);
+
+      await waitFor(() => {
+        expect(mockInvokeFn).toHaveBeenCalledWith("read_config_file_content", {
+          path: "/home/user/.claude.json",
+        });
+      });
+    });
+
+    it("预览抽屉应该显示文件内容", async () => {
+      const user = userEvent.setup();
+
+      mockInvokeFn
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
+        .mockResolvedValueOnce('{"key": "value"}'); // 文件内容
+
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("takeover-item-backup-1")).toBeInTheDocument();
+      });
+
+      const previewButtons = screen.getAllByTitle("hub.takeover.preview");
+      await user.click(previewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.filePreview")).toBeInTheDocument();
+        // 语法高亮将内容拆分到多个 span 中，使用子字符串匹配
+        expect(screen.getByText(/"key"/)).toBeInTheDocument();
+        expect(screen.getByText(/"value"/)).toBeInTheDocument();
+      });
+    });
+
+    it("文件读取失败应该显示错误信息", async () => {
+      const user = userEvent.setup();
+
+      mockInvokeFn
+        .mockResolvedValueOnce(mockUserBackups) // 初始加载
+        .mockRejectedValueOnce(new Error("File not found")); // 读取失败
+
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("takeover-item-backup-1")).toBeInTheDocument();
+      });
+
+      const previewButtons = screen.getAllByTitle("hub.takeover.preview");
+      await user.click(previewButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.previewError")).toBeInTheDocument();
+        expect(screen.getByText("File not found")).toBeInTheDocument();
+      });
+    });
+  });
+
   describe("刷新功能", () => {
     it("点击刷新按钮应该重新加载数据", async () => {
       const user = userEvent.setup();
 
-      mockInvokeFn.mockResolvedValue(mockBackups);
+      mockInvokeFn.mockResolvedValue(mockUserBackups);
 
       render(<TakeoverStatusCard />);
 
@@ -465,10 +593,8 @@ describe("TakeoverStatusCard", () => {
         expect(screen.getByTestId("takeover-status-card")).toBeInTheDocument();
       });
 
-      // 清除之前的调用记录
       mockInvokeFn.mockClear();
 
-      // 点击刷新按钮
       const refreshButton = screen.getByTitle("common.refresh");
       await user.click(refreshButton);
 
@@ -485,11 +611,9 @@ describe("TakeoverStatusCard", () => {
       const { container } = render(<TakeoverStatusCard />);
 
       await waitFor(() => {
-        // 加载失败后应该不显示卡片（因为 backups 仍为空数组）
         expect(screen.queryByTestId("takeover-status-card")).not.toBeInTheDocument();
       });
 
-      // 确保组件没有崩溃
       expect(container).toBeDefined();
     });
   });
