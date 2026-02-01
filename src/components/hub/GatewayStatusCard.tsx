@@ -123,7 +123,7 @@ export function GatewayStatusCard() {
 
     const text =
       type === "url"
-        ? `http://127.0.0.1:${status.port}/sse?token=${status.auth_token}`
+        ? `http://127.0.0.1:${status.port}/mcp`
         : status.auth_token;
 
     try {
@@ -223,7 +223,7 @@ export function GatewayStatusCard() {
               </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs bg-muted px-2 py-1.5 rounded-md font-mono truncate">
-                  http://127.0.0.1:{status.port}/sse?token={maskToken(status.auth_token)}
+                  http://127.0.0.1:{status.port}/mcp
                 </code>
                 <TooltipProvider>
                   <Tooltip>

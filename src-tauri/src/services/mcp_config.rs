@@ -1587,7 +1587,7 @@ mod tests {
 
     #[test]
     fn test_generate_shadow_config() {
-        let gateway_url = "http://127.0.0.1:8080/sse?token=test123";
+        let gateway_url = "http://127.0.0.1:8080/mcp";
 
         let shadow = generate_shadow_config(&ConfigSource::ClaudeCode, gateway_url);
         let parsed: serde_json::Value = serde_json::from_str(&shadow).unwrap();
@@ -1875,7 +1875,7 @@ mod tests {
 
     #[test]
     fn test_shadow_config_format() {
-        let gateway_url = "http://127.0.0.1:8080/sse?token=abc123";
+        let gateway_url = "http://127.0.0.1:8080/mcp";
 
         for source in [
             ConfigSource::ClaudeCode,
