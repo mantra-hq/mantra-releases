@@ -233,7 +233,7 @@ mod tests {
         }"#;
 
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "gemini-token",
         );
 
@@ -248,7 +248,7 @@ mod tests {
         assert!(parsed["mcpServers"]["mantra-gateway"].is_object());
         assert_eq!(
             parsed["mcpServers"]["mantra-gateway"]["url"],
-            "http://127.0.0.1:8080/message"
+            "http://127.0.0.1:8080/mcp"
         );
         assert_eq!(
             parsed["mcpServers"]["mantra-gateway"]["headers"]["Authorization"],
@@ -260,7 +260,7 @@ mod tests {
     fn test_gemini_inject_gateway_empty_file() {
         let adapter = GeminiAdapter;
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "token",
         );
 
@@ -286,7 +286,7 @@ mod tests {
         }"#;
 
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "token",
         );
 

@@ -12,7 +12,7 @@
 use axum::{
     http::{header, Method},
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use std::net::SocketAddr;
@@ -21,7 +21,11 @@ use tokio::sync::{oneshot, watch, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::auth::auth_middleware;
-use super::handlers::{health_handler, message_handler, sse_handler, GatewayAppState};
+use super::handlers::{
+    health_handler, mcp_delete_handler, mcp_get_handler, mcp_post_handler, message_handler,
+    sse_handler, GatewayAppState,
+};
+use super::session::MCP_SESSION_ID_HEADER;
 use super::state::{GatewayConfig, GatewayState, GatewayStats};
 
 /// 默认端口范围起始
@@ -138,13 +142,23 @@ impl GatewayServer {
         let app_state = GatewayAppState::new(state.clone(), stats.clone());
 
         // 创建受保护路由（需要认证）
-        let protected_routes = Router::new()
+        // 旧版端点（向后兼容 Story 11.1 的 SSE Transport）
+        let legacy_routes = Router::new()
             .route("/sse", get(sse_handler))
             .route("/message", post(message_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
+        // Story 11.14: MCP Streamable HTTP 端点
+        // /mcp 端点支持 POST、GET、DELETE
+        let mcp_routes = Router::new()
+            .route("/mcp", post(mcp_post_handler))
+            .route("/mcp", get(mcp_get_handler))
+            .route("/mcp", delete(mcp_delete_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
         // 创建 CORS 层
         // 允许 tauri://localhost 和开发模式下的 localhost/127.0.0.1 (任意端口)
+        // Story 11.14: 扩展允许的 HTTP 方法和 Headers
         let cors = CorsLayer::new()
             .allow_origin(AllowOrigin::predicate(|origin, _| {
                 if let Ok(origin_str) = origin.to_str() {
@@ -161,11 +175,18 @@ impl GatewayServer {
                 }
                 false
             }))
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
             .allow_headers([
                 header::CONTENT_TYPE,
                 header::AUTHORIZATION,
                 header::ACCEPT,
+                // Story 11.14: MCP Streamable HTTP 规范 Headers
+                axum::http::HeaderName::from_static(MCP_SESSION_ID_HEADER),
+                axum::http::HeaderName::from_static("mcp-protocol-version"),
+            ])
+            .expose_headers([
+                // 允许客户端读取 MCP-Session-Id 响应 Header
+                axum::http::HeaderName::from_static(MCP_SESSION_ID_HEADER),
             ])
             .allow_credentials(false);
 
@@ -173,8 +194,10 @@ impl GatewayServer {
         let app = Router::new()
             // 公开端点（不需要认证）
             .route("/health", get(health_handler))
-            // 合并受保护路由
-            .merge(protected_routes)
+            // Story 11.14: MCP Streamable HTTP 端点
+            .merge(mcp_routes)
+            // 旧版端点（向后兼容）
+            .merge(legacy_routes)
             .layer(cors)
             .with_state(app_state);
 

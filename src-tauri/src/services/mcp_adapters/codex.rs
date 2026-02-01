@@ -256,7 +256,7 @@ command = "existing-mcp"
 "#;
 
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "codex-token",
         );
 
@@ -268,7 +268,7 @@ command = "existing-mcp"
 
         // 验证 gateway 注入
         assert!(result.contains("mantra-gateway"));
-        assert!(result.contains("http://127.0.0.1:8080/message"));
+        assert!(result.contains("http://127.0.0.1:8080/mcp"));
         assert!(result.contains("Bearer codex-token"));
 
         // 验证旧服务被移除
@@ -279,14 +279,14 @@ command = "existing-mcp"
     fn test_codex_inject_gateway_empty_file() {
         let adapter = CodexAdapter;
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "token",
         );
 
         let result = adapter.inject_gateway("", &config).unwrap();
 
         assert!(result.contains("mantra-gateway"));
-        assert!(result.contains("http://127.0.0.1:8080/message"));
+        assert!(result.contains("http://127.0.0.1:8080/mcp"));
     }
 
     #[test]
@@ -304,7 +304,7 @@ command = "old-mcp"
 "#;
 
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "token",
         );
 
@@ -319,7 +319,7 @@ command = "old-mcp"
     fn test_codex_uses_http_headers() {
         let adapter = CodexAdapter;
         let config = GatewayInjectionConfig::new(
-            "http://127.0.0.1:8080/message",
+            "http://127.0.0.1:8080/mcp",
             "token",
         );
 

@@ -67,9 +67,11 @@ impl ConfigScope {
 }
 
 /// Gateway 注入配置
+///
+/// Story 11.14: 更新为 MCP Streamable HTTP 端点 `/mcp`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayInjectionConfig {
-    /// HTTP URL: http://127.0.0.1:{port}/message
+    /// HTTP URL: http://127.0.0.1:{port}/mcp (MCP Streamable HTTP 端点)
     pub url: String,
     /// Bearer Token
     pub token: String,
@@ -273,8 +275,8 @@ mod tests {
 
     #[test]
     fn test_gateway_injection_config() {
-        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/message", "test-token");
-        assert_eq!(config.url, "http://127.0.0.1:8080/message");
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "test-token");
+        assert_eq!(config.url, "http://127.0.0.1:8080/mcp");
         assert_eq!(config.token, "test-token");
         assert_eq!(config.authorization_header(), "Bearer test-token");
     }

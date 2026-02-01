@@ -238,6 +238,70 @@ flowchart TB
 xattr -cr /Applications/Mantra.app
 ```
 
+## MCP Gateway
+
+Mantra Client 内置 MCP Gateway，允许 AI 编程助手（如 Claude Code、Cursor）通过 MCP 协议连接并使用 MCP 服务。
+
+### 功能特性
+
+- **MCP Streamable HTTP 协议 (2025-03-26)** - 完整支持最新 MCP 规范
+- **统一 `/mcp` 端点** - 支持 POST (JSON-RPC)、GET (SSE)、DELETE 操作
+- **Origin 验证** - 防止 DNS rebinding 攻击
+- **会话管理** - MCP-Session-Id Header 自动管理
+- **向后兼容** - 同时支持旧版 `/sse` + `/message` 端点
+
+### 使用方法
+
+1. 在 **Hub** 页面启用 Gateway
+2. 添加并启用 MCP 服务
+3. 点击 **Copy Config** 按钮复制配置
+4. 将配置粘贴到 Claude Code 或 Cursor 的配置文件
+
+#### Claude Code 配置
+
+在 `~/.claude.json` 中添加：
+
+```json
+{
+  "mcpServers": {
+    "mantra-gateway": {
+      "url": "http://127.0.0.1:<port>/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
+
+#### Cursor 配置
+
+在 `.cursor/mcp.json` 中添加：
+
+```json
+{
+  "mcpServers": {
+    "mantra-gateway": {
+      "url": "http://127.0.0.1:<port>/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
+
+### 端点说明
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/mcp` | POST | JSON-RPC 请求/通知 |
+| `/mcp` | GET | SSE 流（服务端推送） |
+| `/mcp` | DELETE | 终止会话 |
+| `/health` | GET | 健康检查 |
+| `/sse` | GET | (已弃用) 旧版 SSE 端点 |
+| `/message` | POST | (已弃用) 旧版消息端点 |
+
 ## 相关文档
 
 - [跨仓库发布配置指南](./docs/cross-repo-release-setup.zh-CN.md)

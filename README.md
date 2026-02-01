@@ -240,6 +240,70 @@ xattr -cr /Applications/Mantra.app
 
 ## Related Documentation
 
+## MCP Gateway
+
+Mantra Client includes a built-in MCP Gateway that allows AI programming assistants (like Claude Code, Cursor) to connect and use MCP services via the MCP protocol.
+
+### Features
+
+- **MCP Streamable HTTP Protocol (2025-03-26)** - Full support for the latest MCP specification
+- **Unified `/mcp` Endpoint** - Supports POST (JSON-RPC), GET (SSE), DELETE operations
+- **Origin Validation** - Prevents DNS rebinding attacks
+- **Session Management** - Automatic MCP-Session-Id Header management
+- **Backward Compatible** - Also supports legacy `/sse` + `/message` endpoints
+
+### Usage
+
+1. Enable Gateway on the **Hub** page
+2. Add and enable MCP services
+3. Click **Copy Config** button to copy configuration
+4. Paste configuration into Claude Code or Cursor config file
+
+#### Claude Code Configuration
+
+Add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "mantra-gateway": {
+      "url": "http://127.0.0.1:<port>/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
+
+#### Cursor Configuration
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mantra-gateway": {
+      "url": "http://127.0.0.1:<port>/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/mcp` | POST | JSON-RPC request/notification |
+| `/mcp` | GET | SSE stream (server push) |
+| `/mcp` | DELETE | Terminate session |
+| `/health` | GET | Health check |
+| `/sse` | GET | (Deprecated) Legacy SSE endpoint |
+| `/message` | POST | (Deprecated) Legacy message endpoint |
+
 ## Contributing
 
 Contributions are welcome! Please read the project's contribution guidelines before submitting PRs.

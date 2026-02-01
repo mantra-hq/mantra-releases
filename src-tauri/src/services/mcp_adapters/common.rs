@@ -208,7 +208,7 @@ mod tests {
     fn test_merge_json_config_empty_original() {
         let gateway = serde_json::json!({
             "mantra-gateway": {
-                "url": "http://127.0.0.1:8080/message",
+                "url": "http://127.0.0.1:8080/mcp",
                 "headers": {
                     "Authorization": "Bearer token123"
                 }
@@ -221,7 +221,7 @@ mod tests {
         assert!(parsed["mcpServers"]["mantra-gateway"].is_object());
         assert_eq!(
             parsed["mcpServers"]["mantra-gateway"]["url"],
-            "http://127.0.0.1:8080/message"
+            "http://127.0.0.1:8080/mcp"
         );
     }
 
@@ -237,7 +237,7 @@ mod tests {
 
         let gateway = serde_json::json!({
             "mantra-gateway": {
-                "url": "http://127.0.0.1:8080/message",
+                "url": "http://127.0.0.1:8080/mcp",
                 "headers": {"Authorization": "Bearer token"}
             }
         });
@@ -264,7 +264,7 @@ mod tests {
         }"#;
 
         let gateway = serde_json::json!({
-            "mantra-gateway": {"url": "http://localhost/message"}
+            "mantra-gateway": {"url": "http://localhost/mcp"}
         });
 
         let result = merge_json_config(original, "mcpServers", gateway).unwrap();
@@ -290,12 +290,12 @@ mod tests {
     fn test_merge_toml_config_empty_original() {
         let gateway = r#"
 [mcp_servers]
-mantra-gateway = { url = "http://127.0.0.1:8080/message", http_headers = { Authorization = "Bearer token" } }
+mantra-gateway = { url = "http://127.0.0.1:8080/mcp", http_headers = { Authorization = "Bearer token" } }
 "#;
 
         let result = merge_toml_config("", "mcp_servers", gateway).unwrap();
         assert!(result.contains("mantra-gateway"));
-        assert!(result.contains("http://127.0.0.1:8080/message"));
+        assert!(result.contains("http://127.0.0.1:8080/mcp"));
     }
 
     #[test]
@@ -315,7 +315,7 @@ key = "value"
 
         let gateway = r#"
 [mcp_servers]
-mantra-gateway = { url = "http://127.0.0.1:8080/message" }
+mantra-gateway = { url = "http://127.0.0.1:8080/mcp" }
 "#;
 
         let result = merge_toml_config(original, "mcp_servers", gateway).unwrap();
@@ -346,7 +346,7 @@ test = { command = "test" }
 
         let gateway = r#"
 [mcp_servers]
-mantra-gateway = { url = "http://127.0.0.1:8080/message" }
+mantra-gateway = { url = "http://127.0.0.1:8080/mcp" }
 "#;
 
         let result = merge_toml_config(original, "mcp_servers", gateway).unwrap();
