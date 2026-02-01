@@ -871,7 +871,7 @@ export function McpConfigImportDialog({
 
   // 计算确认步骤的统计信息
   const getConfirmStats = useCallback(() => {
-    if (!preview) return { addCount: 0, conflictCount: 0, fileCount: 0, envCount: 0 };
+    if (!preview) return { addCount: 0, conflictCount: 0, renameCount: 0, fileCount: 0, envCount: 0, envNeeded: 0 };
 
     // 新服务数量（选中且不冲突的）
     const addCount = preview.new_services.filter((s) =>
@@ -885,20 +885,30 @@ export function McpConfigImportDialog({
       return resolution && "replace" in resolution;
     }).length;
 
+    // 重命名导入数量（选中且解决方式为 rename 的）
+    const renameCount = preview.conflicts.filter((c) => {
+      if (!selectedServices.has(c.name)) return false;
+      const resolution = conflictResolutions[c.name];
+      return resolution && "rename" in resolution;
+    }).length;
+
     // 影子模式下将修改的文件数量
     const fileCount = enableShadowMode ? preview.configs.length : 0;
 
     // 已设置的环境变量数量
     const envCount = Object.values(envVarValues).filter((v) => v && v.trim() !== "").length;
 
-    return { addCount, conflictCount, fileCount, envCount };
+    // 需要设置的环境变量总数
+    const envNeeded = preview.env_vars_needed.length;
+
+    return { addCount, conflictCount, renameCount, fileCount, envCount, envNeeded };
   }, [preview, selectedServices, conflictResolutions, enableShadowMode, envVarValues]);
 
   // 渲染确认步骤
   const renderConfirmStep = () => {
     if (!preview) return null;
 
-    const { addCount, conflictCount, fileCount, envCount } = getConfirmStats();
+    const { addCount, conflictCount, renameCount, fileCount, envNeeded } = getConfirmStats();
 
     return (
       <div className="space-y-6">
@@ -931,6 +941,15 @@ export function McpConfigImportDialog({
             </div>
           )}
 
+          {renameCount > 0 && (
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <CheckCircle2 className="h-5 w-5 text-blue-500 shrink-0" />
+              <span className="text-sm">
+                {t("hub.import.confirmSummaryRename", { count: renameCount })}
+              </span>
+            </div>
+          )}
+
           {fileCount > 0 && (
             <div className="flex items-center gap-3 p-3 border rounded-lg">
               <FileCode className="h-5 w-5 text-blue-500 shrink-0" />
@@ -940,11 +959,11 @@ export function McpConfigImportDialog({
             </div>
           )}
 
-          {envCount > 0 && (
+          {envNeeded > 0 && (
             <div className="flex items-center gap-3 p-3 border rounded-lg">
               <Key className="h-5 w-5 text-purple-500 shrink-0" />
               <span className="text-sm">
-                {t("hub.import.confirmSummaryEnv", { count: envCount })}
+                {t("hub.import.confirmSummaryEnv", { count: envNeeded })}
               </span>
             </div>
           )}

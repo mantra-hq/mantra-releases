@@ -34,9 +34,24 @@ interface ConfigDiffViewProps {
   getSourceText: (adapterId: string) => string;
 }
 
-/** 比较两个值是否相同 */
+/** 比较两个值是否相同（对象属性顺序无关） */
 function valuesEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  if (a === null || b === null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((v, i) => valuesEqual(v, b[i]));
+  }
+  if (typeof a === "object" && typeof b === "object") {
+    const keysA = Object.keys(a as object).sort();
+    const keysB = Object.keys(b as object).sort();
+    if (keysA.length !== keysB.length) return false;
+    return keysA.every((k, i) =>
+      k === keysB[i] && valuesEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+    );
+  }
+  return false;
 }
 
 /** 渲染单个字段值 */
@@ -68,10 +83,12 @@ export function ConfigDiffView({
     { key: "env", label: t("hub.import.diffEnv") },
   ];
 
+  const columnCount = (existing ? 1 : 0) + candidates.length;
+
   return (
     <div className="border rounded-lg overflow-hidden" data-testid={`config-diff-${serviceName}`}>
       {/* 表头 */}
-      <div className="grid gap-0 border-b bg-muted/50" style={{ gridTemplateColumns: `140px repeat(${1 + candidates.length}, 1fr)` }}>
+      <div className="grid gap-0 border-b bg-muted/50" style={{ gridTemplateColumns: `140px repeat(${columnCount}, 1fr)` }}>
         <div className="p-2 text-xs font-medium text-muted-foreground border-r">
           {t("hub.import.diffField")}
         </div>
@@ -99,7 +116,7 @@ export function ConfigDiffView({
           <div
             key={field.key}
             className="grid gap-0 border-b last:border-b-0"
-            style={{ gridTemplateColumns: `140px repeat(${1 + candidates.length}, 1fr)` }}
+            style={{ gridTemplateColumns: `140px repeat(${columnCount}, 1fr)` }}
           >
             <div className="p-2 text-xs font-medium text-muted-foreground border-r bg-muted/30">
               {field.label}

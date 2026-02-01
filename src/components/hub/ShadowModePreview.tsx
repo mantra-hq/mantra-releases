@@ -5,7 +5,7 @@
  * 显示一个可展开的 "查看变更预览" 区域，展示每个将被修改的配置文件。
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import {
@@ -70,38 +70,40 @@ export function ShadowModePreview({ enabled, configs }: ShadowModePreviewProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<ShadowModePreviewResult | null>(null);
-
-  const loadPreview = useCallback(async () => {
-    if (!enabled || previewData) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const result = await invoke<ShadowModePreviewResult>("preview_shadow_mode_changes", {
-        configs,
-      });
-      setPreviewData(result);
-    } catch (err) {
-      console.error("[ShadowModePreview] Failed to load preview:", err);
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [enabled, configs, previewData]);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // 展开时加载预览
   useEffect(() => {
-    if (isOpen && enabled && !previewData && !isLoading) {
-      loadPreview();
-    }
-  }, [isOpen, enabled, previewData, isLoading, loadPreview]);
+    if (!isOpen || !enabled || hasLoaded) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    setHasLoaded(true);
+
+    invoke<ShadowModePreviewResult>("preview_shadow_mode_changes", { configs })
+      .then((result) => {
+        if (!cancelled) setPreviewData(result);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("[ShadowModePreview] Failed to load preview:", err);
+          setError((err as Error).message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isOpen, enabled, hasLoaded, configs]);
 
   // 禁用时清除数据
   useEffect(() => {
     if (!enabled) {
       setPreviewData(null);
       setIsOpen(false);
+      setHasLoaded(false);
     }
   }, [enabled]);
 
@@ -167,8 +169,8 @@ export function ShadowModePreview({ enabled, configs }: ShadowModePreviewProps) 
                       {t("hub.import.shadowAfter")}
                     </div>
                     <code className="text-[10px] whitespace-pre-wrap break-all text-muted-foreground">
-                      {change.after_content.length > 200
-                        ? change.after_content.slice(0, 200) + "..."
+                      {change.after_content.length > 500
+                        ? change.after_content.slice(0, 500) + "\n..."
                         : change.after_content}
                     </code>
                   </div>
