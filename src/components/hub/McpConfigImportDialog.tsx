@@ -524,9 +524,9 @@ export function McpConfigImportDialog({
     if (!preview) return null;
 
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col h-full space-y-4">
         {/* 扫描摘要 */}
-        <Alert>
+        <Alert className="shrink-0">
           <FileCode className="h-4 w-4" />
           <AlertDescription>
             {t("hub.import.foundSummary", {
@@ -536,8 +536,8 @@ export function McpConfigImportDialog({
           </AlertDescription>
         </Alert>
 
-        {/* 配置文件列表 */}
-        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
+        {/* 配置文件列表 - flex-1 自适应高度 */}
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-2">
             {preview.configs.map((config, configIndex) => (
               <Collapsible key={configIndex} defaultOpen>
@@ -651,8 +651,8 @@ export function McpConfigImportDialog({
           </div>
         </ScrollArea>
 
-        {/* 选择摘要 */}
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
+        {/* 选择摘要 - shrink-0 保持固定 */}
+        <div className="shrink-0 flex items-center justify-between text-sm text-muted-foreground">
           <span>
             {t("hub.import.selectedCount", { count: selectedServices.size })}
           </span>
@@ -687,8 +687,8 @@ export function McpConfigImportDialog({
     if (!preview || preview.conflicts.length === 0) return null;
 
     return (
-      <div className="space-y-4">
-        <Alert>
+      <div className="flex flex-col h-full space-y-4">
+        <Alert className="shrink-0">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             {t("hub.import.conflictsDescription", {
@@ -697,7 +697,7 @@ export function McpConfigImportDialog({
           </AlertDescription>
         </Alert>
 
-        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-4">
             {preview.conflicts
               .filter((c) => selectedServices.has(c.name))
@@ -785,8 +785,8 @@ export function McpConfigImportDialog({
     if (!preview || preview.env_vars_needed.length === 0) return null;
 
     return (
-      <div className="space-y-4">
-        <Alert>
+      <div className="flex flex-col h-full space-y-4">
+        <Alert className="shrink-0">
           <Key className="h-4 w-4" />
           <AlertDescription>
             {t("hub.import.envDescription", {
@@ -795,7 +795,7 @@ export function McpConfigImportDialog({
           </AlertDescription>
         </Alert>
 
-        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-4">
             {preview.env_vars_needed.map((varName) => (
               <div key={varName} className="space-y-2">
@@ -841,8 +841,8 @@ export function McpConfigImportDialog({
           </div>
         </ScrollArea>
 
-        {/* 影子模式设置 */}
-        <div className="p-4 border rounded-lg space-y-2">
+        {/* 影子模式设置 - shrink-0 保持固定 */}
+        <div className="shrink-0 p-4 border rounded-lg space-y-2">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-sm font-medium">
@@ -1140,8 +1140,8 @@ export function McpConfigImportDialog({
           />
         )}
 
-        {/* 步骤内容 */}
-        <div className="py-4">
+        {/* 步骤内容 - 使用 flex-1 和 overflow-auto 确保可滚动 */}
+        <div className="flex-1 min-h-0 overflow-auto py-4">
           {step === "scan" && renderScanStep()}
           {step === "preview" && renderPreviewStep()}
           {step === "conflicts" && renderConflictsStep()}
