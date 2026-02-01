@@ -4,6 +4,25 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Dialog 尺寸变体系统
+ * 提供响应式尺寸，大屏自动扩展
+ */
+export type DialogSize = "sm" | "md" | "lg" | "xl" | "full"
+
+const dialogSizeVariants: Record<DialogSize, string> = {
+  /** 小型：确认框、简单提示 */
+  sm: "sm:max-w-[400px]",
+  /** 中型：表单、基础编辑 */
+  md: "sm:max-w-[500px] lg:max-w-[550px] xl:max-w-[600px]",
+  /** 大型：列表、向导、多步骤 */
+  lg: "sm:max-w-[600px] lg:max-w-[700px] xl:max-w-[800px]",
+  /** 超大：复杂内容、数据表格 */
+  xl: "sm:max-w-[800px] lg:max-w-[900px] xl:max-w-[1100px]",
+  /** 全屏：浏览、预览 */
+  full: "sm:max-w-[95vw] lg:max-w-[90vw] xl:max-w-[85vw]",
+}
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -48,9 +67,21 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /**
+   * 对话框尺寸变体，提供响应式宽度
+   * - sm: 确认框、简单提示 (400px)
+   * - md: 表单、基础编辑 (500-600px)
+   * - lg: 列表、向导 (600-800px)
+   * - xl: 复杂内容 (800-1100px)
+   * - full: 全屏浏览 (85-95vw)
+   *
+   * 不传则使用默认 sm:max-w-lg，向后兼容
+   */
+  size?: DialogSize
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -58,7 +89,8 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none max-h-[90vh] overflow-hidden",
+          size ? dialogSizeVariants[size] : "sm:max-w-lg",
           className
         )}
         {...props}

@@ -223,7 +223,7 @@ export function ProjectServiceAssociation({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2 className="h-5 w-5" />
@@ -326,7 +326,7 @@ export function ProjectServiceAssociation({
         open={!!editOverrideProject}
         onOpenChange={(open) => !open && setEditOverrideProject(null)}
       >
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>{t("hub.projectAssociation.overrideTitle")}</DialogTitle>
             <DialogDescription>

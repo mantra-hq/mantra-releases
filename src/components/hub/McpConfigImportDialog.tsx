@@ -533,7 +533,7 @@ export function McpConfigImportDialog({
         </Alert>
 
         {/* 配置文件列表 */}
-        <ScrollArea className="h-[300px] pr-4">
+        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
           <div className="space-y-2">
             {preview.configs.map((config, configIndex) => (
               <Collapsible key={configIndex} defaultOpen>
@@ -668,7 +668,7 @@ export function McpConfigImportDialog({
           </AlertDescription>
         </Alert>
 
-        <ScrollArea className="h-[300px] pr-4">
+        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
           <div className="space-y-4">
             {preview.conflicts
               .filter((c) => selectedServices.has(c.name))
@@ -770,7 +770,7 @@ export function McpConfigImportDialog({
           </AlertDescription>
         </Alert>
 
-        <ScrollArea className="h-[300px] pr-4">
+        <ScrollArea className="h-[300px] lg:h-[400px] xl:h-[500px] pr-4">
           <div className="space-y-4">
             {preview.env_vars_needed.map((varName) => (
               <div key={varName} className="space-y-2">
@@ -982,7 +982,7 @@ export function McpConfigImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5" />

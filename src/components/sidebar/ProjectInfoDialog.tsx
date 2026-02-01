@@ -456,7 +456,7 @@ export function ProjectInfoDialog({
     return (
         <TooltipProvider>
             <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <FolderOpen className="h-5 w-5 shrink-0" />

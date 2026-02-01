@@ -121,7 +121,7 @@ export function AddRuleDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md" data-testid="add-rule-dialog">
+            <DialogContent size="md" data-testid="add-rule-dialog">
                 <DialogHeader>
                     <DialogTitle>{t('privacy.rules.addTitle')}</DialogTitle>
                     <DialogDescription>

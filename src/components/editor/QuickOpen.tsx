@@ -135,7 +135,7 @@ export function QuickOpen({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="p-0 max-w-2xl gap-0" onKeyDown={handleKeyDown} showCloseButton={false} aria-describedby={undefined}>
+            <DialogContent size="xl" className="p-0 gap-0" onKeyDown={handleKeyDown} showCloseButton={false} aria-describedby={undefined}>
                 {/* 隐藏的标题 (无障碍) */}
                 <DialogTitle className="sr-only">{t("editor.quickOpenFile")}</DialogTitle>
                 {/* 搜索输入 */}
