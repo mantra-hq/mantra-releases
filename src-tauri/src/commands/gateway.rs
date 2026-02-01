@@ -16,6 +16,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::commands::AppState;
 use crate::error::AppError;
 use crate::gateway::{GatewayServerManager, SessionProjectContext};
+use crate::services::mcp_config::sync_active_takeovers;
 use crate::services::oauth::{
     CallbackResult, InMemoryTokenStore, OAuthConfig, OAuthManager, OAuthServiceStatus,
 };
@@ -115,13 +116,21 @@ pub async fn start_gateway(
         .await
         .map_err(|e| AppError::internal(e))?;
 
-    // 启动后更新数据库中的端口
+    // 启动后更新数据库中的端口，并同步接管配置
     {
         let db = app_state.db.lock().map_err(|_| AppError::LockError)?;
         db.set_gateway_port(Some(manager.current_port() as i32))
             .map_err(|e| AppError::internal(e.to_string()))?;
         db.set_gateway_enabled(true)
             .map_err(|e| AppError::internal(e.to_string()))?;
+
+        // 同步所有活跃的接管配置 (Gateway URL 和 Token 可能已变化)
+        let gateway_url = format!("http://127.0.0.1:{}/mcp", manager.current_port());
+        let gateway_token = manager.auth_token();
+        if let Err(e) = sync_active_takeovers(&db, &gateway_url, &gateway_token) {
+            // 同步失败不阻断启动，只记录警告
+            eprintln!("[Gateway] Failed to sync active takeovers: {:?}", e);
+        }
     }
 
     get_gateway_status_internal(&manager)
@@ -165,11 +174,18 @@ pub async fn restart_gateway(
         .await
         .map_err(|e| AppError::internal(e))?;
 
-    // 更新数据库中的端口
+    // 更新数据库中的端口，并同步接管配置
     {
         let db = app_state.db.lock().map_err(|_| AppError::LockError)?;
         db.set_gateway_port(Some(manager.current_port() as i32))
             .map_err(|e| AppError::internal(e.to_string()))?;
+
+        // 同步所有活跃的接管配置 (Gateway URL 和 Token 可能已变化)
+        let gateway_url = format!("http://127.0.0.1:{}/mcp", manager.current_port());
+        let gateway_token = manager.auth_token();
+        if let Err(e) = sync_active_takeovers(&db, &gateway_url, &gateway_token) {
+            eprintln!("[Gateway] Failed to sync active takeovers: {:?}", e);
+        }
     }
 
     get_gateway_status_internal(&manager)

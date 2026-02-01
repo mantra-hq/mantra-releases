@@ -1459,6 +1459,110 @@ pub fn get_takeover_status(db: &Database) -> Result<Vec<TakeoverBackup>, Storage
     db.get_takeover_backups(Some(crate::models::mcp::TakeoverStatus::Active))
 }
 
+/// 同步所有活跃接管配置中的 Gateway URL 和 Token
+///
+/// 当 Gateway 启动或重启后端口或 token 可能变化时调用此函数，
+/// 更新所有活跃接管的配置文件，确保工具能够正确连接到 Gateway。
+///
+/// # Arguments
+/// * `db` - 数据库连接
+/// * `gateway_url` - 新的 Gateway URL (如 "http://127.0.0.1:39600/mcp")
+/// * `gateway_token` - 新的 Gateway 认证 Token
+///
+/// # Returns
+/// 同步结果，包含成功和失败的数量
+pub fn sync_active_takeovers(
+    db: &Database,
+    gateway_url: &str,
+    gateway_token: &str,
+) -> Result<SyncTakeoverResult, StorageError> {
+    use crate::models::mcp::TakeoverStatus;
+
+    let mut result = SyncTakeoverResult {
+        synced_count: 0,
+        failed_count: 0,
+        errors: Vec::new(),
+    };
+
+    // 获取所有活跃的接管记录
+    let active_backups = db.get_takeover_backups(Some(TakeoverStatus::Active))?;
+
+    if active_backups.is_empty() {
+        return Ok(result);
+    }
+
+    let registry = ToolAdapterRegistry::new();
+    let injection_config = GatewayInjectionConfig::new(gateway_url, gateway_token);
+
+    for backup in active_backups {
+        let adapter_id = backup.tool_type.to_adapter_id();
+
+        // 获取对应的适配器
+        let Some(adapter) = registry.get(adapter_id) else {
+            result.failed_count += 1;
+            result.errors.push(format!(
+                "Unknown adapter for tool type: {}",
+                backup.tool_type.display_name()
+            ));
+            continue;
+        };
+
+        // 读取当前配置文件内容
+        let original_content = match fs::read_to_string(&backup.original_path) {
+            Ok(content) => content,
+            Err(e) => {
+                result.failed_count += 1;
+                result.errors.push(format!(
+                    "Failed to read {}: {}",
+                    backup.original_path.display(),
+                    e
+                ));
+                continue;
+            }
+        };
+
+        // 使用适配器注入新的 Gateway 配置
+        let new_content = match adapter.inject_gateway(&original_content, &injection_config) {
+            Ok(content) => content,
+            Err(e) => {
+                result.failed_count += 1;
+                result.errors.push(format!(
+                    "Failed to inject gateway for {}: {}",
+                    backup.original_path.display(),
+                    e
+                ));
+                continue;
+            }
+        };
+
+        // 写回配置文件
+        if let Err(e) = fs::write(&backup.original_path, new_content) {
+            result.failed_count += 1;
+            result.errors.push(format!(
+                "Failed to write {}: {}",
+                backup.original_path.display(),
+                e
+            ));
+            continue;
+        }
+
+        result.synced_count += 1;
+    }
+
+    Ok(result)
+}
+
+/// 同步接管配置的结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncTakeoverResult {
+    /// 成功同步的配置数量
+    pub synced_count: usize,
+    /// 同步失败的配置数量
+    pub failed_count: usize,
+    /// 错误信息列表
+    pub errors: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

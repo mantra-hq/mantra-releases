@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Radio,
   Play,
@@ -28,6 +34,7 @@ import {
   Link2,
   Key,
   Loader2,
+  Settings2,
 } from "lucide-react";
 import {
   Tooltip,
@@ -57,6 +64,10 @@ export function GatewayStatusCard() {
   const [isStopping, setIsStopping] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [copied, setCopied] = useState<"url" | "token" | null>(null);
+  // 端口配置状态
+  const [portInput, setPortInput] = useState("");
+  const [isPortPopoverOpen, setIsPortPopoverOpen] = useState(false);
+  const [isUpdatingPort, setIsUpdatingPort] = useState(false);
 
   // 加载 Gateway 状态
   const loadStatus = useCallback(async () => {
@@ -116,6 +127,55 @@ export function GatewayStatusCard() {
       setIsRegenerating(false);
     }
   }, [t]);
+
+  // 打开端口配置弹窗
+  const handleOpenPortConfig = useCallback(() => {
+    setPortInput(status?.port?.toString() ?? "39600");
+    setIsPortPopoverOpen(true);
+  }, [status?.port]);
+
+  // 更新端口配置
+  const handleUpdatePort = useCallback(async () => {
+    const newPort = parseInt(portInput, 10);
+    if (isNaN(newPort) || newPort < 1 || newPort > 65535) {
+      feedback.error(t("hub.gateway.portConfig"), t("hub.gateway.invalidPort"));
+      return;
+    }
+
+    // 如果端口没变，直接关闭
+    if (newPort === status?.port) {
+      setIsPortPopoverOpen(false);
+      return;
+    }
+
+    setIsUpdatingPort(true);
+    try {
+      // 1. 更新数据库配置
+      await invoke("update_gateway_config", {
+        update: { port: newPort },
+      });
+
+      // 2. 如果 Gateway 正在运行，用新端口重启
+      if (status?.running) {
+        const result = await invoke<GatewayStatus>("restart_gateway", {
+          newPort: newPort,
+        });
+        setStatus(result);
+        feedback.success(t("hub.gateway.portUpdateSuccess"));
+      } else {
+        // Gateway 未运行，只更新配置
+        setStatus((prev) => prev ? { ...prev, port: newPort } : prev);
+        feedback.success(t("hub.gateway.portConfigSaved"));
+      }
+
+      setIsPortPopoverOpen(false);
+    } catch (error) {
+      console.error("[GatewayStatusCard] Failed to update port:", error);
+      feedback.error(t("hub.gateway.portConfig"), (error as Error).message);
+    } finally {
+      setIsUpdatingPort(false);
+    }
+  }, [portInput, status, t]);
 
   // 复制到剪贴板
   const handleCopy = useCallback(async (type: "url" | "token") => {
@@ -192,9 +252,64 @@ export function GatewayStatusCard() {
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div className="space-y-1">
             <p className="text-muted-foreground">{t("hub.gateway.port")}</p>
-            <p className="font-mono font-medium" data-testid="gateway-port">
-              {status?.port ?? "-"}
-            </p>
+            <div className="flex items-center gap-1">
+              <p className="font-mono font-medium" data-testid="gateway-port">
+                {status?.port ?? "-"}
+              </p>
+              <Popover open={isPortPopoverOpen} onOpenChange={setIsPortPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleOpenPortConfig}
+                    title={t("hub.gateway.portConfig")}
+                    data-testid="port-config-button"
+                  >
+                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64" align="start">
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <h4 className="font-medium text-sm">{t("hub.gateway.portConfig")}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        {t("hub.gateway.portConfigDesc")}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={portInput}
+                        onChange={(e) => setPortInput(e.target.value)}
+                        placeholder="39600"
+                        className="h-8 font-mono"
+                        data-testid="port-input"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleUpdatePort}
+                        disabled={isUpdatingPort}
+                        data-testid="port-save-button"
+                      >
+                        {isUpdatingPort ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          t("common.save")
+                        )}
+                      </Button>
+                    </div>
+                    {status?.running && (
+                      <p className="text-xs text-amber-500">
+                        {t("hub.gateway.portChangeRestartWarning")}
+                      </p>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           <div className="space-y-1">
             <p className="text-muted-foreground">{t("hub.gateway.connections")}</p>

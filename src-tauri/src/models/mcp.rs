@@ -440,6 +440,16 @@ impl ToolType {
         }
     }
 
+    /// 转换为适配器 ID
+    pub fn to_adapter_id(&self) -> &'static str {
+        match self {
+            ToolType::ClaudeCode => "claude",
+            ToolType::Cursor => "cursor",
+            ToolType::Codex => "codex",
+            ToolType::GeminiCli => "gemini",
+        }
+    }
+
     /// 获取用户级配置文件路径
     ///
     /// 根据工具类型返回对应的用户级配置文件路径

@@ -28,10 +28,8 @@ use super::handlers::{
 use super::session::MCP_SESSION_ID_HEADER;
 use super::state::{GatewayConfig, GatewayState, GatewayStats};
 
-/// 默认端口范围起始
+/// 默认端口
 const DEFAULT_PORT_RANGE_START: u16 = 39600;
-/// 默认端口范围结束
-const DEFAULT_PORT_RANGE_END: u16 = 39699;
 
 /// Server 控制句柄
 ///
@@ -110,31 +108,31 @@ impl GatewayServer {
     /// GatewayServerHandle 用于控制 Server 生命周期
     pub async fn start(&self, port: Option<u16>) -> Result<GatewayServerHandle, String> {
         // 确定要使用的端口并绑定 (原子操作，避免 TOCTOU 竞争)
-        let (listener, port) = match port.or(if self.config.port > 0 {
-            Some(self.config.port)
-        } else {
-            None
-        }) {
-            Some(p) => {
-                // 尝试绑定指定端口
-                let addr = SocketAddr::from(([127, 0, 0, 1], p));
-                match tokio::net::TcpListener::bind(addr).await {
-                    Ok(listener) => (listener, p),
-                    Err(_) => {
-                        // 指定端口被占用，尝试自动分配
-                        self.find_and_bind_port().await?
-                    }
-                }
+        // 确定目标端口：优先使用显式传入的端口，其次使用配置端口，最后使用默认端口
+        let target_port = port
+            .or(if self.config.port > 0 { Some(self.config.port) } else { None })
+            .unwrap_or(DEFAULT_PORT_RANGE_START);
+
+        let addr = SocketAddr::from(([127, 0, 0, 1], target_port));
+        let (listener, actual_port) = match tokio::net::TcpListener::bind(addr).await {
+            Ok(listener) => {
+                // 获取实际绑定的端口（当 target_port=0 时由 OS 分配）
+                let actual = listener.local_addr()
+                    .map(|addr| addr.port())
+                    .unwrap_or(target_port);
+                (listener, actual)
             }
-            None => {
-                // 自动分配端口
-                self.find_and_bind_port().await?
+            Err(e) => {
+                return Err(format!(
+                    "无法绑定端口 {}：{}。请检查该端口是否被其他程序占用，或在设置中修改 Gateway 端口。",
+                    target_port, e
+                ));
             }
         };
 
         // 创建共享状态
         let mut config = self.config.clone();
-        config.port = port;
+        config.port = actual_port;
         let state = Arc::new(RwLock::new(GatewayState::new(config)));
         let stats = Arc::new(GatewayStats::new());
 
@@ -217,7 +215,7 @@ impl GatewayServer {
 
         Ok(GatewayServerHandle {
             shutdown_tx: Some(shutdown_tx),
-            port,
+            port: actual_port,
             state,
             stats,
         })
@@ -230,36 +228,6 @@ impl GatewayServer {
             .is_ok()
     }
 
-    /// 在指定范围内查找可用端口并绑定
-    /// 
-    /// 返回已绑定的 TcpListener 以避免 TOCTOU 竞争条件
-    async fn find_and_bind_port(&self) -> Result<(tokio::net::TcpListener, u16), String> {
-        // 首先尝试在首选端口范围内绑定
-        for port in DEFAULT_PORT_RANGE_START..=DEFAULT_PORT_RANGE_END {
-            let addr = SocketAddr::from(([127, 0, 0, 1], port));
-            if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-                return Ok((listener, port));
-            }
-        }
-        
-        // 如果首选范围都被占用，让操作系统分配端口
-        let addr = SocketAddr::from(([127, 0, 0, 1], 0));
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|e| format!("Failed to bind to any port: {}", e))?;
-        let port = listener.local_addr()
-            .map_err(|e| format!("Failed to get local address: {}", e))?
-            .port();
-        Ok((listener, port))
-    }
-
-    /// 在指定范围内查找可用端口 (向后兼容)
-    #[allow(dead_code)]
-    async fn find_available_port(&self) -> Result<u16, String> {
-        let (listener, port) = self.find_and_bind_port().await?;
-        drop(listener); // 释放端口供后续使用
-        Ok(port)
-    }
 }
 
 /// Server 管理器
@@ -380,16 +348,16 @@ mod tests {
     #[tokio::test]
     async fn test_server_start_stop() {
         let config = GatewayConfig {
-            port: 0, // 自动分配端口
+            port: 0, // 让操作系统分配端口（测试用）
             auth_token: "test-token".to_string(),
             enabled: true,
             auto_start: false,
         };
         let server = GatewayServer::new(config);
 
-        let handle = server.start(None).await.expect("Server should start");
+        let handle = server.start(Some(0)).await.expect("Server should start with OS-assigned port");
         let port = handle.port();
-        assert!(port >= DEFAULT_PORT_RANGE_START && port <= DEFAULT_PORT_RANGE_END);
+        assert!(port > 0);
 
         // 验证端口被占用
         assert!(!GatewayServer::check_port_available(port).await);
@@ -403,8 +371,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_manager_lifecycle() {
+        // 先找一个空闲端口用于测试
+        let test_listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .expect("Should bind to OS-assigned port");
+        let test_port = test_listener.local_addr().unwrap().port();
+        drop(test_listener); // 释放端口
+
         let config = GatewayConfig {
-            port: 0,
+            port: test_port,
             auth_token: "test-token".to_string(),
             enabled: true,
             auto_start: false,
@@ -416,7 +391,7 @@ mod tests {
         assert!(manager.is_running());
 
         let port = manager.current_port();
-        assert!(port >= DEFAULT_PORT_RANGE_START);
+        assert!(port > 0);
 
         // 停止
         manager.stop();
@@ -424,11 +399,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_find_available_port() {
-        let server = GatewayServer::with_defaults();
-        let port = server.find_available_port().await;
-        assert!(port.is_ok());
-        let port = port.unwrap();
-        assert!(port >= DEFAULT_PORT_RANGE_START && port <= DEFAULT_PORT_RANGE_END);
+    async fn test_server_strict_port_binding() {
+        // 测试严格端口绑定：指定端口被占用时应报错
+        let config = GatewayConfig {
+            port: DEFAULT_PORT_RANGE_START,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::new(config.clone());
+
+        // 第一个服务器应该成功启动
+        let handle1 = server.start(Some(DEFAULT_PORT_RANGE_START)).await;
+        if handle1.is_err() {
+            // 端口可能已被其他进程占用，跳过测试
+            return;
+        }
+        let handle1 = handle1.unwrap();
+        assert_eq!(handle1.port(), DEFAULT_PORT_RANGE_START);
+
+        // 第二个服务器尝试绑定同一端口应该失败
+        let server2 = GatewayServer::new(config);
+        let result = server2.start(Some(DEFAULT_PORT_RANGE_START)).await;
+        assert!(result.is_err());
+
+        // 清理
+        handle1.shutdown();
     }
 }
