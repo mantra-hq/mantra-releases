@@ -45,8 +45,8 @@ vi.mock("react-i18next", () => ({
         "hub.import.envDescription": `设置 ${params?.count || 0} 个服务所需的环境变量`,
         "hub.import.envPlaceholder": "输入变量值（可为空）",
         "hub.import.envHint": "值将被加密存储，留空则不设置",
-        "hub.import.shadowMode": "影子模式",
-        "hub.import.shadowModeDescription": "修改原配置文件，将所有服务请求路由到 Mantra Gateway",
+        "hub.import.shadowMode": "接管原配置文件",
+        "hub.import.shadowModeDescription": "开启后，原配置文件将被替换为 Mantra Gateway 入口",
         "hub.import.importingTitle": "正在导入",
         "hub.import.importing": "正在导入...",
         "hub.import.startImport": "开始导入",
@@ -58,6 +58,35 @@ vi.mock("react-i18next", () => ({
         "hub.import.skipped": "已跳过",
         "hub.import.backupFiles": "备份文件",
         "hub.import.shadowConfigs": "影子配置文件",
+        // Story 11.13: 新增翻译键
+        "hub.import.actionAdd": "将添加",
+        "hub.import.actionConflict": "需处理冲突",
+        "hub.import.actionSkip": "将跳过",
+        "hub.import.confirmTitle": "确认",
+        "hub.import.confirmDescription": "请确认以下导入操作",
+        "hub.import.confirmSummaryAdd": `即将添加 ${params?.count || 0} 个新服务`,
+        "hub.import.confirmSummaryConflict": `即将覆盖 ${params?.count || 0} 个冲突配置`,
+        "hub.import.confirmSummaryFiles": `即将修改 ${params?.count || 0} 个配置文件`,
+        "hub.import.confirmSummaryEnv": `已设置 ${params?.count || 0} 个环境变量`,
+        "hub.import.confirmImport": "确认导入",
+        "hub.import.confirmBack": "返回修改",
+        "hub.import.diffField": "字段",
+        "hub.import.diffExisting": "已有配置",
+        "hub.import.diffCandidate": `候选 ${params?.index || 0}`,
+        "hub.import.diffCommand": "命令",
+        "hub.import.diffArgs": "参数",
+        "hub.import.diffEnv": "环境变量",
+        "hub.import.stepSelect": "选择服务",
+        "hub.import.stepConflicts": "处理冲突",
+        "hub.import.stepEnv": "环境变量",
+        "hub.import.stepConfirm": "确认",
+        "hub.import.stepExecute": "执行",
+        "hub.import.shadowPreviewTrigger": "查看变更预览",
+        "hub.import.shadowPreviewLoading": "加载预览中...",
+        "hub.import.shadowBefore": "修改前",
+        "hub.import.shadowAfter": "修改后",
+        "hub.import.shadowBackupTo": "备份至",
+        "hub.import.shadowNoChanges": "无配置文件需要修改",
         "common.close": "关闭",
         "common.back": "返回",
         "common.next": "下一步",
@@ -161,6 +190,7 @@ describe("McpConfigImportDialog", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInvokeFn.mockReset();
   });
 
   describe("初始状态", () => {
@@ -207,7 +237,7 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-scan-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("选择服务")).toBeInTheDocument();
+        expect(screen.getByTestId("import-stepper")).toBeInTheDocument();
       });
     });
 
@@ -358,7 +388,6 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("环境变量")).toBeInTheDocument();
         expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
     });
@@ -401,13 +430,21 @@ describe("McpConfigImportDialog", () => {
         expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
       });
 
+      // 预览 -> 环境变量
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("开始导入"));
+      // 环境变量 -> 确认
+      await user.click(screen.getByTestId("import-next-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+      // 确认 -> 执行
+      await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
         expect(screen.getByText("导入成功")).toBeInTheDocument();
@@ -428,10 +465,16 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("开始导入"));
+      await user.click(screen.getByTestId("import-next-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
         expect(defaultProps.onSuccess).toHaveBeenCalled();
@@ -458,10 +501,16 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("开始导入"));
+      await user.click(screen.getByTestId("import-next-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
         expect(feedback.error).toHaveBeenCalled();
@@ -470,6 +519,26 @@ describe("McpConfigImportDialog", () => {
   });
 
   describe("结果步骤", () => {
+    // 辅助：从扫描到确认导入完成
+    const navigateToResult = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByTestId("import-scan-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
+      });
+      // 预览 -> 环境变量
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+      // 环境变量 -> 确认
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+      // 确认 -> 执行
+      await user.click(screen.getByTestId("import-next-button"));
+    };
+
     it("应该显示导入统计", async () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
@@ -477,22 +546,8 @@ describe("McpConfigImportDialog", () => {
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
-
       render(<McpConfigImportDialog {...defaultProps} />);
-
-      await user.click(screen.getByTestId("import-scan-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByTestId("import-next-button"));
-
-      await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText("开始导入"));
+      await navigateToResult(user);
 
       await waitFor(() => {
         expect(screen.getByText("2")).toBeInTheDocument(); // imported_count
@@ -507,25 +562,10 @@ describe("McpConfigImportDialog", () => {
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
-
       render(<McpConfigImportDialog {...defaultProps} />);
-
-      await user.click(screen.getByTestId("import-scan-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByTestId("import-next-button"));
+      await navigateToResult(user);
 
       await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText("开始导入"));
-
-      await waitFor(() => {
-        // 使用函数匹配器，因为 Label 组件会把文本分割成多个节点
         expect(screen.getByText((content) => content.includes("备份文件"))).toBeInTheDocument();
         expect(screen.getByText("/project/.claude/config.json.mantra-backup")).toBeInTheDocument();
       });
@@ -538,34 +578,36 @@ describe("McpConfigImportDialog", () => {
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
-
       render(<McpConfigImportDialog {...defaultProps} />);
-
-      await user.click(screen.getByTestId("import-scan-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByTestId("import-next-button"));
-
-      await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText("开始导入"));
+      await navigateToResult(user);
 
       await waitFor(() => {
         expect(screen.getByText("关闭")).toBeInTheDocument();
       });
 
       await user.click(screen.getByText("关闭"));
-
       expect(defaultProps.onOpenChange).toHaveBeenCalledWith(false);
     });
   });
 
   describe("部分导入结果", () => {
+    // 辅助：从扫描到确认导入完成
+    const navigateToResult = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByTestId("import-scan-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+      await user.click(screen.getByTestId("import-next-button"));
+    };
+
     it("部分成功时应该显示警告图标", async () => {
       const partialResult = {
         ...mockImportResult,
@@ -579,22 +621,8 @@ describe("McpConfigImportDialog", () => {
         .mockResolvedValueOnce(partialResult);
 
       const user = userEvent.setup();
-
       render(<McpConfigImportDialog {...defaultProps} />);
-
-      await user.click(screen.getByTestId("import-scan-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByTestId("import-next-button"));
-
-      await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText("开始导入"));
+      await navigateToResult(user);
 
       await waitFor(() => {
         expect(screen.getByText("部分导入成功")).toBeInTheDocument();
@@ -614,6 +642,79 @@ describe("McpConfigImportDialog", () => {
         .mockResolvedValueOnce(errorResult);
 
       const user = userEvent.setup();
+      render(<McpConfigImportDialog {...defaultProps} />);
+      await navigateToResult(user);
+
+      await waitFor(() => {
+        expect(screen.getByText("Failed to import git-mcp: Name conflict")).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Story 11.13: 新增测试用例
+  describe("动作标签 (AC: #1)", () => {
+    beforeEach(() => {
+      mockInvokeFn
+        .mockResolvedValueOnce(mockScanResult)
+        .mockResolvedValueOnce(mockPreviewWithConflict);
+    });
+
+    it("新服务应该显示'将添加'标签", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        // postgres 是新服务
+        expect(screen.getByTestId("import-action-label-postgres")).toHaveTextContent("将添加");
+      });
+    });
+
+    it("冲突服务应该显示'需处理冲突'标签", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        // git-mcp 是冲突服务
+        expect(screen.getByTestId("import-action-label-git-mcp")).toHaveTextContent("需处理冲突");
+      });
+    });
+
+    it("取消选择的服务应该显示'将跳过'标签", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-service-checkbox-postgres")).toBeInTheDocument();
+      });
+
+      // 取消选择 postgres
+      await user.click(screen.getByTestId("import-service-checkbox-postgres"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-action-label-postgres")).toHaveTextContent("将跳过");
+      });
+    });
+  });
+
+  describe("确认步骤 (AC: #5)", () => {
+    beforeEach(() => {
+      mockInvokeFn
+        .mockResolvedValueOnce(mockScanResult)
+        .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce(mockImportResult);
+    });
+
+    it("环境变量步骤后应该进入确认步骤", async () => {
+      const user = userEvent.setup();
 
       render(<McpConfigImportDialog {...defaultProps} />);
 
@@ -623,16 +724,142 @@ describe("McpConfigImportDialog", () => {
         expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
       });
 
+      // 从预览到环境变量
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("开始导入")).toBeInTheDocument();
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("开始导入"));
+      // 从环境变量到确认
+      await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByText("Failed to import git-mcp: Name conflict")).toBeInTheDocument();
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+    });
+
+    it("确认步骤应该显示操作摘要", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
+      });
+
+      // 预览 -> 环境变量 -> 确认
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("import-next-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+        // 应该显示将添加的服务数量
+        expect(screen.getByText(/即将添加 2 个新服务/)).toBeInTheDocument();
+      });
+    });
+
+    it("确认步骤点击'确认导入'应该执行导入", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
+      });
+
+      // 预览 -> 环境变量 -> 确认
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+
+      // 点击确认导入
+      await user.click(screen.getByTestId("import-next-button"));
+
+      await waitFor(() => {
+        expect(screen.getByText("导入成功")).toBeInTheDocument();
+      });
+    });
+
+    it("确认步骤点击'返回修改'应该返回上一步", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
+      });
+
+      // 预览 -> 环境变量 -> 确认
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("import-next-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-summary")).toBeInTheDocument();
+      });
+
+      // 点击返回修改
+      await user.click(screen.getByText("返回修改"));
+
+      await waitFor(() => {
+        // 应该返回到环境变量步骤
+        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("步骤指示器 (AC: #6)", () => {
+    beforeEach(() => {
+      mockInvokeFn
+        .mockResolvedValueOnce(mockScanResult)
+        .mockResolvedValueOnce(mockPreview);
+    });
+
+    it("应该渲染步骤指示器", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("import-stepper")).toBeInTheDocument();
+      });
+    });
+
+    it("步骤指示器应该显示步骤名称", async () => {
+      const user = userEvent.setup();
+
+      render(<McpConfigImportDialog {...defaultProps} />);
+
+      await user.click(screen.getByTestId("import-scan-button"));
+
+      await waitFor(() => {
+        const stepper = screen.getByTestId("import-stepper");
+        // mockPreview 有 env_vars_needed，所以步骤包含环境变量
+        expect(stepper).toHaveTextContent("选择服务");
+        expect(stepper).toHaveTextContent("确认");
+        expect(stepper).toHaveTextContent("执行");
       });
     });
   });

@@ -5,6 +5,17 @@ import { initReactI18next } from "react-i18next";
 import zhCN from "../i18n/locales/zh-CN.json";
 import en from "../i18n/locales/en.json";
 
+// Mock ResizeObserver for radix-ui components
+global.ResizeObserver = class ResizeObserver {
+  callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // Story 2-26: 初始化 i18n 用于测试环境
 // 测试环境使用简化配置，默认中文
 // 注意: 需要同步初始化以避免测试中的竞态条件

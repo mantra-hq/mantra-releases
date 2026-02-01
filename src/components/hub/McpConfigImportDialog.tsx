@@ -55,6 +55,9 @@ import {
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
+import { ConfigDiffView } from "./ConfigDiffView";
+import { ShadowModePreview } from "./ShadowModePreview";
+import { ImportStepper } from "./ImportStepper";
 
 // ===== 类型定义 =====
 
@@ -147,7 +150,7 @@ interface ImportResult {
 }
 
 // ===== 步骤枚举 =====
-type ImportStep = "scan" | "preview" | "conflicts" | "env" | "execute" | "result";
+type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result";
 
 // ===== 组件属性 =====
 interface McpConfigImportDialogProps {
@@ -399,17 +402,18 @@ export function McpConfigImportDialog({
       } else if (needsEnvVars) {
         setStep("env");
       } else {
-        setStep("execute");
-        handleImport();
+        // 无冲突无环境变量，直接进入确认步骤
+        setStep("confirm");
       }
     } else if (step === "conflicts") {
       if (needsEnvVars) {
         setStep("env");
       } else {
-        setStep("execute");
-        handleImport();
+        setStep("confirm");
       }
     } else if (step === "env") {
+      setStep("confirm");
+    } else if (step === "confirm") {
       setStep("execute");
       handleImport();
     }
@@ -559,19 +563,36 @@ export function McpConfigImportDialog({
                         const hasConflict = preview.conflicts.some(
                           (c) => c.name === service.name
                         );
+                        const isSelected = selectedServices.has(service.name);
+
+                        // 计算动作状态
+                        const actionLabel = !isSelected
+                          ? t("hub.import.actionSkip")
+                          : hasConflict
+                          ? t("hub.import.actionConflict")
+                          : t("hub.import.actionAdd");
+                        const actionClass = !isSelected
+                          ? "bg-muted text-muted-foreground"
+                          : hasConflict
+                          ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                          : "bg-green-500/10 text-green-500 border-green-500/20";
 
                         return (
                           <div
                             key={serviceIndex}
-                            className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                            className={cn(
+                              "flex items-center gap-3 p-2 rounded-md bg-muted/50",
+                              !isSelected && "opacity-60"
+                            )}
                           >
                             <Checkbox
                               id={`service-${configIndex}-${serviceIndex}`}
-                              checked={selectedServices.has(service.name)}
+                              checked={isSelected}
                               onCheckedChange={(checked) =>
                                 toggleService(service.name, checked as boolean)
                               }
                               data-testid={`import-service-checkbox-${service.name}`}
+                              className="border-zinc-500 data-[state=unchecked]:bg-zinc-800/50"
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -601,6 +622,14 @@ export function McpConfigImportDialog({
                                 {service.args && service.args.length > 2 && " ..."}
                               </code>
                             </div>
+                            {/* 动作标签 */}
+                            <Badge
+                              variant="outline"
+                              className={cn("text-xs shrink-0", actionClass)}
+                              data-testid={`import-action-label-${service.name}`}
+                            >
+                              {actionLabel}
+                            </Badge>
                           </div>
                         );
                       })}
@@ -684,17 +713,13 @@ export function McpConfigImportDialog({
                     </Badge>
                   </div>
 
-                  {conflict.existing && (
-                    <div className="text-sm p-2 bg-muted rounded">
-                      <span className="text-muted-foreground">
-                        {t("hub.import.existingService")}:
-                      </span>
-                      <code className="ml-2">
-                        {conflict.existing.command}{" "}
-                        {conflict.existing.args?.join(" ")}
-                      </code>
-                    </div>
-                  )}
+                  {/* 配置差异对比 */}
+                  <ConfigDiffView
+                    serviceName={conflict.name}
+                    existing={conflict.existing}
+                    candidates={conflict.candidates}
+                    getSourceText={getSourceText}
+                  />
 
                   <div className="space-y-2">
                     <Label>{t("hub.import.resolution")}</Label>
@@ -817,20 +842,112 @@ export function McpConfigImportDialog({
         </ScrollArea>
 
         {/* 影子模式设置 */}
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label className="text-sm font-medium">
-              {t("hub.import.shadowMode")}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {t("hub.import.shadowModeDescription")}
-            </p>
+        <div className="p-4 border rounded-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">
+                {t("hub.import.shadowMode")}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {t("hub.import.shadowModeDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={enableShadowMode}
+              onCheckedChange={setEnableShadowMode}
+              data-testid="shadow-mode-switch"
+            />
           </div>
-          <Switch
-            checked={enableShadowMode}
-            onCheckedChange={setEnableShadowMode}
-            data-testid="shadow-mode-switch"
+
+          {/* 影子模式变更预览 */}
+          <ShadowModePreview
+            enabled={enableShadowMode}
+            configs={preview.configs}
           />
+        </div>
+      </div>
+    );
+  };
+
+  // 计算确认步骤的统计信息
+  const getConfirmStats = useCallback(() => {
+    if (!preview) return { addCount: 0, conflictCount: 0, fileCount: 0, envCount: 0 };
+
+    // 新服务数量（选中且不冲突的）
+    const addCount = preview.new_services.filter((s) =>
+      selectedServices.has(s.name)
+    ).length;
+
+    // 覆盖冲突数量（选中且解决方式为 replace 的）
+    const conflictCount = preview.conflicts.filter((c) => {
+      if (!selectedServices.has(c.name)) return false;
+      const resolution = conflictResolutions[c.name];
+      return resolution && "replace" in resolution;
+    }).length;
+
+    // 影子模式下将修改的文件数量
+    const fileCount = enableShadowMode ? preview.configs.length : 0;
+
+    // 已设置的环境变量数量
+    const envCount = Object.values(envVarValues).filter((v) => v && v.trim() !== "").length;
+
+    return { addCount, conflictCount, fileCount, envCount };
+  }, [preview, selectedServices, conflictResolutions, enableShadowMode, envVarValues]);
+
+  // 渲染确认步骤
+  const renderConfirmStep = () => {
+    if (!preview) return null;
+
+    const { addCount, conflictCount, fileCount, envCount } = getConfirmStats();
+
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-500/10 mb-3">
+            <FileCode className="h-6 w-6 text-blue-500" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("hub.import.confirmDescription")}
+          </p>
+        </div>
+
+        {/* 操作摘要 */}
+        <div className="space-y-2" data-testid="confirm-summary">
+          {addCount > 0 && (
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+              <span className="text-sm">
+                {t("hub.import.confirmSummaryAdd", { count: addCount })}
+              </span>
+            </div>
+          )}
+
+          {conflictCount > 0 && (
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              <span className="text-sm">
+                {t("hub.import.confirmSummaryConflict", { count: conflictCount })}
+              </span>
+            </div>
+          )}
+
+          {fileCount > 0 && (
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <FileCode className="h-5 w-5 text-blue-500 shrink-0" />
+              <span className="text-sm">
+                {t("hub.import.confirmSummaryFiles", { count: fileCount })}
+              </span>
+            </div>
+          )}
+
+          {envCount > 0 && (
+            <div className="flex items-center gap-3 p-3 border rounded-lg">
+              <Key className="h-5 w-5 text-purple-500 shrink-0" />
+              <span className="text-sm">
+                {t("hub.import.confirmSummaryEnv", { count: envCount })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -951,6 +1068,8 @@ export function McpConfigImportDialog({
         return t("hub.import.conflictsTitle");
       case "env":
         return t("hub.import.envTitle");
+      case "confirm":
+        return t("hub.import.confirmTitle");
       case "execute":
         return t("hub.import.importingTitle");
       case "result":
@@ -971,6 +1090,8 @@ export function McpConfigImportDialog({
         return t("hub.import.conflictsStepDescription");
       case "env":
         return t("hub.import.envStepDescription");
+      case "confirm":
+        return t("hub.import.confirmDescription");
       case "execute":
         return t("hub.import.importingDescription");
       case "result":
@@ -993,36 +1114,11 @@ export function McpConfigImportDialog({
 
         {/* 步骤指示器 */}
         {step !== "scan" && step !== "result" && (
-          <div className="flex items-center justify-center gap-1 py-2">
-            {["preview", "conflicts", "env", "execute"].map((s, i, arr) => {
-              const isActive = s === step;
-              const isPast =
-                arr.indexOf(s) < arr.indexOf(step as string);
-              const isSkipped =
-                (s === "conflicts" && !hasConflicts) ||
-                (s === "env" && !needsEnvVars);
-
-              if (isSkipped) return null;
-
-              return (
-                <div key={s} className="flex items-center">
-                  <div
-                    className={cn(
-                      "w-2 h-2 rounded-full",
-                      isActive
-                        ? "bg-blue-500"
-                        : isPast
-                        ? "bg-green-500"
-                        : "bg-muted"
-                    )}
-                  />
-                  {i < arr.length - 1 && !isSkipped && (
-                    <ChevronRight className="h-3 w-3 text-muted-foreground mx-1" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <ImportStepper
+            currentStep={step}
+            hasConflicts={hasConflicts}
+            needsEnvVars={needsEnvVars}
+          />
         )}
 
         {/* 步骤内容 */}
@@ -1031,6 +1127,7 @@ export function McpConfigImportDialog({
           {step === "preview" && renderPreviewStep()}
           {step === "conflicts" && renderConflictsStep()}
           {step === "env" && renderEnvStep()}
+          {step === "confirm" && renderConfirmStep()}
           {step === "execute" && renderExecuteStep()}
           {step === "result" && renderResultStep()}
         </div>
@@ -1058,11 +1155,20 @@ export function McpConfigImportDialog({
                     } else {
                       setStep("preview");
                     }
+                  } else if (step === "confirm") {
+                    // 从确认步骤返回
+                    if (needsEnvVars) {
+                      setStep("env");
+                    } else if (hasConflicts) {
+                      setStep("conflicts");
+                    } else {
+                      setStep("preview");
+                    }
                   }
                 }}
                 disabled={isLoading}
               >
-                {t("common.back")}
+                {step === "confirm" ? t("hub.import.confirmBack") : t("common.back")}
               </Button>
               <Button
                 onClick={handleNext}
@@ -1070,7 +1176,7 @@ export function McpConfigImportDialog({
                 data-testid="import-next-button"
               >
                 {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {step === "env" ? t("hub.import.startImport") : t("common.next")}
+                {step === "confirm" ? t("hub.import.confirmImport") : t("common.next")}
               </Button>
             </>
           ) : null}
