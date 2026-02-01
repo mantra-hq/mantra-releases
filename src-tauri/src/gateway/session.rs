@@ -211,6 +211,8 @@ impl McpSessionStore {
 pub type SharedMcpSessionStore = Arc<RwLock<McpSessionStore>>;
 
 /// Session 验证错误响应
+/// 当前预留供 session_middleware 使用
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct SessionErrorResponse {
     pub jsonrpc: &'static str,
@@ -276,6 +278,8 @@ pub fn create_session_id_header(session_id: &str) -> (HeaderName, HeaderValue) {
 /// - 无效或已过期的 Session ID 返回 HTTP 404 Not Found
 ///
 /// 注意：此中间件应放在 auth 中间件之后，origin 中间件之后
+/// 当前 Gateway 路由尚未接入此中间件，待 Streamable HTTP 全面上线后启用
+#[allow(dead_code)]
 pub async fn session_middleware(
     State(session_store): State<SharedMcpSessionStore>,
     request: Request,
@@ -333,12 +337,14 @@ pub async fn session_middleware(
 }
 
 /// 生成 400 Bad Request 响应（缺少 Session ID）
+#[allow(dead_code)]
 fn missing_session_response() -> Response {
     let response = SessionErrorResponse::missing_session_id();
     (StatusCode::BAD_REQUEST, Json(response)).into_response()
 }
 
 /// 生成 404 Not Found 响应（Session 无效或已过期）
+#[allow(dead_code)]
 fn not_found_response(session_id: &str) -> Response {
     let response = SessionErrorResponse::not_found(session_id);
     (StatusCode::NOT_FOUND, Json(response)).into_response()

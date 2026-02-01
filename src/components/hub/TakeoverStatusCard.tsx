@@ -9,9 +9,11 @@
  * - 一键恢复按钮
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
+import { zhCN, enUS } from "date-fns/locale";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -89,17 +91,12 @@ function toolTypeToAdapterId(toolType: ToolType): string {
 }
 
 /**
- * 格式化日期时间
+ * 格式化日期时间（使用 i18n locale）
  */
-function formatDateTime(isoString: string): string {
+function formatDateTime(isoString: string, locale: string): string {
   const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const dateLocale = locale === "zh-CN" ? zhCN : enUS;
+  return format(date, "PPp", { locale: dateLocale });
 }
 
 export interface TakeoverStatusCardProps {
@@ -107,10 +104,13 @@ export interface TakeoverStatusCardProps {
 }
 
 export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [backups, setBackups] = useState<TakeoverBackup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  // 缓存当前语言，避免重复渲染
+  const currentLocale = useMemo(() => i18n.language, [i18n.language]);
 
   // 加载活跃的接管记录
   const loadBackups = useCallback(async () => {
@@ -129,6 +129,15 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     setRestoringId(backupId);
     try {
       await invoke("restore_takeover", { backupId });
+      // 尝试重启 Gateway 以注销已恢复的服务配置
+      try {
+        const status = await invoke<{ running: boolean }>("get_gateway_status");
+        if (status.running) {
+          await invoke("restart_gateway", {});
+        }
+      } catch {
+        // Gateway 操作失败不阻断恢复流程
+      }
       feedback.success(t("hub.takeover.restoreSuccess"));
       // 重新加载列表
       await loadBackups();
@@ -220,7 +229,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
-                    <span>{formatDateTime(backup.taken_over_at)}</span>
+                    <span>{formatDateTime(backup.taken_over_at, currentLocale)}</span>
                   </div>
                 </div>
               </div>

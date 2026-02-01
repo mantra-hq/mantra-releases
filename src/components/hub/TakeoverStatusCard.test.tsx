@@ -31,6 +31,7 @@ vi.mock("react-i18next", () => ({
       }
       return key;
     },
+    i18n: { language: "en" },
   }),
 }));
 
@@ -323,10 +324,17 @@ describe("TakeoverStatusCard", () => {
     it("确认恢复应该调用 restore_takeover 命令", async () => {
       const user = userEvent.setup();
 
-      // 先返回备份列表，然后恢复成功后返回空列表
+      // Mock 调用序列：
+      // 1. list_active_takeovers (初始加载)
+      // 2. restore_takeover (恢复操作)
+      // 3. get_gateway_status (检查 Gateway 状态)
+      // 4. restart_gateway (重启 Gateway)
+      // 5. list_active_takeovers (刷新列表)
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups)
+        .mockResolvedValueOnce(mockBackups) // 初始加载
         .mockResolvedValueOnce(undefined) // restore_takeover
+        .mockResolvedValueOnce({ running: true }) // get_gateway_status
+        .mockResolvedValueOnce(undefined) // restart_gateway
         .mockResolvedValueOnce([]); // 刷新后返回空列表
 
       render(<TakeoverStatusCard />);
@@ -345,6 +353,12 @@ describe("TakeoverStatusCard", () => {
 
       await waitFor(() => {
         expect(mockInvokeFn).toHaveBeenCalledWith("restore_takeover", { backupId: "backup-1" });
+      });
+
+      // 验证 Gateway 重启调用
+      await waitFor(() => {
+        expect(mockInvokeFn).toHaveBeenCalledWith("get_gateway_status");
+        expect(mockInvokeFn).toHaveBeenCalledWith("restart_gateway", {});
       });
 
       expect(feedback.success).toHaveBeenCalledWith("hub.takeover.restoreSuccess");
@@ -383,10 +397,12 @@ describe("TakeoverStatusCard", () => {
       const user = userEvent.setup();
       const onRestore = vi.fn();
 
+      // Mock 调用序列
       mockInvokeFn
-        .mockResolvedValueOnce(mockBackups)
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce(mockBackups) // 初始加载
+        .mockResolvedValueOnce(undefined) // restore_takeover
+        .mockResolvedValueOnce({ running: false }) // get_gateway_status (Gateway 未运行)
+        .mockResolvedValueOnce([]); // 刷新后返回空列表
 
       render(<TakeoverStatusCard onRestore={onRestore} />);
 
@@ -404,6 +420,35 @@ describe("TakeoverStatusCard", () => {
 
       await waitFor(() => {
         expect(onRestore).toHaveBeenCalled();
+      });
+    });
+
+    it("Gateway 未运行时不应调用 restart_gateway", async () => {
+      const user = userEvent.setup();
+
+      mockInvokeFn
+        .mockResolvedValueOnce(mockBackups) // 初始加载
+        .mockResolvedValueOnce(undefined) // restore_takeover
+        .mockResolvedValueOnce({ running: false }) // get_gateway_status
+        .mockResolvedValueOnce([]); // 刷新后返回空列表
+
+      render(<TakeoverStatusCard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("restore-button-backup-1")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("restore-button-backup-1"));
+
+      await waitFor(() => {
+        expect(screen.getByText("hub.takeover.restoreConfirm")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText("hub.takeover.restoreConfirm"));
+
+      await waitFor(() => {
+        expect(mockInvokeFn).toHaveBeenCalledWith("get_gateway_status");
+        expect(mockInvokeFn).not.toHaveBeenCalledWith("restart_gateway", {});
       });
     });
   });

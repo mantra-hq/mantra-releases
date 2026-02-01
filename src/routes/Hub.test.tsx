@@ -3,8 +3,8 @@
  * Story 11.6: Task 9.6 - Hub 页面集成测试
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Hub } from "./Hub";
 
@@ -18,6 +18,7 @@ vi.mock("@/lib/ipc-adapter", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
+    i18n: { language: "en" },
   }),
 }));
 
@@ -80,31 +81,41 @@ describe("Hub Page", () => {
     it("应该显示页面标题", async () => {
       renderWithRouter(<Hub />);
 
-      expect(screen.getByText("hub.title")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("hub.title")).toBeInTheDocument();
+      });
     });
 
     it("应该显示返回按钮", async () => {
       renderWithRouter(<Hub />);
 
-      expect(screen.getByTestId("hub-back-button")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-back-button")).toBeInTheDocument();
+      });
     });
 
     it("应该包含 Gateway 状态区域", async () => {
       renderWithRouter(<Hub />);
 
-      expect(screen.getByTestId("hub-gateway-section")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-gateway-section")).toBeInTheDocument();
+      });
     });
 
     it("应该包含 MCP 服务区域", async () => {
       renderWithRouter(<Hub />);
 
-      expect(screen.getByTestId("hub-services-section")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-services-section")).toBeInTheDocument();
+      });
     });
 
     it("应该包含环境变量区域", async () => {
       renderWithRouter(<Hub />);
 
-      expect(screen.getByTestId("hub-env-section")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-env-section")).toBeInTheDocument();
+      });
     });
   });
 
