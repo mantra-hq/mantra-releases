@@ -159,6 +159,9 @@ impl Database {
         // Migration: Add MCP service tools cache table (Story 11.10)
         Self::run_mcp_service_tools_migration(conn)?;
 
+        // Migration: Add HTTP transport support to MCP services (Story 11.11)
+        Self::run_mcp_http_transport_migration(conn)?;
+
         Ok(())
     }
 
@@ -639,6 +642,39 @@ impl Database {
 
                 -- 按服务 ID 索引
                 CREATE INDEX IF NOT EXISTS idx_mcp_service_tools_service ON mcp_service_tools(service_id);
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for HTTP transport support in MCP services (Story 11.11)
+    ///
+    /// Adds:
+    /// - transport_type column: 'stdio' (default) or 'http'
+    /// - url column: HTTP endpoint URL for http transport
+    /// - headers column: HTTP headers as JSON for http transport
+    fn run_mcp_http_transport_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if transport_type column exists
+        let has_transport_type: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('mcp_services') WHERE name = 'transport_type'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_transport_type {
+            conn.execute_batch(
+                r#"
+                -- 添加传输类型字段（默认 stdio）
+                ALTER TABLE mcp_services ADD COLUMN transport_type TEXT NOT NULL DEFAULT 'stdio'
+                    CHECK(transport_type IN ('stdio', 'http'));
+                -- 添加 HTTP 端点 URL 字段
+                ALTER TABLE mcp_services ADD COLUMN url TEXT;
+                -- 添加 HTTP 请求头字段（JSON 格式）
+                ALTER TABLE mcp_services ADD COLUMN headers TEXT;
                 "#,
             )?;
         }

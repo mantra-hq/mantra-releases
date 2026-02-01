@@ -35,6 +35,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::models::mcp::McpTransportType;
+
 // Re-exports
 pub use claude::ClaudeAdapter;
 pub use cursor::CursorAdapter;
@@ -93,12 +95,20 @@ impl GatewayInjectionConfig {
 pub struct DetectedService {
     /// 服务名称
     pub name: String,
-    /// 启动命令
+    /// 传输类型
+    #[serde(default)]
+    pub transport_type: McpTransportType,
+    /// 启动命令（stdio 模式）
+    #[serde(default)]
     pub command: String,
-    /// 命令参数
+    /// 命令参数（stdio 模式）
     pub args: Option<Vec<String>>,
     /// 环境变量
     pub env: Option<HashMap<String, String>>,
+    /// HTTP 端点 URL（http 模式）
+    pub url: Option<String>,
+    /// HTTP 请求头（http 模式）
+    pub headers: Option<HashMap<String, String>>,
     /// 来源配置文件路径
     pub source_file: PathBuf,
     /// 适配器 ID (替代旧的 source_type)

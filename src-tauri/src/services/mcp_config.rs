@@ -89,12 +89,20 @@ impl ConfigSource {
 pub struct DetectedService {
     /// 服务名称
     pub name: String,
-    /// 启动命令
+    /// 传输类型（stdio 或 http）
+    #[serde(default)]
+    pub transport_type: crate::models::mcp::McpTransportType,
+    /// 启动命令（stdio 模式）
+    #[serde(default)]
     pub command: String,
-    /// 命令参数
+    /// 命令参数（stdio 模式）
     pub args: Option<Vec<String>>,
     /// 环境变量
     pub env: Option<HashMap<String, String>>,
+    /// HTTP 端点 URL（http 模式）
+    pub url: Option<String>,
+    /// HTTP 请求头（http 模式）
+    pub headers: Option<HashMap<String, String>>,
     /// 来源配置文件路径
     pub source_file: PathBuf,
     /// 适配器 ID (Story 11.8: 替代旧的 source_type)
@@ -108,9 +116,12 @@ impl From<AdapterDetectedService> for DetectedService {
     fn from(s: AdapterDetectedService) -> Self {
         Self {
             name: s.name,
+            transport_type: s.transport_type,
             command: s.command,
             args: s.args,
             env: s.env,
+            url: s.url,
+            headers: s.headers,
             source_file: s.source_file,
             adapter_id: s.adapter_id,
             scope: Some(s.scope),
@@ -307,9 +318,12 @@ impl McpConfigParser for ClaudeCodeConfigParser {
                 if let McpServerConfig::Stdio { command, args, env } = server {
                     services.push(DetectedService {
                         name,
+                        transport_type: Default::default(),
                         command,
                         args,
                         env,
+                        url: None,
+                        headers: None,
                         source_file: path.to_path_buf(),
                         adapter_id: "claude".to_string(),
                         scope: None,
@@ -356,9 +370,12 @@ impl McpConfigParser for CursorConfigParser {
                 if let McpServerConfig::Stdio { command, args, env } = server {
                     services.push(DetectedService {
                         name,
+                        transport_type: Default::default(),
                         command,
                         args,
                         env,
+                        url: None,
+                        headers: None,
                         source_file: path.to_path_buf(),
                         adapter_id: "cursor".to_string(),
                         scope: None,
@@ -405,9 +422,12 @@ impl McpConfigParser for ClaudeDesktopConfigParser {
                 if let McpServerConfig::Stdio { command, args, env } = server {
                     services.push(DetectedService {
                         name,
+                        transport_type: Default::default(),
                         command,
                         args,
                         env,
+                        url: None,
+                        headers: None,
                         source_file: path.to_path_buf(),
                         adapter_id: "claude".to_string(),
                         scope: None,
@@ -997,9 +1017,12 @@ impl<'a> ImportExecutor<'a> {
     fn import_service(&self, service: &DetectedService) -> Result<String, StorageError> {
         let request = CreateMcpServiceRequest {
             name: service.name.clone(),
+            transport_type: service.transport_type.clone(),
             command: service.command.clone(),
             args: service.args.clone(),
             env: service.env.as_ref().map(|e| serde_json::to_value(e).unwrap()),
+            url: service.url.clone(),
+            headers: service.headers.clone(),
             source: McpServiceSource::Imported,
             source_file: Some(service.source_file.to_string_lossy().to_string()),
         };
@@ -1441,12 +1464,15 @@ mod tests {
             services: vec![
                 DetectedService {
                     name: "new-service".to_string(),
+                    transport_type: Default::default(),
                     command: "npx".to_string(),
                     args: None,
                     env: Some(HashMap::from([(
                         "API_KEY".to_string(),
                         "$API_KEY".to_string(),
                     )])),
+                    url: None,
+                    headers: None,
                     source_file: PathBuf::from("/test/config.json"),
                     adapter_id: "claude".to_string(),
                     scope: Some(ConfigScope::Project),
@@ -1469,9 +1495,12 @@ mod tests {
         // 创建已存在的服务
         let request = CreateMcpServiceRequest {
             name: "existing-service".to_string(),
+            transport_type: Default::default(),
             command: "old-command".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1483,9 +1512,12 @@ mod tests {
             scope: Some(ConfigScope::Project),
             services: vec![DetectedService {
                 name: "existing-service".to_string(),
+                transport_type: Default::default(),
                 command: "new-command".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source_file: PathBuf::from("/test/config.json"),
                 adapter_id: "claude".to_string(),
                 scope: Some(ConfigScope::Project),
@@ -1637,9 +1669,12 @@ mod tests {
             conflicts: Vec::new(),
             new_services: vec![DetectedService {
                 name: "test-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: Some(vec!["-y".to_string(), "test-mcp".to_string()]),
                 env: None,
+                url: None,
+                headers: None,
                 source_file: PathBuf::from("/test/config.json"),
                 adapter_id: "claude".to_string(),
                 scope: Some(ConfigScope::Project),
@@ -1680,9 +1715,12 @@ mod tests {
             conflicts: Vec::new(),
             new_services: vec![DetectedService {
                 name: "skipped-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source_file: PathBuf::from("/test/config.json"),
                 adapter_id: "claude".to_string(),
                 scope: Some(ConfigScope::Project),
@@ -1716,9 +1754,12 @@ mod tests {
         let existing = db
             .create_mcp_service(&CreateMcpServiceRequest {
                 name: "conflict-service".to_string(),
+                transport_type: Default::default(),
                 command: "old-command".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             })
@@ -1731,9 +1772,12 @@ mod tests {
                 existing: Some(existing.clone()),
                 candidates: vec![DetectedService {
                     name: "conflict-service".to_string(),
+                    transport_type: Default::default(),
                     command: "new-command".to_string(),
                     args: None,
                     env: None,
+                    url: None,
+                    headers: None,
                     source_file: PathBuf::from("/test/config.json"),
                     adapter_id: "claude".to_string(),
                     scope: Some(ConfigScope::Project),
@@ -1774,9 +1818,12 @@ mod tests {
         let existing = db
             .create_mcp_service(&CreateMcpServiceRequest {
                 name: "conflict-service".to_string(),
+                transport_type: Default::default(),
                 command: "old-command".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             })
@@ -1789,9 +1836,12 @@ mod tests {
                 existing: Some(existing),
                 candidates: vec![DetectedService {
                     name: "conflict-service".to_string(),
+                    transport_type: Default::default(),
                     command: "new-command".to_string(),
                     args: None,
                     env: None,
+                    url: None,
+                    headers: None,
                     source_file: PathBuf::from("/test/config.json"),
                     adapter_id: "claude".to_string(),
                     scope: Some(ConfigScope::Project),
@@ -1832,9 +1882,12 @@ mod tests {
         let existing = db
             .create_mcp_service(&CreateMcpServiceRequest {
                 name: "conflict-service".to_string(),
+                transport_type: Default::default(),
                 command: "old-command".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             })
@@ -1847,9 +1900,12 @@ mod tests {
                 existing: Some(existing),
                 candidates: vec![DetectedService {
                     name: "conflict-service".to_string(),
+                    transport_type: Default::default(),
                     command: "new-command".to_string(),
                     args: None,
                     env: None,
+                    url: None,
+                    headers: None,
                     source_file: PathBuf::from("/test/config.json"),
                     adapter_id: "claude".to_string(),
                     scope: Some(ConfigScope::Project),
@@ -1896,9 +1952,12 @@ mod tests {
             conflicts: Vec::new(),
             new_services: vec![DetectedService {
                 name: "api-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: Some(HashMap::from([("API_KEY".to_string(), "$API_KEY".to_string())])),
+                url: None,
+                headers: None,
                 source_file: PathBuf::from("/test/config.json"),
                 adapter_id: "claude".to_string(),
                 scope: Some(ConfigScope::Project),

@@ -52,9 +52,12 @@ impl McpToolAdapter for CodexAdapter {
                 if let Some(command) = server.command {
                     services.push(DetectedService {
                         name,
+                        transport_type: crate::models::mcp::McpTransportType::Stdio,
                         command,
                         args: server.args,
                         env: server.env,
+                        url: None,
+                        headers: None,
                         source_file: path.to_path_buf(),
                         adapter_id: self.id().to_string(),
                         scope,

@@ -38,9 +38,12 @@ const mockInvokeFn = vi.mocked(invoke);
 const mockService: McpService = {
   id: "service-1",
   name: "git-mcp",
+  transport_type: "stdio",
   command: "npx",
   args: ["--yes", "@anthropic/mcp-server-git"],
   env: { GITHUB_TOKEN: "$GITHUB_TOKEN" },
+  url: null,
+  headers: null,
   source: "manual",
   source_file: null,
   enabled: true,
@@ -96,9 +99,14 @@ describe("McpServiceForm", () => {
         expect(mockInvokeFn).toHaveBeenCalledWith("create_mcp_service", {
           request: {
             name: "test-service",
+            transport_type: "stdio",
             command: "npx",
             args: null,
             env: null,
+            url: null,
+            headers: null,
+            source: "manual",
+            source_file: null,
           },
         });
       });

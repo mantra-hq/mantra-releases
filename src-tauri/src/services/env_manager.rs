@@ -815,12 +815,15 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "openai-mcp".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "OPENAI_API_KEY": "$OPENAI_API_KEY",
                 "DEBUG": "true"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -844,9 +847,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "simple-mcp".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,

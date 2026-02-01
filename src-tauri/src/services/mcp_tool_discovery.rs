@@ -266,9 +266,12 @@ mod tests {
         let service = db
             .create_mcp_service(&crate::models::mcp::CreateMcpServiceRequest {
                 name: "test-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: crate::models::mcp::McpServiceSource::Manual,
                 source_file: None,
             })
@@ -310,9 +313,12 @@ mod tests {
         let service = db
             .create_mcp_service(&crate::models::mcp::CreateMcpServiceRequest {
                 name: "test-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: crate::models::mcp::McpServiceSource::Manual,
                 source_file: None,
             })
@@ -345,9 +351,12 @@ mod tests {
         let service = db
             .create_mcp_service(&crate::models::mcp::CreateMcpServiceRequest {
                 name: "test-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: crate::models::mcp::McpServiceSource::Manual,
                 source_file: None,
             })
@@ -387,9 +396,12 @@ mod tests {
         let service = db
             .create_mcp_service(&crate::models::mcp::CreateMcpServiceRequest {
                 name: "test-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: crate::models::mcp::McpServiceSource::Manual,
                 source_file: None,
             })

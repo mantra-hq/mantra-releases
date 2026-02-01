@@ -6,12 +6,13 @@
 
 use regex;
 use rusqlite::{params, Row};
+use std::collections::HashMap;
 
 use super::database::Database;
 use super::error::StorageError;
 use crate::models::mcp::{
     CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceTool, McpServiceWithOverride,
-    ProjectMcpService, UpdateMcpServiceRequest,
+    McpTransportType, ProjectMcpService, UpdateMcpServiceRequest,
 };
 
 /// 从数据库行解析 McpService
@@ -28,12 +29,28 @@ fn parse_mcp_service_row(row: &Row) -> rusqlite::Result<McpService> {
     let env_json: Option<String> = row.get(4)?;
     let env = env_json.and_then(|s| serde_json::from_str(&s).ok());
 
+    // 解析 transport_type（默认 stdio）
+    let transport_type_str: String = row.get(10).unwrap_or_else(|_| "stdio".to_string());
+    let transport_type =
+        McpTransportType::from_str(&transport_type_str).unwrap_or(McpTransportType::Stdio);
+
+    // 解析 url
+    let url: Option<String> = row.get(11).ok().flatten();
+
+    // 解析 headers JSON
+    let headers_json: Option<String> = row.get(12).ok().flatten();
+    let headers: Option<HashMap<String, String>> =
+        headers_json.and_then(|s| serde_json::from_str(&s).ok());
+
     Ok(McpService {
         id: row.get(0)?,
         name: row.get(1)?,
+        transport_type,
         command: row.get(2)?,
         args,
         env,
+        url,
+        headers,
         source,
         source_file: row.get(6)?,
         enabled: enabled != 0,
@@ -57,13 +74,17 @@ impl Database {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
-        // 序列化 args 和 env 为 JSON
+        // 序列化 args、env 和 headers 为 JSON
         let args_json = request.args.as_ref().and_then(|a| serde_json::to_string(a).ok());
         let env_json = request.env.as_ref().and_then(|e| serde_json::to_string(e).ok());
+        let headers_json = request
+            .headers
+            .as_ref()
+            .and_then(|h| serde_json::to_string(h).ok());
 
         self.connection().execute(
-            r#"INSERT INTO mcp_services (id, name, command, args, env, source, source_file, enabled, created_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?8)"#,
+            r#"INSERT INTO mcp_services (id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?8, ?9, ?10, ?11)"#,
             params![
                 &id,
                 &request.name,
@@ -73,6 +94,9 @@ impl Database {
                 request.source.as_str(),
                 &request.source_file,
                 &now,
+                request.transport_type.as_str(),
+                &request.url,
+                &headers_json,
             ],
         )?;
 
@@ -89,7 +113,7 @@ impl Database {
     pub fn get_mcp_service(&self, id: &str) -> Result<McpService, StorageError> {
         self.connection()
             .query_row(
-                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
                    FROM mcp_services WHERE id = ?1"#,
                 [id],
                 parse_mcp_service_row,
@@ -108,7 +132,7 @@ impl Database {
     /// MCP 服务，如果不存在则返回 None
     pub fn get_mcp_service_by_name(&self, name: &str) -> Result<Option<McpService>, StorageError> {
         let result = self.connection().query_row(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
                FROM mcp_services WHERE name = ?1 LIMIT 1"#,
             [name],
             parse_mcp_service_row,
@@ -127,7 +151,7 @@ impl Database {
     /// 所有 MCP 服务列表
     pub fn list_mcp_services(&self) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
                FROM mcp_services ORDER BY name ASC"#,
         )?;
 
@@ -151,7 +175,7 @@ impl Database {
         source: &McpServiceSource,
     ) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
                FROM mcp_services WHERE source = ?1 ORDER BY name ASC"#,
         )?;
 
@@ -183,18 +207,25 @@ impl Database {
 
         // 合并更新
         let name = update.name.as_ref().unwrap_or(&current.name);
+        let transport_type = update
+            .transport_type
+            .as_ref()
+            .unwrap_or(&current.transport_type);
         let command = update.command.as_ref().unwrap_or(&current.command);
         let args = update.args.as_ref().or(current.args.as_ref());
         let env = update.env.as_ref().or(current.env.as_ref());
+        let url = update.url.as_ref().or(current.url.as_ref());
+        let headers = update.headers.as_ref().or(current.headers.as_ref());
         let enabled = update.enabled.unwrap_or(current.enabled);
 
-        // 序列化 args 和 env 为 JSON
+        // 序列化 args、env 和 headers 为 JSON
         let args_json = args.and_then(|a| serde_json::to_string(a).ok());
         let env_json = env.and_then(|e| serde_json::to_string(e).ok());
+        let headers_json = headers.and_then(|h| serde_json::to_string(h).ok());
 
         self.connection().execute(
-            r#"UPDATE mcp_services SET name = ?1, command = ?2, args = ?3, env = ?4, enabled = ?5, updated_at = ?6
-               WHERE id = ?7"#,
+            r#"UPDATE mcp_services SET name = ?1, command = ?2, args = ?3, env = ?4, enabled = ?5, updated_at = ?6, transport_type = ?7, url = ?8, headers = ?9
+               WHERE id = ?10"#,
             params![
                 name,
                 command,
@@ -202,6 +233,9 @@ impl Database {
                 &env_json,
                 enabled as i32,
                 &now,
+                transport_type.as_str(),
+                url,
+                &headers_json,
                 id,
             ],
         )?;
@@ -616,9 +650,12 @@ mod tests {
     fn create_test_request() -> CreateMcpServiceRequest {
         CreateMcpServiceRequest {
             name: "git-mcp".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
             env: Some(serde_json::json!({"DEBUG": "true"})),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         }
@@ -686,17 +723,23 @@ mod tests {
         // Create multiple services
         let request1 = CreateMcpServiceRequest {
             name: "alpha-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
         let request2 = CreateMcpServiceRequest {
             name: "beta-service".to_string(),
+            transport_type: Default::default(),
             command: "uvx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Imported,
             source_file: Some("/home/user/.mcp.json".to_string()),
         };
@@ -718,17 +761,23 @@ mod tests {
 
         let request1 = CreateMcpServiceRequest {
             name: "manual-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
         let request2 = CreateMcpServiceRequest {
             name: "imported-service".to_string(),
+            transport_type: Default::default(),
             command: "uvx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Imported,
             source_file: Some("/home/user/.mcp.json".to_string()),
         };
@@ -840,12 +889,15 @@ mod tests {
 
         let request = CreateMcpServiceRequest {
             name: "openai-mcp".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: Some(vec!["-y".to_string(), "@anthropic/openai-mcp".to_string()]),
             env: Some(serde_json::json!({
                 "OPENAI_API_KEY": "$OPENAI_API_KEY",
                 "DEBUG": "true"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Imported,
             source_file: Some("/home/user/.claude/mcp.json".to_string()),
         };
@@ -959,9 +1011,12 @@ mod tests {
         let service1 = db
             .create_mcp_service(&CreateMcpServiceRequest {
                 name: "alpha-service".to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             })
@@ -970,9 +1025,12 @@ mod tests {
         let service2 = db
             .create_mcp_service(&CreateMcpServiceRequest {
                 name: "beta-service".to_string(),
+                transport_type: Default::default(),
                 command: "uvx".to_string(),
                 args: None,
                 env: None,
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             })
@@ -1132,12 +1190,15 @@ mod tests {
         // 创建使用 $OPENAI_API_KEY 的服务
         let request = CreateMcpServiceRequest {
             name: "openai-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "OPENAI_API_KEY": "$OPENAI_API_KEY",
                 "DEBUG": "true"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1146,11 +1207,14 @@ mod tests {
         // 创建不使用该变量的服务
         let request2 = CreateMcpServiceRequest {
             name: "other-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "DEBUG": "true"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1168,11 +1232,14 @@ mod tests {
         // 创建使用 ${ANTHROPIC_API_KEY} 的服务
         let request = CreateMcpServiceRequest {
             name: "anthropic-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "API_KEY": "${ANTHROPIC_API_KEY}",
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1191,11 +1258,14 @@ mod tests {
         for name in ["service-a", "service-b", "service-c"] {
             let request = CreateMcpServiceRequest {
                 name: name.to_string(),
+                transport_type: Default::default(),
                 command: "npx".to_string(),
                 args: None,
                 env: Some(serde_json::json!({
                     "API_KEY": "$SHARED_KEY",
                 })),
+                url: None,
+                headers: None,
                 source: McpServiceSource::Manual,
                 source_file: None,
             };
@@ -1216,11 +1286,14 @@ mod tests {
 
         let request = CreateMcpServiceRequest {
             name: "some-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "OTHER_VAR": "$OTHER_VAR",
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1237,9 +1310,12 @@ mod tests {
         // 创建没有 env 字段的服务
         let request = CreateMcpServiceRequest {
             name: "no-env-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1256,11 +1332,14 @@ mod tests {
         // 创建使用 $OPENAI_API_KEY 的服务（包含 API_KEY 子串）
         let request1 = CreateMcpServiceRequest {
             name: "openai-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "KEY": "$OPENAI_API_KEY",
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -1269,11 +1348,14 @@ mod tests {
         // 创建使用 $API_KEY 的服务
         let request2 = CreateMcpServiceRequest {
             name: "api-key-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "KEY": "$API_KEY",
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };

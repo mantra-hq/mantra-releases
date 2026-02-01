@@ -53,6 +53,8 @@ import {
   Shield,
   CheckCircle2,
   AlertCircle,
+  Terminal,
+  Globe,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { McpServiceForm } from "./McpServiceForm";
@@ -63,14 +65,22 @@ import { InspectorDrawer } from "./inspector";
 import { OAuthConfigDialog, OAuthServiceStatus } from "./OAuthConfigDialog";
 
 /**
+ * 传输类型
+ */
+export type TransportType = "stdio" | "http";
+
+/**
  * MCP 服务类型
  */
 export interface McpService {
   id: string;
   name: string;
+  transport_type: TransportType;
   command: string;
   args: string[] | null;
   env: Record<string, string> | null;
+  url: string | null;
+  headers: Record<string, string> | null;
   source: "imported" | "manual";
   source_file: string | null;
   enabled: boolean;
@@ -353,7 +363,8 @@ export function McpServiceList() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">{t("hub.services.name")}</TableHead>
-                  <TableHead>{t("hub.services.command")}</TableHead>
+                  <TableHead className="w-[80px]">{t("hub.services.transport", "Transport")}</TableHead>
+                  <TableHead>{t("hub.services.connection", "Connection")}</TableHead>
                   <TableHead className="w-[100px]">{t("hub.services.source")}</TableHead>
                   <TableHead className="w-[80px] text-center">{t("hub.services.enabled")}</TableHead>
                   <TableHead className="w-[60px]">{t("hub.services.actions")}</TableHead>
@@ -369,13 +380,40 @@ export function McpServiceList() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`gap-1 text-xs ${
+                          service.transport_type === "http"
+                            ? "bg-purple-500/10 text-purple-500 border-purple-500/30"
+                            : "bg-blue-500/10 text-blue-500 border-blue-500/30"
+                        }`}
+                      >
+                        {service.transport_type === "http" ? (
+                          <Globe className="h-3 w-3" />
+                        ) : (
+                          <Terminal className="h-3 w-3" />
+                        )}
+                        {service.transport_type === "http" ? "HTTP" : "stdio"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                        {service.command}
-                        {service.args && service.args.length > 0 && (
-                          <span className="text-muted-foreground ml-1">
-                            {service.args.slice(0, 2).join(" ")}
-                            {service.args.length > 2 && " ..."}
+                        {service.transport_type === "http" ? (
+                          // HTTP 模式显示 URL
+                          <span className="text-purple-400">
+                            {service.url || "-"}
                           </span>
+                        ) : (
+                          // stdio 模式显示命令和参数
+                          <>
+                            {service.command}
+                            {service.args && service.args.length > 0 && (
+                              <span className="text-muted-foreground ml-1">
+                                {service.args.slice(0, 2).join(" ")}
+                                {service.args.length > 2 && " ..."}
+                              </span>
+                            )}
+                          </>
                         )}
                       </code>
                     </TableCell>

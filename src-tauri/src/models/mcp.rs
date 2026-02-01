@@ -5,12 +5,45 @@
 //! 定义 MCP 服务配置、项目关联和环境变量的数据结构
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// MCP 服务参数类型别名
 pub type McpServiceArgs = Vec<String>;
 
 /// MCP 服务环境变量类型别名
 pub type McpServiceEnv = serde_json::Value;
+
+/// MCP 传输类型
+///
+/// 支持 stdio（子进程）和 http（Streamable HTTP）两种传输模式
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum McpTransportType {
+    /// stdio 传输：通过子进程 stdin/stdout 通信
+    #[default]
+    Stdio,
+    /// HTTP 传输：Streamable HTTP（MCP 2025-03-26 规范）
+    Http,
+}
+
+impl McpTransportType {
+    /// 转换为数据库存储的字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            McpTransportType::Stdio => "stdio",
+            McpTransportType::Http => "http",
+        }
+    }
+
+    /// 从数据库字符串解析
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "stdio" => Some(McpTransportType::Stdio),
+            "http" => Some(McpTransportType::Http),
+            _ => None,
+        }
+    }
+}
 
 /// MCP 服务来源
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -48,13 +81,20 @@ pub struct McpService {
     pub id: String,
     /// 服务名称，如 "git-mcp"、"filesystem"
     pub name: String,
-    /// 启动命令，如 "npx"、"uvx"
+    /// 传输类型（stdio 或 http）
+    #[serde(default)]
+    pub transport_type: McpTransportType,
+    /// 启动命令，如 "npx"、"uvx"（仅 stdio 模式）
     pub command: String,
-    /// 命令参数，JSON 数组格式
+    /// 命令参数，JSON 数组格式（仅 stdio 模式）
     pub args: Option<McpServiceArgs>,
     /// 环境变量引用，JSON 对象格式
     /// 值可以是字面量或变量引用（如 "$OPENAI_API_KEY"）
     pub env: Option<McpServiceEnv>,
+    /// HTTP 端点 URL（仅 http 模式）
+    pub url: Option<String>,
+    /// HTTP 请求头（仅 http 模式）
+    pub headers: Option<HashMap<String, String>>,
     /// 服务来源
     pub source: McpServiceSource,
     /// 导入来源的原始配置文件路径
@@ -72,12 +112,20 @@ pub struct McpService {
 pub struct CreateMcpServiceRequest {
     /// 服务名称
     pub name: String,
-    /// 启动命令
+    /// 传输类型（默认 stdio）
+    #[serde(default)]
+    pub transport_type: McpTransportType,
+    /// 启动命令（stdio 模式必填）
+    #[serde(default)]
     pub command: String,
-    /// 命令参数
+    /// 命令参数（stdio 模式）
     pub args: Option<McpServiceArgs>,
     /// 环境变量引用
     pub env: Option<McpServiceEnv>,
+    /// HTTP 端点 URL（http 模式必填）
+    pub url: Option<String>,
+    /// HTTP 请求头（http 模式可选）
+    pub headers: Option<HashMap<String, String>>,
     /// 服务来源
     pub source: McpServiceSource,
     /// 导入来源的原始配置文件路径
@@ -89,12 +137,18 @@ pub struct CreateMcpServiceRequest {
 pub struct UpdateMcpServiceRequest {
     /// 服务名称
     pub name: Option<String>,
+    /// 传输类型
+    pub transport_type: Option<McpTransportType>,
     /// 启动命令
     pub command: Option<String>,
     /// 命令参数
     pub args: Option<McpServiceArgs>,
     /// 环境变量引用
     pub env: Option<McpServiceEnv>,
+    /// HTTP 端点 URL
+    pub url: Option<String>,
+    /// HTTP 请求头
+    pub headers: Option<HashMap<String, String>>,
     /// 是否启用
     pub enabled: Option<bool>,
 }
@@ -378,9 +432,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
             command: "npx".to_string(),
             args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
             env: Some(serde_json::json!({"DEBUG": "true"})),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -393,6 +450,7 @@ mod tests {
 
         assert_eq!(deserialized.id, service.id);
         assert_eq!(deserialized.name, service.name);
+        assert_eq!(deserialized.transport_type, McpTransportType::Stdio);
         assert_eq!(deserialized.command, service.command);
         assert_eq!(deserialized.args, service.args);
         assert_eq!(deserialized.source, service.source);
@@ -400,12 +458,43 @@ mod tests {
     }
 
     #[test]
+    fn test_mcp_service_http_type() {
+        let service = McpService {
+            id: "deepwiki-id".to_string(),
+            name: "deepwiki".to_string(),
+            transport_type: McpTransportType::Http,
+            command: String::new(),
+            args: None,
+            env: None,
+            url: Some("https://mcp.deepwiki.com/mcp".to_string()),
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some(".mcp.json".to_string()),
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&service).unwrap();
+        assert!(json.contains("deepwiki"));
+        assert!(json.contains("https://mcp.deepwiki.com/mcp"));
+        assert!(json.contains(r#""transport_type":"http""#));
+
+        let deserialized: McpService = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.transport_type, McpTransportType::Http);
+        assert_eq!(deserialized.url, Some("https://mcp.deepwiki.com/mcp".to_string()));
+    }
+
+    #[test]
     fn test_create_mcp_service_request() {
         let request = CreateMcpServiceRequest {
             name: "filesystem".to_string(),
+            transport_type: McpTransportType::Stdio,
             command: "npx".to_string(),
             args: Some(vec!["-y".to_string(), "@anthropic/filesystem-mcp".to_string()]),
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Imported,
             source_file: Some("/home/user/.mcp.json".to_string()),
         };
@@ -413,6 +502,25 @@ mod tests {
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("filesystem"));
         assert!(json.contains("imported"));
+    }
+
+    #[test]
+    fn test_create_mcp_service_request_http() {
+        let request = CreateMcpServiceRequest {
+            name: "deepwiki".to_string(),
+            transport_type: McpTransportType::Http,
+            command: String::new(),
+            args: None,
+            env: None,
+            url: Some("https://mcp.deepwiki.com/mcp".to_string()),
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some(".mcp.json".to_string()),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("deepwiki"));
+        assert!(json.contains("https://mcp.deepwiki.com/mcp"));
     }
 
     #[test]
@@ -484,9 +592,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -503,6 +614,36 @@ mod tests {
         // 由于 #[serde(flatten)]，service 字段会被展开
         assert!(json.contains("git-mcp"));
         assert!(json.contains("--verbose"));
+    }
+
+    #[test]
+    fn test_transport_type_serialization() {
+        assert_eq!(serde_json::to_string(&McpTransportType::Stdio).unwrap(), r#""stdio""#);
+        assert_eq!(serde_json::to_string(&McpTransportType::Http).unwrap(), r#""http""#);
+
+        let stdio: McpTransportType = serde_json::from_str(r#""stdio""#).unwrap();
+        assert_eq!(stdio, McpTransportType::Stdio);
+        let http: McpTransportType = serde_json::from_str(r#""http""#).unwrap();
+        assert_eq!(http, McpTransportType::Http);
+    }
+
+    #[test]
+    fn test_transport_type_default() {
+        let default = McpTransportType::default();
+        assert_eq!(default, McpTransportType::Stdio);
+    }
+
+    #[test]
+    fn test_transport_type_as_str() {
+        assert_eq!(McpTransportType::Stdio.as_str(), "stdio");
+        assert_eq!(McpTransportType::Http.as_str(), "http");
+    }
+
+    #[test]
+    fn test_transport_type_from_str() {
+        assert_eq!(McpTransportType::from_str("stdio"), Some(McpTransportType::Stdio));
+        assert_eq!(McpTransportType::from_str("http"), Some(McpTransportType::Http));
+        assert_eq!(McpTransportType::from_str("unknown"), None);
     }
 
     // ===== Story 11.10: Tool Policy 测试 =====

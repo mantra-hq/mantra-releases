@@ -169,9 +169,12 @@ mod tests {
         // 创建两个服务，一个启用一个禁用
         let enabled_req = CreateMcpServiceRequest {
             name: "enabled-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -179,9 +182,12 @@ mod tests {
 
         let disabled_req = CreateMcpServiceRequest {
             name: "disabled-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -206,9 +212,12 @@ mod tests {
         // 创建服务并关联到项目
         let req = CreateMcpServiceRequest {
             name: "project-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -233,9 +242,12 @@ mod tests {
         // 创建两个服务
         let enabled_req = CreateMcpServiceRequest {
             name: "enabled-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -243,9 +255,12 @@ mod tests {
 
         let disabled_req = CreateMcpServiceRequest {
             name: "disabled-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
         };
@@ -273,9 +288,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: Some(vec!["--original".to_string()]),
             env: None,
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -303,12 +321,15 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "BASE_VAR": "base_value",
                 "SHARED_VAR": "original"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -341,9 +362,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: None, // No env initially
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -373,9 +397,12 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: Some(vec!["--original".to_string()]),
             env: Some(serde_json::json!({"VAR": "value"})),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -401,12 +428,15 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "API_KEY": "$API_KEY",
                 "DEBUG": "true"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,
@@ -428,11 +458,14 @@ mod tests {
         let service = McpService {
             id: "test-id".to_string(),
             name: "test-service".to_string(),
+            transport_type: Default::default(),
             command: "npx".to_string(),
             args: None,
             env: Some(serde_json::json!({
                 "API_KEY": "$NONEXISTENT_VAR"
             })),
+            url: None,
+            headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
             enabled: true,

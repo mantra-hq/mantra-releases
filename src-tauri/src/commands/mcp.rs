@@ -13,9 +13,10 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::error::AppError;
+use crate::gateway::McpHttpClient;
 use crate::models::mcp::{
     CreateMcpServiceRequest, EnvVariable, EnvVariableNameValidation, McpService, McpServiceSource,
-    McpServiceWithOverride, SetEnvVariableRequest, UpdateMcpServiceRequest,
+    McpServiceWithOverride, McpTransportType, SetEnvVariableRequest, UpdateMcpServiceRequest,
 };
 use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
 use crate::services::mcp_config::{
@@ -838,7 +839,7 @@ pub struct McpCapabilities {
 /// Story 11.11: MCP Inspector - Task 实现
 ///
 /// 此命令会：
-/// 1. 根据服务配置启动 MCP 子进程
+/// 1. 根据服务配置启动 MCP 子进程（stdio）或连接 HTTP 端点（http）
 /// 2. 发送 initialize 请求
 /// 3. 发送 tools/list 和 resources/list 请求
 /// 4. 返回服务的完整能力列表
@@ -854,17 +855,82 @@ pub async fn mcp_get_service_capabilities(
         db.get_mcp_service(&service_id)?
     };
 
+    // 根据传输类型选择不同的处理路径
+    match service.transport_type {
+        McpTransportType::Http => {
+            // HTTP 传输模式：使用 McpHttpClient
+            get_http_service_capabilities(&service).await
+        }
+        McpTransportType::Stdio => {
+            // stdio 传输模式：使用子进程
+            get_stdio_service_capabilities(&service, &mcp_state, &process_state).await
+        }
+    }
+}
+
+/// 获取 HTTP 传输类型服务的能力
+async fn get_http_service_capabilities(service: &McpService) -> Result<McpCapabilities, AppError> {
+    let url = service.url.as_ref().ok_or_else(|| {
+        AppError::internal(format!(
+            "HTTP service '{}' has no URL configured",
+            service.name
+        ))
+    })?;
+
+    // 创建 HTTP 客户端
+    let client = McpHttpClient::new(url.clone(), service.headers.clone());
+
+    // 1. 发送 initialize 请求
+    client.initialize().await.map_err(|e| {
+        AppError::internal(format!(
+            "Initialize failed for HTTP service '{}' ({}): {}",
+            service.name, url, e
+        ))
+    })?;
+
+    // 2. 发送 initialized 通知
+    let _ = client.send_initialized().await;
+
+    // 3. 获取工具列表
+    let tools: Vec<McpToolInfo> = match client.list_tools().await {
+        Ok(response) => response
+            .get("result")
+            .and_then(|r| r.get("tools"))
+            .and_then(|t| serde_json::from_value(t.clone()).ok())
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+
+    // 4. 获取资源列表
+    let resources: Vec<McpResourceInfo> = match client.list_resources().await {
+        Ok(response) => response
+            .get("result")
+            .and_then(|r| r.get("resources"))
+            .and_then(|t| serde_json::from_value(t.clone()).ok())
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+
+    Ok(McpCapabilities { tools, resources })
+}
+
+/// 获取 stdio 传输类型服务的能力
+async fn get_stdio_service_capabilities(
+    service: &McpService,
+    mcp_state: &State<'_, McpState>,
+    process_state: &State<'_, McpProcessState>,
+) -> Result<McpCapabilities, AppError> {
     // 2. 解析环境变量
-    let env = resolve_service_env(&service, &mcp_state)?;
+    let env = resolve_service_env(service, mcp_state)?;
 
     // 3. 启动或获取进程
     {
         let manager = process_state.manager.read().await;
-        if !manager.is_running(&service_id).await {
+        if !manager.is_running(&service.id).await {
             drop(manager);
             let manager = process_state.manager.write().await;
             manager
-                .get_or_spawn(&service, env.clone())
+                .get_or_spawn(service, env.clone())
                 .await
                 .map_err(|e| AppError::internal(e.to_string()))?;
         }
@@ -872,11 +938,11 @@ pub async fn mcp_get_service_capabilities(
 
     // 4. 等待进程准备就绪（特别是对于需要网络连接的服务如 mcp-remote）
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    
+
     // 检查进程是否仍在运行
     {
         let manager = process_state.manager.read().await;
-        if !manager.is_running(&service_id).await {
+        if !manager.is_running(&service.id).await {
             return Err(AppError::internal(format!(
                 "MCP service '{}' process exited before initialization. \
                  Command: {} {:?}. \
@@ -906,7 +972,7 @@ pub async fn mcp_get_service_capabilities(
     {
         let manager = process_state.manager.read().await;
         let _ = manager
-            .send_request(&service_id, init_request)
+            .send_request(&service.id, init_request)
             .await
             .map_err(|e| AppError::internal(format!(
                 "Initialize failed for '{}': {}. \
@@ -923,11 +989,11 @@ pub async fn mcp_get_service_capabilities(
         "jsonrpc": "2.0",
         "method": "notifications/initialized"
     });
-    
+
     {
         let manager = process_state.manager.read().await;
         // 通知不需要响应，忽略错误
-        let _ = manager.send_request(&service_id, initialized_notification).await;
+        let _ = manager.send_request(&service.id, initialized_notification).await;
     }
 
     // 7. 获取工具列表
@@ -940,7 +1006,7 @@ pub async fn mcp_get_service_capabilities(
 
     let tools: Vec<McpToolInfo> = {
         let manager = process_state.manager.read().await;
-        match manager.send_request(&service_id, tools_request).await {
+        match manager.send_request(&service.id, tools_request).await {
             Ok(response) => {
                 response
                     .get("result")
@@ -962,7 +1028,7 @@ pub async fn mcp_get_service_capabilities(
 
     let resources: Vec<McpResourceInfo> = {
         let manager = process_state.manager.read().await;
-        match manager.send_request(&service_id, resources_request).await {
+        match manager.send_request(&service.id, resources_request).await {
             Ok(response) => {
                 response
                     .get("result")

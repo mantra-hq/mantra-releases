@@ -46,9 +46,12 @@ impl McpToolAdapter for CursorAdapter {
                 if let McpServerConfig::Stdio { command, args, env } = server {
                     services.push(DetectedService {
                         name,
+                        transport_type: crate::models::mcp::McpTransportType::Stdio,
                         command,
                         args,
                         env,
+                        url: None,
+                        headers: None,
                         source_file: path.to_path_buf(),
                         adapter_id: self.id().to_string(),
                         scope,

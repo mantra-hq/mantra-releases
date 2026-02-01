@@ -43,18 +43,36 @@ impl McpToolAdapter for ClaudeAdapter {
         let mut services = Vec::new();
         if let Some(mcp_servers) = config.mcp_servers {
             for (name, server) in mcp_servers {
-                if let McpServerConfig::Stdio { command, args, env } = server {
-                    services.push(DetectedService {
-                        name,
-                        command,
-                        args,
-                        env,
-                        source_file: path.to_path_buf(),
-                        adapter_id: self.id().to_string(),
-                        scope,
-                    });
+                match server {
+                    McpServerConfig::Stdio { command, args, env } => {
+                        services.push(DetectedService {
+                            name,
+                            transport_type: crate::models::mcp::McpTransportType::Stdio,
+                            command,
+                            args,
+                            env,
+                            url: None,
+                            headers: None,
+                            source_file: path.to_path_buf(),
+                            adapter_id: self.id().to_string(),
+                            scope,
+                        });
+                    }
+                    McpServerConfig::Http { url, headers } => {
+                        services.push(DetectedService {
+                            name,
+                            transport_type: crate::models::mcp::McpTransportType::Http,
+                            command: String::new(),
+                            args: None,
+                            env: None,
+                            url: Some(url),
+                            headers,
+                            source_file: path.to_path_buf(),
+                            adapter_id: self.id().to_string(),
+                            scope,
+                        });
+                    }
                 }
-                // 跳过 SSE/HTTP 模式的服务（通常是已配置的 gateway）
             }
         }
 
@@ -101,7 +119,6 @@ enum McpServerConfig {
         env: Option<HashMap<String, String>>,
     },
     /// HTTP 传输模式（URL 连接）
-    #[allow(dead_code)]
     Http {
         url: String,
         #[serde(default)]
@@ -189,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn test_claude_parse_skip_http_servers() {
+    fn test_claude_parse_includes_http_servers() {
         let adapter = ClaudeAdapter;
         let content = r#"{
             "mcpServers": {
@@ -207,9 +224,17 @@ mod tests {
         let path = Path::new("/test/.mcp.json");
         let services = adapter.parse(path, content, ConfigScope::Project).unwrap();
 
-        // HTTP 服务应该被跳过
-        assert_eq!(services.len(), 1);
-        assert_eq!(services[0].name, "local-server");
+        // Both stdio and HTTP services should be parsed
+        assert_eq!(services.len(), 2);
+
+        let local = services.iter().find(|s| s.name == "local-server").unwrap();
+        assert_eq!(local.transport_type, crate::models::mcp::McpTransportType::Stdio);
+        assert_eq!(local.command, "npx");
+
+        let remote = services.iter().find(|s| s.name == "remote-gateway").unwrap();
+        assert_eq!(remote.transport_type, crate::models::mcp::McpTransportType::Http);
+        assert_eq!(remote.url, Some("http://remote.example.com/message".to_string()));
+        assert!(remote.headers.is_some());
     }
 
     #[test]
