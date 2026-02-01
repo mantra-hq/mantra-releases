@@ -13,16 +13,23 @@
 
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useCallback, useRef } from "react";
 import { ArrowLeft, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GatewayStatusCard } from "@/components/hub/GatewayStatusCard";
 import { TakeoverStatusCard } from "@/components/hub/TakeoverStatusCard";
-import { McpServiceList } from "@/components/hub/McpServiceList";
+import { McpServiceList, type McpServiceListRef } from "@/components/hub/McpServiceList";
 import { EnvVariableManager } from "@/components/hub/EnvVariableManager";
 
 export function Hub() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const serviceListRef = useRef<McpServiceListRef>(null);
+
+  // Story 11.15: 恢复接管后刷新服务列表
+  const handleTakeoverRestore = useCallback(() => {
+    serviceListRef.current?.refresh();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,12 +62,12 @@ export function Hub() {
 
           {/* 接管状态卡片 (Story 11.15: AC: #4, #5) */}
           <section data-testid="hub-takeover-section">
-            <TakeoverStatusCard />
+            <TakeoverStatusCard onRestore={handleTakeoverRestore} />
           </section>
 
           {/* MCP 服务列表 (AC: #1, #3, #4, #5) */}
           <section data-testid="hub-services-section">
-            <McpServiceList />
+            <McpServiceList ref={serviceListRef} />
           </section>
 
           {/* 环境变量管理 (AC: #6) */}

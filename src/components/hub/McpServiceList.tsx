@@ -9,7 +9,7 @@
  * - 批量操作工具栏
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,15 @@ export interface McpService {
   updated_at: string;
 }
 
-export function McpServiceList() {
+/**
+ * McpServiceList 组件的 ref 接口
+ * Story 11.15: 支持外部触发刷新
+ */
+export interface McpServiceListRef {
+  refresh: () => void;
+}
+
+export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceList(_, ref) {
   const { t } = useTranslation();
   const [services, setServices] = useState<McpService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,6 +140,11 @@ export function McpServiceList() {
       setIsLoading(false);
     }
   }, [t]);
+
+  // Story 11.15: 暴露 refresh 方法供外部调用
+  useImperativeHandle(ref, () => ({
+    refresh: loadServices,
+  }), [loadServices]);
 
   // 切换服务启用状态
   const handleToggle = useCallback(async (service: McpService, enabled: boolean) => {
@@ -579,6 +592,6 @@ export function McpServiceList() {
       )}
     </Card>
   );
-}
+});
 
 export default McpServiceList;

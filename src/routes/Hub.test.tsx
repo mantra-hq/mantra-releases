@@ -102,6 +102,14 @@ describe("Hub Page", () => {
       });
     });
 
+    it("应该包含接管状态区域 (Story 11.15)", async () => {
+      renderWithRouter(<Hub />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-takeover-section")).toBeInTheDocument();
+      });
+    });
+
     it("应该包含 MCP 服务区域", async () => {
       renderWithRouter(<Hub />);
 
