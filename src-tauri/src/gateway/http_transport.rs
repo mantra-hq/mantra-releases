@@ -50,7 +50,7 @@ impl McpHttpClient {
         custom_headers: Option<HashMap<String, String>>,
     ) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(120))
             .build()
             .expect("Failed to create HTTP client");
 

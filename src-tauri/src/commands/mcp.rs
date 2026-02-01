@@ -788,14 +788,19 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// MCP 进程管理器状态
+///
+/// 管理 stdio 子进程和 HTTP 客户端连接
 pub struct McpProcessState {
     pub manager: Arc<RwLock<McpProcessManager>>,
+    /// HTTP 传输客户端缓存（service_id -> 已初始化的客户端）
+    pub http_clients: Arc<RwLock<HashMap<String, Arc<McpHttpClient>>>>,
 }
 
 impl McpProcessState {
     pub fn new() -> Self {
         Self {
             manager: Arc::new(RwLock::new(McpProcessManager::new())),
+            http_clients: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -859,7 +864,7 @@ pub async fn mcp_get_service_capabilities(
     match service.transport_type {
         McpTransportType::Http => {
             // HTTP 传输模式：使用 McpHttpClient
-            get_http_service_capabilities(&service).await
+            get_http_service_capabilities(&service, &process_state).await
         }
         McpTransportType::Stdio => {
             // stdio 传输模式：使用子进程
@@ -869,7 +874,12 @@ pub async fn mcp_get_service_capabilities(
 }
 
 /// 获取 HTTP 传输类型服务的能力
-async fn get_http_service_capabilities(service: &McpService) -> Result<McpCapabilities, AppError> {
+///
+/// 创建并缓存 HTTP 客户端，后续 tools/call 和 resources/read 可复用
+async fn get_http_service_capabilities(
+    service: &McpService,
+    process_state: &State<'_, McpProcessState>,
+) -> Result<McpCapabilities, AppError> {
     let url = service.url.as_ref().ok_or_else(|| {
         AppError::internal(format!(
             "HTTP service '{}' has no URL configured",
@@ -910,6 +920,12 @@ async fn get_http_service_capabilities(service: &McpService) -> Result<McpCapabi
             .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
+
+    // 5. 缓存已初始化的客户端供后续 tools/call 复用
+    {
+        let mut http_clients = process_state.http_clients.write().await;
+        http_clients.insert(service.id.clone(), Arc::new(client));
+    }
 
     Ok(McpCapabilities { tools, resources })
 }
@@ -1046,13 +1062,21 @@ async fn get_stdio_service_capabilities(
 /// 调用 MCP 工具
 ///
 /// Story 11.11: MCP Inspector
+/// 支持 stdio 和 HTTP 两种传输类型
 #[tauri::command]
 pub async fn mcp_call_tool(
     service_id: String,
     tool_name: String,
     arguments: serde_json::Value,
+    mcp_state: State<'_, McpState>,
     process_state: State<'_, McpProcessState>,
 ) -> Result<serde_json::Value, AppError> {
+    // 查询服务配置以确定传输类型
+    let service = {
+        let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_mcp_service(&service_id)?
+    };
+
     let request = serde_json::json!({
         "jsonrpc": "2.0",
         "id": chrono::Utc::now().timestamp_millis(),
@@ -1063,11 +1087,24 @@ pub async fn mcp_call_tool(
         }
     });
 
-    let manager = process_state.manager.read().await;
-    let response = manager
-        .send_request(&service_id, request)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
+    let response = match service.transport_type {
+        McpTransportType::Http => {
+            // HTTP 传输：从缓存获取客户端或新建
+            let client = get_or_create_http_client(&service, &process_state).await?;
+            client
+                .send_request(request)
+                .await
+                .map_err(|e| AppError::internal(format!("HTTP tool call failed: {}", e)))?
+        }
+        McpTransportType::Stdio => {
+            // stdio 传输：通过进程管理器
+            let manager = process_state.manager.read().await;
+            manager
+                .send_request(&service_id, request)
+                .await
+                .map_err(|e| AppError::internal(e.to_string()))?
+        }
+    };
 
     // 检查是否有错误
     if let Some(error) = response.get("error") {
@@ -1083,12 +1120,20 @@ pub async fn mcp_call_tool(
 /// 读取 MCP 资源
 ///
 /// Story 11.11: MCP Inspector
+/// 支持 stdio 和 HTTP 两种传输类型
 #[tauri::command]
 pub async fn mcp_read_resource(
     service_id: String,
     uri: String,
+    mcp_state: State<'_, McpState>,
     process_state: State<'_, McpProcessState>,
 ) -> Result<serde_json::Value, AppError> {
+    // 查询服务配置以确定传输类型
+    let service = {
+        let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+        db.get_mcp_service(&service_id)?
+    };
+
     let request = serde_json::json!({
         "jsonrpc": "2.0",
         "id": chrono::Utc::now().timestamp_millis(),
@@ -1098,11 +1143,24 @@ pub async fn mcp_read_resource(
         }
     });
 
-    let manager = process_state.manager.read().await;
-    let response = manager
-        .send_request(&service_id, request)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
+    let response = match service.transport_type {
+        McpTransportType::Http => {
+            // HTTP 传输：从缓存获取客户端或新建
+            let client = get_or_create_http_client(&service, &process_state).await?;
+            client
+                .send_request(request)
+                .await
+                .map_err(|e| AppError::internal(format!("HTTP resource read failed: {}", e)))?
+        }
+        McpTransportType::Stdio => {
+            // stdio 传输：通过进程管理器
+            let manager = process_state.manager.read().await;
+            manager
+                .send_request(&service_id, request)
+                .await
+                .map_err(|e| AppError::internal(e.to_string()))?
+        }
+    };
 
     // 检查是否有错误
     if let Some(error) = response.get("error") {
@@ -1115,16 +1173,70 @@ pub async fn mcp_read_resource(
     Ok(response.get("result").cloned().unwrap_or(serde_json::json!(null)))
 }
 
+/// 获取或创建 HTTP 客户端
+///
+/// 优先从缓存中获取已初始化的客户端，如果不存在则创建新客户端并初始化
+async fn get_or_create_http_client(
+    service: &McpService,
+    process_state: &State<'_, McpProcessState>,
+) -> Result<Arc<McpHttpClient>, AppError> {
+    // 先尝试从缓存获取
+    {
+        let http_clients = process_state.http_clients.read().await;
+        if let Some(client) = http_clients.get(&service.id) {
+            return Ok(Arc::clone(client));
+        }
+    }
+
+    // 缓存中没有，创建新客户端
+    let url = service.url.as_ref().ok_or_else(|| {
+        AppError::internal(format!(
+            "HTTP service '{}' has no URL configured",
+            service.name
+        ))
+    })?;
+
+    let client = McpHttpClient::new(url.clone(), service.headers.clone());
+
+    // 初始化连接
+    client.initialize().await.map_err(|e| {
+        AppError::internal(format!(
+            "Initialize failed for HTTP service '{}' ({}): {}",
+            service.name, url, e
+        ))
+    })?;
+    let _ = client.send_initialized().await;
+
+    let client = Arc::new(client);
+
+    // 缓存客户端
+    {
+        let mut http_clients = process_state.http_clients.write().await;
+        http_clients.insert(service.id.clone(), Arc::clone(&client));
+    }
+
+    Ok(client)
+}
+
 /// 停止 MCP 服务进程
 ///
 /// Story 11.11: MCP Inspector
+/// 清理 stdio 进程和 HTTP 客户端缓存
 #[tauri::command]
 pub async fn mcp_stop_service(
     service_id: String,
     process_state: State<'_, McpProcessState>,
 ) -> Result<(), AppError> {
+    // 停止 stdio 进程
     let manager = process_state.manager.read().await;
     manager.stop_process(&service_id).await;
+
+    // 清理 HTTP 客户端缓存
+    {
+        let mut http_clients = process_state.http_clients.write().await;
+        http_clients.remove(&service_id);
+    }
+
     Ok(())
 }
 
