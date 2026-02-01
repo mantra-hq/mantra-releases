@@ -77,6 +77,8 @@ use commands::{
     validate_env_variable_name,
     // Story 11.3: MCP Config Import commands
     scan_mcp_configs_cmd, preview_mcp_import, execute_mcp_import, rollback_mcp_import,
+    // Story 11.15: MCP Takeover Restore commands
+    list_active_takeovers, restore_takeover, restore_takeover_by_tool, get_active_takeover,
     // Story 11.9: Project Detail MCP Integration commands
     check_project_mcp_status,
     // Story 11.7: Tray commands
@@ -372,6 +374,11 @@ pub fn run() {
             preview_mcp_import,
             execute_mcp_import,
             rollback_mcp_import,
+            // Story 11.15: MCP Takeover Restore
+            list_active_takeovers,
+            restore_takeover,
+            restore_takeover_by_tool,
+            get_active_takeover,
             // Story 11.9: Project Detail MCP Integration
             check_project_mcp_status,
             // Story 11.7: Tray

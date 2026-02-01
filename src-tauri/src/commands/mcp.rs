@@ -16,11 +16,13 @@ use crate::error::AppError;
 use crate::gateway::McpHttpClient;
 use crate::models::mcp::{
     CreateMcpServiceRequest, EnvVariable, EnvVariableNameValidation, McpService, McpServiceSource,
-    McpServiceWithOverride, McpTransportType, SetEnvVariableRequest, UpdateMcpServiceRequest,
+    McpServiceWithOverride, McpTransportType, SetEnvVariableRequest, TakeoverBackup, ToolType,
+    UpdateMcpServiceRequest,
 };
 use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
 use crate::services::mcp_config::{
     scan_mcp_configs, generate_import_preview, rollback_from_backups,
+    restore_mcp_takeover, restore_mcp_takeover_by_tool, get_takeover_status,
     ImportExecutor, ImportPreview, ImportRequest, ImportResult, ScanResult,
 };
 use crate::services::EnvManager;
@@ -396,6 +398,78 @@ pub fn execute_mcp_import(
 pub fn rollback_mcp_import(backup_files: Vec<String>) -> Result<usize, AppError> {
     let paths: Vec<PathBuf> = backup_files.iter().map(PathBuf::from).collect();
     rollback_from_backups(&paths).map_err(AppError::Io)
+}
+
+// ===== Story 11.15: 接管恢复命令 =====
+
+/// 获取所有活跃的接管状态
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// # Returns
+/// 所有活跃接管的备份记录列表
+#[tauri::command]
+pub fn list_active_takeovers(state: State<'_, McpState>) -> Result<Vec<TakeoverBackup>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    get_takeover_status(&db).map_err(AppError::from)
+}
+
+/// 恢复指定的接管配置
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// # Arguments
+/// * `backup_id` - 备份记录 ID
+///
+/// # Returns
+/// 恢复后的备份记录
+#[tauri::command]
+pub fn restore_takeover(
+    backup_id: String,
+    state: State<'_, McpState>,
+) -> Result<TakeoverBackup, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    restore_mcp_takeover(&db, &backup_id).map_err(AppError::from)
+}
+
+/// 按工具类型恢复接管配置
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// # Arguments
+/// * `tool_type` - 工具类型 ("claude_code" | "cursor" | "codex" | "gemini_cli")
+///
+/// # Returns
+/// 恢复后的备份记录（如果存在活跃接管）
+#[tauri::command]
+pub fn restore_takeover_by_tool(
+    tool_type: String,
+    state: State<'_, McpState>,
+) -> Result<Option<TakeoverBackup>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let tool = ToolType::from_str(&tool_type)
+        .ok_or_else(|| AppError::InvalidInput(format!("Invalid tool type: {}", tool_type)))?;
+    restore_mcp_takeover_by_tool(&db, &tool).map_err(AppError::from)
+}
+
+/// 获取指定工具类型的活跃接管
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// # Arguments
+/// * `tool_type` - 工具类型 ("claude_code" | "cursor" | "codex" | "gemini_cli")
+///
+/// # Returns
+/// 该工具类型的活跃备份记录（如果存在）
+#[tauri::command]
+pub fn get_active_takeover(
+    tool_type: String,
+    state: State<'_, McpState>,
+) -> Result<Option<TakeoverBackup>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let tool = ToolType::from_str(&tool_type)
+        .ok_or_else(|| AppError::InvalidInput(format!("Invalid tool type: {}", tool_type)))?;
+    db.get_active_takeover_by_tool(&tool).map_err(AppError::from)
 }
 
 // ===== Story 11.9: 项目详情页 MCP 集成命令 =====

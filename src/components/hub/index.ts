@@ -15,6 +15,9 @@ export { EnvVariableDeleteDialog } from "./EnvVariableDeleteDialog";
 // Gateway 状态
 export { GatewayStatusCard } from "./GatewayStatusCard";
 
+// Story 11.15: 接管状态
+export { TakeoverStatusCard, type TakeoverStatusCardProps } from "./TakeoverStatusCard";
+
 // MCP 服务管理
 export { McpServiceList, type McpService } from "./McpServiceList";
 export { McpServiceForm } from "./McpServiceForm";

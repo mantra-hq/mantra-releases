@@ -162,6 +162,9 @@ impl Database {
         // Migration: Add HTTP transport support to MCP services (Story 11.11)
         Self::run_mcp_http_transport_migration(conn)?;
 
+        // Migration: Add MCP takeover backups table (Story 11.15)
+        Self::run_mcp_takeover_backups_migration(conn)?;
+
         Ok(())
     }
 
@@ -675,6 +678,44 @@ impl Database {
                 ALTER TABLE mcp_services ADD COLUMN url TEXT;
                 -- 添加 HTTP 请求头字段（JSON 格式）
                 ALTER TABLE mcp_services ADD COLUMN headers TEXT;
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP takeover backups table (Story 11.15)
+    ///
+    /// Creates:
+    /// - mcp_takeover_backups table: 记录 MCP 配置接管的备份信息
+    fn run_mcp_takeover_backups_migration(conn: &Connection) -> Result<(), StorageError> {
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mcp_takeover_backups'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            conn.execute_batch(
+                r#"
+                -- mcp_takeover_backups 表: MCP 配置接管备份记录 (Story 11.15)
+                CREATE TABLE IF NOT EXISTS mcp_takeover_backups (
+                    id TEXT PRIMARY KEY,
+                    tool_type TEXT NOT NULL CHECK(tool_type IN ('claude_code', 'cursor', 'codex', 'gemini_cli')),
+                    original_path TEXT NOT NULL,
+                    backup_path TEXT NOT NULL,
+                    taken_over_at TEXT NOT NULL,
+                    restored_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'restored'))
+                );
+
+                -- 按状态索引 (快速查询活跃的接管记录)
+                CREATE INDEX IF NOT EXISTS idx_takeover_status ON mcp_takeover_backups(status);
+                -- 按工具类型索引 (按工具筛选)
+                CREATE INDEX IF NOT EXISTS idx_takeover_tool ON mcp_takeover_backups(tool_type);
                 "#,
             )?;
         }
@@ -1492,5 +1533,192 @@ mod tests {
 
         // Should succeed - name is not unique
         assert!(result.is_ok(), "Duplicate service names should be allowed");
+    }
+
+    // ===== Story 11.15: MCP Takeover Backups Migration Tests =====
+
+    #[test]
+    fn test_mcp_takeover_backups_table_exists() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify mcp_takeover_backups table exists
+        let result = db.connection().execute(
+            "SELECT 1 FROM mcp_takeover_backups LIMIT 1",
+            [],
+        );
+        assert!(result.is_ok() || matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)));
+
+        // Verify columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(mcp_takeover_backups)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"id".to_string()));
+        assert!(columns.contains(&"tool_type".to_string()));
+        assert!(columns.contains(&"original_path".to_string()));
+        assert!(columns.contains(&"backup_path".to_string()));
+        assert!(columns.contains(&"taken_over_at".to_string()));
+        assert!(columns.contains(&"restored_at".to_string()));
+        assert!(columns.contains(&"status".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_indexes_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        let indexes: Vec<String> = db
+            .connection()
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='mcp_takeover_backups'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(indexes.contains(&"idx_takeover_status".to_string()));
+        assert!(indexes.contains(&"idx_takeover_tool".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_tool_type_check_constraint() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Valid tool_type values should work
+        for tool_type in &["claude_code", "cursor", "codex", "gemini_cli"] {
+            let id = format!("backup_{}", tool_type);
+            let result = db.connection().execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at) VALUES (?1, ?2, '/original', '/backup', ?3)",
+                [&id, *tool_type, &now],
+            );
+            assert!(result.is_ok(), "Valid tool_type '{}' should be accepted", tool_type);
+        }
+
+        // Invalid tool_type should fail
+        let result = db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at) VALUES ('invalid', 'vscode', '/original', '/backup', ?1)",
+            [&now],
+        );
+        assert!(result.is_err(), "Invalid tool_type should be rejected");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_status_check_constraint() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Valid status values should work
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status) VALUES ('b1', 'claude_code', '/original', '/backup', ?1, 'active')",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status) VALUES ('b2', 'cursor', '/original2', '/backup2', ?1, 'restored')",
+                [&now],
+            )
+            .unwrap();
+
+        // Invalid status should fail
+        let result = db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status) VALUES ('b3', 'codex', '/original3', '/backup3', ?1, 'invalid')",
+            [&now],
+        );
+        assert!(result.is_err(), "Invalid status should be rejected");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_default_status() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Insert without specifying status
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at) VALUES ('b1', 'claude_code', '/original', '/backup', ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // Verify default status is 'active'
+        let status: String = db
+            .connection()
+            .query_row(
+                "SELECT status FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "active", "Default status should be 'active'");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_crud_operations() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // CREATE
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at) VALUES ('b1', 'claude_code', '/home/user/.claude.json', '/home/user/.claude.json.mantra-backup.20260201', ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        // READ
+        let (tool_type, original_path, status): (String, String, String) = db
+            .connection()
+            .query_row(
+                "SELECT tool_type, original_path, status FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(tool_type, "claude_code");
+        assert_eq!(original_path, "/home/user/.claude.json");
+        assert_eq!(status, "active");
+
+        // UPDATE (restore)
+        let restored_at = chrono::Utc::now().to_rfc3339();
+        db.connection()
+            .execute(
+                "UPDATE mcp_takeover_backups SET status = 'restored', restored_at = ?1 WHERE id = 'b1'",
+                [&restored_at],
+            )
+            .unwrap();
+
+        let (new_status, restored): (String, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT status, restored_at FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(new_status, "restored");
+        assert!(restored.is_some());
+
+        // DELETE
+        db.connection()
+            .execute("DELETE FROM mcp_takeover_backups WHERE id = 'b1'", [])
+            .unwrap();
+
+        let count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE id = 'b1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "Record should be deleted");
     }
 }

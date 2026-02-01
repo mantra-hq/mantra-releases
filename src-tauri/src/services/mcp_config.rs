@@ -17,7 +17,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::models::mcp::{CreateMcpServiceRequest, McpService, McpServiceSource};
+use crate::models::mcp::{CreateMcpServiceRequest, McpService, McpServiceSource, TakeoverBackup, ToolType};
 use crate::services::EnvManager;
 use crate::services::mcp_adapters::{
     ConfigScope, DetectedConfig as AdapterDetectedConfig,
@@ -207,6 +207,10 @@ pub struct ImportRequest {
     /// 环境变量值
     pub env_var_values: HashMap<String, String>,
     /// 是否启用影子模式（修改原配置文件）
+    ///
+    /// Story 11.15: 此字段已弃用，导入时总是强制接管
+    #[deprecated(since = "0.7.0", note = "Shadow mode is now always enabled during import")]
+    #[serde(default)]
     pub enable_shadow_mode: bool,
     /// 网关 URL（用于生成影子配置）
     pub gateway_url: Option<String>,
@@ -224,12 +228,15 @@ pub struct ImportResult {
     pub skipped_count: usize,
     /// 创建的备份文件列表
     pub backup_files: Vec<PathBuf>,
-    /// 修改为影子模式的配置文件
+    /// 修改为影子模式的配置文件（已接管的工具配置）
     pub shadow_configs: Vec<PathBuf>,
     /// 错误信息
     pub errors: Vec<String>,
     /// 导入的服务 ID 列表
     pub imported_service_ids: Vec<String>,
+    /// 接管备份记录 ID 列表 (Story 11.15)
+    #[serde(default)]
+    pub takeover_backup_ids: Vec<String>,
 }
 
 /// 解析错误类型
@@ -825,6 +832,18 @@ impl BackupManager {
         self.backups.iter().map(|e| e.backup_path.clone()).collect()
     }
 
+    /// 添加已存在的备份路径（用于追踪外部创建的备份）
+    ///
+    /// Story 11.15: 用于 apply_takeover 手动创建备份后的追踪
+    pub fn add_backup_path(&mut self, original_path: PathBuf) {
+        // 不实际创建备份，只是记录路径用于可能的回滚
+        // 注意：这里我们不知道备份路径，所以只记录原始路径
+        self.backups.push(BackupEntry {
+            original_path: original_path.clone(),
+            backup_path: original_path, // 占位，实际备份由 apply_takeover 处理
+        });
+    }
+
     /// 清理备份文件
     pub fn cleanup(&self) -> io::Result<()> {
         for entry in &self.backups {
@@ -974,27 +993,44 @@ impl<'a> ImportExecutor<'a> {
             }
         }
 
-        // 4. 启用影子模式（如果请求）
-        if request.enable_shadow_mode {
+        // 4. 强制接管所有检测到的工具配置 (Story 11.15)
+        // 移除 enable_shadow_mode 开关检查，总是执行接管
+        let mut takeover_backup_ids = Vec::new();
+
+        // 收集需要接管的工具类型（按 adapter_id 去重）
+        let mut adapter_ids_to_takeover: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for config in &preview.configs {
+            if !config.services.is_empty() {
+                adapter_ids_to_takeover.insert(config.adapter_id.clone());
+            }
+        }
+
+        // 只有当有需要接管的配置时才需要 gateway_url
+        if !adapter_ids_to_takeover.is_empty() {
             if let Some(gateway_url) = &request.gateway_url {
                 let gateway_token = request.gateway_token.as_deref();
-                for config in &preview.configs {
-                    if !config.services.is_empty() {
-                        match self.apply_shadow_mode_v2(&config.path, &config.adapter_id, gateway_url, gateway_token) {
-                            Ok(_) => {
-                                shadow_configs.push(config.path.clone());
+
+                // 对每个工具类型，写入用户级配置
+                for adapter_id in adapter_ids_to_takeover {
+                    if let Some(tool_type) = ToolType::from_adapter_id(&adapter_id) {
+                        let user_config_path = tool_type.get_user_config_path();
+
+                        match self.apply_takeover(&user_config_path, &adapter_id, gateway_url, gateway_token, &tool_type) {
+                            Ok(backup_id) => {
+                                shadow_configs.push(user_config_path);
+                                takeover_backup_ids.push(backup_id);
                             }
                             Err(e) => {
                                 errors.push(format!(
-                                    "Failed to apply shadow mode to {:?}: {}",
-                                    config.path, e
+                                    "Failed to takeover {} config: {}",
+                                    tool_type.display_name(), e
                                 ));
                             }
                         }
                     }
                 }
             } else {
-                errors.push("Gateway URL required for shadow mode".to_string());
+                errors.push("Gateway URL required for MCP import with configurations".to_string());
             }
         }
 
@@ -1010,6 +1046,7 @@ impl<'a> ImportExecutor<'a> {
             shadow_configs,
             errors,
             imported_service_ids,
+            takeover_backup_ids,
         })
     }
 
@@ -1101,6 +1138,9 @@ impl<'a> ImportExecutor<'a> {
     /// 应用影子模式 (新版，使用适配器架构)
     ///
     /// Story 11.8: 使用 HTTP Transport + Authorization Header
+    ///
+    /// Note: Story 11.15 后使用 apply_takeover() 替代
+    #[allow(dead_code)]
     fn apply_shadow_mode_v2(
         &mut self,
         path: &Path,
@@ -1143,6 +1183,116 @@ impl<'a> ImportExecutor<'a> {
 
         Ok(())
     }
+
+    /// 执行配置接管 (Story 11.15)
+    ///
+    /// 接管用户级配置文件：
+    /// 1. 备份原始文件
+    /// 2. 写入 Gateway 配置
+    /// 3. 将备份记录存储到数据库
+    ///
+    /// # Arguments
+    /// * `path` - 用户级配置文件路径
+    /// * `adapter_id` - 适配器 ID
+    /// * `gateway_url` - Gateway URL
+    /// * `gateway_token` - Gateway 认证 Token
+    /// * `tool_type` - 工具类型
+    ///
+    /// # Returns
+    /// 备份记录 ID
+    fn apply_takeover(
+        &mut self,
+        path: &Path,
+        adapter_id: &str,
+        gateway_url: &str,
+        gateway_token: Option<&str>,
+        tool_type: &ToolType,
+    ) -> Result<String, StorageError> {
+        // 1. 生成备份文件路径
+        let backup_path = self.generate_backup_path(path);
+
+        // 2. 检查是否已有活跃的接管记录
+        if let Ok(Some(_)) = self.db.get_active_takeover_by_tool(tool_type) {
+            // 已经接管过，跳过（但不报错）
+            // 这里我们仍然更新配置文件，但不创建新的备份
+        } else if path.exists() {
+            // 3. 备份原文件（仅当文件存在且未接管过）
+            fs::copy(path, &backup_path).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to backup file: {}", e))
+            })?;
+        }
+
+        // 4. 确保父目录存在
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to create directory: {}", e))
+            })?;
+        }
+
+        // 5. 读取原始内容（如果存在）
+        let original_content = if path.exists() {
+            fs::read_to_string(path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // 6. 使用适配器生成新配置
+        let registry = ToolAdapterRegistry::new();
+        let token = gateway_token.unwrap_or("");
+        let new_content = if let Some(adapter) = registry.get(adapter_id) {
+            let config = GatewayInjectionConfig::new(gateway_url, token);
+            adapter
+                .inject_gateway(&original_content, &config)
+                .map_err(|e| StorageError::InvalidInput(format!("Failed to inject gateway: {}", e)))?
+        } else {
+            // 回退到默认 JSON 格式
+            serde_json::json!({
+                "mcpServers": {
+                    "mantra-gateway": {
+                        "url": gateway_url,
+                        "headers": {
+                            "Authorization": format!("Bearer {}", token)
+                        }
+                    }
+                }
+            })
+            .to_string()
+        };
+
+        // 7. 写入新配置
+        fs::write(path, new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        })?;
+
+        // 8. 创建备份记录并存储到数据库
+        let backup = TakeoverBackup::new(
+            tool_type.clone(),
+            path.to_path_buf(),
+            backup_path,
+        );
+        let backup_id = backup.id.clone();
+        self.db.create_takeover_backup(&backup)?;
+
+        // 9. 添加到备份管理器（用于可能的回滚）
+        // 注意：BackupManager 的 backup() 会创建备份，但我们已经手动处理了
+        // 所以这里只记录路径用于追踪
+        self.backup_manager.add_backup_path(path.to_path_buf());
+
+        Ok(backup_id)
+    }
+
+    /// 生成备份文件路径
+    ///
+    /// 格式: <原路径>.mantra-backup.<时间戳>
+    fn generate_backup_path(&self, path: &Path) -> PathBuf {
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let backup_name = format!(
+            "{}.mantra-backup.{}",
+            path.file_name().unwrap_or_default().to_string_lossy(),
+            timestamp
+        );
+        path.parent().unwrap_or(Path::new(".")).join(backup_name)
+    }
 }
 
 // ===== 回滚功能 =====
@@ -1177,6 +1327,92 @@ pub fn rollback_from_backups(backup_files: &[PathBuf]) -> io::Result<usize> {
     }
 
     Ok(restored)
+}
+
+// ===== Story 11.15: 接管恢复功能 =====
+
+/// 恢复 MCP 配置接管
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// 从备份文件恢复原始配置，并更新数据库记录状态
+///
+/// # Arguments
+/// * `db` - 数据库连接
+/// * `backup_id` - 备份记录 ID
+///
+/// # Returns
+/// 恢复后的备份记录
+pub fn restore_mcp_takeover(
+    db: &Database,
+    backup_id: &str,
+) -> Result<TakeoverBackup, StorageError> {
+    // 1. 获取备份记录
+    let backup = db
+        .get_takeover_backup_by_id(backup_id)?
+        .ok_or_else(|| StorageError::NotFound(format!("Takeover backup not found: {}", backup_id)))?;
+
+    // 2. 检查是否可以恢复
+    if backup.status != crate::models::mcp::TakeoverStatus::Active {
+        return Err(StorageError::InvalidInput(format!(
+            "Backup {} is already restored",
+            backup_id
+        )));
+    }
+
+    // 3. 检查备份文件是否存在
+    if !backup.backup_path.exists() {
+        return Err(StorageError::InvalidInput(format!(
+            "Backup file not found: {:?}",
+            backup.backup_path
+        )));
+    }
+
+    // 4. 恢复原始文件
+    fs::copy(&backup.backup_path, &backup.original_path).map_err(|e| {
+        StorageError::InvalidInput(format!("Failed to restore file: {}", e))
+    })?;
+
+    // 5. 更新数据库记录状态
+    db.update_backup_status_restored(backup_id)?;
+
+    // 6. 返回更新后的备份记录
+    db.get_takeover_backup_by_id(backup_id)?
+        .ok_or_else(|| StorageError::NotFound(format!("Backup not found after update: {}", backup_id)))
+}
+
+/// 恢复指定工具类型的 MCP 配置接管
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// # Arguments
+/// * `db` - 数据库连接
+/// * `tool_type` - 工具类型
+///
+/// # Returns
+/// 恢复后的备份记录（如果存在活跃的接管）
+pub fn restore_mcp_takeover_by_tool(
+    db: &Database,
+    tool_type: &ToolType,
+) -> Result<Option<TakeoverBackup>, StorageError> {
+    // 1. 获取该工具类型的活跃备份
+    let backup = match db.get_active_takeover_by_tool(tool_type)? {
+        Some(b) => b,
+        None => return Ok(None),
+    };
+
+    // 2. 恢复
+    let restored = restore_mcp_takeover(db, &backup.id)?;
+    Ok(Some(restored))
+}
+
+/// 获取所有活跃的接管状态
+///
+/// Story 11.15: MCP 接管流程重构 - AC 5
+///
+/// 返回每个工具类型的当前接管状态
+pub fn get_takeover_status(db: &Database) -> Result<Vec<TakeoverBackup>, StorageError> {
+    db.get_takeover_backups(Some(crate::models::mcp::TakeoverStatus::Active))
 }
 
 #[cfg(test)]

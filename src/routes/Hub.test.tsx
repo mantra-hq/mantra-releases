@@ -68,6 +68,8 @@ describe("Hub Page", () => {
           ]);
         case "list_env_variables":
           return Promise.resolve([]);
+        case "list_active_takeovers":
+          return Promise.resolve([]);
         default:
           return Promise.resolve(null);
       }

@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// MCP 服务参数类型别名
 pub type McpServiceArgs = Vec<String>;
@@ -383,6 +384,164 @@ impl McpServiceTool {
         } else {
             true // 无法解析时间，视为过期
         }
+    }
+}
+
+// ===== Story 11.15: MCP 接管备份模型 =====
+
+/// 工具类型
+///
+/// Story 11.15: MCP 接管流程重构 - AC 6
+///
+/// 支持的 AI 编程工具类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolType {
+    /// Claude Code
+    ClaudeCode,
+    /// Cursor
+    Cursor,
+    /// Codex (OpenAI)
+    Codex,
+    /// Gemini CLI
+    GeminiCli,
+}
+
+impl ToolType {
+    /// 转换为数据库存储的字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ToolType::ClaudeCode => "claude_code",
+            ToolType::Cursor => "cursor",
+            ToolType::Codex => "codex",
+            ToolType::GeminiCli => "gemini_cli",
+        }
+    }
+
+    /// 从数据库字符串解析
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "claude_code" => Some(ToolType::ClaudeCode),
+            "cursor" => Some(ToolType::Cursor),
+            "codex" => Some(ToolType::Codex),
+            "gemini_cli" => Some(ToolType::GeminiCli),
+            _ => None,
+        }
+    }
+
+    /// 从 adapter_id 解析
+    pub fn from_adapter_id(id: &str) -> Option<Self> {
+        match id {
+            "claude" => Some(ToolType::ClaudeCode),
+            "cursor" => Some(ToolType::Cursor),
+            "codex" => Some(ToolType::Codex),
+            "gemini" => Some(ToolType::GeminiCli),
+            _ => None,
+        }
+    }
+
+    /// 获取用户级配置文件路径
+    ///
+    /// 根据工具类型返回对应的用户级配置文件路径
+    pub fn get_user_config_path(&self) -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+        match self {
+            ToolType::ClaudeCode => home.join(".claude.json"),
+            ToolType::Cursor => home.join(".cursor").join("mcp.json"),
+            ToolType::Codex => home.join(".codex").join("config.toml"),
+            ToolType::GeminiCli => home.join(".gemini").join("settings.json"),
+        }
+    }
+
+    /// 获取工具显示名称
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ToolType::ClaudeCode => "Claude Code",
+            ToolType::Cursor => "Cursor",
+            ToolType::Codex => "Codex",
+            ToolType::GeminiCli => "Gemini CLI",
+        }
+    }
+}
+
+/// 接管状态
+///
+/// Story 11.15: MCP 接管流程重构 - AC 3, AC 5
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TakeoverStatus {
+    /// 接管中（原配置已被替换）
+    #[default]
+    Active,
+    /// 已恢复（原配置已被恢复）
+    Restored,
+}
+
+impl TakeoverStatus {
+    /// 转换为数据库存储的字符串
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TakeoverStatus::Active => "active",
+            TakeoverStatus::Restored => "restored",
+        }
+    }
+
+    /// 从数据库字符串解析
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "active" => Some(TakeoverStatus::Active),
+            "restored" => Some(TakeoverStatus::Restored),
+            _ => None,
+        }
+    }
+}
+
+/// 接管备份记录
+///
+/// Story 11.15: MCP 接管流程重构 - AC 3, AC 4, AC 5
+///
+/// 记录 MCP 配置接管的备份信息，支持一键恢复
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakeoverBackup {
+    /// 唯一标识符 (UUID)
+    pub id: String,
+    /// 工具类型
+    pub tool_type: ToolType,
+    /// 原始配置文件路径
+    pub original_path: PathBuf,
+    /// 备份文件路径
+    pub backup_path: PathBuf,
+    /// 接管时间 (ISO 8601)
+    pub taken_over_at: String,
+    /// 恢复时间 (ISO 8601)，如果未恢复则为 None
+    pub restored_at: Option<String>,
+    /// 接管状态
+    pub status: TakeoverStatus,
+}
+
+impl TakeoverBackup {
+    /// 创建新的备份记录
+    pub fn new(tool_type: ToolType, original_path: PathBuf, backup_path: PathBuf) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool_type,
+            original_path,
+            backup_path,
+            taken_over_at: chrono::Utc::now().to_rfc3339(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        }
+    }
+
+    /// 检查备份文件是否存在
+    pub fn backup_exists(&self) -> bool {
+        self.backup_path.exists()
+    }
+
+    /// 检查是否可以恢复
+    pub fn can_restore(&self) -> bool {
+        self.status == TakeoverStatus::Active && self.backup_exists()
     }
 }
 
@@ -855,5 +1014,180 @@ mod tests {
 
         let policy = service.get_tool_policy();
         assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+    }
+
+    // ===== Story 11.15: TakeoverBackup 模型测试 =====
+
+    #[test]
+    fn test_tool_type_serialization() {
+        assert_eq!(serde_json::to_string(&ToolType::ClaudeCode).unwrap(), r#""claude_code""#);
+        assert_eq!(serde_json::to_string(&ToolType::Cursor).unwrap(), r#""cursor""#);
+        assert_eq!(serde_json::to_string(&ToolType::Codex).unwrap(), r#""codex""#);
+        assert_eq!(serde_json::to_string(&ToolType::GeminiCli).unwrap(), r#""gemini_cli""#);
+    }
+
+    #[test]
+    fn test_tool_type_deserialization() {
+        let claude: ToolType = serde_json::from_str(r#""claude_code""#).unwrap();
+        assert_eq!(claude, ToolType::ClaudeCode);
+        let cursor: ToolType = serde_json::from_str(r#""cursor""#).unwrap();
+        assert_eq!(cursor, ToolType::Cursor);
+        let codex: ToolType = serde_json::from_str(r#""codex""#).unwrap();
+        assert_eq!(codex, ToolType::Codex);
+        let gemini: ToolType = serde_json::from_str(r#""gemini_cli""#).unwrap();
+        assert_eq!(gemini, ToolType::GeminiCli);
+    }
+
+    #[test]
+    fn test_tool_type_as_str() {
+        assert_eq!(ToolType::ClaudeCode.as_str(), "claude_code");
+        assert_eq!(ToolType::Cursor.as_str(), "cursor");
+        assert_eq!(ToolType::Codex.as_str(), "codex");
+        assert_eq!(ToolType::GeminiCli.as_str(), "gemini_cli");
+    }
+
+    #[test]
+    fn test_tool_type_from_str() {
+        assert_eq!(ToolType::from_str("claude_code"), Some(ToolType::ClaudeCode));
+        assert_eq!(ToolType::from_str("cursor"), Some(ToolType::Cursor));
+        assert_eq!(ToolType::from_str("codex"), Some(ToolType::Codex));
+        assert_eq!(ToolType::from_str("gemini_cli"), Some(ToolType::GeminiCli));
+        assert_eq!(ToolType::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_tool_type_from_adapter_id() {
+        assert_eq!(ToolType::from_adapter_id("claude"), Some(ToolType::ClaudeCode));
+        assert_eq!(ToolType::from_adapter_id("cursor"), Some(ToolType::Cursor));
+        assert_eq!(ToolType::from_adapter_id("codex"), Some(ToolType::Codex));
+        assert_eq!(ToolType::from_adapter_id("gemini"), Some(ToolType::GeminiCli));
+        assert_eq!(ToolType::from_adapter_id("unknown"), None);
+    }
+
+    #[test]
+    fn test_tool_type_display_name() {
+        assert_eq!(ToolType::ClaudeCode.display_name(), "Claude Code");
+        assert_eq!(ToolType::Cursor.display_name(), "Cursor");
+        assert_eq!(ToolType::Codex.display_name(), "Codex");
+        assert_eq!(ToolType::GeminiCli.display_name(), "Gemini CLI");
+    }
+
+    #[test]
+    fn test_tool_type_user_config_path() {
+        // 测试路径包含正确的文件名
+        let claude_path = ToolType::ClaudeCode.get_user_config_path();
+        assert!(claude_path.to_string_lossy().ends_with(".claude.json"));
+
+        let cursor_path = ToolType::Cursor.get_user_config_path();
+        assert!(cursor_path.to_string_lossy().contains(".cursor"));
+        assert!(cursor_path.to_string_lossy().ends_with("mcp.json"));
+
+        let codex_path = ToolType::Codex.get_user_config_path();
+        assert!(codex_path.to_string_lossy().contains(".codex"));
+        assert!(codex_path.to_string_lossy().ends_with("config.toml"));
+
+        let gemini_path = ToolType::GeminiCli.get_user_config_path();
+        assert!(gemini_path.to_string_lossy().contains(".gemini"));
+        assert!(gemini_path.to_string_lossy().ends_with("settings.json"));
+    }
+
+    #[test]
+    fn test_takeover_status_serialization() {
+        assert_eq!(serde_json::to_string(&TakeoverStatus::Active).unwrap(), r#""active""#);
+        assert_eq!(serde_json::to_string(&TakeoverStatus::Restored).unwrap(), r#""restored""#);
+    }
+
+    #[test]
+    fn test_takeover_status_deserialization() {
+        let active: TakeoverStatus = serde_json::from_str(r#""active""#).unwrap();
+        assert_eq!(active, TakeoverStatus::Active);
+        let restored: TakeoverStatus = serde_json::from_str(r#""restored""#).unwrap();
+        assert_eq!(restored, TakeoverStatus::Restored);
+    }
+
+    #[test]
+    fn test_takeover_status_as_str() {
+        assert_eq!(TakeoverStatus::Active.as_str(), "active");
+        assert_eq!(TakeoverStatus::Restored.as_str(), "restored");
+    }
+
+    #[test]
+    fn test_takeover_status_from_str() {
+        assert_eq!(TakeoverStatus::from_str("active"), Some(TakeoverStatus::Active));
+        assert_eq!(TakeoverStatus::from_str("restored"), Some(TakeoverStatus::Restored));
+        assert_eq!(TakeoverStatus::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_takeover_status_default() {
+        let status = TakeoverStatus::default();
+        assert_eq!(status, TakeoverStatus::Active);
+    }
+
+    #[test]
+    fn test_takeover_backup_new() {
+        let backup = TakeoverBackup::new(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.claude.json.mantra-backup.20260201"),
+        );
+
+        assert!(!backup.id.is_empty());
+        assert_eq!(backup.tool_type, ToolType::ClaudeCode);
+        assert_eq!(backup.original_path, PathBuf::from("/home/user/.claude.json"));
+        assert_eq!(backup.backup_path, PathBuf::from("/home/user/.claude.json.mantra-backup.20260201"));
+        assert!(backup.restored_at.is_none());
+        assert_eq!(backup.status, TakeoverStatus::Active);
+    }
+
+    #[test]
+    fn test_takeover_backup_serialization() {
+        let backup = TakeoverBackup {
+            id: "backup-123".to_string(),
+            tool_type: ToolType::Cursor,
+            original_path: PathBuf::from("/home/user/.cursor/mcp.json"),
+            backup_path: PathBuf::from("/home/user/.cursor/mcp.json.mantra-backup.20260201"),
+            taken_over_at: "2026-02-01T10:00:00Z".to_string(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        };
+
+        let json = serde_json::to_string(&backup).unwrap();
+        assert!(json.contains("backup-123"));
+        assert!(json.contains("cursor"));
+        assert!(json.contains("takenOverAt")); // camelCase
+        assert!(json.contains("active"));
+
+        let deserialized: TakeoverBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, backup.id);
+        assert_eq!(deserialized.tool_type, backup.tool_type);
+        assert_eq!(deserialized.status, TakeoverStatus::Active);
+    }
+
+    #[test]
+    fn test_takeover_backup_can_restore() {
+        // Active 状态但备份文件不存在
+        let backup = TakeoverBackup {
+            id: "backup-123".to_string(),
+            tool_type: ToolType::ClaudeCode,
+            original_path: PathBuf::from("/nonexistent/original.json"),
+            backup_path: PathBuf::from("/nonexistent/backup.json"),
+            taken_over_at: "2026-02-01T10:00:00Z".to_string(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        };
+        assert!(!backup.can_restore()); // 文件不存在
+
+        // Restored 状态
+        let restored_backup = TakeoverBackup {
+            id: "backup-456".to_string(),
+            tool_type: ToolType::Cursor,
+            original_path: PathBuf::from("/home/user/.cursor/mcp.json"),
+            backup_path: PathBuf::from("/home/user/.cursor/mcp.json.backup"),
+            taken_over_at: "2026-02-01T10:00:00Z".to_string(),
+            restored_at: Some("2026-02-01T12:00:00Z".to_string()),
+            status: TakeoverStatus::Restored,
+        };
+        assert!(!restored_backup.can_restore()); // 已恢复
     }
 }

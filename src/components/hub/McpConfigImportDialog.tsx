@@ -1,13 +1,14 @@
 /**
  * MCP 配置导入对话框
  * Story 11.3: Task 9 - 配置导入前端 UI (AC: #1, #2, #4, #6)
+ * Story 11.15: 移除 Shadow Mode 开关，导入即接管
  *
  * 提供完整的配置导入向导：
  * - 扫描检测 MCP 配置文件
  * - 预览将要导入的服务
  * - 解决配置冲突
  * - 设置所需环境变量
- * - 配置影子模式
+ * - 导入即接管（自动备份原配置）
  */
 
 import { useState, useCallback, useEffect, useMemo } from "react";
@@ -24,7 +25,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,11 +52,11 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Play,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { ConfigDiffView } from "./ConfigDiffView";
-import { ShadowModePreview } from "./ShadowModePreview";
 import { ImportStepper } from "./ImportStepper";
 
 // ===== 类型定义 =====
@@ -158,6 +158,8 @@ interface McpConfigImportDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   projectPath?: string;
+  /** 项目 ID - 如果提供，导入成功后自动建立服务与项目的关联 */
+  projectId?: string;
 }
 
 export function McpConfigImportDialog({
@@ -165,6 +167,7 @@ export function McpConfigImportDialog({
   onOpenChange,
   onSuccess,
   projectPath,
+  projectId,
 }: McpConfigImportDialogProps) {
   const { t } = useTranslation();
 
@@ -184,11 +187,11 @@ export function McpConfigImportDialog({
   >({});
   const [envVarValues, setEnvVarValues] = useState<Record<string, string>>({});
   const [showEnvValues, setShowEnvValues] = useState<Set<string>>(new Set());
-  const [enableShadowMode, setEnableShadowMode] = useState(false);
   const [renameInputs, setRenameInputs] = useState<Record<string, string>>({});
 
   // 导入结果
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [gatewayRunning, setGatewayRunning] = useState(true);
 
   // 重置状态
   const resetState = useCallback(() => {
@@ -201,9 +204,9 @@ export function McpConfigImportDialog({
     setConflictResolutions({});
     setEnvVarValues({});
     setShowEnvValues(new Set());
-    setEnableShadowMode(false);
     setRenameInputs({});
     setImportResult(null);
+    setGatewayRunning(true);
   }, []);
 
   // 对话框打开时重置
@@ -298,12 +301,28 @@ export function McpConfigImportDialog({
         }
       }
 
+      // Story 11.15: 导入即接管，始终获取 Gateway URL
+      let gatewayUrl: string | null = null;
+      let isGatewayRunning = false;
+      try {
+        const gatewayStatus = await invoke<{ running: boolean; port: number | null; auth_token: string }>(
+          "get_gateway_status"
+        );
+        if (gatewayStatus.running && gatewayStatus.port) {
+          gatewayUrl = `http://127.0.0.1:${gatewayStatus.port}/mcp`;
+          isGatewayRunning = true;
+        }
+      } catch (gwErr) {
+        console.error("[McpConfigImportDialog] Failed to get gateway status:", gwErr);
+      }
+      setGatewayRunning(isGatewayRunning);
+
       const request: ImportRequest = {
         services_to_import: Array.from(selectedServices),
         conflict_resolutions: resolutions,
         env_var_values: envVarValues,
-        enable_shadow_mode: enableShadowMode,
-        gateway_url: null, // Will be filled by backend if shadow mode is enabled
+        enable_shadow_mode: true,
+        gateway_url: gatewayUrl,
       };
 
       const result = await invoke<ImportResult>("execute_mcp_import", {
@@ -313,6 +332,24 @@ export function McpConfigImportDialog({
 
       setImportResult(result);
       setStep("result");
+
+      // 如果有成功导入且提供了项目 ID，自动建立项目关联
+      if (result.imported_count > 0 && projectId && result.imported_service_ids?.length > 0) {
+        try {
+          // 为每个导入的服务建立项目关联
+          for (const serviceId of result.imported_service_ids) {
+            await invoke("link_mcp_service_to_project", {
+              projectId,
+              serviceId,
+              configOverride: null,
+            });
+          }
+          console.log(`[McpConfigImportDialog] Linked ${result.imported_service_ids.length} services to project ${projectId}`);
+        } catch (linkErr) {
+          // 关联失败不影响导入结果，只记录日志
+          console.error("[McpConfigImportDialog] Failed to link services to project:", linkErr);
+        }
+      }
 
       // 如果有成功导入，通知父组件刷新
       if (result.imported_count > 0) {
@@ -331,8 +368,8 @@ export function McpConfigImportDialog({
     conflictResolutions,
     renameInputs,
     envVarValues,
-    enableShadowMode,
     onSuccess,
+    projectId,
     t,
   ]);
 
@@ -359,13 +396,13 @@ export function McpConfigImportDialog({
 
   // 判断是否有冲突需要解决
   const hasConflicts = useMemo(
-    () => preview && preview.conflicts.length > 0,
+    () => !!(preview && preview.conflicts.length > 0),
     [preview]
   );
 
   // 判断是否需要设置环境变量
   const needsEnvVars = useMemo(
-    () => preview && preview.env_vars_needed.length > 0,
+    () => !!(preview && preview.env_vars_needed.length > 0),
     [preview]
   );
 
@@ -840,38 +877,13 @@ export function McpConfigImportDialog({
             ))}
           </div>
         </ScrollArea>
-
-        {/* 影子模式设置 - shrink-0 保持固定 */}
-        <div className="shrink-0 p-4 border rounded-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">
-                {t("hub.import.shadowMode")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("hub.import.shadowModeDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={enableShadowMode}
-              onCheckedChange={setEnableShadowMode}
-              data-testid="shadow-mode-switch"
-            />
-          </div>
-
-          {/* 影子模式变更预览 */}
-          <ShadowModePreview
-            enabled={enableShadowMode}
-            configs={preview.configs}
-          />
-        </div>
       </div>
     );
   };
 
   // 计算确认步骤的统计信息
   const getConfirmStats = useCallback(() => {
-    if (!preview) return { addCount: 0, conflictCount: 0, renameCount: 0, fileCount: 0, envCount: 0, envNeeded: 0 };
+    if (!preview) return { addCount: 0, conflictCount: 0, renameCount: 0, envCount: 0, envNeeded: 0 };
 
     // 新服务数量（选中且不冲突的）
     const addCount = preview.new_services.filter((s) =>
@@ -892,23 +904,20 @@ export function McpConfigImportDialog({
       return resolution && "rename" in resolution;
     }).length;
 
-    // 影子模式下将修改的文件数量
-    const fileCount = enableShadowMode ? preview.configs.length : 0;
-
     // 已设置的环境变量数量
     const envCount = Object.values(envVarValues).filter((v) => v && v.trim() !== "").length;
 
     // 需要设置的环境变量总数
     const envNeeded = preview.env_vars_needed.length;
 
-    return { addCount, conflictCount, renameCount, fileCount, envCount, envNeeded };
-  }, [preview, selectedServices, conflictResolutions, enableShadowMode, envVarValues]);
+    return { addCount, conflictCount, renameCount, envCount, envNeeded };
+  }, [preview, selectedServices, conflictResolutions, envVarValues]);
 
   // 渲染确认步骤
   const renderConfirmStep = () => {
     if (!preview) return null;
 
-    const { addCount, conflictCount, renameCount, fileCount, envNeeded } = getConfirmStats();
+    const { addCount, conflictCount, renameCount, envNeeded } = getConfirmStats();
 
     return (
       <div className="space-y-6">
@@ -946,15 +955,6 @@ export function McpConfigImportDialog({
               <CheckCircle2 className="h-5 w-5 text-blue-500 shrink-0" />
               <span className="text-sm">
                 {t("hub.import.confirmSummaryRename", { count: renameCount })}
-              </span>
-            </div>
-          )}
-
-          {fileCount > 0 && (
-            <div className="flex items-center gap-3 p-3 border rounded-lg">
-              <FileCode className="h-5 w-5 text-blue-500 shrink-0" />
-              <span className="text-sm">
-                {t("hub.import.confirmSummaryFiles", { count: fileCount })}
               </span>
             </div>
           )}
@@ -1057,6 +1057,33 @@ export function McpConfigImportDialog({
               ))}
             </div>
           </div>
+        )}
+
+        {/* Gateway 未启动提示 (Story 11.15: AC 2) */}
+        {!gatewayRunning && importResult.imported_count > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>{t("hub.import.gatewayNotRunning")}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("start_gateway");
+                    setGatewayRunning(true);
+                    feedback.success(t("hub.import.gatewayStarted"));
+                  } catch (err) {
+                    feedback.error(t("hub.import.gatewayStartError"), (err as Error).message);
+                  }
+                }}
+                data-testid="start-gateway-button"
+              >
+                <Play className="h-4 w-4 mr-1" />
+                {t("hub.import.startGateway")}
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* 错误列表 */}

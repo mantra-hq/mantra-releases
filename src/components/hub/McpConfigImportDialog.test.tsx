@@ -393,31 +393,16 @@ describe("McpConfigImportDialog", () => {
       });
     });
 
-    it("应该显示影子模式开关", async () => {
-      const user = userEvent.setup();
-
-      render(<McpConfigImportDialog {...defaultProps} />);
-
-      await user.click(screen.getByTestId("import-scan-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("import-next-button")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByTestId("import-next-button"));
-
-      await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
-      });
-    });
+    // Story 11.15: Shadow Mode 开关已移除，导入即接管
   });
 
   describe("导入执行", () => {
     beforeEach(() => {
       mockInvokeFn
-        .mockResolvedValueOnce(mockScanResult)
-        .mockResolvedValueOnce(mockPreview)
-        .mockResolvedValueOnce(mockImportResult);
+        .mockResolvedValueOnce(mockScanResult)       // scan_mcp_configs_cmd
+        .mockResolvedValueOnce(mockPreview)           // preview_mcp_import
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" }) // get_gateway_status
+        .mockResolvedValueOnce(mockImportResult);     // execute_mcp_import
     });
 
     it("导入成功后应该显示结果", async () => {
@@ -435,7 +420,7 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       // 环境变量 -> 确认
@@ -466,7 +451,7 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       await user.click(screen.getByTestId("import-next-button"));
@@ -487,7 +472,8 @@ describe("McpConfigImportDialog", () => {
         .mockReset()
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
-        .mockRejectedValueOnce(new Error("Import failed"));
+        .mockRejectedValueOnce(new Error("Import failed"))  // get_gateway_status fails
+        .mockRejectedValueOnce(new Error("Import failed")); // execute_mcp_import fails
 
       const user = userEvent.setup();
 
@@ -502,7 +488,7 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       await user.click(screen.getByTestId("import-next-button"));
@@ -529,7 +515,7 @@ describe("McpConfigImportDialog", () => {
       // 预览 -> 环境变量
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
       // 环境变量 -> 确认
       await user.click(screen.getByTestId("import-next-button"));
@@ -544,6 +530,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
@@ -560,6 +547,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
@@ -576,6 +564,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(mockImportResult);
 
       const user = userEvent.setup();
@@ -600,7 +589,7 @@ describe("McpConfigImportDialog", () => {
       });
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
@@ -619,6 +608,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(partialResult);
 
       const user = userEvent.setup();
@@ -640,6 +630,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(errorResult);
 
       const user = userEvent.setup();
@@ -711,6 +702,7 @@ describe("McpConfigImportDialog", () => {
       mockInvokeFn
         .mockResolvedValueOnce(mockScanResult)
         .mockResolvedValueOnce(mockPreview)
+        .mockResolvedValueOnce({ running: false, port: null, auth_token: "t" })
         .mockResolvedValueOnce(mockImportResult);
     });
 
@@ -729,7 +721,7 @@ describe("McpConfigImportDialog", () => {
       await user.click(screen.getByTestId("import-next-button"));
 
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       // 从环境变量到确认
@@ -755,7 +747,7 @@ describe("McpConfigImportDialog", () => {
       // 预览 -> 环境变量 -> 确认
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       await user.click(screen.getByTestId("import-next-button"));
@@ -781,7 +773,7 @@ describe("McpConfigImportDialog", () => {
       // 预览 -> 环境变量 -> 确认
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       await user.click(screen.getByTestId("import-next-button"));
@@ -811,7 +803,7 @@ describe("McpConfigImportDialog", () => {
       // 预览 -> 环境变量 -> 确认
       await user.click(screen.getByTestId("import-next-button"));
       await waitFor(() => {
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
 
       await user.click(screen.getByTestId("import-next-button"));
@@ -824,7 +816,7 @@ describe("McpConfigImportDialog", () => {
 
       await waitFor(() => {
         // 应该返回到环境变量步骤
-        expect(screen.getByTestId("shadow-mode-switch")).toBeInTheDocument();
+        expect(screen.getByTestId("env-var-input-DATABASE_URL")).toBeInTheDocument();
       });
     });
   });

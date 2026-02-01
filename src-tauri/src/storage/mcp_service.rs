@@ -5,14 +5,16 @@
 //! 提供 mcp_services 表的 CRUD 操作
 
 use regex;
-use rusqlite::{params, Row};
+use rusqlite::{params, OptionalExtension, Row};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use super::database::Database;
 use super::error::StorageError;
 use crate::models::mcp::{
     CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceTool, McpServiceWithOverride,
-    McpTransportType, ProjectMcpService, UpdateMcpServiceRequest,
+    McpTransportType, ProjectMcpService, TakeoverBackup, TakeoverStatus, ToolType,
+    UpdateMcpServiceRequest,
 };
 
 /// 从数据库行解析 McpService
@@ -640,6 +642,210 @@ impl Database {
             .collect();
 
         Ok(times)
+    }
+
+    // ===== Story 11.15: MCP 接管备份存储 =====
+
+    /// 创建接管备份记录
+    ///
+    /// Story 11.15: MCP 接管流程重构 - Task 2.3
+    ///
+    /// # Arguments
+    /// * `backup` - 备份记录
+    pub fn create_takeover_backup(&self, backup: &TakeoverBackup) -> Result<(), StorageError> {
+        self.connection().execute(
+            r#"INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, restored_at, status)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+            params![
+                &backup.id,
+                backup.tool_type.as_str(),
+                backup.original_path.to_string_lossy().to_string(),
+                backup.backup_path.to_string_lossy().to_string(),
+                &backup.taken_over_at,
+                &backup.restored_at,
+                backup.status.as_str(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 获取接管备份记录列表
+    ///
+    /// Story 11.15: MCP 接管流程重构 - Task 2.4
+    ///
+    /// # Arguments
+    /// * `status` - 可选的状态筛选（active/restored）
+    ///
+    /// # Returns
+    /// 备份记录列表，按接管时间倒序排列
+    pub fn get_takeover_backups(
+        &self,
+        status: Option<TakeoverStatus>,
+    ) -> Result<Vec<TakeoverBackup>, StorageError> {
+        let status_str = status.as_ref().map(|s| s.as_str().to_string());
+
+        let sql = match &status_str {
+            Some(_) => {
+                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status
+                   FROM mcp_takeover_backups
+                   WHERE status = ?1
+                   ORDER BY taken_over_at DESC"#
+            }
+            None => {
+                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status
+                   FROM mcp_takeover_backups
+                   ORDER BY taken_over_at DESC"#
+            }
+        };
+
+        let mut stmt = self.connection().prepare(sql)?;
+
+        let backups = if let Some(ref s) = status_str {
+            stmt.query_map([s.as_str()], |row| {
+                let tool_type_str: String = row.get(1)?;
+                let status_str: String = row.get(6)?;
+                Ok(TakeoverBackup {
+                    id: row.get(0)?,
+                    tool_type: ToolType::from_str(&tool_type_str).unwrap_or(ToolType::ClaudeCode),
+                    original_path: PathBuf::from(row.get::<_, String>(2)?),
+                    backup_path: PathBuf::from(row.get::<_, String>(3)?),
+                    taken_over_at: row.get(4)?,
+                    restored_at: row.get(5)?,
+                    status: TakeoverStatus::from_str(&status_str).unwrap_or(TakeoverStatus::Active),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect()
+        } else {
+            stmt.query_map([], |row| {
+                let tool_type_str: String = row.get(1)?;
+                let status_str: String = row.get(6)?;
+                Ok(TakeoverBackup {
+                    id: row.get(0)?,
+                    tool_type: ToolType::from_str(&tool_type_str).unwrap_or(ToolType::ClaudeCode),
+                    original_path: PathBuf::from(row.get::<_, String>(2)?),
+                    backup_path: PathBuf::from(row.get::<_, String>(3)?),
+                    taken_over_at: row.get(4)?,
+                    restored_at: row.get(5)?,
+                    status: TakeoverStatus::from_str(&status_str).unwrap_or(TakeoverStatus::Active),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect()
+        };
+
+        Ok(backups)
+    }
+
+    /// 按 ID 获取接管备份记录
+    ///
+    /// Story 11.15: MCP 接管流程重构
+    ///
+    /// # Arguments
+    /// * `id` - 备份 ID
+    pub fn get_takeover_backup_by_id(&self, id: &str) -> Result<Option<TakeoverBackup>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status
+               FROM mcp_takeover_backups
+               WHERE id = ?1"#,
+        )?;
+
+        let backup = stmt
+            .query_row([id], |row| {
+                let tool_type_str: String = row.get(1)?;
+                let status_str: String = row.get(6)?;
+                Ok(TakeoverBackup {
+                    id: row.get(0)?,
+                    tool_type: ToolType::from_str(&tool_type_str).unwrap_or(ToolType::ClaudeCode),
+                    original_path: PathBuf::from(row.get::<_, String>(2)?),
+                    backup_path: PathBuf::from(row.get::<_, String>(3)?),
+                    taken_over_at: row.get(4)?,
+                    restored_at: row.get(5)?,
+                    status: TakeoverStatus::from_str(&status_str).unwrap_or(TakeoverStatus::Active),
+                })
+            })
+            .optional()?;
+
+        Ok(backup)
+    }
+
+    /// 按工具类型获取活跃的接管备份
+    ///
+    /// Story 11.15: MCP 接管流程重构
+    ///
+    /// # Arguments
+    /// * `tool_type` - 工具类型
+    ///
+    /// # Returns
+    /// 该工具类型的活跃备份（如果存在）
+    pub fn get_active_takeover_by_tool(
+        &self,
+        tool_type: &ToolType,
+    ) -> Result<Option<TakeoverBackup>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status
+               FROM mcp_takeover_backups
+               WHERE tool_type = ?1 AND status = 'active'
+               ORDER BY taken_over_at DESC
+               LIMIT 1"#,
+        )?;
+
+        let backup = stmt
+            .query_row([tool_type.as_str()], |row| {
+                let tool_type_str: String = row.get(1)?;
+                let status_str: String = row.get(6)?;
+                Ok(TakeoverBackup {
+                    id: row.get(0)?,
+                    tool_type: ToolType::from_str(&tool_type_str).unwrap_or(ToolType::ClaudeCode),
+                    original_path: PathBuf::from(row.get::<_, String>(2)?),
+                    backup_path: PathBuf::from(row.get::<_, String>(3)?),
+                    taken_over_at: row.get(4)?,
+                    restored_at: row.get(5)?,
+                    status: TakeoverStatus::from_str(&status_str).unwrap_or(TakeoverStatus::Active),
+                })
+            })
+            .optional()?;
+
+        Ok(backup)
+    }
+
+    /// 更新备份记录状态为已恢复
+    ///
+    /// Story 11.15: MCP 接管流程重构 - Task 2.5
+    ///
+    /// # Arguments
+    /// * `id` - 备份 ID
+    pub fn update_backup_status_restored(&self, id: &str) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let affected = self.connection().execute(
+            r#"UPDATE mcp_takeover_backups
+               SET status = 'restored', restored_at = ?1
+               WHERE id = ?2"#,
+            params![&now, id],
+        )?;
+
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "Takeover backup not found: {}",
+                id
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// 删除备份记录
+    ///
+    /// Story 11.15: MCP 接管流程重构
+    ///
+    /// # Arguments
+    /// * `id` - 备份 ID
+    pub fn delete_takeover_backup(&self, id: &str) -> Result<(), StorageError> {
+        self.connection().execute(
+            "DELETE FROM mcp_takeover_backups WHERE id = ?1",
+            [id],
+        )?;
+        Ok(())
     }
 }
 
@@ -1370,5 +1576,168 @@ mod tests {
         let affected = db.find_services_using_env_var("OPENAI_API_KEY").unwrap();
         assert_eq!(affected.len(), 1);
         assert_eq!(affected[0].name, "openai-service");
+    }
+
+    // ===== Story 11.15: 接管备份存储测试 =====
+
+    fn create_test_backup(tool_type: ToolType) -> TakeoverBackup {
+        TakeoverBackup::new(
+            tool_type,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.claude.json.mantra-backup.20260201"),
+        )
+    }
+
+    #[test]
+    fn test_create_takeover_backup() {
+        let db = Database::new_in_memory().unwrap();
+        let backup = create_test_backup(ToolType::ClaudeCode);
+
+        db.create_takeover_backup(&backup).unwrap();
+
+        // Verify it was created
+        let fetched = db.get_takeover_backup_by_id(&backup.id).unwrap();
+        assert!(fetched.is_some());
+        let fetched = fetched.unwrap();
+        assert_eq!(fetched.id, backup.id);
+        assert_eq!(fetched.tool_type, ToolType::ClaudeCode);
+        assert_eq!(fetched.status, TakeoverStatus::Active);
+    }
+
+    #[test]
+    fn test_get_takeover_backups_all() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create multiple backups
+        let backup1 = create_test_backup(ToolType::ClaudeCode);
+        let backup2 = TakeoverBackup::new(
+            ToolType::Cursor,
+            PathBuf::from("/home/user/.cursor/mcp.json"),
+            PathBuf::from("/home/user/.cursor/mcp.json.backup"),
+        );
+
+        db.create_takeover_backup(&backup1).unwrap();
+        db.create_takeover_backup(&backup2).unwrap();
+
+        let backups = db.get_takeover_backups(None).unwrap();
+        assert_eq!(backups.len(), 2);
+    }
+
+    #[test]
+    fn test_get_takeover_backups_by_status() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Create active backup
+        let backup1 = create_test_backup(ToolType::ClaudeCode);
+        db.create_takeover_backup(&backup1).unwrap();
+
+        // Create and restore another backup
+        let backup2 = TakeoverBackup::new(
+            ToolType::Cursor,
+            PathBuf::from("/home/user/.cursor/mcp.json"),
+            PathBuf::from("/home/user/.cursor/mcp.json.backup"),
+        );
+        db.create_takeover_backup(&backup2).unwrap();
+        db.update_backup_status_restored(&backup2.id).unwrap();
+
+        // Filter by active
+        let active = db.get_takeover_backups(Some(TakeoverStatus::Active)).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].tool_type, ToolType::ClaudeCode);
+
+        // Filter by restored
+        let restored = db.get_takeover_backups(Some(TakeoverStatus::Restored)).unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].tool_type, ToolType::Cursor);
+    }
+
+    #[test]
+    fn test_get_active_takeover_by_tool() {
+        let db = Database::new_in_memory().unwrap();
+
+        // No backup exists
+        let result = db.get_active_takeover_by_tool(&ToolType::ClaudeCode).unwrap();
+        assert!(result.is_none());
+
+        // Create backup
+        let backup = create_test_backup(ToolType::ClaudeCode);
+        db.create_takeover_backup(&backup).unwrap();
+
+        let result = db.get_active_takeover_by_tool(&ToolType::ClaudeCode).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().id, backup.id);
+
+        // Different tool type should return None
+        let result = db.get_active_takeover_by_tool(&ToolType::Cursor).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_active_takeover_excludes_restored() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = create_test_backup(ToolType::ClaudeCode);
+        db.create_takeover_backup(&backup).unwrap();
+        db.update_backup_status_restored(&backup.id).unwrap();
+
+        // Should not return restored backups
+        let result = db.get_active_takeover_by_tool(&ToolType::ClaudeCode).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_update_backup_status_restored() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = create_test_backup(ToolType::ClaudeCode);
+        db.create_takeover_backup(&backup).unwrap();
+
+        // Update status
+        db.update_backup_status_restored(&backup.id).unwrap();
+
+        // Verify
+        let fetched = db.get_takeover_backup_by_id(&backup.id).unwrap().unwrap();
+        assert_eq!(fetched.status, TakeoverStatus::Restored);
+        assert!(fetched.restored_at.is_some());
+    }
+
+    #[test]
+    fn test_update_backup_status_not_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        let result = db.update_backup_status_restored("nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delete_takeover_backup() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = create_test_backup(ToolType::ClaudeCode);
+        db.create_takeover_backup(&backup).unwrap();
+
+        db.delete_takeover_backup(&backup.id).unwrap();
+
+        let fetched = db.get_takeover_backup_by_id(&backup.id).unwrap();
+        assert!(fetched.is_none());
+    }
+
+    #[test]
+    fn test_takeover_backup_preserves_paths() {
+        let db = Database::new_in_memory().unwrap();
+
+        let original = PathBuf::from("/home/user/.claude.json");
+        let backup_path = PathBuf::from("/home/user/.claude.json.mantra-backup.20260201");
+
+        let backup = TakeoverBackup::new(
+            ToolType::ClaudeCode,
+            original.clone(),
+            backup_path.clone(),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        let fetched = db.get_takeover_backup_by_id(&backup.id).unwrap().unwrap();
+        assert_eq!(fetched.original_path, original);
+        assert_eq!(fetched.backup_path, backup_path);
     }
 }

@@ -1,9 +1,11 @@
 /**
  * Hub Page - Mantra Hub 页面
  * Story 11.6: Task 1 - Hub 路由和页面布局 (AC: #1)
+ * Story 11.15: Task 7.4 - 集成接管状态卡片
  *
  * 提供 MCP Gateway 管理界面：
  * - Gateway 状态卡片
+ * - 接管状态卡片（显示活跃接管和恢复按钮）
  * - MCP 服务列表
  * - 环境变量管理入口
  * - 项目关联配置
@@ -14,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GatewayStatusCard } from "@/components/hub/GatewayStatusCard";
+import { TakeoverStatusCard } from "@/components/hub/TakeoverStatusCard";
 import { McpServiceList } from "@/components/hub/McpServiceList";
 import { EnvVariableManager } from "@/components/hub/EnvVariableManager";
 
@@ -48,6 +51,11 @@ export function Hub() {
           {/* Gateway 状态卡片 (AC: #1, #2) */}
           <section data-testid="hub-gateway-section">
             <GatewayStatusCard />
+          </section>
+
+          {/* 接管状态卡片 (Story 11.15: AC: #4, #5) */}
+          <section data-testid="hub-takeover-section">
+            <TakeoverStatusCard />
           </section>
 
           {/* MCP 服务列表 (AC: #1, #3, #4, #5) */}

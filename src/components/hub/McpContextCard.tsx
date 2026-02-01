@@ -286,6 +286,7 @@ export function McpContextCard({
           onOpenChange={setImportDialogOpen}
           onSuccess={handleImportSuccess}
           projectPath={projectPath}
+          projectId={projectId}
         />
       </>
     );
