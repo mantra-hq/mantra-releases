@@ -13,8 +13,8 @@ use super::database::Database;
 use super::error::StorageError;
 use crate::models::mcp::{
     CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceTool, McpServiceWithOverride,
-    McpTransportType, ProjectMcpService, TakeoverBackup, TakeoverScope, TakeoverStatus, ToolType,
-    UpdateMcpServiceRequest,
+    McpTransportType, ProjectMcpService, TakeoverBackup, TakeoverScope, TakeoverStatus, ToolPolicy,
+    ToolPolicyMode, ToolType, UpdateMcpServiceRequest,
 };
 
 /// 从数据库行解析 McpService
@@ -44,6 +44,11 @@ fn parse_mcp_service_row(row: &Row) -> rusqlite::Result<McpService> {
     let headers: Option<HashMap<String, String>> =
         headers_json.and_then(|s| serde_json::from_str(&s).ok());
 
+    // 解析 default_tool_policy JSON (Story 11.9 Phase 2)
+    let default_tool_policy_json: Option<String> = row.get(13).ok().flatten();
+    let default_tool_policy: Option<ToolPolicy> =
+        default_tool_policy_json.and_then(|s| serde_json::from_str(&s).ok());
+
     Ok(McpService {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -58,6 +63,7 @@ fn parse_mcp_service_row(row: &Row) -> rusqlite::Result<McpService> {
         enabled: enabled != 0,
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
+        default_tool_policy,
     })
 }
 
@@ -137,7 +143,7 @@ impl Database {
     pub fn get_mcp_service(&self, id: &str) -> Result<McpService, StorageError> {
         self.connection()
             .query_row(
-                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
+                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
                    FROM mcp_services WHERE id = ?1"#,
                 [id],
                 parse_mcp_service_row,
@@ -156,7 +162,7 @@ impl Database {
     /// MCP 服务，如果不存在则返回 None
     pub fn get_mcp_service_by_name(&self, name: &str) -> Result<Option<McpService>, StorageError> {
         let result = self.connection().query_row(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
                FROM mcp_services WHERE name = ?1 LIMIT 1"#,
             [name],
             parse_mcp_service_row,
@@ -175,7 +181,7 @@ impl Database {
     /// 所有 MCP 服务列表
     pub fn list_mcp_services(&self) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
                FROM mcp_services ORDER BY name ASC"#,
         )?;
 
@@ -199,7 +205,7 @@ impl Database {
         source: &McpServiceSource,
     ) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
                FROM mcp_services WHERE source = ?1 ORDER BY name ASC"#,
         )?;
 
@@ -307,6 +313,53 @@ impl Database {
         self.get_mcp_service(id)
     }
 
+    // ===== 服务级默认 Tool Policy (Story 11.9 Phase 2) =====
+
+    /// 获取服务的默认 Tool Policy
+    ///
+    /// # Arguments
+    /// * `service_id` - 服务 ID
+    ///
+    /// # Returns
+    /// 服务的默认 Tool Policy，如果未配置则返回默认策略 (AllowAll)
+    pub fn get_service_default_policy(&self, service_id: &str) -> Result<ToolPolicy, StorageError> {
+        let service = self.get_mcp_service(service_id)?;
+        Ok(service.get_default_tool_policy())
+    }
+
+    /// 更新服务的默认 Tool Policy
+    ///
+    /// # Arguments
+    /// * `service_id` - 服务 ID
+    /// * `policy` - Tool Policy，传 None 清除默认策略
+    ///
+    /// # Returns
+    /// 更新后的 MCP 服务
+    pub fn update_service_default_policy(
+        &self,
+        service_id: &str,
+        policy: Option<&ToolPolicy>,
+    ) -> Result<McpService, StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 序列化 policy 为 JSON
+        let policy_json = policy.and_then(|p| serde_json::to_string(p).ok());
+
+        let affected = self.connection().execute(
+            "UPDATE mcp_services SET default_tool_policy = ?1, updated_at = ?2 WHERE id = ?3",
+            params![&policy_json, &now, service_id],
+        )?;
+
+        if affected == 0 {
+            return Err(StorageError::NotFound(format!(
+                "MCP service not found: {}",
+                service_id
+            )));
+        }
+
+        self.get_mcp_service(service_id)
+    }
+
     // ===== 项目关联存储 (Task 4) =====
 
     /// 关联 MCP 服务到项目
@@ -378,7 +431,7 @@ impl Database {
     ) -> Result<Vec<McpServiceWithOverride>, StorageError> {
         let mut stmt = self.connection().prepare(
             r#"SELECT s.id, s.name, s.command, s.args, s.env, s.source, s.source_file, s.enabled, s.created_at, s.updated_at,
-                      ps.config_override
+                      s.transport_type, s.url, s.headers, s.default_tool_policy, ps.config_override
                FROM mcp_services s
                INNER JOIN project_mcp_services ps ON s.id = ps.service_id
                WHERE ps.project_id = ?1
@@ -388,7 +441,7 @@ impl Database {
         let services = stmt
             .query_map([project_id], |row| {
                 let service = parse_mcp_service_row(row)?;
-                let config_json: Option<String> = row.get(10)?;
+                let config_json: Option<String> = row.get(14)?;
                 let config_override = config_json.and_then(|s| serde_json::from_str(&s).ok());
 
                 Ok(McpServiceWithOverride {
@@ -1950,5 +2003,139 @@ mod tests {
         assert_eq!(user_found.scope, TakeoverScope::User);
         assert_eq!(project_found.scope, TakeoverScope::Project);
         assert_eq!(project_found.project_path, Some(PathBuf::from("/home/user/project")));
+    }
+
+    // ===== Story 11.9 Phase 2: Default Tool Policy Tests =====
+
+    #[test]
+    fn test_get_service_default_policy_none() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建服务（无默认策略）
+        let request = CreateMcpServiceRequest {
+            name: "test-service".to_string(),
+            transport_type: Default::default(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        let service = db.create_mcp_service(&request).unwrap();
+
+        // 获取默认策略应返回 AllowAll
+        let policy = db.get_service_default_policy(&service.id).unwrap();
+        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+        assert!(policy.allowed_tools.is_empty());
+        assert!(policy.denied_tools.is_empty());
+    }
+
+    #[test]
+    fn test_update_service_default_policy() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建服务
+        let request = CreateMcpServiceRequest {
+            name: "test-service".to_string(),
+            transport_type: Default::default(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        let service = db.create_mcp_service(&request).unwrap();
+
+        // 更新默认策略为 DenyAll
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::DenyAll,
+            allowed_tools: vec![],
+            denied_tools: vec![],
+        };
+        let updated = db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
+        assert!(updated.default_tool_policy.is_some());
+
+        let retrieved_policy = db.get_service_default_policy(&service.id).unwrap();
+        assert_eq!(retrieved_policy.mode, ToolPolicyMode::DenyAll);
+    }
+
+    #[test]
+    fn test_update_service_default_policy_custom() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建服务
+        let request = CreateMcpServiceRequest {
+            name: "test-service".to_string(),
+            transport_type: Default::default(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        let service = db.create_mcp_service(&request).unwrap();
+
+        // 更新为 Custom 策略
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::Custom,
+            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
+            denied_tools: vec!["write_file".to_string()],
+        };
+        db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
+
+        let retrieved = db.get_service_default_policy(&service.id).unwrap();
+        assert_eq!(retrieved.mode, ToolPolicyMode::Custom);
+        assert_eq!(retrieved.allowed_tools, vec!["read_file", "list_commits"]);
+        assert_eq!(retrieved.denied_tools, vec!["write_file"]);
+    }
+
+    #[test]
+    fn test_update_service_default_policy_clear() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建服务
+        let request = CreateMcpServiceRequest {
+            name: "test-service".to_string(),
+            transport_type: Default::default(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Manual,
+            source_file: None,
+        };
+        let service = db.create_mcp_service(&request).unwrap();
+
+        // 先设置策略
+        let policy = ToolPolicy {
+            mode: ToolPolicyMode::DenyAll,
+            allowed_tools: vec![],
+            denied_tools: vec![],
+        };
+        db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
+
+        // 然后清除策略
+        let updated = db.update_service_default_policy(&service.id, None).unwrap();
+        assert!(updated.default_tool_policy.is_none());
+
+        // 获取策略应返回默认值
+        let retrieved = db.get_service_default_policy(&service.id).unwrap();
+        assert_eq!(retrieved.mode, ToolPolicyMode::AllowAll);
+    }
+
+    #[test]
+    fn test_update_service_default_policy_not_found() {
+        let db = Database::new_in_memory().unwrap();
+
+        let policy = ToolPolicy::default();
+        let result = db.update_service_default_policy("nonexistent-id", Some(&policy));
+        assert!(result.is_err());
     }
 }

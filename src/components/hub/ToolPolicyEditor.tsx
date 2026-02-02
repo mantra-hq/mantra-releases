@@ -1,8 +1,11 @@
 /**
  * Tool Policy 编辑器组件
  * Story 11.10: Project-Level Tool Management - Task 4.1, 4.2, 4.3, 4.4
+ * Story 11.9 Phase 2: Task 10 - 支持全局模式（服务级默认策略）
  *
- * 用于编辑项目级 MCP 工具策略：
+ * 用于编辑 MCP 工具策略：
+ * - 项目级模式：当 projectId 有值时，编辑项目级策略覆盖
+ * - 全局模式：当 projectId 为空时，编辑服务级默认策略
  * - Mode 选择器 (Allow All / Deny All / Custom)
  * - 工具列表展示 (名称、描述、Toggle)
  * - "Refresh Tools" 按钮强制刷新工具列表
@@ -42,7 +45,8 @@ import type { ToolPolicy, ToolPolicyMode, McpTool, ToolDiscoveryResult } from "@
 import { DEFAULT_TOOL_POLICY, isToolAllowed } from "@/types/mcp";
 
 interface ToolPolicyEditorProps {
-  projectId: string;
+  /** 项目 ID（可选，不提供则为全局模式） */
+  projectId?: string;
   serviceId: string;
   serviceName?: string;
   /** 初始策略（可选，如果未提供会从后端加载） */
@@ -113,17 +117,29 @@ export function ToolPolicyEditor({
   const [fromCache, setFromCache] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | undefined>();
 
+  // 是否为全局模式（无 projectId）
+  const isGlobalMode = !projectId;
+
   // 加载策略和工具列表
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       // 加载工具策略
       if (!initialPolicy) {
-        const loadedPolicy = await invoke<ToolPolicy>('get_project_tool_policy', {
-          projectId,
-          serviceId,
-        });
-        setPolicy(loadedPolicy);
+        if (isGlobalMode) {
+          // 全局模式：加载服务级默认策略
+          const loadedPolicy = await invoke<ToolPolicy>('get_service_default_policy', {
+            serviceId,
+          });
+          setPolicy(loadedPolicy);
+        } else {
+          // 项目模式：加载项目级策略
+          const loadedPolicy = await invoke<ToolPolicy>('get_project_tool_policy', {
+            projectId,
+            serviceId,
+          });
+          setPolicy(loadedPolicy);
+        }
       }
 
       // 加载工具列表
@@ -139,7 +155,7 @@ export function ToolPolicyEditor({
     } finally {
       setIsLoading(false);
     }
-  }, [projectId, serviceId, initialPolicy, t]);
+  }, [isGlobalMode, projectId, serviceId, initialPolicy, t]);
 
   // 初始加载
   useEffect(() => {
@@ -182,11 +198,20 @@ export function ToolPolicyEditor({
     // 保存到后端
     setIsSaving(true);
     try {
-      await invoke('update_project_tool_policy', {
-        projectId,
-        serviceId,
-        policy: newPolicy,
-      });
+      if (isGlobalMode) {
+        // 全局模式：更新服务级默认策略
+        await invoke('update_service_default_policy', {
+          serviceId,
+          policy: newPolicy,
+        });
+      } else {
+        // 项目模式：更新项目级策略
+        await invoke('update_project_tool_policy', {
+          projectId,
+          serviceId,
+          policy: newPolicy,
+        });
+      }
       feedback.success(t('hub.toolPolicy.saveSuccess'));
       onSaved?.();
     } catch (error) {
@@ -195,7 +220,7 @@ export function ToolPolicyEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [policy, projectId, serviceId, onPolicyChange, onSaved, t]);
+  }, [policy, isGlobalMode, projectId, serviceId, onPolicyChange, onSaved, t]);
 
   // 切换工具的允许/禁止状态
   const handleToggleTool = useCallback(async (toolName: string, allowed: boolean) => {
@@ -227,11 +252,20 @@ export function ToolPolicyEditor({
     // 保存到后端
     setIsSaving(true);
     try {
-      await invoke('update_project_tool_policy', {
-        projectId,
-        serviceId,
-        policy: newPolicy,
-      });
+      if (isGlobalMode) {
+        // 全局模式：更新服务级默认策略
+        await invoke('update_service_default_policy', {
+          serviceId,
+          policy: newPolicy,
+        });
+      } else {
+        // 项目模式：更新项目级策略
+        await invoke('update_project_tool_policy', {
+          projectId,
+          serviceId,
+          policy: newPolicy,
+        });
+      }
       onSaved?.();
     } catch (error) {
       console.error('[ToolPolicyEditor] Failed to save policy:', error);
@@ -239,7 +273,7 @@ export function ToolPolicyEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [policy, projectId, serviceId, onPolicyChange, onSaved, t]);
+  }, [policy, isGlobalMode, projectId, serviceId, onPolicyChange, onSaved, t]);
 
   // 渲染内容
   const renderContent = () => {
@@ -412,7 +446,9 @@ export function ToolPolicyEditor({
           {t('hub.toolPolicy.title')}
         </CardTitle>
         <CardDescription>
-          {t('hub.toolPolicy.description', { service: serviceName })}
+          {isGlobalMode
+            ? t('hub.toolPolicy.descriptionGlobal', { service: serviceName })
+            : t('hub.toolPolicy.description', { service: serviceName })}
         </CardDescription>
       </CardHeader>
       <CardContent>{renderContent()}</CardContent>

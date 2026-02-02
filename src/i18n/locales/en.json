@@ -1003,7 +1003,7 @@
       "deleteConfirm": "Are you sure you want to delete service \"{{name}}\"?",
       "deleteSuccess": "Deleted {{name}}",
       "deleteError": "Failed to delete service",
-      "linkProjects": "Link Projects",
+      "linkProjects": "Manage Projects",
       "disabled": "Service is disabled",
       "form": {
         "addTitle": "Add MCP Service",
@@ -1043,8 +1043,8 @@
       "loadError": "Failed to load projects",
       "saveSuccess": "Project associations saved",
       "saveError": "Failed to save project associations",
-      "editOverride": "Override",
-      "overrideTitle": "Project-level Config Override",
+      "editOverride": "Manage Tools",
+      "overrideTitle": "Tool Permissions",
       "overrideDescription": "Customize service configuration for this project, overriding defaults",
       "overrideLabel": "Config Override (JSON)",
       "overridePlaceholder": "{\"args\": [\"--custom-arg\"]}",
@@ -1190,7 +1190,11 @@
       "addServicesHint": "Add MCP tools to enhance your AI coding experience.",
       "statusRunning": "Running",
       "statusStopped": "Stopped",
-      "statusError": "Error"
+      "statusError": "Error",
+      "manageTools": "Manage Tools",
+      "toolPermissions": "Tool Permissions",
+      "policyDenyAll": "All Denied",
+      "policyCustom": "Custom {{count}}"
     },
     "takeover": {
       "title": "Takeover Status",
@@ -1218,6 +1222,7 @@
     "toolPolicy": {
       "title": "Tool Policy",
       "description": "Configure tool access permissions for {{service}}",
+      "descriptionGlobal": "Configure default tool access permissions for {{service}}, applied to all projects",
       "mode": "Policy Mode",
       "modeAllowAll": "Allow All Tools",
       "modeDenyAll": "Deny All Tools",

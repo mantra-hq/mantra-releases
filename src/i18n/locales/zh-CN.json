@@ -1008,7 +1008,7 @@
       "deleteConfirm": "确定要删除服务 \"{{name}}\" 吗？",
       "deleteSuccess": "已删除 {{name}}",
       "deleteError": "删除服务失败",
-      "linkProjects": "关联项目",
+      "linkProjects": "管理项目关联",
       "disabled": "服务已禁用",
       "form": {
         "addTitle": "添加 MCP 服务",
@@ -1048,8 +1048,8 @@
       "loadError": "加载项目列表失败",
       "saveSuccess": "项目关联已保存",
       "saveError": "保存项目关联失败",
-      "editOverride": "配置覆盖",
-      "overrideTitle": "项目级配置覆盖",
+      "editOverride": "管理工具",
+      "overrideTitle": "工具权限设置",
       "overrideDescription": "为此项目自定义服务配置，将覆盖默认配置",
       "overrideLabel": "配置覆盖 (JSON)",
       "overridePlaceholder": "{\"args\": [\"--custom-arg\"]}",
@@ -1196,7 +1196,11 @@
       "addServicesHint": "添加 MCP 工具以增强 AI 编程体验",
       "statusRunning": "运行中",
       "statusStopped": "未运行",
-      "statusError": "错误"
+      "statusError": "错误",
+      "manageTools": "管理工具",
+      "toolPermissions": "工具权限",
+      "policyDenyAll": "全部禁止",
+      "policyCustom": "自定义 {{count}}"
     },
     "takeover": {
       "title": "配置接管状态",
@@ -1224,6 +1228,7 @@
     "toolPolicy": {
       "title": "工具策略",
       "description": "为 {{service}} 配置工具访问权限",
+      "descriptionGlobal": "配置 {{service}} 的默认工具访问权限，将应用于所有项目",
       "mode": "策略模式",
       "modeAllowAll": "允许所有工具",
       "modeDenyAll": "禁止所有工具",

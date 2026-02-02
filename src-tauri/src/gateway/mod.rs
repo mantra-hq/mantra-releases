@@ -2,6 +2,7 @@
 //!
 //! Story 11.1: SSE Server 核心
 //! Story 11.5: 上下文路由
+//! Story 11.9 Phase 2: 工具策略完整实现 - PolicyResolver
 //! Story 11.10: Project-Level Tool Management
 //! Story 11.11: Integrated MCP Inspector - HTTP Transport
 //! Story 11.12: Remote MCP OAuth Support
@@ -18,6 +19,7 @@ mod handlers;
 pub mod http_forwarder;
 pub mod http_transport;
 mod origin;
+pub mod policy;
 pub mod process_manager;
 pub mod router;
 mod server;
@@ -51,6 +53,8 @@ pub use aggregator::{
     AggregatorError, McpAggregator, McpPrompt, McpResource, McpTool, ServiceCapabilities,
     SharedMcpAggregator, WarmupResult,
 };
+// Story 11.9 Phase 2: PolicyResolver
+pub use policy::{PolicyResolver, SharedPolicyResolver, StoragePolicyResolver};
 
 #[cfg(test)]
 mod tests;

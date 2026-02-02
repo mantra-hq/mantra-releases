@@ -299,6 +299,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let override_config = serde_json::json!({
@@ -335,6 +336,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let override_config = serde_json::json!({
@@ -373,6 +375,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let override_config = serde_json::json!({
@@ -408,6 +411,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let merged = registry.merge_service_config(&service, None);
@@ -442,6 +446,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let env = registry.build_process_env(&service).await.unwrap();
@@ -471,6 +476,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         // 变量不存在时保留原始引用

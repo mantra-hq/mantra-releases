@@ -422,7 +422,7 @@ pub struct McpAggregator {
     /// 服务配置 (service_id -> McpService)
     services: RwLock<HashMap<String, McpService>>,
     /// 服务缓存 (service_id -> ServiceCache)
-    cache: RwLock<HashMap<String, ServiceCache>>,
+    pub(crate) cache: RwLock<HashMap<String, ServiceCache>>,
     /// 服务名称到 ID 的映射
     name_to_id: RwLock<HashMap<String, String>>,
 }
@@ -909,18 +909,33 @@ impl McpAggregator {
     /// 获取聚合的工具列表
     ///
     /// # Arguments
-    /// * `policy` - 可选的 Tool Policy 用于过滤
-    pub async fn list_tools(&self, policy: Option<&ToolPolicy>) -> Vec<McpTool> {
+    /// * `policies` - 可选的服务级 Tool Policy 映射，key 为 service_id
+    ///
+    /// Story 11.9 Phase 2: 支持服务级独立 Tool Policy
+    pub async fn list_tools(&self, policies: Option<&HashMap<String, ToolPolicy>>) -> Vec<McpTool> {
         let cache = self.cache.read().await;
-        let mut all_tools: Vec<McpTool> = cache
-            .values()
-            .filter(|c| c.initialized)
-            .flat_map(|c| c.tools.clone())
-            .collect();
+        let mut all_tools: Vec<McpTool> = Vec::new();
 
-        // 应用 Tool Policy 过滤
-        if let Some(policy) = policy {
-            all_tools.retain(|tool| policy.is_tool_allowed(&tool.name));
+        for service_cache in cache.values() {
+            if !service_cache.initialized {
+                continue;
+            }
+
+            // 获取该服务的 Policy（如果有）
+            let service_policy = policies.and_then(|p| p.get(&service_cache.service_id));
+
+            // 过滤该服务的工具
+            for tool in &service_cache.tools {
+                if let Some(policy) = service_policy {
+                    // 使用原始工具名进行 Policy 检查
+                    if policy.is_tool_allowed(&tool.original_name) {
+                        all_tools.push(tool.clone());
+                    }
+                } else {
+                    // 无 Policy，允许所有工具
+                    all_tools.push(tool.clone());
+                }
+            }
         }
 
         all_tools
@@ -964,6 +979,18 @@ impl McpAggregator {
     pub async fn get_service_id_by_name(&self, service_name: &str) -> Option<String> {
         let name_to_id = self.name_to_id.read().await;
         name_to_id.get(service_name).cloned()
+    }
+
+    /// 获取已初始化服务的 ID 列表
+    ///
+    /// Story 11.9 Phase 2: 用于 Tool Policy 过滤
+    pub async fn list_initialized_service_ids(&self) -> Vec<String> {
+        let cache = self.cache.read().await;
+        cache
+            .values()
+            .filter(|c| c.initialized)
+            .map(|c| c.service_id.clone())
+            .collect()
     }
 
     /// 获取服务配置
@@ -1230,6 +1257,7 @@ mod tests {
             enabled: true,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            default_tool_policy: None,
         }];
 
         let aggregator = McpAggregator::new(services);
@@ -1263,6 +1291,7 @@ mod tests {
             enabled: true,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            default_tool_policy: None,
         };
 
         aggregator.update_service(service).await;
@@ -1270,5 +1299,231 @@ mod tests {
 
         aggregator.remove_service("svc-new").await;
         assert!(aggregator.get_service("svc-new").await.is_none());
+    }
+
+    /// Story 11.9 Phase 2: 测试服务级 Tool Policy 过滤
+    #[tokio::test]
+    async fn test_aggregator_list_tools_with_service_policies() {
+        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+
+        let aggregator = McpAggregator::new(vec![]);
+
+        // 手动向缓存添加两个服务的工具数据
+        {
+            let mut cache = aggregator.cache.write().await;
+
+            // 服务 1 有两个工具: read_file, write_file
+            cache.insert(
+                "svc-1".to_string(),
+                ServiceCache {
+                    service_id: "svc-1".to_string(),
+                    service_name: "service-a".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-1", "service-a", "read_file", None, None, None, None),
+                        McpTool::new("svc-1", "service-a", "write_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+
+            // 服务 2 有两个工具: list_dir, delete_file
+            cache.insert(
+                "svc-2".to_string(),
+                ServiceCache {
+                    service_id: "svc-2".to_string(),
+                    service_name: "service-b".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-2", "service-b", "list_dir", None, None, None, None),
+                        McpTool::new("svc-2", "service-b", "delete_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+
+        // 测试 1: 无 Policy，返回所有工具
+        let all_tools = aggregator.list_tools(None).await;
+        assert_eq!(all_tools.len(), 4);
+
+        // 测试 2: 服务 1 使用 DenyAll Policy
+        let mut policies = HashMap::new();
+        policies.insert(
+            "svc-1".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::DenyAll,
+                allowed_tools: vec![],
+                denied_tools: vec![],
+            },
+        );
+
+        let tools_with_policy = aggregator.list_tools(Some(&policies)).await;
+        assert_eq!(tools_with_policy.len(), 2); // 只有服务 2 的工具
+        assert!(tools_with_policy.iter().all(|t| t.service_id == "svc-2"));
+
+        // 测试 3: 服务 1 使用 Custom Policy（只允许 read_file）
+        policies.insert(
+            "svc-1".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::Custom,
+                allowed_tools: vec!["read_file".to_string()],
+                denied_tools: vec![],
+            },
+        );
+
+        let tools_custom = aggregator.list_tools(Some(&policies)).await;
+        assert_eq!(tools_custom.len(), 3); // 服务 1 的 read_file + 服务 2 的两个工具
+        assert!(tools_custom.iter().any(|t| t.original_name == "read_file" && t.service_id == "svc-1"));
+        assert!(tools_custom.iter().all(|t| t.original_name != "write_file" || t.service_id != "svc-1"));
+
+        // 测试 4: 两个服务都有 Policy
+        policies.insert(
+            "svc-2".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::Custom,
+                allowed_tools: vec!["list_dir".to_string()],
+                denied_tools: vec![],
+            },
+        );
+
+        let tools_both = aggregator.list_tools(Some(&policies)).await;
+        assert_eq!(tools_both.len(), 2); // 服务 1 的 read_file + 服务 2 的 list_dir
+    }
+
+    /// Story 11.9 Phase 2: AllowAll + denied_tools 过滤
+    #[tokio::test]
+    async fn test_aggregator_list_tools_allow_all_with_denied() {
+        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+
+        let aggregator = McpAggregator::new(vec![]);
+
+        {
+            let mut cache = aggregator.cache.write().await;
+            cache.insert(
+                "svc-1".to_string(),
+                ServiceCache {
+                    service_id: "svc-1".to_string(),
+                    service_name: "service-a".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-1", "service-a", "read_file", None, None, None, None),
+                        McpTool::new("svc-1", "service-a", "write_file", None, None, None, None),
+                        McpTool::new("svc-1", "service-a", "delete_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+
+        // AllowAll + denied_tools: delete_file 被禁止
+        let mut policies = HashMap::new();
+        policies.insert(
+            "svc-1".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::AllowAll,
+                allowed_tools: vec![],
+                denied_tools: vec!["delete_file".to_string()],
+            },
+        );
+
+        let tools = aggregator.list_tools(Some(&policies)).await;
+        assert_eq!(tools.len(), 2);
+        assert!(tools.iter().all(|t| t.original_name != "delete_file"));
+    }
+
+    /// Story 11.9 Phase 2: 空 policies HashMap 应返回所有工具
+    #[tokio::test]
+    async fn test_aggregator_list_tools_empty_policies_map() {
+        use crate::models::mcp::ToolPolicy;
+
+        let aggregator = McpAggregator::new(vec![]);
+
+        {
+            let mut cache = aggregator.cache.write().await;
+            cache.insert(
+                "svc-1".to_string(),
+                ServiceCache {
+                    service_id: "svc-1".to_string(),
+                    service_name: "service-a".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-1", "service-a", "read_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+
+        // 空 policies map（有 map 但 service 不在其中）
+        let policies: HashMap<String, ToolPolicy> = HashMap::new();
+        let tools = aggregator.list_tools(Some(&policies)).await;
+        assert_eq!(tools.len(), 1); // 无匹配 policy，返回所有工具
+    }
+
+    /// Story 11.9 Phase 2: 未初始化服务不返回工具
+    #[tokio::test]
+    async fn test_aggregator_list_tools_uninitialised_service_excluded() {
+        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+
+        let aggregator = McpAggregator::new(vec![]);
+
+        {
+            let mut cache = aggregator.cache.write().await;
+            // 已初始化
+            cache.insert(
+                "svc-1".to_string(),
+                ServiceCache {
+                    service_id: "svc-1".to_string(),
+                    service_name: "service-a".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-1", "service-a", "tool_a", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+            // 未初始化
+            cache.insert(
+                "svc-2".to_string(),
+                ServiceCache {
+                    service_id: "svc-2".to_string(),
+                    service_name: "service-b".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-2", "service-b", "tool_b", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: false,
+                    last_updated: None,
+                    error: None,
+                },
+            );
+        }
+
+        let tools = aggregator.list_tools(None).await;
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].service_id, "svc-1");
     }
 }

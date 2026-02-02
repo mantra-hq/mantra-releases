@@ -1,12 +1,14 @@
 /**
  * MCP Context Card 组件
  * Story 11.9: Task 2 - 项目详情页 MCP 状态卡片 (AC: #1, #2, #3, #4, #5)
+ * Story 11.9 Phase 2: Task 9 - 工具策略入口 (AC: #6, #7)
  *
  * 显示项目的 MCP 服务状态：
  * - 已关联的服务列表及运行状态
  * - 可检测到的配置文件 (接管入口)
  * - 空状态引导
  * - 管理入口
+ * - 工具策略管理入口 (Phase 2)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,15 +18,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Plug,
   Settings2,
   Download,
   Plus,
   Loader2,
+  Shield,
+  ShieldOff,
+  ShieldAlert,
 } from "lucide-react";
 import { McpServiceStatusDot, type ServiceStatus } from "./McpServiceStatusDot";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import { McpConfigImportDialog } from "./McpConfigImportDialog";
+import { ToolPolicyEditor } from "./ToolPolicyEditor";
 
 // ===== 类型定义 =====
 
@@ -35,6 +47,10 @@ interface McpServiceSummary {
   adapter_id: string;
   is_running: boolean;
   error_message: string | null;
+  /** 当前生效的 Tool Policy 模式 */
+  tool_policy_mode: string | null;
+  /** Custom 模式下涉及的工具数量 */
+  custom_tools_count: number | null;
 }
 
 /** 可检测的配置 */
@@ -92,6 +108,47 @@ function getServiceStatus(service: McpServiceSummary): ServiceStatus {
   return "stopped";
 }
 
+/**
+ * 策略状态徽标
+ * - allow_all: 绿色 ShieldCheck "All Allowed"
+ * - deny_all: 红色 ShieldOff "All Denied"
+ * - custom: 黄色 ShieldAlert "Custom N"
+ * - null/undefined: 不显示
+ */
+function PolicyBadge({ service, t }: { service: McpServiceSummary; t: (key: string, fallback: string, opts?: Record<string, unknown>) => string }) {
+  if (!service.tool_policy_mode || service.tool_policy_mode === "allow_all") {
+    return null;
+  }
+
+  if (service.tool_policy_mode === "deny_all") {
+    return (
+      <Badge
+        variant="destructive"
+        className="text-[10px] px-1.5 py-0 h-5 gap-1"
+        data-testid={`mcp-policy-badge-${service.id}`}
+      >
+        <ShieldOff className="h-3 w-3" />
+        {t("hub.mcpContext.policyDenyAll", "All Denied")}
+      </Badge>
+    );
+  }
+
+  if (service.tool_policy_mode === "custom") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] px-1.5 py-0 h-5 gap-1 border-yellow-500/50 text-yellow-500"
+        data-testid={`mcp-policy-badge-${service.id}`}
+      >
+        <ShieldAlert className="h-3 w-3" />
+        {t("hub.mcpContext.policyCustom", "Custom {{count}}", { count: service.custom_tools_count ?? 0 })}
+      </Badge>
+    );
+  }
+
+  return null;
+}
+
 export function McpContextCard({
   projectId,
   projectPath,
@@ -103,6 +160,9 @@ export function McpContextCard({
   const [status, setStatus] = useState<ProjectMcpStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  // Story 11.9 Phase 2: 工具策略 Dialog 状态
+  const [policyDialogService, setPolicyDialogService] = useState<McpServiceSummary | null>(null);
 
   // 加载 MCP 状态
   const loadStatus = useCallback(async () => {
@@ -174,58 +234,107 @@ export function McpContextCard({
   // 已接管状态：显示关联的服务
   if (status?.is_taken_over) {
     return (
-      <Card className="w-full" data-testid="mcp-context-card">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Plug className="h-4 w-4" />
-              {t("hub.mcpContext.title", "MCP Context")}
-            </CardTitle>
-            <Badge variant="secondary" className="text-xs">
-              {runningServices > 0
-                ? t("hub.mcpContext.servicesActive", "{{count}} Services Active", { count: runningServices })
-                : t("hub.mcpContext.servicesCount", "{{count}} Services", { count: totalServices })}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* 服务列表 */}
-          <div className="space-y-2">
-            {status.associated_services.map((service) => (
-              <div
-                key={service.id}
-                className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
-                data-testid={`mcp-service-${service.id}`}
-              >
-                <McpServiceStatusDot
-                  status={getServiceStatus(service)}
-                  errorMessage={service.error_message}
-                />
-                <span className="text-sm font-medium flex-1 truncate">
-                  {service.name}
-                </span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <SourceIcon source={service.adapter_id} className="h-4 w-4" />
-                  <span className="text-xs text-muted-foreground">
-                    {getAdapterLabel(service.adapter_id)}
+      <>
+        <Card className="w-full" data-testid="mcp-context-card">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Plug className="h-4 w-4" />
+                {t("hub.mcpContext.title", "MCP Context")}
+              </CardTitle>
+              <Badge variant="secondary" className="text-xs">
+                {runningServices > 0
+                  ? t("hub.mcpContext.servicesActive", "{{count}} Services Active", { count: runningServices })
+                  : t("hub.mcpContext.servicesCount", "{{count}} Services", { count: totalServices })}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* 服务列表 */}
+            <div className="space-y-2">
+              {status.associated_services.map((service) => (
+                <div
+                  key={service.id}
+                  className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                  data-testid={`mcp-service-${service.id}`}
+                >
+                  <McpServiceStatusDot
+                    status={getServiceStatus(service)}
+                    errorMessage={service.error_message}
+                  />
+                  <span className="text-sm font-medium flex-1 truncate">
+                    {service.name}
                   </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <SourceIcon source={service.adapter_id} className="h-4 w-4" />
+                    <span className="text-xs text-muted-foreground">
+                      {getAdapterLabel(service.adapter_id)}
+                    </span>
+                  </div>
+                  {/* Story 11.9 Phase 2: 策略状态徽标 */}
+                  <PolicyBadge service={service} t={t} />
+                  {/* Story 11.9 Phase 2: 管理工具按钮 */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => setPolicyDialogService(service)}
+                    title={t("hub.mcpContext.manageTools", "Manage Tools")}
+                    data-testid={`mcp-manage-tools-${service.id}`}
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          {/* 管理按钮 */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleManageServices}
-            data-testid="mcp-manage-services-button"
-          >
-            <Settings2 className="h-4 w-4 mr-2" />
-            {t("hub.mcpContext.manageServices", "Manage Services")}
-          </Button>
-        </CardContent>
-      </Card>
+            {/* 管理按钮 */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleManageServices}
+              data-testid="mcp-manage-services-button"
+            >
+              <Settings2 className="h-4 w-4 mr-2" />
+              {t("hub.mcpContext.manageServices", "Manage Services")}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Story 11.9 Phase 2: 工具策略编辑 Dialog */}
+        <Dialog
+          open={!!policyDialogService}
+          onOpenChange={(open) => {
+            if (!open) setPolicyDialogService(null);
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
+                {policyDialogService && (
+                  <Badge variant="outline" className="ml-2">
+                    {policyDialogService.name}
+                  </Badge>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {policyDialogService && (
+              <ToolPolicyEditor
+                projectId={projectId}
+                serviceId={policyDialogService.id}
+                serviceName={policyDialogService.name}
+                onSaved={() => {
+                  setPolicyDialogService(null);
+                  loadStatus(); // Refresh badges
+                  onStatusChange?.();
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 

@@ -20,12 +20,13 @@ use std::sync::Arc;
 use tokio::sync::{oneshot, watch, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use super::auth::auth_middleware;
 use super::aggregator::SharedMcpAggregator;
+use super::auth::auth_middleware;
 use super::handlers::{
     health_handler, mcp_delete_handler, mcp_get_handler, mcp_post_handler, message_handler,
     sse_handler, GatewayAppState,
 };
+use super::policy::SharedPolicyResolver;
 use super::session::MCP_SESSION_ID_HEADER;
 use super::state::{GatewayConfig, GatewayState, GatewayStats};
 
@@ -89,6 +90,8 @@ pub struct GatewayServer {
     config: GatewayConfig,
     /// MCP 协议聚合器 (Story 11.17)
     aggregator: Option<SharedMcpAggregator>,
+    /// Tool Policy 解析器 (Story 11.9 Phase 2)
+    policy_resolver: Option<SharedPolicyResolver>,
 }
 
 impl GatewayServer {
@@ -97,6 +100,7 @@ impl GatewayServer {
         Self {
             config,
             aggregator: None,
+            policy_resolver: None,
         }
     }
 
@@ -112,11 +116,34 @@ impl GatewayServer {
         self.aggregator = Some(aggregator);
     }
 
+    /// 设置 Tool Policy 解析器
+    ///
+    /// Story 11.9 Phase 2: 工具策略完整实现
+    pub fn set_policy_resolver(&mut self, policy_resolver: SharedPolicyResolver) {
+        self.policy_resolver = Some(policy_resolver);
+    }
+
     /// 创建带聚合器的 Server 实例
     pub fn with_aggregator(config: GatewayConfig, aggregator: SharedMcpAggregator) -> Self {
         Self {
             config,
             aggregator: Some(aggregator),
+            policy_resolver: None,
+        }
+    }
+
+    /// 创建带聚合器和 PolicyResolver 的 Server 实例
+    ///
+    /// Story 11.9 Phase 2: 工具策略完整实现
+    pub fn with_aggregator_and_policy(
+        config: GatewayConfig,
+        aggregator: SharedMcpAggregator,
+        policy_resolver: SharedPolicyResolver,
+    ) -> Self {
+        Self {
+            config,
+            aggregator: Some(aggregator),
+            policy_resolver: Some(policy_resolver),
         }
     }
 
@@ -159,11 +186,20 @@ impl GatewayServer {
 
         // 创建应用状态
         // Story 11.17: 如果有聚合器，则使用 with_aggregator
-        let app_state = match &self.aggregator {
-            Some(aggregator) => {
+        // Story 11.9 Phase 2: 如果有 PolicyResolver，则使用 with_aggregator_and_policy
+        let app_state = match (&self.aggregator, &self.policy_resolver) {
+            (Some(aggregator), Some(policy_resolver)) => {
+                GatewayAppState::with_aggregator_and_policy(
+                    state.clone(),
+                    stats.clone(),
+                    aggregator.clone(),
+                    policy_resolver.clone(),
+                )
+            }
+            (Some(aggregator), None) => {
                 GatewayAppState::with_aggregator(state.clone(), stats.clone(), aggregator.clone())
             }
-            None => GatewayAppState::new(state.clone(), stats.clone()),
+            _ => GatewayAppState::new(state.clone(), stats.clone()),
         };
 
         // 创建受保护路由（需要认证）
@@ -268,6 +304,8 @@ pub struct GatewayServerManager {
     port_rx: watch::Receiver<u16>,
     /// MCP 协议聚合器 (Story 11.17)
     aggregator: Option<SharedMcpAggregator>,
+    /// Tool Policy 解析器 (Story 11.9 Phase 2)
+    policy_resolver: Option<SharedPolicyResolver>,
 }
 
 impl GatewayServerManager {
@@ -286,6 +324,7 @@ impl GatewayServerManager {
             port_tx,
             port_rx,
             aggregator: None,
+            policy_resolver: None,
         }
     }
 
@@ -308,6 +347,20 @@ impl GatewayServerManager {
         self.aggregator.as_ref()
     }
 
+    /// 设置 Tool Policy 解析器
+    ///
+    /// Story 11.9 Phase 2: 工具策略完整实现
+    pub fn set_policy_resolver(&mut self, policy_resolver: SharedPolicyResolver) {
+        self.policy_resolver = Some(policy_resolver);
+    }
+
+    /// 获取 Tool Policy 解析器引用
+    ///
+    /// Story 11.9 Phase 2: 工具策略完整实现
+    pub fn policy_resolver(&self) -> Option<&SharedPolicyResolver> {
+        self.policy_resolver.as_ref()
+    }
+
     /// 启动 Server
     pub async fn start(&mut self) -> Result<(), String> {
         if self.handle.is_some() {
@@ -315,10 +368,17 @@ impl GatewayServerManager {
         }
 
         // Story 11.17: 使用聚合器创建 Server
-        let server = match &self.aggregator {
+        // Story 11.9 Phase 2: 同时注入 PolicyResolver
+        let mut server = match &self.aggregator {
             Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
             None => GatewayServer::new(self.config.clone()),
         };
+
+        // 注入 PolicyResolver
+        if let Some(policy_resolver) = &self.policy_resolver {
+            server.set_policy_resolver(policy_resolver.clone());
+        }
+
         let handle = server.start(None).await?;
         let port = handle.port();
         let _ = self.port_tx.send(port);
@@ -344,10 +404,17 @@ impl GatewayServerManager {
         }
 
         // Story 11.17: 重新启动时使用聚合器
-        let server = match &self.aggregator {
+        // Story 11.9 Phase 2: 同时注入 PolicyResolver
+        let mut server = match &self.aggregator {
             Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
             None => GatewayServer::new(self.config.clone()),
         };
+
+        // 注入 PolicyResolver
+        if let Some(policy_resolver) = &self.policy_resolver {
+            server.set_policy_resolver(policy_resolver.clone());
+        }
+
         let handle = server.start(new_port).await?;
         let port = handle.port();
         let _ = self.port_tx.send(port);

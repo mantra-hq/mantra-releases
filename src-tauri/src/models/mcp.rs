@@ -106,6 +106,10 @@ pub struct McpService {
     pub created_at: String,
     /// 更新时间 (ISO 8601)
     pub updated_at: String,
+    /// 服务级默认 Tool Policy (Story 11.9 Phase 2)
+    /// 当项目未配置项目级 Policy 时，使用此默认策略
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_tool_policy: Option<ToolPolicy>,
 }
 
 /// 创建 MCP 服务的请求参数
@@ -166,6 +170,21 @@ pub struct ProjectMcpService {
     pub config_override: Option<serde_json::Value>,
     /// 创建时间 (ISO 8601)
     pub created_at: String,
+}
+
+impl McpService {
+    /// 获取服务级默认 Tool Policy (Story 11.9 Phase 2)
+    ///
+    /// 返回 `default_tool_policy` 字段值。
+    /// 如果未配置，返回默认策略 (AllowAll)。
+    pub fn get_default_tool_policy(&self) -> ToolPolicy {
+        self.default_tool_policy.clone().unwrap_or_default()
+    }
+
+    /// 设置服务级默认 Tool Policy (Story 11.9 Phase 2)
+    pub fn set_default_tool_policy(&mut self, policy: Option<ToolPolicy>) {
+        self.default_tool_policy = policy;
+    }
 }
 
 impl ProjectMcpService {
@@ -685,6 +704,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let json = serde_json::to_string(&service).unwrap();
@@ -715,6 +735,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let json = serde_json::to_string(&service).unwrap();
@@ -845,6 +866,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let with_override = McpServiceWithOverride {

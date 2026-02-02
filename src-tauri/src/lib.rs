@@ -83,6 +83,10 @@ use commands::{
     get_active_takeovers_by_project, read_config_file_content,
     // Story 11.9: Project Detail MCP Integration commands
     check_project_mcp_status,
+    // Story 11.10: Project-Level Tool Management commands
+    get_project_tool_policy, update_project_tool_policy,
+    // Story 11.9 Phase 2: Service-Level Default Tool Policy commands
+    get_service_default_policy, update_service_default_policy,
     // Story 11.7: Tray commands
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
     // Story 11.12: OAuth commands
@@ -173,7 +177,7 @@ pub fn run() {
             let mcp_db = Database::new(&db_path).expect("Failed to create MCP db connection");
             let env_manager = EnvManager::from_machine_id();
             app.manage(McpState {
-                db: Mutex::new(mcp_db),
+                db: Arc::new(Mutex::new(mcp_db)),
                 env_manager,
             });
 
@@ -388,6 +392,12 @@ pub fn run() {
             read_config_file_content,
             // Story 11.9: Project Detail MCP Integration
             check_project_mcp_status,
+            // Story 11.10: Project-Level Tool Management
+            get_project_tool_policy,
+            update_project_tool_policy,
+            // Story 11.9 Phase 2: Service-Level Default Tool Policy
+            get_service_default_policy,
+            update_service_default_policy,
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,

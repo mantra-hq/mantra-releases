@@ -7,7 +7,7 @@
 //! 提供 MCP 服务、项目关联、环境变量管理和配置导入的 Tauri IPC 命令
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -31,7 +31,7 @@ use crate::GatewayServerState;
 
 /// MCP 服务状态
 pub struct McpState {
-    pub db: Mutex<Database>,
+    pub db: Arc<Mutex<Database>>,
     pub env_manager: EnvManager,
 }
 
@@ -663,6 +663,11 @@ pub struct McpServiceSummary {
     pub is_running: bool,
     /// 错误信息 (如果启动失败)
     pub error_message: Option<String>,
+    /// 当前生效的 Tool Policy 模式 (Story 11.9 Phase 2)
+    /// "allow_all" | "deny_all" | "custom"
+    pub tool_policy_mode: Option<String>,
+    /// Custom 模式下允许/禁止的工具数量 (Story 11.9 Phase 2)
+    pub custom_tools_count: Option<usize>,
 }
 
 /// 检测到的可接管配置
@@ -712,12 +717,52 @@ pub async fn check_project_mcp_status(
         manager.is_running()
     };
 
-    // 3. 构建服务摘要列表 (含运行状态)
+    // 3. 构建服务摘要列表 (含运行状态和策略信息)
     // 服务被视为"运行中"当：Gateway 运行 + 服务已启用
     let mut associated_services = Vec::new();
     for svc in &project_services {
         // 如果 Gateway 运行且服务已启用，视为运行状态
         let is_running = gateway_running && svc.service.enabled;
+
+        // Story 11.9 Phase 2: 提取 Tool Policy 信息
+        // 优先级: 项目级 config_override.toolPolicy > 服务级 default_tool_policy > 默认 AllowAll
+        let effective_policy = {
+            // 尝试从项目级 config_override 获取
+            let project_policy = svc.config_override
+                .as_ref()
+                .and_then(|config| config.get("toolPolicy"))
+                .and_then(|v| serde_json::from_value::<crate::models::mcp::ToolPolicy>(v.clone()).ok());
+
+            match project_policy {
+                Some(p) if p.mode != crate::models::mcp::ToolPolicyMode::AllowAll
+                    || !p.allowed_tools.is_empty()
+                    || !p.denied_tools.is_empty() => Some(p),
+                _ => {
+                    // 回退到服务级默认
+                    svc.service.default_tool_policy.clone()
+                }
+            }
+        };
+
+        let (tool_policy_mode, custom_tools_count) = match &effective_policy {
+            Some(policy) => {
+                let mode = match policy.mode {
+                    crate::models::mcp::ToolPolicyMode::AllowAll => "allow_all",
+                    crate::models::mcp::ToolPolicyMode::DenyAll => "deny_all",
+                    crate::models::mcp::ToolPolicyMode::Custom => "custom",
+                };
+                let count = match policy.mode {
+                    crate::models::mcp::ToolPolicyMode::Custom => {
+                        Some(policy.allowed_tools.len() + policy.denied_tools.len())
+                    }
+                    crate::models::mcp::ToolPolicyMode::DenyAll => Some(0),
+                    _ => None,
+                };
+                (Some(mode.to_string()), count)
+            }
+            None => (None, None),
+        };
+
         associated_services.push(McpServiceSummary {
             id: svc.service.id.clone(),
             name: svc.service.name.clone(),
@@ -727,6 +772,8 @@ pub async fn check_project_mcp_status(
                 .unwrap_or_else(|| "unknown".to_string()),
             is_running,
             error_message: None,
+            tool_policy_mode,
+            custom_tools_count,
         });
     }
 
@@ -1017,11 +1064,48 @@ pub fn update_project_tool_policy(
         .map_err(AppError::from)
 }
 
+// ===== Story 11.9 Phase 2: 服务级默认 Tool Policy =====
+
+/// 获取服务的默认 Tool Policy
+///
+/// Story 11.9 Phase 2: Task 10 - Hub 页面全局 Policy 入口
+///
+/// # Arguments
+/// * `service_id` - 服务 ID
+///
+/// # Returns
+/// 服务的默认 Tool Policy，如果未配置则返回 AllowAll
+#[tauri::command]
+pub fn get_service_default_policy(
+    service_id: String,
+    state: State<'_, McpState>,
+) -> Result<ToolPolicy, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_service_default_policy(&service_id).map_err(AppError::from)
+}
+
+/// 更新服务的默认 Tool Policy
+///
+/// Story 11.9 Phase 2: Task 10 - Hub 页面全局 Policy 入口
+///
+/// # Arguments
+/// * `service_id` - 服务 ID
+/// * `policy` - Tool Policy 配置，传 None 清除默认策略
+#[tauri::command]
+pub fn update_service_default_policy(
+    service_id: String,
+    policy: Option<ToolPolicy>,
+    state: State<'_, McpState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.update_service_default_policy(&service_id, policy.as_ref())?;
+    Ok(())
+}
+
 // ===== Story 11.11: MCP Inspector 直接调用命令 =====
 
 use crate::gateway::McpProcessManager;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// MCP 进程管理器状态

@@ -118,6 +118,7 @@ impl JsonRpcResponse {
 /// Story 11.5: 扩展添加 router 和 registry
 /// Story 11.14: 添加 MCP Session Store
 /// Story 11.17: 添加 MCP Aggregator
+/// Story 11.9 Phase 2: 添加 PolicyResolver
 ///
 /// 注意：由于 rusqlite::Connection 不是 Send + Sync，
 /// router 和 registry 需要通过 Tauri 状态管理在外部提供，
@@ -130,6 +131,8 @@ pub struct GatewayAppState {
     pub mcp_sessions: SharedMcpSessionStore,
     /// MCP 协议聚合器 (Story 11.17)
     pub aggregator: Option<super::aggregator::SharedMcpAggregator>,
+    /// Tool Policy 解析器 (Story 11.9 Phase 2)
+    pub policy_resolver: Option<super::policy::SharedPolicyResolver>,
 }
 
 impl GatewayAppState {
@@ -140,6 +143,7 @@ impl GatewayAppState {
             stats,
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
             aggregator: None,
+            policy_resolver: None,
         }
     }
 
@@ -154,6 +158,23 @@ impl GatewayAppState {
             stats,
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
             aggregator: Some(aggregator),
+            policy_resolver: None,
+        }
+    }
+
+    /// 创建带 Aggregator 和 PolicyResolver 的应用状态 (Story 11.9 Phase 2)
+    pub fn with_aggregator_and_policy(
+        state: Arc<RwLock<GatewayState>>,
+        stats: Arc<GatewayStats>,
+        aggregator: super::aggregator::SharedMcpAggregator,
+        policy_resolver: super::policy::SharedPolicyResolver,
+    ) -> Self {
+        Self {
+            state,
+            stats,
+            mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
+            aggregator: Some(aggregator),
+            policy_resolver: Some(policy_resolver),
         }
     }
 }
@@ -446,6 +467,7 @@ fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
 /// Story 11.5: 上下文路由 - Task 5
 /// Story 11.10: Project-Level Tool Management - AC 4 (Gateway 拦截 - tools/list 响应过滤)
 /// Story 11.17: MCP 协议聚合器 - AC 1 (工具聚合)
+/// Story 11.9 Phase 2: 工具策略完整实现 - AC 9 (Gateway 工具策略集成)
 ///
 /// 返回聚合的工具列表。根据项目的 Tool Policy 过滤返回的工具。
 ///
@@ -459,7 +481,7 @@ async fn handle_tools_list(
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
     // 获取会话的项目上下文
-    let _project_context = {
+    let project_context = {
         let state = app_state.state.read().await;
         state
             .get_session(session_id)
@@ -469,9 +491,23 @@ async fn handle_tools_list(
     // Story 11.17: 从 Aggregator 获取聚合的工具列表
     let tools: Vec<serde_json::Value> = match &app_state.aggregator {
         Some(aggregator) => {
-            // TODO: Tool Policy 过滤需要通过 Tauri IPC 获取项目配置
-            // 当前返回所有工具，Tool Policy 过滤留待后续实现
-            let mcp_tools = aggregator.list_tools(None).await;
+            // Story 11.9 Phase 2: 获取服务级 Tool Policy
+            let policies = match &app_state.policy_resolver {
+                Some(resolver) => {
+                    // 获取所有已初始化服务的 ID 列表
+                    let service_ids = aggregator.list_initialized_service_ids().await;
+
+                    // 获取项目 ID（如果有）
+                    let project_id = project_context.as_ref().map(|ctx| ctx.project_id.as_str());
+
+                    // 批量获取所有服务的 Policy
+                    let policies = resolver.get_policies(project_id, &service_ids).await;
+                    Some(policies)
+                }
+                None => None,
+            };
+
+            let mcp_tools = aggregator.list_tools(policies.as_ref()).await;
             mcp_tools.iter().map(|t| t.to_mcp_format()).collect()
         }
         None => {

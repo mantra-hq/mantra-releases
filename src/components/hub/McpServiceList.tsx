@@ -1,12 +1,14 @@
 /**
  * MCP 服务列表组件
  * Story 11.6: Task 3 - MCP 服务列表 (AC: #1, #3)
+ * Story 11.9 Phase 2: Task 10 - Hub 页面全局 Policy 入口 (AC: #11)
  *
  * 显示 MCP 服务列表：
  * - 表格展示（名称、命令、来源、状态、操作）
  * - 启用/禁用 Switch 组件
  * - 服务状态指示器
  * - 批量操作工具栏
+ * - 全局 Tool Policy 管理入口
  */
 
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
@@ -31,6 +33,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -63,6 +71,7 @@ import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 import { McpConfigImportDialog } from "./McpConfigImportDialog";
 import { InspectorDrawer } from "./inspector";
 import { OAuthConfigDialog, OAuthServiceStatus } from "./OAuthConfigDialog";
+import { ToolPolicyEditor } from "./ToolPolicyEditor";
 
 /**
  * 传输类型
@@ -126,6 +135,9 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
   const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
   const [oauthService, setOAuthService] = useState<McpService | null>(null);
   const [oauthStatuses, setOAuthStatuses] = useState<Record<string, OAuthServiceStatus>>({});
+
+  // Story 11.9 Phase 2: Tool Policy 全局管理状态
+  const [policyDialogService, setPolicyDialogService] = useState<McpService | null>(null);
 
   // 加载服务列表
   const loadServices = useCallback(async () => {
@@ -512,6 +524,11 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
                             <Shield className="h-4 w-4 mr-2" />
                             {t("hub.oauth.configure")}
                           </DropdownMenuItem>
+                          {/* Story 11.9 Phase 2: 全局 Tool Policy 入口 */}
+                          <DropdownMenuItem onClick={() => setPolicyDialogService(service)}>
+                            <Shield className="h-4 w-4 mr-2" />
+                            {t("hub.mcpContext.manageTools", "Manage Tools")}
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleDelete(service)}
@@ -590,6 +607,37 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
           onSuccess={() => loadOAuthStatuses([oauthService.id])}
         />
       )}
+
+      {/* Story 11.9 Phase 2: 全局 Tool Policy 对话框 */}
+      <Dialog
+        open={!!policyDialogService}
+        onOpenChange={(open) => {
+          if (!open) setPolicyDialogService(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
+              {policyDialogService && (
+                <Badge variant="outline" className="ml-2">
+                  {policyDialogService.name}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {policyDialogService && (
+            <ToolPolicyEditor
+              serviceId={policyDialogService.id}
+              serviceName={policyDialogService.name}
+              onSaved={() => {
+                setPolicyDialogService(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 });

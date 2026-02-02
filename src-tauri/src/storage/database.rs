@@ -168,6 +168,9 @@ impl Database {
         // Migration: Add scope and project_path to takeover backups (Story 11.16)
         Self::run_mcp_takeover_scope_migration(conn)?;
 
+        // Migration: Add default_tool_policy to mcp_services (Story 11.9 Phase 2)
+        Self::run_mcp_default_tool_policy_migration(conn)?;
+
         Ok(())
     }
 
@@ -754,6 +757,32 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_takeover_scope ON mcp_takeover_backups(scope);
                 -- 创建 project_path 索引
                 CREATE INDEX IF NOT EXISTS idx_takeover_project_path ON mcp_takeover_backups(project_path);
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP service default tool policy (Story 11.9 Phase 2)
+    ///
+    /// Adds:
+    /// - default_tool_policy column: JSON string for service-level default Tool Policy
+    fn run_mcp_default_tool_policy_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if default_tool_policy column exists
+        let has_default_tool_policy: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('mcp_services') WHERE name = 'default_tool_policy'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_default_tool_policy {
+            conn.execute_batch(
+                r#"
+                -- 添加服务级默认 Tool Policy 字段 (Story 11.9 Phase 2)
+                ALTER TABLE mcp_services ADD COLUMN default_tool_policy TEXT;
                 "#,
             )?;
         }

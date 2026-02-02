@@ -829,6 +829,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let env = build_mcp_env(&service, &db, &manager).unwrap();
@@ -858,6 +859,7 @@ mod tests {
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
         };
 
         let env = build_mcp_env(&service, &db, &manager).unwrap();

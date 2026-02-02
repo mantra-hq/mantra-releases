@@ -16,7 +16,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::{AppState, McpState};
 use crate::error::AppError;
-use crate::gateway::{GatewayServerManager, McpAggregator, SessionProjectContext, WarmupResult};
+use crate::gateway::{GatewayServerManager, McpAggregator, SessionProjectContext, StoragePolicyResolver, WarmupResult};
 use crate::services::mcp_config::sync_active_takeovers;
 use crate::services::oauth::{
     CallbackResult, InMemoryTokenStore, OAuthConfig, OAuthManager, OAuthServiceStatus,
@@ -167,6 +167,12 @@ pub async fn start_gateway(
     // 5. 设置 aggregator 到 manager
     manager.set_aggregator(aggregator);
 
+    // Story 11.9 Phase 2: 创建并注入 PolicyResolver
+    {
+        let policy_resolver = Arc::new(StoragePolicyResolver::new(mcp_state.db.clone()));
+        manager.set_policy_resolver(policy_resolver);
+    }
+
     // 启动 Server
     manager
         .start()
@@ -273,6 +279,12 @@ pub async fn restart_gateway(
     };
 
     manager.set_aggregator(aggregator);
+
+    // Story 11.9 Phase 2: 重新创建并注入 PolicyResolver
+    {
+        let policy_resolver = Arc::new(StoragePolicyResolver::new(mcp_state.db.clone()));
+        manager.set_policy_resolver(policy_resolver);
+    }
 
     manager
         .restart(new_port)

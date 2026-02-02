@@ -798,3 +798,517 @@ mod aggregator_integration_tests {
         handle.shutdown();
     }
 }
+
+// =====================================================================
+// Story 11.9 Phase 2: Tool Policy Gateway 集成测试
+// =====================================================================
+
+#[cfg(test)]
+mod policy_integration_tests {
+    use super::*;
+    use crate::gateway::aggregator::{McpAggregator, McpTool, ServiceCache, ServiceCapabilities};
+    use crate::gateway::policy::{PolicyResolver, SharedPolicyResolver};
+    use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    /// 用于测试的 MockPolicyResolver
+    struct MockPolicyResolver {
+        policies: HashMap<(Option<String>, String), ToolPolicy>,
+    }
+
+    impl MockPolicyResolver {
+        fn new() -> Self {
+            Self {
+                policies: HashMap::new(),
+            }
+        }
+
+        fn add_policy(
+            &mut self,
+            project_id: Option<String>,
+            service_id: String,
+            policy: ToolPolicy,
+        ) {
+            self.policies.insert((project_id, service_id), policy);
+        }
+    }
+
+    #[async_trait]
+    impl PolicyResolver for MockPolicyResolver {
+        async fn get_policy(&self, project_id: Option<&str>, service_id: &str) -> ToolPolicy {
+            let key = (project_id.map(|s| s.to_string()), service_id.to_string());
+            self.policies
+                .get(&key)
+                .cloned()
+                // 如果没有项目级匹配，回退到全局
+                .or_else(|| {
+                    let global_key = (None, service_id.to_string());
+                    self.policies.get(&global_key).cloned()
+                })
+                .unwrap_or_default()
+        }
+
+        async fn get_policies(
+            &self,
+            project_id: Option<&str>,
+            service_ids: &[String],
+        ) -> HashMap<String, ToolPolicy> {
+            let mut result = HashMap::new();
+            for service_id in service_ids {
+                let policy = self.get_policy(project_id, service_id).await;
+                result.insert(service_id.clone(), policy);
+            }
+            result
+        }
+    }
+
+    /// 创建带有工具数据的 Aggregator
+    async fn create_test_aggregator() -> Arc<McpAggregator> {
+        let aggregator = McpAggregator::new(vec![]);
+
+        {
+            let mut cache = aggregator.cache.write().await;
+            cache.insert(
+                "svc-a".to_string(),
+                ServiceCache {
+                    service_id: "svc-a".to_string(),
+                    service_name: "service-alpha".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-a", "service-alpha", "read_file", None, None, None, None),
+                        McpTool::new("svc-a", "service-alpha", "write_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+            cache.insert(
+                "svc-b".to_string(),
+                ServiceCache {
+                    service_id: "svc-b".to_string(),
+                    service_name: "service-beta".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new("svc-b", "service-beta", "list_dir", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+
+        Arc::new(aggregator)
+    }
+
+    /// 测试: Aggregator 有工具，但无 PolicyResolver 时返回所有工具
+    #[tokio::test]
+    async fn test_tools_list_with_aggregator_no_policy() {
+        let aggregator = create_test_aggregator().await;
+
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::with_aggregator(config, aggregator);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let tools = body["result"]["tools"].as_array().unwrap();
+
+        // 无 PolicyResolver → 返回全部 3 个工具
+        assert_eq!(tools.len(), 3);
+
+        handle.shutdown();
+    }
+
+    /// 测试: PolicyResolver DenyAll 某服务时，该服务工具被过滤
+    #[tokio::test]
+    async fn test_tools_list_with_policy_deny_all() {
+        let aggregator = create_test_aggregator().await;
+
+        let mut mock_resolver = MockPolicyResolver::new();
+        // 服务 A 全局 DenyAll
+        mock_resolver.add_policy(
+            None,
+            "svc-a".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::DenyAll,
+                allowed_tools: vec![],
+                denied_tools: vec![],
+            },
+        );
+
+        let resolver: SharedPolicyResolver = Arc::new(mock_resolver);
+
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server =
+            GatewayServer::with_aggregator_and_policy(config, aggregator, resolver);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let tools = body["result"]["tools"].as_array().unwrap();
+
+        // 服务 A (2 个工具) 被 DenyAll，只剩服务 B 的 1 个工具
+        assert_eq!(tools.len(), 1);
+        let tool_name = tools[0]["name"].as_str().unwrap();
+        assert!(tool_name.contains("list_dir"));
+
+        handle.shutdown();
+    }
+
+    /// 测试: Custom Policy 只允许部分工具
+    #[tokio::test]
+    async fn test_tools_list_with_custom_policy() {
+        let aggregator = create_test_aggregator().await;
+
+        let mut mock_resolver = MockPolicyResolver::new();
+        // 服务 A 只允许 read_file
+        mock_resolver.add_policy(
+            None,
+            "svc-a".to_string(),
+            ToolPolicy {
+                mode: ToolPolicyMode::Custom,
+                allowed_tools: vec!["read_file".to_string()],
+                denied_tools: vec![],
+            },
+        );
+
+        let resolver: SharedPolicyResolver = Arc::new(mock_resolver);
+
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server =
+            GatewayServer::with_aggregator_and_policy(config, aggregator, resolver);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let tools = body["result"]["tools"].as_array().unwrap();
+
+        // 服务 A: read_file 允许，write_file 被过滤 → 1
+        // 服务 B: AllowAll (默认) → 1
+        // 总计 2 个工具
+        assert_eq!(tools.len(), 2);
+
+        // 验证 write_file 不在返回列表中
+        let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(tool_names.iter().all(|name| !name.contains("write_file")));
+        assert!(tool_names.iter().any(|name| name.contains("read_file")));
+        assert!(tool_names.iter().any(|name| name.contains("list_dir")));
+
+        handle.shutdown();
+    }
+}
+
+// =====================================================================
+// Story 11.9 Phase 2: E2E 测试 - 完整配置 → 生效流程
+// =====================================================================
+
+#[cfg(test)]
+mod policy_e2e_tests {
+    use super::*;
+    use crate::gateway::aggregator::{McpAggregator, McpTool, ServiceCache, ServiceCapabilities};
+    use crate::gateway::policy::StoragePolicyResolver;
+    use crate::models::mcp::{
+        CreateMcpServiceRequest, McpServiceSource, ToolPolicy, ToolPolicyMode,
+    };
+    use crate::storage::Database;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    /// E2E 测试: 在数据库中配置 Tool Policy，然后通过 HTTP 端点验证过滤生效
+    ///
+    /// 流程:
+    /// 1. 创建 in-memory 数据库
+    /// 2. 创建 MCP 服务，设置全局 Tool Policy
+    /// 3. 创建 Aggregator 并填充缓存
+    /// 4. 创建 StoragePolicyResolver (使用真实数据库)
+    /// 5. 启动 Gateway Server
+    /// 6. 通过 HTTP 请求 tools/list
+    /// 7. 验证返回结果符合 Policy 配置
+    #[tokio::test]
+    async fn test_e2e_global_policy_filters_tools() {
+        // 1. 创建数据库和服务
+        let db = Arc::new(Mutex::new(Database::new_in_memory().unwrap()));
+
+        let service_id = {
+            let db_guard = db.lock().unwrap();
+            let request = CreateMcpServiceRequest {
+                name: "test-mcp".to_string(),
+                transport_type: Default::default(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            };
+            let service = db_guard.create_mcp_service(&request).unwrap();
+
+            // 设置全局 Tool Policy: 只允许 read_file
+            let policy = ToolPolicy {
+                mode: ToolPolicyMode::Custom,
+                allowed_tools: vec!["read_file".to_string()],
+                denied_tools: vec![],
+            };
+            db_guard
+                .update_service_default_policy(&service.id, Some(&policy))
+                .unwrap();
+
+            service.id
+        };
+
+        // 2. 创建 Aggregator 并填充工具缓存
+        let aggregator = McpAggregator::new(vec![]);
+        {
+            let mut cache = aggregator.cache.write().await;
+            cache.insert(
+                service_id.clone(),
+                ServiceCache {
+                    service_id: service_id.clone(),
+                    service_name: "test-mcp".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new(&service_id, "test-mcp", "read_file", None, None, None, None),
+                        McpTool::new(&service_id, "test-mcp", "write_file", None, None, None, None),
+                        McpTool::new(&service_id, "test-mcp", "delete_file", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+        let shared_aggregator = Arc::new(aggregator);
+
+        // 3. 创建 StoragePolicyResolver (使用真实数据库)
+        let resolver = StoragePolicyResolver::new(db.clone());
+        let shared_resolver: super::policy::SharedPolicyResolver = Arc::new(resolver);
+
+        // 4. 启动 Gateway
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "e2e-test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::with_aggregator_and_policy(
+            config,
+            shared_aggregator,
+            shared_resolver,
+        );
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // 5. 请求 tools/list
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer e2e-test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let tools = body["result"]["tools"].as_array().unwrap();
+
+        // 6. 验证: 3 个工具中只有 read_file 被返回
+        assert_eq!(tools.len(), 1);
+        let tool_name = tools[0]["name"].as_str().unwrap();
+        assert!(tool_name.contains("read_file"));
+
+        handle.shutdown();
+    }
+
+    /// E2E 测试: 项目级 Policy 覆盖全局 Policy
+    #[tokio::test]
+    async fn test_e2e_project_policy_overrides_global() {
+        let db = Arc::new(Mutex::new(Database::new_in_memory().unwrap()));
+
+        let service_id = {
+            let db_guard = db.lock().unwrap();
+            let request = CreateMcpServiceRequest {
+                name: "test-mcp-2".to_string(),
+                transport_type: Default::default(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            };
+            let service = db_guard.create_mcp_service(&request).unwrap();
+
+            // 全局 Policy: DenyAll
+            let global_policy = ToolPolicy {
+                mode: ToolPolicyMode::DenyAll,
+                allowed_tools: vec![],
+                denied_tools: vec![],
+            };
+            db_guard
+                .update_service_default_policy(&service.id, Some(&global_policy))
+                .unwrap();
+
+            service.id
+        };
+
+        // 创建 Aggregator
+        let aggregator = McpAggregator::new(vec![]);
+        {
+            let mut cache = aggregator.cache.write().await;
+            cache.insert(
+                service_id.clone(),
+                ServiceCache {
+                    service_id: service_id.clone(),
+                    service_name: "test-mcp-2".to_string(),
+                    capabilities: ServiceCapabilities::default(),
+                    tools: vec![
+                        McpTool::new(&service_id, "test-mcp-2", "tool_a", None, None, None, None),
+                        McpTool::new(&service_id, "test-mcp-2", "tool_b", None, None, None, None),
+                    ],
+                    resources: vec![],
+                    prompts: vec![],
+                    initialized: true,
+                    last_updated: Some(chrono::Utc::now()),
+                    error: None,
+                },
+            );
+        }
+        let shared_aggregator = Arc::new(aggregator);
+
+        // StoragePolicyResolver
+        let resolver = StoragePolicyResolver::new(db.clone());
+        let shared_resolver: super::policy::SharedPolicyResolver = Arc::new(resolver);
+
+        // 启动 Gateway
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "e2e-test-token-2".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::with_aggregator_and_policy(
+            config,
+            shared_aggregator,
+            shared_resolver,
+        );
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+
+        // 无项目上下文: 全局 DenyAll，工具应为空
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer e2e-test-token-2")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let tools = body["result"]["tools"].as_array().unwrap();
+
+        // 全局 DenyAll: 所有工具被过滤
+        assert_eq!(tools.len(), 0);
+
+        handle.shutdown();
+    }
+}
