@@ -1199,7 +1199,7 @@
       "statusError": "错误",
       "manageTools": "管理工具",
       "toolPermissions": "工具权限",
-      "policyDenyAll": "全部禁止",
+      "policyDenyAll": "全部禁用",
       "policyCustom": "自定义 {{count}}"
     },
     "takeover": {
@@ -1231,11 +1231,11 @@
       "descriptionGlobal": "配置 {{service}} 的默认工具访问权限，将应用于所有项目",
       "mode": "策略模式",
       "modeAllowAll": "允许所有工具",
-      "modeDenyAll": "禁止所有工具",
+      "modeDenyAll": "禁用所有工具",
       "modeCustom": "自定义",
       "modeDescription": {
-        "allow_all": "允许 AI 调用此服务的所有工具（除了明确禁止的）",
-        "deny_all": "禁止 AI 调用此服务的任何工具",
+        "allow_all": "允许 AI 调用此服务的所有工具（除了明确禁用的）",
+        "deny_all": "禁用 AI 调用此服务的任何工具",
         "custom": "仅允许 AI 调用明确允许的工具"
       },
       "tools": "工具列表",
@@ -1247,10 +1247,14 @@
       "noToolsHint": "点击「刷新工具」从服务获取工具列表",
       "noToolsCached": "无缓存的工具列表，请确保服务正在运行",
       "cachedAt": "缓存于 {{time}}",
-      "blocked": "已禁止",
+      "blocked": "已禁用",
       "loadError": "加载工具策略失败",
       "saveSuccess": "工具策略已保存",
-      "saveError": "保存工具策略失败"
+      "saveError": "保存工具策略失败",
+      "selectAll": "全选",
+      "deselectAll": "全不选",
+      "selectedCount": "{{selected}}/{{total}}",
+      "save": "保存"
     },
     "oauth": {
       "title": "OAuth 设置 - {{name}}",

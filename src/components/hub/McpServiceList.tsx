@@ -615,7 +615,7 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
           if (!open) setPolicyDialogService(null);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent size="lg" className="overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
@@ -632,7 +632,7 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
               serviceId={policyDialogService.id}
               serviceName={policyDialogService.name}
               onSaved={() => {
-                setPolicyDialogService(null);
+                setPolicyDialogService(null); // 关闭对话框
               }}
             />
           )}

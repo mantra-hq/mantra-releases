@@ -1244,7 +1244,11 @@
       "blocked": "Blocked",
       "loadError": "Failed to load tool policy",
       "saveSuccess": "Tool policy saved",
-      "saveError": "Failed to save tool policy"
+      "saveError": "Failed to save tool policy",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectedCount": "{{selected}}/{{total}}",
+      "save": "Save"
     },
     "oauth": {
       "title": "OAuth Settings - {{name}}",

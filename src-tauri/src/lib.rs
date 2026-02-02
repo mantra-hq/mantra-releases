@@ -84,7 +84,7 @@ use commands::{
     // Story 11.9: Project Detail MCP Integration commands
     check_project_mcp_status,
     // Story 11.10: Project-Level Tool Management commands
-    get_project_tool_policy, update_project_tool_policy,
+    get_project_tool_policy, update_project_tool_policy, fetch_service_tools,
     // Story 11.9 Phase 2: Service-Level Default Tool Policy commands
     get_service_default_policy, update_service_default_policy,
     // Story 11.7: Tray commands
@@ -395,6 +395,7 @@ pub fn run() {
             // Story 11.10: Project-Level Tool Management
             get_project_tool_policy,
             update_project_tool_policy,
+            fetch_service_tools,
             // Story 11.9 Phase 2: Service-Level Default Tool Policy
             get_service_default_policy,
             update_service_default_policy,

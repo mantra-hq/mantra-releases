@@ -876,12 +876,11 @@ use crate::services::{ToolDefinition, ToolDiscoveryResult};
 ///
 /// Story 11.10: Project-Level Tool Management - Task 2.5
 ///
-/// 首先尝试从缓存获取，如果缓存不存在或已过期，返回空列表
-/// 前端需要调用 refresh_service_tools 强制刷新
+/// 首先尝试从缓存获取，如果缓存不存在或已过期，从 MCP 服务获取并缓存
 ///
 /// # Arguments
 /// * `service_id` - 服务 ID
-/// * `force_refresh` - 是否强制刷新（清除缓存）
+/// * `force_refresh` - 是否强制刷新（清除缓存并重新获取）
 ///
 /// # Returns
 /// 工具发现结果，包含工具列表和缓存状态
@@ -890,62 +889,96 @@ pub async fn fetch_service_tools(
     service_id: String,
     force_refresh: Option<bool>,
     state: State<'_, McpState>,
+    process_state: State<'_, McpProcessState>,
 ) -> Result<ToolDiscoveryResult, AppError> {
+    let force = force_refresh.unwrap_or(false);
+
     // 如果强制刷新，先清除缓存
-    if force_refresh.unwrap_or(false) {
+    if force {
         let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
         db_lock.clear_service_tools_cache(&service_id)?;
         drop(db_lock);
-        
-        // 强制刷新时返回空列表，前端需要通过其他方式获取实际工具列表
+    }
+
+    // 尝试获取缓存
+    let cached_tools = if !force {
+        let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
+        db_lock.get_cached_service_tools(&service_id)?
+    } else {
+        Vec::new()
+    };
+
+    // 检查缓存是否有效 (5 分钟 TTL)
+    let ttl_seconds = 300;
+    let cache_valid = !cached_tools.is_empty()
+        && !cached_tools.first().map(|t| t.is_expired(ttl_seconds)).unwrap_or(true);
+
+    if cache_valid {
+        // 返回缓存的工具列表
+        let tools: Vec<ToolDefinition> = cached_tools
+            .into_iter()
+            .map(|t| ToolDefinition {
+                name: t.name,
+                description: t.description,
+                input_schema: t.input_schema,
+            })
+            .collect();
+
         return Ok(ToolDiscoveryResult {
             service_id,
-            tools: Vec::new(),
-            from_cache: false,
+            tools,
+            from_cache: true,
             cached_at: None,
         });
     }
 
-    // 尝试获取缓存，直接从数据库获取
-    let cached_tools = {
+    // 缓存无效或不存在，从 MCP 服务获取工具列表
+    let service = {
         let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
-        db_lock.get_cached_service_tools(&service_id)?
+        db_lock.get_mcp_service(&service_id)?
     };
 
-    if cached_tools.is_empty() {
-        // 无缓存，返回空列表
-        Ok(ToolDiscoveryResult {
-            service_id,
-            tools: Vec::new(),
-            from_cache: false,
-            cached_at: None,
-        })
-    } else {
-        // 检查是否过期 (5 分钟 TTL)
-        let ttl_seconds = 300;
-        let is_expired = cached_tools.first().map(|t| t.is_expired(ttl_seconds)).unwrap_or(true);
+    let capabilities = match service.transport_type {
+        McpTransportType::Http => {
+            get_http_service_capabilities(&service, &process_state).await
+        }
+        McpTransportType::Stdio => {
+            get_stdio_service_capabilities(&service, &state, &process_state).await
+        }
+    };
 
-        if is_expired {
-            Ok(ToolDiscoveryResult {
-                service_id,
-                tools: Vec::new(),
-                from_cache: false,
-                cached_at: cached_tools.first().map(|t| t.cached_at.clone()),
-            })
-        } else {
-            let tools: Vec<ToolDefinition> = cached_tools
-                .into_iter()
-                .map(|t| ToolDefinition {
-                    name: t.name,
-                    description: t.description,
-                    input_schema: t.input_schema,
-                })
-                .collect();
+    match capabilities {
+        Ok(caps) => {
+            let tools: Vec<ToolDefinition> = caps.tools.into_iter().map(|t| ToolDefinition {
+                name: t.name,
+                description: t.description,
+                input_schema: t.input_schema,
+            }).collect();
+
+            // 缓存到数据库
+            if !tools.is_empty() {
+                let tool_data: Vec<(String, Option<String>, Option<serde_json::Value>)> = tools
+                    .iter()
+                    .map(|t| (t.name.clone(), t.description.clone(), t.input_schema.clone()))
+                    .collect();
+                let db_lock = state.db.lock().map_err(|_| AppError::LockError)?;
+                let _ = db_lock.cache_service_tools(&service_id, &tool_data);
+            }
 
             Ok(ToolDiscoveryResult {
                 service_id,
                 tools,
-                from_cache: true,
+                from_cache: false,
+                cached_at: None,
+            })
+        }
+        Err(e) => {
+            // 获取失败，返回空列表
+            eprintln!("[fetch_service_tools] Failed to fetch tools for service {}: {}", service_id, e);
+            Ok(ToolDiscoveryResult {
+                service_id,
+                tools: Vec::new(),
+                from_cache: false,
                 cached_at: None,
             })
         }
