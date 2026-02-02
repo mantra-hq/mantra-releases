@@ -30,7 +30,7 @@ import { DrawerSearch } from "./DrawerSearch";
 import { LogicalProjectTreeItem } from "./LogicalProjectTreeItem";
 import { LogicalProjectContextMenu } from "./LogicalProjectContextMenu";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
-import { ProjectInfoDialog } from "./ProjectInfoDialog";
+import { ProjectInfoSheet } from "./ProjectInfoSheet";
 import { showSyncResult } from "./SyncResultToast";
 import {
   syncProject,
@@ -480,9 +480,10 @@ export function ProjectDrawer({
         onConfirm={handleRemoveConfirm}
       />
 
-      {/* Story 2.27 + 1.12: 逻辑项目信息对话框 */}
+      {/* Story 2.27 + 1.12: 逻辑项目信息 Sheet */}
       {/* Task 15: 详情页统一为唯一关联入口 */}
-      <ProjectInfoDialog
+      {/* Story 12.1: Dialog → Sheet 改造 */}
+      <ProjectInfoSheet
         isOpen={infoLogicalProject !== null}
         onOpenChange={(open) => {
           if (!open) setInfoLogicalProject(null);

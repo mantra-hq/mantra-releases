@@ -34,11 +34,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -68,7 +68,7 @@ import { feedback } from "@/lib/feedback";
 import { McpServiceForm } from "./McpServiceForm";
 import { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
-import { McpConfigImportDialog } from "./McpConfigImportDialog";
+import { McpConfigImportSheet } from "./McpConfigImportSheet";
 import { InspectorDrawer } from "./inspector";
 import { OAuthConfigDialog, OAuthServiceStatus } from "./OAuthConfigDialog";
 import { ToolPolicyEditor } from "./ToolPolicyEditor";
@@ -582,8 +582,8 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
         onSuccess={handleSuccess}
       />
 
-      {/* 配置导入对话框 */}
-      <McpConfigImportDialog
+      {/* 配置导入 Sheet - Story 12.1 */}
+      <McpConfigImportSheet
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
         onSuccess={handleSuccess}
@@ -608,16 +608,16 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
         />
       )}
 
-      {/* Story 11.9 Phase 2: 全局 Tool Policy 对话框 */}
-      <Dialog
+      {/* Story 11.9 Phase 2: 全局 Tool Policy Sheet - Story 12.1 改造 */}
+      <Sheet
         open={!!policyDialogService}
         onOpenChange={(open) => {
           if (!open) setPolicyDialogService(null);
         }}
       >
-        <DialogContent size="lg" className="overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <SheetContent side="right" className="w-full max-w-lg overflow-y-auto" data-testid="tool-policy-sheet">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
               {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
               {policyDialogService && (
@@ -625,19 +625,19 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
                   {policyDialogService.name}
                 </Badge>
               )}
-            </DialogTitle>
-          </DialogHeader>
+            </SheetTitle>
+          </SheetHeader>
           {policyDialogService && (
             <ToolPolicyEditor
               serviceId={policyDialogService.id}
               serviceName={policyDialogService.name}
               onSaved={() => {
-                setPolicyDialogService(null); // 关闭对话框
+                setPolicyDialogService(null); // 关闭 Sheet
               }}
             />
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </Card>
   );
 });

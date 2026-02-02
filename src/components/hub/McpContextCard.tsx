@@ -18,11 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Plug,
   Settings2,
@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { McpServiceStatusDot, type ServiceStatus } from "./McpServiceStatusDot";
 import { SourceIcon } from "@/components/import/SourceIcons";
-import { McpConfigImportDialog } from "./McpConfigImportDialog";
+import { McpConfigImportSheet } from "./McpConfigImportSheet";
 import { ToolPolicyEditor } from "./ToolPolicyEditor";
 
 // ===== 类型定义 =====
@@ -301,16 +301,16 @@ export function McpContextCard({
           </CardContent>
         </Card>
 
-        {/* Story 11.9 Phase 2: 工具策略编辑 Dialog */}
-        <Dialog
+        {/* Story 11.9 Phase 2: 工具策略编辑 Sheet - Story 12.1 改造 */}
+        <Sheet
           open={!!policyDialogService}
           onOpenChange={(open) => {
             if (!open) setPolicyDialogService(null);
           }}
         >
-          <DialogContent size="lg" className="overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+          <SheetContent side="right" className="w-full max-w-lg overflow-y-auto" data-testid="tool-policy-sheet">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
                 {policyDialogService && (
@@ -318,22 +318,22 @@ export function McpContextCard({
                     {policyDialogService.name}
                   </Badge>
                 )}
-              </DialogTitle>
-            </DialogHeader>
+              </SheetTitle>
+            </SheetHeader>
             {policyDialogService && (
               <ToolPolicyEditor
                 projectId={projectId}
                 serviceId={policyDialogService.id}
                 serviceName={policyDialogService.name}
                 onSaved={() => {
-                  setPolicyDialogService(null); // 关闭对话框
+                  setPolicyDialogService(null); // 关闭 Sheet
                   loadStatus(); // Refresh badges
                   onStatusChange?.();
                 }}
               />
             )}
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       </>
     );
   }
@@ -389,8 +389,8 @@ export function McpContextCard({
           </CardContent>
         </Card>
 
-        {/* 导入对话框 */}
-        <McpConfigImportDialog
+        {/* 导入 Sheet - Story 12.1 */}
+        <McpConfigImportSheet
           open={importDialogOpen}
           onOpenChange={setImportDialogOpen}
           onSuccess={handleImportSuccess}

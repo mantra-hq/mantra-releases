@@ -23,15 +23,15 @@ export type { DeletedPlaceholderProps } from "./DeletedPlaceholder";
 export { MessageActionButtons } from "./MessageActionButtons";
 export type { MessageActionButtonsProps } from "./MessageActionButtons";
 
-export { EditMessageDialog } from "./EditMessageDialog";
-export type { EditMessageDialogProps } from "./EditMessageDialog";
+export { EditMessageSheet } from "./EditMessageSheet";
+export type { EditMessageSheetProps } from "./EditMessageSheet";
 
 // Story 10.5: 消息插入组件
 export { InsertMessageTrigger } from "./InsertMessageTrigger";
 export type { InsertMessageTriggerProps } from "./InsertMessageTrigger";
 
-export { InsertMessageDialog } from "./InsertMessageDialog";
-export type { InsertMessageDialogProps } from "./InsertMessageDialog";
+export { InsertMessageSheet } from "./InsertMessageSheet";
+export type { InsertMessageSheetProps } from "./InsertMessageSheet";
 
 export { InsertedMessageCard } from "./InsertedMessageCard";
 export type { InsertedMessageCardProps } from "./InsertedMessageCard";

@@ -20,8 +20,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { OriginalMessageCard } from "./OriginalMessageCard";
-import { EditMessageDialog } from "./EditMessageDialog";
-import { InsertMessageDialog } from "./InsertMessageDialog";
+import { EditMessageSheet } from "./EditMessageSheet";
+import { InsertMessageSheet } from "./InsertMessageSheet";
 import { InsertedMessageCard } from "./InsertedMessageCard";
 import type { NarrativeMessage } from "@/types/message";
 import { useCompressState } from "@/hooks/useCompressState";
@@ -302,16 +302,16 @@ export function OriginalMessageList({
         </div>
       </div>
 
-      {/* Story 10.4: 编辑对话框 */}
-      <EditMessageDialog
+      {/* Story 10.4: 编辑 Sheet - Story 12.1 改造 */}
+      <EditMessageSheet
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         message={editingMessage}
         onConfirm={handleEditConfirm}
       />
 
-      {/* Story 10.5: 插入对话框 (支持新建和编辑) */}
-      <InsertMessageDialog
+      {/* Story 10.5: 插入 Sheet (支持新建和编辑) - Story 12.1 改造 */}
+      <InsertMessageSheet
         open={isInsertDialogOpen}
         onOpenChange={handleInsertDialogOpenChange}
         onConfirm={handleInsertDialogConfirm}

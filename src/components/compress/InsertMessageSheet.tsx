@@ -1,8 +1,9 @@
 /**
- * InsertMessageDialog - 消息插入对话框组件
+ * InsertMessageSheet - 消息插入 Sheet 组件
  * Story 10.5: Task 2
+ * Story 12.1: Task 4 - Dialog → Sheet 改造
  *
- * AC2: 弹出对话框，显示角色选择和内容输入
+ * AC2: 弹出 Sheet，显示角色选择和内容输入
  * AC3: 确认后调用回调
  */
 
@@ -10,13 +11,13 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { User, Bot } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -24,12 +25,13 @@ import type { NarrativeMessage } from "@/types/message";
 import { estimateTokenCount } from "@/lib/token-counter";
 
 /**
- * InsertMessageDialog 组件 Props
+ * InsertMessageSheet 组件 Props
+ * Story 12.1: 重命名 Props 接口
  */
-export interface InsertMessageDialogProps {
-  /** 对话框是否打开 */
+export interface InsertMessageSheetProps {
+  /** Sheet 是否打开 */
   open: boolean;
-  /** 对话框状态变化回调 */
+  /** Sheet 状态变化回调 */
   onOpenChange: (open: boolean) => void;
   /** 确认插入回调 */
   onConfirm: (message: NarrativeMessage) => void;
@@ -56,18 +58,19 @@ function createInsertedMessage(
 }
 
 /**
- * InsertMessageDialog - 插入消息对话框
+ * InsertMessageSheet - 插入消息 Sheet
+ * Story 12.1: Dialog → Sheet 改造
  *
  * AC2: 角色选择 + 内容输入 + Token 统计
  * AC3: 确认插入回调
  */
-export function InsertMessageDialog({
+export function InsertMessageSheet({
   open,
   onOpenChange,
   onConfirm,
   insertPosition,
   initialMessage,
-}: InsertMessageDialogProps) {
+}: InsertMessageSheetProps) {
   const { t } = useTranslation();
 
   // 角色状态 (默认 user)
@@ -98,7 +101,7 @@ export function InsertMessageDialog({
       .join("\n");
   }, []);
 
-  // 对话框打开时设置初始状态 (支持新建和编辑)
+  // Sheet 打开时设置初始状态 (支持新建和编辑)
   React.useEffect(() => {
     if (open) {
       if (initialMessage) {
@@ -160,40 +163,37 @@ export function InsertMessageDialog({
         e.preventDefault();
         handleConfirm();
       }
-      // Escape 取消
-      if (e.key === "Escape") {
-        e.preventDefault();
-        handleCancel();
-      }
+      // Escape 取消 - Sheet 已有内置处理
     },
-    [content, handleConfirm, handleCancel]
+    [content, handleConfirm]
   );
 
   // 确认按钮是否禁用
   const isConfirmDisabled = !content.trim();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-lg max-h-[70vh] flex flex-col"
-        data-testid="insert-message-dialog"
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full max-w-lg flex flex-col"
+        data-testid="insert-message-sheet"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader>
-          <DialogTitle>
+        <SheetHeader>
+          <SheetTitle>
             {isEditMode
               ? t("compress.insertDialog.titleEdit")
               : t("compress.insertDialog.title")}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             {isEditMode
               ? t("compress.insertDialog.descriptionEdit")
               : t("compress.insertDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {/* 角色选择 */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 px-4">
           <Label className="text-sm text-muted-foreground mb-2 block">
             {t("compress.insertDialog.roleLabel")}
           </Label>
@@ -226,7 +226,7 @@ export function InsertMessageDialog({
         </div>
 
         {/* 内容输入 */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col px-4">
           <div className="flex justify-between items-center mb-1">
             <Label className="text-sm text-muted-foreground">
               {t("compress.insertDialog.contentLabel")}
@@ -251,7 +251,7 @@ export function InsertMessageDialog({
           />
         </div>
 
-        <DialogFooter className="flex-shrink-0">
+        <SheetFooter className="px-4">
           <Button
             variant="outline"
             onClick={handleCancel}
@@ -268,10 +268,10 @@ export function InsertMessageDialog({
               ? t("compress.insertDialog.confirmEdit")
               : t("compress.insertDialog.confirm")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default InsertMessageDialog;
+export default InsertMessageSheet;

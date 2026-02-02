@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp, EditMessageDialog, InsertMessageDialog } from "@/components/compress";
+import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp, EditMessageSheet, InsertMessageSheet } from "@/components/compress";
 import { useCompressState } from "@/hooks/useCompressState";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import { useMessageFocus } from "@/hooks/useMessageFocus";
@@ -288,16 +288,16 @@ export function CompressModeContent({
         onOpenChange={setShowHelpDialog}
       />
 
-      {/* Story 10.10 AC1: 快捷键触发的编辑对话框 */}
-      <EditMessageDialog
+      {/* Story 10.10 AC1: 快捷键触发的编辑 Sheet - Story 12.1 改造 */}
+      <EditMessageSheet
         open={isEditDialogOpen}
         onOpenChange={setIsEditDialogOpen}
         message={editingMessage}
         onConfirm={handleEditConfirm}
       />
 
-      {/* Story 10.10 AC1: 快捷键触发的插入对话框 */}
-      <InsertMessageDialog
+      {/* Story 10.10 AC1: 快捷键触发的插入 Sheet - Story 12.1 改造 */}
+      <InsertMessageSheet
         open={isInsertDialogOpen}
         onOpenChange={setIsInsertDialogOpen}
         onConfirm={handleInsertConfirm}

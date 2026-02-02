@@ -1,21 +1,22 @@
 /**
- * EditMessageDialog - 消息编辑对话框
+ * EditMessageSheet - 消息编辑 Sheet
  * Story 10.4: Task 3
+ * Story 12.1: Task 3 - Dialog → Sheet 改造
  *
- * AC3: 弹出编辑对话框，显示原始内容和可编辑区域
+ * AC3: 弹出编辑 Sheet，显示原始内容和可编辑区域
  * AC4: 实时显示 Token 变化，确认后更新状态
  */
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,12 +25,13 @@ import { estimateTokenCount } from "@/lib/token-counter";
 import { getMessageDisplayContent } from "@/lib/message-utils";
 
 /**
- * EditMessageDialog 组件 Props
+ * EditMessageSheet 组件 Props
+ * Story 12.1: 重命名 Props 接口
  */
-export interface EditMessageDialogProps {
-  /** 对话框是否打开 */
+export interface EditMessageSheetProps {
+  /** Sheet 是否打开 */
   open: boolean;
-  /** 对话框状态变化回调 */
+  /** Sheet 状态变化回调 */
   onOpenChange: (open: boolean) => void;
   /** 要编辑的消息 */
   message: NarrativeMessage | null;
@@ -38,7 +40,8 @@ export interface EditMessageDialogProps {
 }
 
 /**
- * EditMessageDialog - 编辑消息对话框
+ * EditMessageSheet - 编辑消息 Sheet
+ * Story 12.1: Dialog → Sheet 改造
  *
  * 包含:
  * - 原始内容显示 (只读)
@@ -46,12 +49,12 @@ export interface EditMessageDialogProps {
  * - 实时 Token 变化显示
  * - 取消和确认按钮
  */
-export function EditMessageDialog({
+export function EditMessageSheet({
   open,
   onOpenChange,
   message,
   onConfirm,
-}: EditMessageDialogProps) {
+}: EditMessageSheetProps) {
   const { t } = useTranslation();
 
   // 获取原始内容 (Story 10.6 Fix: 使用 getMessageDisplayContent 支持所有内容类型)
@@ -124,33 +127,30 @@ export function EditMessageDialog({
         e.preventDefault();
         handleConfirm();
       }
-      // Escape 取消
-      if (e.key === "Escape") {
-        e.preventDefault();
-        handleCancel();
-      }
+      // Escape 取消 - Sheet 已有内置处理
     },
-    [hasChanges, handleConfirm, handleCancel]
+    [hasChanges, handleConfirm]
   );
 
   if (!message) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-2xl max-h-[80vh] flex flex-col"
-        data-testid="edit-message-dialog"
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full max-w-2xl flex flex-col"
+        data-testid="edit-message-sheet"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader>
-          <DialogTitle>{t("compress.editDialog.title")}</DialogTitle>
-          <DialogDescription className="sr-only">
+        <SheetHeader>
+          <SheetTitle>{t("compress.editDialog.title")}</SheetTitle>
+          <SheetDescription className="sr-only">
             {t("compress.editDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {/* 原始内容 - 只读 */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 px-4">
           <div className="text-sm text-muted-foreground mb-1">
             {t("compress.editDialog.original")}
           </div>
@@ -165,7 +165,7 @@ export function EditMessageDialog({
         </div>
 
         {/* 修改内容 - 可编辑 */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col px-4">
           <div className="flex justify-between items-center mb-1">
             <span className="text-sm text-muted-foreground">
               {t("compress.editDialog.modified")}
@@ -195,7 +195,7 @@ export function EditMessageDialog({
           />
         </div>
 
-        <DialogFooter className="flex-shrink-0">
+        <SheetFooter className="px-4">
           <Button
             variant="outline"
             onClick={handleCancel}
@@ -210,10 +210,10 @@ export function EditMessageDialog({
           >
             {t("compress.editDialog.confirm")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default EditMessageDialog;
+export default EditMessageSheet;

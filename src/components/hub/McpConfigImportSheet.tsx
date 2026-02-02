@@ -1,7 +1,8 @@
 /**
- * MCP 配置导入对话框
+ * MCP 配置导入 Sheet
  * Story 11.3: Task 9 - 配置导入前端 UI (AC: #1, #2, #4, #6)
  * Story 11.15: 移除 Shadow Mode 开关，导入即接管
+ * Story 12.1: Task 2 - Dialog → Sheet 改造
  *
  * 提供完整的配置导入向导：
  * - 扫描检测 MCP 配置文件
@@ -16,13 +17,13 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -156,7 +157,8 @@ interface ImportResult {
 type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result";
 
 // ===== 组件属性 =====
-interface McpConfigImportDialogProps {
+/** Story 12.1: 重命名 Props 接口 */
+interface McpConfigImportSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -165,13 +167,13 @@ interface McpConfigImportDialogProps {
   projectId?: string;
 }
 
-export function McpConfigImportDialog({
+export function McpConfigImportSheet({
   open,
   onOpenChange,
   onSuccess,
   projectPath,
   projectId,
-}: McpConfigImportDialogProps) {
+}: McpConfigImportSheetProps) {
   const { t } = useTranslation();
 
   // 步骤状态
@@ -212,7 +214,7 @@ export function McpConfigImportDialog({
     setGatewayRunning(true);
   }, []);
 
-  // 对话框打开时重置
+  // Sheet 打开时重置
   useEffect(() => {
     if (open) {
       resetState();
@@ -277,7 +279,7 @@ export function McpConfigImportDialog({
       // 进入预览步骤
       setStep("preview");
     } catch (err) {
-      console.error("[McpConfigImportDialog] Scan failed:", err);
+      console.error("[McpConfigImportSheet] Scan failed:", err);
       setError((err as Error).message);
     } finally {
       setIsLoading(false);
@@ -318,7 +320,7 @@ export function McpConfigImportDialog({
           isGatewayRunning = true;
         }
       } catch (gwErr) {
-        console.error("[McpConfigImportDialog] Failed to get gateway status:", gwErr);
+        console.error("[McpConfigImportSheet] Failed to get gateway status:", gwErr);
       }
       setGatewayRunning(isGatewayRunning);
 
@@ -350,10 +352,10 @@ export function McpConfigImportDialog({
               configOverride: null,
             });
           }
-          console.log(`[McpConfigImportDialog] Linked ${result.imported_service_ids.length} services to project ${projectId}`);
+          console.log(`[McpConfigImportSheet] Linked ${result.imported_service_ids.length} services to project ${projectId}`);
         } catch (linkErr) {
           // 关联失败不影响导入结果，只记录日志
-          console.error("[McpConfigImportDialog] Failed to link services to project:", linkErr);
+          console.error("[McpConfigImportSheet] Failed to link services to project:", linkErr);
         }
       }
 
@@ -362,7 +364,7 @@ export function McpConfigImportDialog({
         onSuccess();
       }
     } catch (err) {
-      console.error("[McpConfigImportDialog] Import failed:", err);
+      console.error("[McpConfigImportSheet] Import failed:", err);
       setError((err as Error).message);
       feedback.error(t("hub.import.importError"), (err as Error).message);
     } finally {
@@ -1184,15 +1186,15 @@ export function McpConfigImportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full max-w-2xl flex flex-col" data-testid="mcp-config-import-sheet">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5" />
             {getStepTitle()}
-          </DialogTitle>
-          <DialogDescription>{getStepDescription()}</DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>{getStepDescription()}</SheetDescription>
+        </SheetHeader>
 
         {/* 步骤指示器 */}
         {step !== "scan" && step !== "result" && (
@@ -1204,7 +1206,7 @@ export function McpConfigImportDialog({
         )}
 
         {/* 步骤内容 - 使用 flex-1 和 overflow-auto 确保可滚动 */}
-        <div className="flex-1 min-h-0 overflow-auto py-4">
+        <div className="flex-1 min-h-0 overflow-auto py-4 px-4">
           {step === "scan" && renderScanStep()}
           {step === "preview" && renderPreviewStep()}
           {step === "conflicts" && renderConflictsStep()}
@@ -1215,7 +1217,7 @@ export function McpConfigImportDialog({
         </div>
 
         {/* 底部按钮 */}
-        <DialogFooter>
+        <SheetFooter className="px-4">
           {step === "result" ? (
             <Button onClick={() => onOpenChange(false)}>
               {t("common.close")}
@@ -1262,10 +1264,10 @@ export function McpConfigImportDialog({
               </Button>
             </>
           ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default McpConfigImportDialog;
+export default McpConfigImportSheet;

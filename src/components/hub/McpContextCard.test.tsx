@@ -27,9 +27,9 @@ vi.mock("react-i18next", () => ({
 }));
 
 // Mock child components that are heavy/complex
-vi.mock("./McpConfigImportDialog", () => ({
-  McpConfigImportDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="import-dialog">Import Dialog</div> : null,
+vi.mock("./McpConfigImportSheet", () => ({
+  McpConfigImportSheet: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="import-sheet">Import Sheet</div> : null,
 }));
 
 vi.mock("./ToolPolicyEditor", () => ({
@@ -373,7 +373,7 @@ describe("McpContextCard", () => {
       await user.click(screen.getByTestId("mcp-import-takeover-button"));
 
       await waitFor(() => {
-        expect(screen.getByTestId("import-dialog")).toBeInTheDocument();
+        expect(screen.getByTestId("import-sheet")).toBeInTheDocument();
       });
     });
   });

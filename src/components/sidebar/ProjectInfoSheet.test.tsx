@@ -1,14 +1,15 @@
 /**
- * ProjectInfoDialog Tests
- * Story 2.27: 项目元信息对话框
+ * ProjectInfoSheet Tests
+ * Story 2.27: 项目元信息 Sheet
  * Story 1.9: Task 8.9 - 设置工作目录功能测试
+ * Story 12.1: Task 1 - Dialog → Sheet 改造
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { ProjectInfoDialog } from "./ProjectInfoDialog";
+import { ProjectInfoSheet } from "./ProjectInfoSheet";
 import type { Project } from "@/types/project";
 
 // Helper to render with router context
@@ -124,11 +125,11 @@ const defaultProps = {
     onProjectUpdated: vi.fn(),
 };
 
-describe("ProjectInfoDialog", () => {
-    describe("Dialog rendering", () => {
-        it("renders dialog when open with project", async () => {
+describe("ProjectInfoSheet", () => {
+    describe("Sheet rendering", () => {
+        it("renders sheet when open with project", async () => {
             const project = createMockProject();
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -137,22 +138,32 @@ describe("ProjectInfoDialog", () => {
 
         it("does not render when closed", () => {
             const project = createMockProject();
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} isOpen={false} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} isOpen={false} project={project} />);
 
             expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
         });
 
         it("does not render when project is null", () => {
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={null} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={null} />);
 
             expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        });
+
+        // Story 12.1: Sheet 特定测试
+        it("renders with data-testid for sheet", async () => {
+            const project = createMockProject();
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId("project-info-sheet")).toBeInTheDocument();
+            });
         });
     });
 
     describe("Project name display (Task 8.7)", () => {
         it("shows project name in title", async () => {
             const project = createMockProject({ name: "my-project" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText("my-project")).toBeInTheDocument();
@@ -162,7 +173,7 @@ describe("ProjectInfoDialog", () => {
         it("truncates long project name with ellipsis", async () => {
             const longName = "a".repeat(50);
             const project = createMockProject({ name: longName });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 // Should show truncated name with "..."
@@ -174,7 +185,7 @@ describe("ProjectInfoDialog", () => {
     describe("CWD path display (Task 8.8)", () => {
         it("shows project cwd path", async () => {
             const project = createMockProject({ cwd: "/home/user/project" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/项目路径/)).toBeInTheDocument();
@@ -184,7 +195,7 @@ describe("ProjectInfoDialog", () => {
         it("truncates long cwd path with ellipsis", async () => {
             const longPath = "/home/user/" + "a".repeat(60);
             const project = createMockProject({ cwd: longPath });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 // Path should be truncated
@@ -197,7 +208,7 @@ describe("ProjectInfoDialog", () => {
     describe("Invalid CWD warning (Task 8.6)", () => {
         it("shows warning for gemini-project: placeholder", async () => {
             const project = createMockProject({ cwd: "gemini-project:abc123" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/无法识别的路径/)).toBeInTheDocument();
@@ -206,7 +217,7 @@ describe("ProjectInfoDialog", () => {
 
         it("shows warning for empty cwd", async () => {
             const project = createMockProject({ cwd: "" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/无法识别的路径/)).toBeInTheDocument();
@@ -215,7 +226,7 @@ describe("ProjectInfoDialog", () => {
 
         it("shows warning for unknown cwd", async () => {
             const project = createMockProject({ cwd: "unknown" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/无法识别的路径/)).toBeInTheDocument();
@@ -224,7 +235,7 @@ describe("ProjectInfoDialog", () => {
 
         it("does not show warning for valid cwd", async () => {
             const project = createMockProject({ cwd: "/home/user/valid-project" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.queryByText(/无法识别的路径/)).not.toBeInTheDocument();
@@ -235,7 +246,7 @@ describe("ProjectInfoDialog", () => {
     describe("Change path button (Task 8.4, 8.5, Story 1.12)", () => {
         it("shows change path button", async () => {
             const project = createMockProject();
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 // Button should be present (look for the FolderEdit icon button with title="更换路径")
@@ -254,7 +265,7 @@ describe("ProjectInfoDialog", () => {
 
             const project = createMockProject();
             const user = userEvent.setup();
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 const buttons = screen.getAllByRole("button");
@@ -280,7 +291,7 @@ describe("ProjectInfoDialog", () => {
     });
 
     describe("Session info display", () => {
-        it("loads sessions when dialog opens", async () => {
+        it("loads sessions when sheet opens", async () => {
             const mockGetSessions = vi.fn().mockResolvedValue([
                 { id: "s1", source: "claude", message_count: 10 },
                 { id: "s2", source: "gemini", message_count: 5 },
@@ -288,7 +299,7 @@ describe("ProjectInfoDialog", () => {
 
             const project = createMockProject();
             renderWithRouter(
-                <ProjectInfoDialog
+                <ProjectInfoSheet
                     {...defaultProps}
                     project={project}
                     getProjectSessions={mockGetSessions}
@@ -307,7 +318,7 @@ describe("ProjectInfoDialog", () => {
             ]);
             const project = createMockProject({ session_count: 10 });
             renderWithRouter(
-                <ProjectInfoDialog
+                <ProjectInfoSheet
                     {...defaultProps}
                     project={project}
                     getProjectSessions={mockGetSessions}
@@ -324,7 +335,7 @@ describe("ProjectInfoDialog", () => {
     describe("Date display", () => {
         it("shows created date", async () => {
             const project = createMockProject({ created_at: "2026-01-01T00:00:00Z" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/创建时间/)).toBeInTheDocument();
@@ -333,7 +344,7 @@ describe("ProjectInfoDialog", () => {
 
         it("shows last activity date", async () => {
             const project = createMockProject({ last_activity: "2026-01-06T00:00:00Z" });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/最后活动/)).toBeInTheDocument();
@@ -348,7 +359,7 @@ describe("ProjectInfoDialog", () => {
                 git_repo_path: "/home/user/test-project",
                 git_remote_url: "https://github.com/user/repo",
             });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.getByText(/Git 仓库 URL/)).toBeInTheDocument();
@@ -363,7 +374,7 @@ describe("ProjectInfoDialog", () => {
                 git_repo_path: "/home/user/project", // same as cwd
                 git_remote_url: "https://github.com/user/repo",
             });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 // Should show git remote url
@@ -380,7 +391,7 @@ describe("ProjectInfoDialog", () => {
                 git_repo_path: "/home/user/project", // git root is parent
                 git_remote_url: "https://github.com/user/repo",
             });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 // Should show git remote url
@@ -400,11 +411,33 @@ describe("ProjectInfoDialog", () => {
                 git_repo_path: null,
                 git_remote_url: null,
             });
-            renderWithRouter(<ProjectInfoDialog {...defaultProps} project={project} />);
+            renderWithRouter(<ProjectInfoSheet {...defaultProps} project={project} />);
 
             await waitFor(() => {
                 expect(screen.queryByText(/Git 仓库 URL/)).not.toBeInTheDocument();
                 expect(screen.queryByText(/Git 仓库根目录/)).not.toBeInTheDocument();
+            });
+        });
+    });
+
+    describe("Keyboard navigation (AC #8)", () => {
+        it("closes on Escape key press", async () => {
+            const onOpenChange = vi.fn();
+            const project = createMockProject();
+            const user = userEvent.setup();
+
+            renderWithRouter(
+                <ProjectInfoSheet {...defaultProps} project={project} onOpenChange={onOpenChange} />
+            );
+
+            await waitFor(() => {
+                expect(screen.getByRole("dialog")).toBeInTheDocument();
+            });
+
+            await user.keyboard("{Escape}");
+
+            await waitFor(() => {
+                expect(onOpenChange).toHaveBeenCalledWith(false);
             });
         });
     });

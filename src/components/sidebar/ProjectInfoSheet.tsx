@@ -1,9 +1,10 @@
 /**
- * ProjectInfoDialog Component - 项目元信息对话框
+ * ProjectInfoSheet Component - 项目元信息 Sheet
  * Story 2.27: Task 1 - 项目元信息查看
  * Story 1.9: Task 8.4-8.8 - 设置工作目录功能
  * Story 1.12: 多路径支持
  * Story 11.9: Task 4 - MCP 上下文集成
+ * Story 12.1: Task 1 - Dialog → Sheet 改造
  *
  * 展示项目详细信息：名称、路径、来源、会话数、创建时间等
  * 支持手动设置工作目录（修复 Gemini 等占位符路径问题）
@@ -14,12 +15,12 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from "@/components/ui/dialog";
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -51,10 +52,11 @@ import { toast } from "sonner";
 import { McpContextCard } from "@/components/hub";
 
 /**
- * ProjectInfoDialog Props
+ * ProjectInfoSheet Props
  * Story 1.12: Phase 5 - 支持逻辑项目视图
+ * Story 12.1: Task 1 - 重命名 Props 接口
  */
-export interface ProjectInfoDialogProps {
+export interface ProjectInfoSheetProps {
     /** 是否打开 */
     isOpen: boolean;
     /** 打开状态变化回调 */
@@ -241,11 +243,12 @@ function countSessionsBySource(sessions: SessionSummary[]): Record<string, numbe
 }
 
 /**
- * ProjectInfoDialog 组件
+ * ProjectInfoSheet 组件
  * 显示项目的元信息
  * Story 1.12: 支持逻辑项目视图
+ * Story 12.1: Task 1 - Dialog → Sheet 改造
  */
-export function ProjectInfoDialog({
+export function ProjectInfoSheet({
     isOpen,
     onOpenChange,
     project,
@@ -253,7 +256,7 @@ export function ProjectInfoDialog({
     logicalProject,
     getLogicalProjectSessions,
     onProjectUpdated,
-}: ProjectInfoDialogProps) {
+}: ProjectInfoSheetProps) {
     const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const [sessions, setSessions] = React.useState<SessionSummary[]>([]);
@@ -280,7 +283,7 @@ export function ProjectInfoDialog({
         setCurrentProject(project ?? null);
     }, [project]);
 
-    // 当对话框打开时加载会话
+    // 当 Sheet 打开时加载会话
     React.useEffect(() => {
         if (!isOpen) {
             setSessions([]);
@@ -394,24 +397,24 @@ export function ProjectInfoDialog({
      */
     const handleAssociatePath = async () => {
         const projectId = currentProject?.id ?? logicalProject?.project_ids[0];
-        console.log("[DEBUG-DIALOG] handleAssociatePath: Called. projectId:", projectId);
+        console.log("[DEBUG-SHEET] handleAssociatePath: Called. projectId:", projectId);
 
         if (!projectId) {
-            console.warn("[DEBUG-DIALOG] handleAssociatePath: projectId is missing, returning.");
+            console.warn("[DEBUG-SHEET] handleAssociatePath: projectId is missing, returning.");
             return;
         }
 
         try {
-            console.log("[DEBUG-DIALOG] handleAssociatePath: Opening dialog...");
+            console.log("[DEBUG-SHEET] handleAssociatePath: Opening dialog...");
             const selected = await open({
                 directory: true,
                 multiple: false,
                 title: t("projectInfo.associatePath", "关联真实路径"),
             });
-            console.log("[DEBUG-DIALOG] handleAssociatePath: Dialog result:", selected);
+            console.log("[DEBUG-SHEET] handleAssociatePath: Dialog result:", selected);
 
             if (!selected || typeof selected !== "string") {
-                console.log("[DEBUG-DIALOG] handleAssociatePath: No selection or invalid type");
+                console.log("[DEBUG-SHEET] handleAssociatePath: No selection or invalid type");
                 return;
             }
 
@@ -430,10 +433,10 @@ export function ProjectInfoDialog({
                     count: sessionCount,
                 })
             );
-            // 关联成功后关闭对话框
+            // 关联成功后关闭 Sheet
             onOpenChange(false);
         } catch (error) {
-            console.error("[DEBUG-DIALOG] Failed to associate path:", error);
+            console.error("[DEBUG-SHEET] Failed to associate path:", error);
             toast.error(
                 t("projectInfo.associatePathFailed", "关联路径失败: {{error}}", {
                     error: error instanceof Error ? error.message : String(error),
@@ -455,10 +458,10 @@ export function ProjectInfoDialog({
 
     return (
         <TooltipProvider>
-            <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                <DialogContent size="md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+            <Sheet open={isOpen} onOpenChange={onOpenChange}>
+                <SheetContent side="right" className="w-full max-w-lg overflow-y-auto" data-testid="project-info-sheet">
+                    <SheetHeader>
+                        <SheetTitle className="flex items-center gap-2">
                             <FolderOpen className="h-5 w-5 shrink-0" />
                             <TruncatedText
                                 text={displayName ?? "Unknown"}
@@ -471,13 +474,13 @@ export function ProjectInfoDialog({
                                     {t("project.multiSource", { count: logicalProject.project_count })}
                                 </span>
                             )}
-                        </DialogTitle>
-                        <DialogDescription className="sr-only">
+                        </SheetTitle>
+                        <SheetDescription className="sr-only">
                             {t("projectInfo.description", "项目详细信息")}
-                        </DialogDescription>
-                    </DialogHeader>
+                        </SheetDescription>
+                    </SheetHeader>
 
-                    <div className="divide-y divide-border">
+                    <div className="divide-y divide-border px-4">
                         {/* Story 1.12: 项目路径列表 - 多路径支持 */}
                         <div className="flex items-start gap-3 py-2">
                             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -638,7 +641,7 @@ export function ProjectInfoDialog({
                                 </div>
                             </div>
                         )}
-                        
+
                         {/* 存储层视图：显示会话来源统计 */}
                         {!isLogicalView && currentProject && (
                             <div className="flex items-start gap-3 py-2">
@@ -718,7 +721,7 @@ export function ProjectInfoDialog({
                                     mono
                                 />
                             )}
-                        
+
                         {/* 逻辑项目 Git 状态 */}
                         {isLogicalView && logicalProject?.has_git_repo && (
                             <InfoRow
@@ -733,25 +736,27 @@ export function ProjectInfoDialog({
                     {!isPlaceholder && (currentProject || logicalProject) && (
                         <>
                             <Separator className="my-4" />
-                            <McpContextCard
-                                projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
-                                projectPath={
-                                    paths.find((p) => p.is_primary)?.path ??
-                                    paths[0]?.path ??
-                                    logicalProject?.physical_path ??
-                                    currentProject?.cwd
-                                }
-                                onNavigateToHub={(projectId) => {
-                                    onOpenChange(false); // 关闭对话框
-                                    navigate(`/hub?project=${projectId}`);
-                                }}
-                            />
+                            <div className="px-4">
+                                <McpContextCard
+                                    projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
+                                    projectPath={
+                                        paths.find((p) => p.is_primary)?.path ??
+                                        paths[0]?.path ??
+                                        logicalProject?.physical_path ??
+                                        currentProject?.cwd
+                                    }
+                                    onNavigateToHub={(projectId) => {
+                                        onOpenChange(false); // 关闭 Sheet
+                                        navigate(`/hub?project=${projectId}`);
+                                    }}
+                                />
+                            </div>
                         </>
                     )}
 
                     {/* 无效 CWD 提示 */}
                     {isPlaceholder && (
-                        <div className="mt-4 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                        <div className="mx-4 mt-4 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
                             <div className="flex items-start gap-2">
                                 <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
                                 <div className="text-sm text-yellow-600 dark:text-yellow-400">
@@ -768,8 +773,8 @@ export function ProjectInfoDialog({
                             </div>
                         </div>
                     )}
-                </DialogContent>
-            </Dialog>
+                </SheetContent>
+            </Sheet>
         </TooltipProvider>
     );
 }
