@@ -9,7 +9,10 @@ export { InterceptionStats, type InterceptionStatsProps } from './InterceptionSt
 export { RecordFilters, type TimeRange, type RecordFiltersProps } from './RecordFilters';
 export { InterceptionRecordItem, type InterceptionRecordItemProps } from './InterceptionRecordItem';
 export { InterceptionRecordList, type InterceptionRecordListProps } from './InterceptionRecordList';
-export { PrivacyScanReport, type PrivacyScanReportProps } from './PrivacyScanReport';
+// Story 3-9/12.3: 隐私扫描报告面板
+export { PrivacyScanReportSheet, type PrivacyScanReportSheetProps } from './PrivacyScanReportSheet';
+// 向后兼容别名 (deprecated)
+export { PrivacyScanReport, type PrivacyScanReportProps } from './PrivacyScanReportSheet';
 // Story 3.10: 自定义检测规则管理
 export { RuleListItem, type RuleListItemProps } from './RuleListItem';
 export { AddRuleSheet, type AddRuleSheetProps } from './AddRuleSheet';

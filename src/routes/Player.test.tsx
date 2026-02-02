@@ -130,7 +130,7 @@ vi.mock("@/components/player", () => ({
       <button onClick={onImport}>导入项目</button>
     </div>
   ),
-  CompressGuideDialog: () => <div data-testid="compress-guide-dialog">Compress Guide</div>,
+  CompressGuideSheet: () => <div data-testid="compress-guide-sheet">Compress Guide</div>,
 }));
 
 // Mock analytics components

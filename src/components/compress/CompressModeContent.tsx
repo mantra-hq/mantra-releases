@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { DualStreamLayout, type DualStreamLayoutRef } from "@/components/layout";
-import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelp, EditMessageSheet, InsertMessageSheet } from "@/components/compress";
+import { OriginalMessageList, CompressPreviewList, TokenStatistics, UnsavedChangesDialog, KeyboardShortcutsHelpSheet, EditMessageSheet, InsertMessageSheet } from "@/components/compress";
 import { useCompressState } from "@/hooks/useCompressState";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import { useMessageFocus } from "@/hooks/useMessageFocus";
@@ -282,8 +282,8 @@ export function CompressModeContent({
         onCancel={handleCancel}
       />
 
-      {/* Story 10.10 AC4: 快捷键帮助面板 */}
-      <KeyboardShortcutsHelp
+      {/* Story 10.10 AC4: 快捷键帮助面板 - Story 12.3 改造 */}
+      <KeyboardShortcutsHelpSheet
         open={showHelpDialog}
         onOpenChange={setShowHelpDialog}
       />

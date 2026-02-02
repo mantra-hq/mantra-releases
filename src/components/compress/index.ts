@@ -61,6 +61,9 @@ export { CompressModeContent } from "./CompressModeContent";
 export { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 export type { UnsavedChangesDialogProps } from "./UnsavedChangesDialog";
 
-// Story 10.10: 快捷键帮助面板
-export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
-export type { KeyboardShortcutsHelpProps } from "./KeyboardShortcutsHelp";
+// Story 10.10/12.3: 快捷键帮助面板
+export { KeyboardShortcutsHelpSheet } from "./KeyboardShortcutsHelpSheet";
+export type { KeyboardShortcutsHelpSheetProps } from "./KeyboardShortcutsHelpSheet";
+// 向后兼容别名 (deprecated)
+export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelpSheet";
+export type { KeyboardShortcutsHelpProps } from "./KeyboardShortcutsHelpSheet";

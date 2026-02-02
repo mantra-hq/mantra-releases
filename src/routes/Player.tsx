@@ -55,7 +55,7 @@ import { showSyncResult } from "@/components/sidebar/SyncResultToast";
 import { useProjectDrawer } from "@/hooks/useProjectDrawer";
 // Story 2.21: Player 空状态组件
 // Story 10.11: 移除 ModeSwitch (已集成到 TopBar)
-import { PlayerEmptyState, CompressGuideDialog } from "@/components/player";
+import { PlayerEmptyState, CompressGuideSheet } from "@/components/player";
 // Story 10.2/10.3/10.6: 压缩模式组件
 import { CompressModeContent } from "@/components/compress";
 // Story 10.3: 压缩状态 Provider
@@ -1074,10 +1074,10 @@ export default function Player() {
               /* 压缩模式不显示 TimberLine */
             ) : null}
 
-            {/* Story 10.1 AC #2: 首次使用引导弹窗 */}
-            <CompressGuideDialog
+            {/* Story 10.1 AC #2: 首次使用引导面板 */}
+            <CompressGuideSheet
               open={isFirstTimeCompress}
-              onClose={hideGuide} // 临时隐藏弹窗，下次还会显示
+              onClose={hideGuide} // 临时隐藏面板，下次还会显示
               onDismissForever={dismissGuide}
             />
           </>
