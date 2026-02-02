@@ -65,12 +65,12 @@ import {
   Globe,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
-import { McpServiceForm } from "./McpServiceForm";
+import { McpServiceSheet } from "./McpServiceSheet";
 import { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 import { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 import { McpConfigImportSheet } from "./McpConfigImportSheet";
 import { InspectorDrawer } from "./inspector";
-import { OAuthConfigDialog, OAuthServiceStatus } from "./OAuthConfigDialog";
+import { OAuthConfigSheet, OAuthServiceStatus } from "./OAuthConfigSheet";
 import { ToolPolicyEditor } from "./ToolPolicyEditor";
 
 /**
@@ -558,8 +558,8 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
         )}
       </CardContent>
 
-      {/* 添加/编辑表单对话框 */}
-      <McpServiceForm
+      {/* 添加/编辑表单 Sheet */}
+      <McpServiceSheet
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
         editService={editService}
@@ -597,9 +597,9 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
         gatewayRunning={gatewayRunning}
       />
 
-      {/* OAuth 配置对话框 - Story 11.12 */}
+      {/* OAuth 配置 Sheet - Story 11.12 → 12.2 */}
       {oauthService && (
-        <OAuthConfigDialog
+        <OAuthConfigSheet
           open={isOAuthDialogOpen}
           onOpenChange={setIsOAuthDialogOpen}
           serviceId={oauthService.id}

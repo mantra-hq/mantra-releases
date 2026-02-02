@@ -12,6 +12,6 @@ export { InterceptionRecordList, type InterceptionRecordListProps } from './Inte
 export { PrivacyScanReport, type PrivacyScanReportProps } from './PrivacyScanReport';
 // Story 3.10: 自定义检测规则管理
 export { RuleListItem, type RuleListItemProps } from './RuleListItem';
-export { AddRuleDialog, type AddRuleDialogProps } from './AddRuleDialog';
+export { AddRuleSheet, type AddRuleSheetProps } from './AddRuleSheet';
 export { PrivacySettingsPanel, type PrivacySettingsPanelProps } from './PrivacySettingsPanel';
 

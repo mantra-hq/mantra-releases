@@ -1,12 +1,13 @@
 /**
- * AddRuleDialog Component Tests
+ * AddRuleSheet Component Tests
  * Story 3.10: Task 7.2 - 前端组件测试
+ * Story 12.2: Dialog → Sheet 改造
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AddRuleDialog } from './AddRuleDialog';
+import { AddRuleSheet } from './AddRuleSheet';
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -49,24 +50,24 @@ const defaultProps = {
     existingRuleNames: [],
 };
 
-describe('AddRuleDialog', () => {
+describe('AddRuleSheet', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
     describe('渲染测试', () => {
         it('应该正确渲染对话框', () => {
-            render(<AddRuleDialog {...defaultProps} />);
-            expect(screen.getByTestId('add-rule-dialog')).toBeInTheDocument();
+            render(<AddRuleSheet {...defaultProps} />);
+            expect(screen.getByTestId('add-rule-sheet')).toBeInTheDocument();
         });
 
         it('open 为 false 时不应该渲染', () => {
-            render(<AddRuleDialog {...defaultProps} open={false} />);
-            expect(screen.queryByTestId('add-rule-dialog')).not.toBeInTheDocument();
+            render(<AddRuleSheet {...defaultProps} open={false} />);
+            expect(screen.queryByTestId('add-rule-sheet')).not.toBeInTheDocument();
         });
 
         it('应该显示标题和表单字段', () => {
-            render(<AddRuleDialog {...defaultProps} />);
+            render(<AddRuleSheet {...defaultProps} />);
             expect(screen.getByText('Add Custom Rule')).toBeInTheDocument();
             expect(screen.getByTestId('rule-name-input')).toBeInTheDocument();
             expect(screen.getByTestId('rule-pattern-input')).toBeInTheDocument();
@@ -76,7 +77,7 @@ describe('AddRuleDialog', () => {
 
     describe('表单验证', () => {
         it('名称为空时应该显示错误', async () => {
-            render(<AddRuleDialog {...defaultProps} />);
+            render(<AddRuleSheet {...defaultProps} />);
 
             const submitButton = screen.getByTestId('add-rule-submit');
             await userEvent.click(submitButton);
@@ -87,7 +88,7 @@ describe('AddRuleDialog', () => {
         });
 
         it('正则为空时应该显示错误', async () => {
-            render(<AddRuleDialog {...defaultProps} />);
+            render(<AddRuleSheet {...defaultProps} />);
 
             const nameInput = screen.getByTestId('rule-name-input');
             await userEvent.type(nameInput, 'My Rule');
@@ -104,7 +105,7 @@ describe('AddRuleDialog', () => {
     describe('名称唯一性验证 (AC4)', () => {
         it('名称重复时应该显示错误', async () => {
             render(
-                <AddRuleDialog
+                <AddRuleSheet
                     {...defaultProps}
                     existingRuleNames={['Existing Rule']}
                 />
@@ -126,7 +127,7 @@ describe('AddRuleDialog', () => {
 
         it('名称唯一性检查应该不区分大小写', async () => {
             render(
-                <AddRuleDialog
+                <AddRuleSheet
                     {...defaultProps}
                     existingRuleNames={['Existing Rule']}
                 />
@@ -150,7 +151,7 @@ describe('AddRuleDialog', () => {
     describe('成功添加规则', () => {
         it('添加成功应该调用 onAdd', async () => {
             const onAdd = vi.fn();
-            render(<AddRuleDialog {...defaultProps} onAdd={onAdd} />);
+            render(<AddRuleSheet {...defaultProps} onAdd={onAdd} />);
 
             const nameInput = screen.getByTestId('rule-name-input');
             await userEvent.type(nameInput, 'New Rule');
@@ -177,7 +178,7 @@ describe('AddRuleDialog', () => {
     describe('取消操作', () => {
         it('点击取消应该调用 onOpenChange(false)', async () => {
             const onOpenChange = vi.fn();
-            render(<AddRuleDialog {...defaultProps} onOpenChange={onOpenChange} />);
+            render(<AddRuleSheet {...defaultProps} onOpenChange={onOpenChange} />);
 
             const cancelButton = screen.getByTestId('add-rule-cancel');
             await userEvent.click(cancelButton);

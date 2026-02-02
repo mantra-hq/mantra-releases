@@ -1,12 +1,13 @@
 /**
- * McpServiceForm 组件测试
- * Story 11.6: Task 9.3 - McpServiceForm 组件测试
+ * McpServiceSheet 组件测试
+ * Story 11.6: Task 9.3 - McpServiceSheet 组件测试
+ * Story 12.2: Dialog → Sheet 改造
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { McpServiceForm } from "./McpServiceForm";
+import { McpServiceSheet } from "./McpServiceSheet";
 import type { McpService } from "./McpServiceList";
 
 // Mock IPC adapter
@@ -51,7 +52,7 @@ const mockService: McpService = {
   updated_at: "2024-01-01T00:00:00Z",
 };
 
-describe("McpServiceForm", () => {
+describe("McpServiceSheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -59,7 +60,7 @@ describe("McpServiceForm", () => {
   describe("添加模式", () => {
     it("应该显示空表单", async () => {
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={null}
@@ -80,7 +81,7 @@ describe("McpServiceForm", () => {
       mockInvokeFn.mockResolvedValue(mockService);
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={onOpenChange}
           editService={null}
@@ -120,7 +121,7 @@ describe("McpServiceForm", () => {
   describe("编辑模式", () => {
     it("应该显示已有服务数据", async () => {
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={mockService}
@@ -141,7 +142,7 @@ describe("McpServiceForm", () => {
       mockInvokeFn.mockResolvedValue({ ...mockService, name: "updated-service" });
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={onOpenChange}
           editService={mockService}
@@ -173,7 +174,7 @@ describe("McpServiceForm", () => {
       const user = userEvent.setup();
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={null}
@@ -196,7 +197,7 @@ describe("McpServiceForm", () => {
       const user = userEvent.setup();
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={null}
@@ -219,7 +220,7 @@ describe("McpServiceForm", () => {
       const user = userEvent.setup();
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={null}
@@ -246,7 +247,7 @@ describe("McpServiceForm", () => {
       mockInvokeFn.mockRejectedValue(new Error("Create failed"));
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={null}
@@ -273,7 +274,7 @@ describe("McpServiceForm", () => {
       mockInvokeFn.mockRejectedValue(new Error("Update failed"));
 
       render(
-        <McpServiceForm
+        <McpServiceSheet
           open={true}
           onOpenChange={vi.fn()}
           editService={mockService}

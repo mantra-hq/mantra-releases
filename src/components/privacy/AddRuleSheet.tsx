@@ -1,6 +1,6 @@
 /**
- * AddRuleDialog Component - 添加自定义规则对话框
- * Story 3.10: Task 4.3
+ * AddRuleSheet Component - 添加自定义规则 Sheet
+ * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 3
  *
  * 提供表单添加自定义脱敏规则
  */
@@ -8,13 +8,13 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { validateRegexV2 } from '@/lib/ipc/sanitizer-ipc';
 import type { SanitizationRule, Severity, SensitiveType } from '@/components/sanitizer/types';
 
-export interface AddRuleDialogProps {
+export interface AddRuleSheetProps {
     /** 是否打开 */
     open: boolean;
     /** 关闭回调 */
@@ -40,13 +40,13 @@ function generateRuleId(): string {
     return `custom_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function AddRuleDialog({
+export function AddRuleSheet({
     open,
     onOpenChange,
     onAdd,
     existingRuleIds,
     existingRuleNames = [],
-}: AddRuleDialogProps) {
+}: AddRuleSheetProps) {
     const { t } = useTranslation();
     const [name, setName] = useState('');
     const [pattern, setPattern] = useState('');
@@ -120,14 +120,14 @@ export function AddRuleDialog({
     }, [name, pattern, severity, existingRuleIds, existingRuleNames, onAdd, handleClose, t]);
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="md" data-testid="add-rule-dialog">
-                <DialogHeader>
-                    <DialogTitle>{t('privacy.rules.addTitle')}</DialogTitle>
-                    <DialogDescription>
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent side="right" className="w-full max-w-md" data-testid="add-rule-sheet">
+                <SheetHeader>
+                    <SheetTitle>{t('privacy.rules.addTitle')}</SheetTitle>
+                    <SheetDescription>
                         {t('privacy.rules.addDescription')}
-                    </DialogDescription>
-                </DialogHeader>
+                    </SheetDescription>
+                </SheetHeader>
 
                 <div className="space-y-4 py-4">
                     {/* 规则名称 */}
@@ -178,7 +178,7 @@ export function AddRuleDialog({
                     )}
                 </div>
 
-                <DialogFooter>
+                <SheetFooter>
                     <Button variant="outline" onClick={handleClose} data-testid="add-rule-cancel">
                         {t('common.cancel')}
                     </Button>
@@ -189,10 +189,10 @@ export function AddRuleDialog({
                     >
                         {isValidating ? t('common.validating') : t('common.add')}
                     </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </SheetFooter>
+            </SheetContent>
+        </Sheet>
     );
 }
 
-export default AddRuleDialog;
+export default AddRuleSheet;

@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Key, Plus, RefreshCw, Loader2 } from "lucide-react";
 import { EnvVariableList } from "./EnvVariableList";
-import { EnvVariableDialog } from "./EnvVariableDialog";
+import { EnvVariableSheet } from "./EnvVariableSheet";
 import { EnvVariableDeleteDialog } from "./EnvVariableDeleteDialog";
 import { listEnvVariables, type EnvVariable } from "@/lib/env-variable-ipc";
 
@@ -124,8 +124,8 @@ export function EnvVariableManager() {
         </div>
       )}
 
-      {/* 添加/编辑对话框 */}
-      <EnvVariableDialog
+      {/* 添加/编辑 Sheet */}
+      <EnvVariableSheet
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         editVariable={editVariable}

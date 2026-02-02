@@ -1,6 +1,6 @@
 /**
- * BindSessionDialog Component - 会话绑定对话框
- * Story 1.12: Task 5.4 - 会话手动绑定
+ * BindSessionSheet Component - 会话绑定 Sheet
+ * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 5
  *
  * 允许用户将未分类会话手动绑定到指定项目
  */
@@ -8,13 +8,13 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter,
-} from "@/components/ui/dialog";
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+    SheetFooter,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -30,9 +30,9 @@ import type { Project } from "@/types/project";
 import type { Session } from "@/types/project";
 
 /**
- * BindSessionDialog Props
+ * BindSessionSheet Props
  */
-export interface BindSessionDialogProps {
+export interface BindSessionSheetProps {
     /** 是否打开 */
     isOpen: boolean;
     /** 打开状态变化回调 */
@@ -48,23 +48,23 @@ export interface BindSessionDialogProps {
 }
 
 /**
- * BindSessionDialog 组件
- * 显示会话绑定对话框
+ * BindSessionSheet 组件
+ * 显示会话绑定 Sheet
  */
-export function BindSessionDialog({
+export function BindSessionSheet({
     isOpen,
     onOpenChange,
     session,
     projects,
     currentProjectId,
     onBindSuccess,
-}: BindSessionDialogProps) {
+}: BindSessionSheetProps) {
     const { t } = useTranslation();
     const [selectedProjectId, setSelectedProjectId] = React.useState<string>("");
     const [isBinding, setIsBinding] = React.useState(false);
     const [isUnbinding, setIsUnbinding] = React.useState(false);
 
-    // 当对话框打开时，设置当前绑定的项目
+    // 当 Sheet 打开时，设置当前绑定的项目
     React.useEffect(() => {
         if (isOpen && currentProjectId) {
             setSelectedProjectId(currentProjectId);
@@ -128,19 +128,19 @@ export function BindSessionDialog({
     const isAlreadyBound = !!currentProjectId;
 
     return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent size="md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
+        <Sheet open={isOpen} onOpenChange={onOpenChange}>
+            <SheetContent side="right" className="w-full max-w-md">
+                <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2">
                         <Link2 className="h-5 w-5" />
                         {t("session.bindToProject", "绑定到项目")}
-                    </DialogTitle>
-                    <DialogDescription>
+                    </SheetTitle>
+                    <SheetDescription>
                         {t("session.bindDescription", "将会话 \"{{session}}\" 手动绑定到指定项目", {
                             session: sessionDisplayName,
                         })}
-                    </DialogDescription>
-                </DialogHeader>
+                    </SheetDescription>
+                </SheetHeader>
 
                 <div className="py-4">
                     <label className="text-sm font-medium mb-2 block">
@@ -171,7 +171,7 @@ export function BindSessionDialog({
                     )}
                 </div>
 
-                <DialogFooter className="flex gap-2">
+                <SheetFooter className="flex gap-2">
                     {isAlreadyBound && (
                         <Button
                             variant="outline"
@@ -198,8 +198,8 @@ export function BindSessionDialog({
                         )}
                         {t("session.bind", "绑定")}
                     </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                </SheetFooter>
+            </SheetContent>
+        </Sheet>
     );
 }

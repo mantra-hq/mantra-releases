@@ -1,6 +1,6 @@
 /**
- * 环境变量添加/编辑对话框
- * Story 11.4: 环境变量管理 - Task 4.4
+ * 环境变量添加/编辑 Sheet
+ * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 1
  *
  * 支持添加新变量和编辑现有变量
  */
@@ -8,13 +8,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ import {
 } from "@/lib/env-variable-ipc";
 import { feedback } from "@/lib/feedback";
 
-interface EnvVariableDialogProps {
+interface EnvVariableSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** 编辑模式时传入现有变量，添加模式时为 null */
@@ -36,12 +36,12 @@ interface EnvVariableDialogProps {
   onSuccess: () => void;
 }
 
-export function EnvVariableDialog({
+export function EnvVariableSheet({
   open,
   onOpenChange,
   editVariable,
   onSuccess,
-}: EnvVariableDialogProps) {
+}: EnvVariableSheetProps) {
   const { t } = useTranslation();
   const isEditMode = editVariable !== null;
 
@@ -66,7 +66,7 @@ export function EnvVariableDialog({
             setValue(decrypted || "");
           })
           .catch((error) => {
-            console.error("[EnvVariableDialog] Failed to load value:", error);
+            console.error("[EnvVariableSheet] Failed to load value:", error);
             setValue("");
           })
           .finally(() => {
@@ -138,7 +138,7 @@ export function EnvVariableDialog({
       onSuccess();
       onOpenChange(false);
     } catch (error) {
-      console.error("[EnvVariableDialog] Failed to save:", error);
+      console.error("[EnvVariableSheet] Failed to save:", error);
       feedback.error(
         isEditMode
           ? t("hub.envVariables.updateError")
@@ -150,20 +150,20 @@ export function EnvVariableDialog({
   }, [name, value, description, isEditMode, onSuccess, onOpenChange, t]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full max-w-sm">
+        <SheetHeader>
+          <SheetTitle>
             {isEditMode
               ? t("hub.envVariables.editTitle")
               : t("hub.envVariables.addTitle")}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             {isEditMode
               ? t("hub.envVariables.editDescription")
               : t("hub.envVariables.addDescription")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="space-y-4 py-4">
           {/* 变量名 */}
@@ -243,7 +243,7 @@ export function EnvVariableDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -259,10 +259,10 @@ export function EnvVariableDialog({
             {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isEditMode ? t("common.save") : t("common.add")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default EnvVariableDialog;
+export default EnvVariableSheet;

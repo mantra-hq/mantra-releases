@@ -1,6 +1,6 @@
 /**
- * OAuth 配置对话框
- * Story 11.12: Remote MCP OAuth Support - Task 5.1
+ * OAuth 配置 Sheet
+ * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 2
  *
  * 支持配置远程 MCP 服务的 OAuth 认证：
  * - OAuth 2.0 配置 (Client ID, Secret, URLs, Scopes)
@@ -12,13 +12,13 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,7 +69,7 @@ export interface OAuthConfig {
   callback_port: number;
 }
 
-interface OAuthConfigDialogProps {
+interface OAuthConfigSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serviceId: string;
@@ -77,13 +77,13 @@ interface OAuthConfigDialogProps {
   onSuccess?: () => void;
 }
 
-export function OAuthConfigDialog({
+export function OAuthConfigSheet({
   open,
   onOpenChange,
   serviceId,
   serviceName,
   onSuccess,
-}: OAuthConfigDialogProps) {
+}: OAuthConfigSheetProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<OAuthServiceStatus | null>(null);
@@ -117,7 +117,7 @@ export function OAuthConfigDialog({
       });
       setStatus(result);
     } catch (error) {
-      console.error("[OAuthConfigDialog] Failed to load status:", error);
+      console.error("[OAuthConfigSheet] Failed to load status:", error);
     }
   };
 
@@ -153,7 +153,7 @@ export function OAuthConfigDialog({
       // 等待一段时间后刷新状态
       setTimeout(loadStatus, 5000);
     } catch (error) {
-      console.error("[OAuthConfigDialog] Failed to start OAuth flow:", error);
+      console.error("[OAuthConfigSheet] Failed to start OAuth flow:", error);
       feedback.error(
         t("hub.oauth.error"),
         (error as Error).message
@@ -188,7 +188,7 @@ export function OAuthConfigDialog({
       await loadStatus();
       onSuccess?.();
     } catch (error) {
-      console.error("[OAuthConfigDialog] Failed to disconnect:", error);
+      console.error("[OAuthConfigSheet] Failed to disconnect:", error);
       feedback.error(
         t("hub.oauth.error"),
         (error as Error).message
@@ -222,7 +222,7 @@ export function OAuthConfigDialog({
 
       await loadStatus();
     } catch (error) {
-      console.error("[OAuthConfigDialog] Failed to refresh token:", error);
+      console.error("[OAuthConfigSheet] Failed to refresh token:", error);
       feedback.error(
         t("hub.oauth.error"),
         (error as Error).message
@@ -269,145 +269,147 @@ export function OAuthConfigDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
             {t("hub.oauth.title", { name: serviceName })}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             {t("hub.oauth.description")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        {/* 状态显示 */}
-        <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-lg">
-          <span className="text-sm text-muted-foreground">
-            {t("hub.oauth.currentStatus")}
-          </span>
-          {renderStatusBadge()}
-        </div>
+        <div className="space-y-4 py-4">
+          {/* 状态显示 */}
+          <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-lg">
+            <span className="text-sm text-muted-foreground">
+              {t("hub.oauth.currentStatus")}
+            </span>
+            {renderStatusBadge()}
+          </div>
 
-        <Tabs value={authType} onValueChange={(v) => setAuthType(v as "oauth" | "bearer")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="oauth">
-              <Shield className="h-4 w-4 mr-2" />
-              OAuth 2.0
-            </TabsTrigger>
-            <TabsTrigger value="bearer">
-              <Key className="h-4 w-4 mr-2" />
-              Bearer Token
-            </TabsTrigger>
-          </TabsList>
+          <Tabs value={authType} onValueChange={(v) => setAuthType(v as "oauth" | "bearer")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="oauth">
+                <Shield className="h-4 w-4 mr-2" />
+                OAuth 2.0
+              </TabsTrigger>
+              <TabsTrigger value="bearer">
+                <Key className="h-4 w-4 mr-2" />
+                Bearer Token
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="oauth" className="space-y-4 mt-4">
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="clientId">{t("hub.oauth.clientId")} *</Label>
-                <Input
-                  id="clientId"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder="your-client-id"
-                />
+            <TabsContent value="oauth" className="space-y-4 mt-4">
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="clientId">{t("hub.oauth.clientId")} *</Label>
+                  <Input
+                    id="clientId"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder="your-client-id"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="clientSecret">{t("hub.oauth.clientSecret")}</Label>
+                  <Input
+                    id="clientSecret"
+                    type="password"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder={t("hub.oauth.clientSecretPlaceholder")}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="authorizationUrl">{t("hub.oauth.authorizationUrl")} *</Label>
+                  <Input
+                    id="authorizationUrl"
+                    value={authorizationUrl}
+                    onChange={(e) => setAuthorizationUrl(e.target.value)}
+                    placeholder="https://provider.com/oauth/authorize"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="tokenUrl">{t("hub.oauth.tokenUrl")} *</Label>
+                  <Input
+                    id="tokenUrl"
+                    value={tokenUrl}
+                    onChange={(e) => setTokenUrl(e.target.value)}
+                    placeholder="https://provider.com/oauth/token"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="revokeUrl">{t("hub.oauth.revokeUrl")}</Label>
+                  <Input
+                    id="revokeUrl"
+                    value={revokeUrl}
+                    onChange={(e) => setRevokeUrl(e.target.value)}
+                    placeholder="https://provider.com/oauth/revoke"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="scopes">{t("hub.oauth.scopes")}</Label>
+                  <Input
+                    id="scopes"
+                    value={scopes}
+                    onChange={(e) => setScopes(e.target.value)}
+                    placeholder="read, write, admin"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("hub.oauth.scopesHint")}
+                  </p>
+                </div>
               </div>
+            </TabsContent>
 
+            <TabsContent value="bearer" className="space-y-4 mt-4">
               <div className="grid gap-2">
-                <Label htmlFor="clientSecret">{t("hub.oauth.clientSecret")}</Label>
-                <Input
-                  id="clientSecret"
-                  type="password"
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  placeholder={t("hub.oauth.clientSecretPlaceholder")}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="authorizationUrl">{t("hub.oauth.authorizationUrl")} *</Label>
-                <Input
-                  id="authorizationUrl"
-                  value={authorizationUrl}
-                  onChange={(e) => setAuthorizationUrl(e.target.value)}
-                  placeholder="https://provider.com/oauth/authorize"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="tokenUrl">{t("hub.oauth.tokenUrl")} *</Label>
-                <Input
-                  id="tokenUrl"
-                  value={tokenUrl}
-                  onChange={(e) => setTokenUrl(e.target.value)}
-                  placeholder="https://provider.com/oauth/token"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="revokeUrl">{t("hub.oauth.revokeUrl")}</Label>
-                <Input
-                  id="revokeUrl"
-                  value={revokeUrl}
-                  onChange={(e) => setRevokeUrl(e.target.value)}
-                  placeholder="https://provider.com/oauth/revoke"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="scopes">{t("hub.oauth.scopes")}</Label>
-                <Input
-                  id="scopes"
-                  value={scopes}
-                  onChange={(e) => setScopes(e.target.value)}
-                  placeholder="read, write, admin"
+                <Label htmlFor="bearerToken">{t("hub.oauth.bearerToken")} *</Label>
+                <Textarea
+                  id="bearerToken"
+                  value={bearerToken}
+                  onChange={(e) => setBearerToken(e.target.value)}
+                  placeholder={t("hub.oauth.bearerTokenPlaceholder")}
+                  rows={3}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {t("hub.oauth.scopesHint")}
+                  {t("hub.oauth.bearerTokenHint")}
                 </p>
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
+          </Tabs>
 
-          <TabsContent value="bearer" className="space-y-4 mt-4">
-            <div className="grid gap-2">
-              <Label htmlFor="bearerToken">{t("hub.oauth.bearerToken")} *</Label>
-              <Textarea
-                id="bearerToken"
-                value={bearerToken}
-                onChange={(e) => setBearerToken(e.target.value)}
-                placeholder={t("hub.oauth.bearerTokenPlaceholder")}
-                rows={3}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("hub.oauth.bearerTokenHint")}
-              </p>
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* Token 信息 */}
-        {status?.status === "connected" && status.expires_at && (
-          <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
-            <div className="flex items-center gap-2">
-              <Clock className="h-3 w-3" />
-              <span>
-                {t("hub.oauth.expiresAt")}: {new Date(status.expires_at).toLocaleString()}
-              </span>
-            </div>
-            {status.scopes.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {status.scopes.map((scope) => (
-                  <Badge key={scope} variant="outline" className="text-xs">
-                    {scope}
-                  </Badge>
-                ))}
+          {/* Token 信息 */}
+          {status?.status === "connected" && status.expires_at && (
+            <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Clock className="h-3 w-3" />
+                <span>
+                  {t("hub.oauth.expiresAt")}: {new Date(status.expires_at).toLocaleString()}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              {status.scopes.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {status.scopes.map((scope) => (
+                    <Badge key={scope} variant="outline" className="text-xs">
+                      {scope}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="gap-2">
+        <SheetFooter className="gap-2">
           {status?.status === "connected" || status?.status === "expired" ? (
             <>
               <Button
@@ -448,10 +450,10 @@ export function OAuthConfigDialog({
               {t("hub.oauth.connect")}
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default OAuthConfigDialog;
+export default OAuthConfigSheet;

@@ -23,7 +23,7 @@ import { getPrivacyRules, updatePrivacyRules, getBuiltinRules } from '@/lib/ipc/
 import type { SanitizationRule, PrivacyRulesConfig, SensitiveType } from '@/components/sanitizer/types';
 import { SENSITIVE_TYPE_LABELS } from '@/components/sanitizer/types';
 import { RuleListItem } from './RuleListItem';
-import { AddRuleDialog } from './AddRuleDialog';
+import { AddRuleSheet } from './AddRuleSheet';
 
 export interface PrivacySettingsPanelProps {
     /** 外部样式 */
@@ -279,8 +279,8 @@ export function PrivacySettingsPanel({ className }: PrivacySettingsPanelProps) {
                 </div>
             )}
 
-            {/* 添加规则对话框 */}
-            <AddRuleDialog
+            {/* 添加规则 Sheet */}
+            <AddRuleSheet
                 open={addDialogOpen}
                 onOpenChange={setAddDialogOpen}
                 onAdd={handleAddRule}

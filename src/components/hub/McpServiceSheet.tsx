@@ -1,7 +1,6 @@
 /**
- * MCP 服务表单组件
- * Story 11.6: Task 4 - MCP 服务表单 (AC: #4, #5)
- * Story 11.11: HTTP Transport Support
+ * MCP 服务表单 Sheet 组件
+ * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 4
  *
  * 添加/编辑 MCP 服务的表单：
  * - 传输类型 (stdio / http)
@@ -16,13 +15,13 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,19 +68,19 @@ interface UpdateMcpServiceRequest {
   enabled?: boolean;
 }
 
-interface McpServiceFormProps {
+interface McpServiceSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editService: McpService | null;
   onSuccess: () => void;
 }
 
-export function McpServiceForm({
+export function McpServiceSheet({
   open,
   onOpenChange,
   editService,
   onSuccess,
-}: McpServiceFormProps) {
+}: McpServiceSheetProps) {
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -285,7 +284,7 @@ export function McpServiceForm({
       onOpenChange(false);
       onSuccess();
     } catch (error) {
-      console.error("[McpServiceForm] Failed to save service:", error);
+      console.error("[McpServiceSheet] Failed to save service:", error);
       feedback.error(
         editService ? t("hub.services.updateError") : t("hub.services.createError"),
         (error as Error).message
@@ -309,20 +308,20 @@ export function McpServiceForm({
   ]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>
             {editService
               ? t("hub.services.form.editTitle")
               : t("hub.services.form.addTitle")}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             {editService
               ? t("hub.services.form.editDescription")
               : t("hub.services.form.addDescription")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="space-y-4 py-4">
           {/* 服务名称 */}
@@ -466,7 +465,7 @@ export function McpServiceForm({
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -482,10 +481,10 @@ export function McpServiceForm({
             {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {editService ? t("common.save") : t("common.create")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export default McpServiceForm;
+export default McpServiceSheet;

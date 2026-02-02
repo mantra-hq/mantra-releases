@@ -203,7 +203,7 @@ describe('PrivacySettingsPanel', () => {
             await userEvent.click(addButton);
 
             await waitFor(() => {
-                expect(screen.getByTestId('add-rule-dialog')).toBeInTheDocument();
+                expect(screen.getByTestId('add-rule-sheet')).toBeInTheDocument();
             });
         });
     });

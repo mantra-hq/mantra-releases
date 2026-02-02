@@ -9,7 +9,7 @@
 export { EnvVariableManager } from "./EnvVariableManager";
 export { EnvVariableList } from "./EnvVariableList";
 export { EnvVariableItem } from "./EnvVariableItem";
-export { EnvVariableDialog } from "./EnvVariableDialog";
+export { EnvVariableSheet } from "./EnvVariableSheet";
 export { EnvVariableDeleteDialog } from "./EnvVariableDeleteDialog";
 
 // Gateway 状态
@@ -20,7 +20,7 @@ export { TakeoverStatusCard, type TakeoverStatusCardProps } from "./TakeoverStat
 
 // MCP 服务管理
 export { McpServiceList, type McpService } from "./McpServiceList";
-export { McpServiceForm } from "./McpServiceForm";
+export { McpServiceSheet } from "./McpServiceSheet";
 export { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 export { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 export { McpConfigImportSheet } from "./McpConfigImportSheet";
@@ -46,5 +46,5 @@ export {
   type RpcLogEntry,
 } from "./inspector";
 
-// Story 11.12: OAuth 配置
-export { OAuthConfigDialog, type OAuthServiceStatus, type OAuthConfig } from "./OAuthConfigDialog";
+// Story 11.12: OAuth 配置 → Story 12.2 Sheet 改造
+export { OAuthConfigSheet, type OAuthServiceStatus, type OAuthConfig } from "./OAuthConfigSheet";

@@ -42,4 +42,8 @@ export type { ProjectRenameInputProps } from "./ProjectRenameInput";
 export { ProjectInfoSheet } from "./ProjectInfoSheet";
 export type { ProjectInfoSheetProps } from "./ProjectInfoSheet";
 
+// Story 12.2: 会话绑定 Sheet
+export { BindSessionSheet } from "./BindSessionSheet";
+export type { BindSessionSheetProps } from "./BindSessionSheet";
+
 export type { SessionSummary } from "./types";
