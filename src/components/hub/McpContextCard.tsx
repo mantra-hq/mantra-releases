@@ -18,6 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ActionSheet,
   ActionSheetContent,
   ActionSheetHeader,
@@ -73,6 +78,8 @@ interface ProjectMcpStatus {
 export interface McpContextCardProps {
   /** 项目 ID */
   projectId: string;
+  /** 项目名称 (用于上下文提示) */
+  projectName?: string;
   /** 项目路径 (用于扫描配置文件) */
   projectPath?: string;
   /** 状态变更回调 */
@@ -151,6 +158,7 @@ function PolicyBadge({ service, t }: { service: McpServiceSummary; t: (key: stri
 
 export function McpContextCard({
   projectId,
+  projectName,
   projectPath,
   onStatusChange,
   onNavigateToHub,
@@ -274,16 +282,22 @@ export function McpContextCard({
                   {/* Story 11.9 Phase 2: 策略状态徽标 */}
                   <PolicyBadge service={service} t={t} />
                   {/* Story 11.9 Phase 2: 管理工具按钮 - Story 12.5: 文案区分 */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={() => setPolicyDialogService(service)}
-                    title={t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
-                    data-testid={`mcp-manage-tools-${service.id}`}
-                  >
-                    <Shield className="h-3.5 w-3.5" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => setPolicyDialogService(service)}
+                        data-testid={`mcp-manage-tools-${service.id}`}
+                      >
+                        <Shield className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               ))}
             </div>
@@ -324,6 +338,7 @@ export function McpContextCard({
             {policyDialogService && (
               <ToolPolicyEditor
                 projectId={projectId}
+                projectName={projectName}
                 serviceId={policyDialogService.id}
                 serviceName={policyDialogService.name}
                 embedded

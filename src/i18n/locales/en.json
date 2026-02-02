@@ -1254,8 +1254,9 @@
       "globalHint": "Editing the service's default policy. This will affect all projects without custom configuration.",
       "projectHint": "Customizing policy for project {{project}}. This will override the global default.",
       "inheritingFrom": "Inheriting from global default: {{mode}}",
-      "customPolicy": "Custom Policy",
+      "customPolicy": "Use Custom Policy",
       "inheritGlobal": "Use Global Default",
+      "projectScope": "Project: {{project}}",
       "isCustom": "Custom",
       "isInherited": "Inherited"
     },

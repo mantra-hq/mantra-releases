@@ -1262,6 +1262,7 @@
       "inheritingFrom": "当前继承自全局默认: {{mode}}",
       "customPolicy": "使用自定义策略",
       "inheritGlobal": "继承全局默认",
+      "projectScope": "项目: {{project}}",
       "isCustom": "自定义",
       "isInherited": "继承中"
     },

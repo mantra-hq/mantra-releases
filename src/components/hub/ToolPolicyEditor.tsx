@@ -33,7 +33,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { RefreshCw, ChevronDown, Shield, ShieldOff, Settings, Loader2, Save, CheckSquare, Square, Info, Globe, FolderOpen } from "lucide-react";
+import { RefreshCw, ChevronDown, Shield, ShieldOff, Settings, Loader2, Save, CheckSquare, Square, Info } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import type { ToolPolicy, ToolPolicyMode, McpTool, ToolDiscoveryResult } from "@/types/mcp";
 
@@ -61,24 +61,27 @@ interface ToolPolicyEditorProps {
 /**
  * Story 12.5: 上下文提示组件
  * 区分全局模式和项目模式的策略编辑范围
+ * AC2: 使用 Info 图标 + 浅色背景
  */
 function PolicyContextHint({
   isGlobalMode,
   projectName,
   globalDefaultMode,
   isInherited,
+  onStartCustomize,
   t,
 }: {
   isGlobalMode: boolean;
   projectName?: string;
   globalDefaultMode?: ToolPolicyMode;
   isInherited?: boolean;
-  t: (key: string, fallback?: string, opts?: Record<string, unknown>) => string;
+  onStartCustomize?: () => void;
+  t: ReturnType<typeof useTranslation>['t'];
 }) {
   if (isGlobalMode) {
     return (
       <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-        <Globe className="h-4 w-4 text-blue-500 shrink-0" />
+        <Info className="h-4 w-4 text-blue-500 shrink-0" />
         <span className="text-sm text-blue-200">
           {t("hub.toolPolicy.globalHint", "Editing the service's default policy. This will affect all projects without custom configuration.")}
         </span>
@@ -96,21 +99,29 @@ function PolicyContextHint({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-        <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
+        <Info className="h-4 w-4 text-amber-500 shrink-0" />
         <span className="text-sm text-amber-200">
           {t("hub.toolPolicy.projectHint", "Customizing policy for project {{project}}. This will override the global default.", { project: projectName || "this project" })}
         </span>
       </div>
-      {/* AC3: 继承状态指示 */}
+      {/* AC3: 继承状态指示 + "使用自定义策略"开关 */}
       {isInherited && globalDefaultMode && (
         <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg">
           <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground flex-1">
             {t("hub.toolPolicy.inheritingFrom", "Inheriting from global default: {{mode}}", { mode: modeLabel })}
           </span>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 ml-auto">
-            {t("hub.toolPolicy.isInherited", "Inherited")}
-          </Badge>
+          {onStartCustomize && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={onStartCustomize}
+              data-testid="start-customize-button"
+            >
+              {t("hub.toolPolicy.customPolicy", "Use Custom Policy")}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -180,7 +191,6 @@ export function ToolPolicyEditor({
 
   // Story 12.5 AC3: 全局默认策略（用于项目模式下显示继承状态）
   const [globalDefaultPolicy, setGlobalDefaultPolicy] = useState<ToolPolicy | null>(null);
-  const [isInherited, setIsInherited] = useState(false);
 
   // 从策略初始化选中状态
   const initializeSelection = useCallback((policy: ToolPolicy, toolList: McpTool[]) => {
@@ -259,19 +269,14 @@ export function ToolPolicyEditor({
 
       setOriginalPolicy(loadedPolicy);
       initializeSelection(loadedPolicy, result.tools);
-
-      // Story 12.5 AC3: 检测是否继承自全局（仅项目模式）
-      if (!isGlobalMode) {
-        const inherited = arePoliciesEqual(loadedPolicy, globalPolicy);
-        setIsInherited(inherited);
-      }
+      // Story 12.5 AC3: 继承状态现在通过 currentIsInherited useMemo 自动计算
     } catch (error) {
       console.error('[ToolPolicyEditor] Failed to load data:', error);
       feedback.error(t('hub.toolPolicy.loadError'), (error as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [isGlobalMode, projectId, serviceId, initialPolicy, t, initializeSelection, arePoliciesEqual]);
+  }, [isGlobalMode, projectId, serviceId, initialPolicy, t, initializeSelection]);
 
   // 初始加载
   useEffect(() => {
@@ -367,6 +372,25 @@ export function ToolPolicyEditor({
     return arePoliciesEqual(currentPolicy, globalDefaultPolicy);
   }, [isGlobalMode, globalDefaultPolicy, buildPolicy, arePoliciesEqual]);
 
+  // Story 12.5 AC3: 开始自定义策略（取消选中一个工具触发变更）
+  const handleStartCustomize = useCallback(() => {
+    // 触发一个小变更让用户开始自定义
+    // 如果当前是 allow_all，取消选中第一个工具
+    // 如果当前是 deny_all，选中第一个工具
+    if (tools.length === 0) return;
+
+    const firstTool = tools[0].name;
+    setSelectedTools(prev => {
+      const next = new Set(prev);
+      if (next.has(firstTool)) {
+        next.delete(firstTool);
+      } else {
+        next.add(firstTool);
+      }
+      return next;
+    });
+  }, [tools]);
+
   // 保存策略
   const handleSave = useCallback(async () => {
     const newPolicy = buildPolicy();
@@ -442,17 +466,6 @@ export function ToolPolicyEditor({
           <span className="text-sm font-medium">
             {t(`hub.toolPolicy.mode${currentMode === 'allow_all' ? 'AllowAll' : currentMode === 'deny_all' ? 'DenyAll' : 'Custom'}`)}
           </span>
-          {/* Story 12.5 AC3: 项目模式下显示自定义/继承状态徽章 */}
-          {!isGlobalMode && (
-            <Badge
-              variant={currentIsInherited ? "secondary" : "default"}
-              className="text-[10px] px-1.5 py-0 h-5"
-            >
-              {currentIsInherited
-                ? t('hub.toolPolicy.isInherited', 'Inherited')
-                : t('hub.toolPolicy.isCustom', 'Custom')}
-            </Badge>
-          )}
         </div>
         <Badge variant="outline" className="text-xs">
           {t('hub.toolPolicy.selectedCount', { selected: selectedTools.size, total: tools.length })}
@@ -556,6 +569,7 @@ export function ToolPolicyEditor({
             projectName={projectName}
             globalDefaultMode={globalDefaultPolicy?.mode}
             isInherited={currentIsInherited}
+            onStartCustomize={handleStartCustomize}
             t={t}
           />
         </div>
