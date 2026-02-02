@@ -1,6 +1,7 @@
 /**
  * BindSessionSheet Component - 会话绑定 Sheet
  * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 5
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 允许用户将未分类会话手动绑定到指定项目
  */
@@ -8,13 +9,13 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
-    SheetFooter,
-} from "@/components/ui/sheet";
+    ActionSheet,
+    ActionSheetContent,
+    ActionSheetHeader,
+    ActionSheetTitle,
+    ActionSheetDescription,
+    ActionSheetFooter,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -128,19 +129,19 @@ export function BindSessionSheet({
     const isAlreadyBound = !!currentProjectId;
 
     return (
-        <Sheet open={isOpen} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-full max-w-md">
-                <SheetHeader>
-                    <SheetTitle className="flex items-center gap-2">
+        <ActionSheet open={isOpen} onOpenChange={onOpenChange}>
+            <ActionSheetContent size="md">
+                <ActionSheetHeader>
+                    <ActionSheetTitle className="flex items-center gap-2">
                         <Link2 className="h-5 w-5" />
                         {t("session.bindToProject", "绑定到项目")}
-                    </SheetTitle>
-                    <SheetDescription>
+                    </ActionSheetTitle>
+                    <ActionSheetDescription>
                         {t("session.bindDescription", "将会话 \"{{session}}\" 手动绑定到指定项目", {
                             session: sessionDisplayName,
                         })}
-                    </SheetDescription>
-                </SheetHeader>
+                    </ActionSheetDescription>
+                </ActionSheetHeader>
 
                 <div className="py-4 px-4">
                     <label className="text-sm font-medium mb-2 block">
@@ -171,7 +172,7 @@ export function BindSessionSheet({
                     )}
                 </div>
 
-                <SheetFooter className="flex gap-2">
+                <ActionSheetFooter className="flex gap-2">
                     {isAlreadyBound && (
                         <Button
                             variant="outline"
@@ -198,8 +199,8 @@ export function BindSessionSheet({
                         )}
                         {t("session.bind", "绑定")}
                     </Button>
-                </SheetFooter>
-            </SheetContent>
-        </Sheet>
+                </ActionSheetFooter>
+            </ActionSheetContent>
+        </ActionSheet>
     );
 }

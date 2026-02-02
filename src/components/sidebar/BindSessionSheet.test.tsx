@@ -50,36 +50,51 @@ import { toast } from "sonner";
 const mockBindSessionToProject = vi.mocked(bindSessionToProject);
 const mockUnbindSession = vi.mocked(unbindSession);
 
-const mockSession: Session = {
+const mockSession = {
   id: "session-1",
   title: "Test Session",
-  tool: "claude-code",
+  source: "claude" as const,
+  message_count: 10,
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
 } as Session;
 
-const mockProjects: Project[] = [
+const mockProjects = [
   {
     id: "project-1",
     name: "Project Alpha",
-    path: "/path/to/alpha",
+    cwd: "/path/to/alpha",
+    session_count: 5,
+    last_activity: "2024-01-01T00:00:00Z",
+    git_repo_path: null,
+    git_remote_url: null,
+    has_git_repo: false,
     created_at: "2024-01-01T00:00:00Z",
-    updated_at: "2024-01-01T00:00:00Z",
-  } as Project,
+  },
   {
     id: "project-2",
     name: "Project Beta",
-    path: "/path/to/beta",
+    cwd: "/path/to/beta",
+    session_count: 3,
+    last_activity: "2024-01-01T00:00:00Z",
+    git_repo_path: null,
+    git_remote_url: null,
+    has_git_repo: false,
     created_at: "2024-01-01T00:00:00Z",
-    updated_at: "2024-01-01T00:00:00Z",
-  } as Project,
-];
+  },
+] as Project[];
+
+const mockSessionBinding = {
+  session_id: "session-1",
+  project_id: "project-1",
+  bound_at: "2024-01-01T00:00:00Z",
+};
 
 describe("BindSessionSheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockBindSessionToProject.mockResolvedValue(undefined);
-    mockUnbindSession.mockResolvedValue(undefined);
+    mockBindSessionToProject.mockResolvedValue(mockSessionBinding);
+    mockUnbindSession.mockResolvedValue(undefined as unknown as void);
   });
 
   describe("渲染测试", () => {

@@ -1,6 +1,7 @@
 /**
  * MCP 服务表单 Sheet 组件
  * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 4
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 添加/编辑 MCP 服务的表单：
  * - 传输类型 (stdio / http)
@@ -15,13 +16,13 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetFooter,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -308,20 +309,20 @@ export function McpServiceSheet({
   ]);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent size="lg" className="overflow-y-auto">
+        <ActionSheetHeader>
+          <ActionSheetTitle>
             {editService
               ? t("hub.services.form.editTitle")
               : t("hub.services.form.addTitle")}
-          </SheetTitle>
-          <SheetDescription>
+          </ActionSheetTitle>
+          <ActionSheetDescription>
             {editService
               ? t("hub.services.form.editDescription")
               : t("hub.services.form.addDescription")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         <div className="space-y-4 py-4 px-4">
           {/* 服务名称 */}
@@ -465,7 +466,7 @@ export function McpServiceSheet({
           </div>
         </div>
 
-        <SheetFooter>
+        <ActionSheetFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -481,9 +482,9 @@ export function McpServiceSheet({
             {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {editService ? t("common.save") : t("common.create")}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

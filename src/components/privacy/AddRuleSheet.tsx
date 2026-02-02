@@ -1,6 +1,7 @@
 /**
  * AddRuleSheet Component - 添加自定义规则 Sheet
  * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 3
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 提供表单添加自定义脱敏规则
  */
@@ -8,13 +9,13 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetFooter,
-    SheetHeader,
-    SheetTitle,
-} from '@/components/ui/sheet';
+    ActionSheet,
+    ActionSheetContent,
+    ActionSheetDescription,
+    ActionSheetFooter,
+    ActionSheetHeader,
+    ActionSheetTitle,
+} from '@/components/ui/action-sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -120,14 +121,14 @@ export function AddRuleSheet({
     }, [name, pattern, severity, existingRuleIds, existingRuleNames, onAdd, handleClose, t]);
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-full max-w-md" data-testid="add-rule-sheet">
-                <SheetHeader>
-                    <SheetTitle>{t('privacy.rules.addTitle')}</SheetTitle>
-                    <SheetDescription>
+        <ActionSheet open={open} onOpenChange={onOpenChange}>
+            <ActionSheetContent size="md" data-testid="add-rule-sheet">
+                <ActionSheetHeader>
+                    <ActionSheetTitle>{t('privacy.rules.addTitle')}</ActionSheetTitle>
+                    <ActionSheetDescription>
                         {t('privacy.rules.addDescription')}
-                    </SheetDescription>
-                </SheetHeader>
+                    </ActionSheetDescription>
+                </ActionSheetHeader>
 
                 <div className="space-y-4 py-4 px-4">
                     {/* 规则名称 */}
@@ -178,7 +179,7 @@ export function AddRuleSheet({
                     )}
                 </div>
 
-                <SheetFooter>
+                <ActionSheetFooter>
                     <Button variant="outline" onClick={handleClose} data-testid="add-rule-cancel">
                         {t('common.cancel')}
                     </Button>
@@ -189,9 +190,9 @@ export function AddRuleSheet({
                     >
                         {isValidating ? t('common.validating') : t('common.add')}
                     </Button>
-                </SheetFooter>
-            </SheetContent>
-        </Sheet>
+                </ActionSheetFooter>
+            </ActionSheetContent>
+        </ActionSheet>
     );
 }
 

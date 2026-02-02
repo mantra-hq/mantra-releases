@@ -23,12 +23,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -622,17 +622,17 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
       </Card>
 
       {/* 文件预览抽屉 */}
-      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
+      <ActionSheet open={previewOpen} onOpenChange={setPreviewOpen}>
+        <ActionSheetContent size="xl">
+          <ActionSheetHeader>
+            <ActionSheetTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               {t("hub.takeover.filePreview")}
-            </SheetTitle>
-            <SheetDescription className="truncate font-mono text-xs">
+            </ActionSheetTitle>
+            <ActionSheetDescription className="truncate font-mono text-xs">
               {previewPath}
-            </SheetDescription>
-          </SheetHeader>
+            </ActionSheetDescription>
+          </ActionSheetHeader>
 
           <div className="flex-1 overflow-hidden mt-4">
             {previewLoading ? (
@@ -684,8 +684,8 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
               </div>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+        </ActionSheetContent>
+      </ActionSheet>
     </>
   );
 }

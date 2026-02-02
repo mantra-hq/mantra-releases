@@ -5,6 +5,7 @@
  * Story 1.12: 多路径支持
  * Story 11.9: Task 4 - MCP 上下文集成
  * Story 12.1: Task 1 - Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 展示项目详细信息：名称、路径、来源、会话数、创建时间等
  * 支持手动设置工作目录（修复 Gemini 等占位符路径问题）
@@ -15,12 +16,12 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
-} from "@/components/ui/sheet";
+    ActionSheet,
+    ActionSheetContent,
+    ActionSheetHeader,
+    ActionSheetTitle,
+    ActionSheetDescription,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -458,10 +459,10 @@ export function ProjectInfoSheet({
 
     return (
         <TooltipProvider>
-            <Sheet open={isOpen} onOpenChange={onOpenChange}>
-                <SheetContent side="right" className="w-full max-w-lg overflow-y-auto" data-testid="project-info-sheet">
-                    <SheetHeader>
-                        <SheetTitle className="flex items-center gap-2">
+            <ActionSheet open={isOpen} onOpenChange={onOpenChange}>
+                <ActionSheetContent size="lg" className="overflow-y-auto" data-testid="project-info-sheet">
+                    <ActionSheetHeader>
+                        <ActionSheetTitle className="flex items-center gap-2">
                             <FolderOpen className="h-5 w-5 shrink-0" />
                             <TruncatedText
                                 text={displayName ?? "Unknown"}
@@ -474,11 +475,11 @@ export function ProjectInfoSheet({
                                     {t("project.multiSource", { count: logicalProject.project_count })}
                                 </span>
                             )}
-                        </SheetTitle>
-                        <SheetDescription className="sr-only">
+                        </ActionSheetTitle>
+                        <ActionSheetDescription className="sr-only">
                             {t("projectInfo.description", "项目详细信息")}
-                        </SheetDescription>
-                    </SheetHeader>
+                        </ActionSheetDescription>
+                    </ActionSheetHeader>
 
                     <div className="divide-y divide-border px-4">
                         {/* Story 1.12: 项目路径列表 - 多路径支持 */}
@@ -773,8 +774,8 @@ export function ProjectInfoSheet({
                             </div>
                         </div>
                     )}
-                </SheetContent>
-            </Sheet>
+                </ActionSheetContent>
+            </ActionSheet>
         </TooltipProvider>
     );
 }

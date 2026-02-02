@@ -56,6 +56,15 @@ vi.mock("@/components/ui/sheet", () => ({
   SheetTitle: ({ children }: { children: React.ReactNode }) => (
     <h2 data-testid="sheet-title">{children}</h2>
   ),
+  SheetDescription: ({ children }: { children: React.ReactNode }) => (
+    <p data-testid="sheet-description">{children}</p>
+  ),
+  SheetFooter: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="sheet-footer" className={className}>{children}</div>
+  ),
+  SheetClose: ({ children }: { children: React.ReactNode }) => (
+    <button data-testid="sheet-close">{children}</button>
+  ),
 }));
 
 describe("KeyboardShortcutsHelpSheet", () => {

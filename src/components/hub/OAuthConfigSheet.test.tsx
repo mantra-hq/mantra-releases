@@ -39,8 +39,6 @@ vi.mock("sonner", () => ({
 
 // Import after mocking
 import { invoke } from "@/lib/ipc-adapter";
-import { feedback } from "@/lib/feedback";
-import { toast } from "sonner";
 
 const mockInvoke = vi.mocked(invoke);
 

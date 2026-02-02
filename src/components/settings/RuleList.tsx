@@ -2,6 +2,7 @@
  * RuleList - 规则列表组件
  * Story 3-3: Task 3 - AC #1, #5
  * Story 2.26: 国际化支持
+ * Story 12.4: 迁移使用 ActionSheet
  */
 
 import { useState } from 'react';
@@ -9,11 +10,11 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+    ActionSheet,
+    ActionSheetContent,
+    ActionSheetHeader,
+    ActionSheetTitle,
+} from '@/components/ui/action-sheet';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -182,13 +183,13 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                 </div>
             )}
 
-            <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
+            <ActionSheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+                <ActionSheetContent size="md">
+                    <ActionSheetHeader>
+                        <ActionSheetTitle>
                             {editingRule ? t("settings.editRule") : t("settings.addRule")}
-                        </DialogTitle>
-                    </DialogHeader>
+                        </ActionSheetTitle>
+                    </ActionSheetHeader>
                     <RuleEditor
                         initialData={
                             editingRule
@@ -202,8 +203,8 @@ export function RuleList({ onImport, onExport }: RuleListProps) {
                         onSave={handleSave}
                         onCancel={() => setIsEditorOpen(false)}
                     />
-                </DialogContent>
-            </Dialog>
+                </ActionSheetContent>
+            </ActionSheet>
         </div>
     );
 }

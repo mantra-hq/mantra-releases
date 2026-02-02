@@ -60,6 +60,9 @@ vi.mock('@/components/ui/sheet', () => ({
     SheetFooter: ({ children, className }: { children: React.ReactNode; className?: string }) => (
         <div data-testid="sheet-footer" className={className}>{children}</div>
     ),
+    SheetClose: ({ children }: { children: React.ReactNode }) => (
+        <button data-testid="sheet-close">{children}</button>
+    ),
 }));
 
 // Mock ScrollArea

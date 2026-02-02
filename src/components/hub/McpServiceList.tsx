@@ -34,11 +34,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -609,15 +609,15 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
       )}
 
       {/* Story 11.9 Phase 2: 全局 Tool Policy Sheet - Story 12.1 改造 */}
-      <Sheet
+      <ActionSheet
         open={!!policyDialogService}
         onOpenChange={(open) => {
           if (!open) setPolicyDialogService(null);
         }}
       >
-        <SheetContent side="right" className="w-full max-w-lg overflow-hidden" data-testid="tool-policy-sheet">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
+        <ActionSheetContent size="lg" className="overflow-hidden" data-testid="tool-policy-sheet">
+          <ActionSheetHeader>
+            <ActionSheetTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
               {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
               {policyDialogService && (
@@ -625,8 +625,8 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
                   {policyDialogService.name}
                 </Badge>
               )}
-            </SheetTitle>
-          </SheetHeader>
+            </ActionSheetTitle>
+          </ActionSheetHeader>
           {policyDialogService && (
             <ToolPolicyEditor
               serviceId={policyDialogService.id}
@@ -637,8 +637,8 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
               }}
             />
           )}
-        </SheetContent>
-      </Sheet>
+        </ActionSheetContent>
+      </ActionSheet>
     </Card>
   );
 });

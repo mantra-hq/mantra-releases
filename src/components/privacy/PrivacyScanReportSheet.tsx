@@ -2,6 +2,7 @@
  * PrivacyScanReportSheet Component - 上传前隐私扫描报告面板
  * Story 3-9: Task 1 - AC #2
  * Story 12.3: Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 显示隐私扫描结果，提供脱敏/忽略/取消操作
  */
@@ -9,13 +10,13 @@
 import { useTranslation } from 'react-i18next';
 import { Shield, AlertTriangle, Info, Loader2 } from 'lucide-react';
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-    SheetFooter,
-} from '@/components/ui/sheet';
+    ActionSheet,
+    ActionSheetContent,
+    ActionSheetDescription,
+    ActionSheetHeader,
+    ActionSheetTitle,
+    ActionSheetFooter,
+} from '@/components/ui/action-sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ScanResult, ScanMatch, Severity } from '@/components/sanitizer/types';
@@ -195,10 +196,10 @@ export function PrivacyScanReportSheet({
     const warningCount = scanResult?.stats.warning_count ?? 0;
 
     return (
-        <Sheet open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-            <SheetContent
-                side="right"
-                className="w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+        <ActionSheet open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+            <ActionSheetContent
+                size="2xl"
+                className="max-h-[85vh] overflow-hidden flex flex-col"
                 data-testid="privacy-scan-report-sheet"
                 // 安全设计：阻止点击外部关闭面板
                 // 对于隐私敏感操作，防止用户意外点击导致未经审查就继续上传
@@ -211,15 +212,15 @@ export function PrivacyScanReportSheet({
                     onCancel();
                 }}
             >
-                <SheetHeader>
-                    <SheetTitle className="flex items-center gap-2">
+                <ActionSheetHeader>
+                    <ActionSheetTitle className="flex items-center gap-2">
                         <Shield className="h-5 w-5 text-primary" />
                         {t('privacy.scan.title')}
-                    </SheetTitle>
-                    <SheetDescription className="sr-only">
+                    </ActionSheetTitle>
+                    <ActionSheetDescription className="sr-only">
                         {t('privacy.scan.detected')}
-                    </SheetDescription>
-                </SheetHeader>
+                    </ActionSheetDescription>
+                </ActionSheetHeader>
 
                 {/* 加载状态 */}
                 {isScanning && (
@@ -297,7 +298,7 @@ export function PrivacyScanReportSheet({
                     </div>
                 )}
 
-                <SheetFooter className="flex flex-row gap-2 sm:justify-between border-t pt-4">
+                <ActionSheetFooter className="flex flex-row gap-2 sm:justify-between border-t pt-4">
                     <Button
                         variant="ghost"
                         onClick={onCancel}
@@ -328,9 +329,9 @@ export function PrivacyScanReportSheet({
                             {t('privacy.scan.actions.redact')}
                         </Button>
                     </div>
-                </SheetFooter>
-            </SheetContent>
-        </Sheet>
+                </ActionSheetFooter>
+            </ActionSheetContent>
+        </ActionSheet>
     );
 }
 

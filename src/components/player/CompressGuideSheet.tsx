@@ -2,6 +2,7 @@
  * CompressGuideSheet - 压缩模式首次使用引导面板
  * Story 10.1: AC #2
  * Story 12.3: Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 首次切换到压缩模式时显示引导提示
  * - 说明功能用途
@@ -12,13 +13,13 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Minimize2, Trash2, Edit3, PlusCircle, BarChart3 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetFooter,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -53,17 +54,17 @@ export function CompressGuideSheet({
   }, [dontShowAgain, onClose, onDismissForever]);
 
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <SheetContent side="right" className="w-full max-w-md" data-testid="compress-guide-sheet">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <ActionSheet open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <ActionSheetContent size="md" data-testid="compress-guide-sheet">
+        <ActionSheetHeader>
+          <ActionSheetTitle className="flex items-center gap-2">
             <Minimize2 className="h-5 w-5 text-primary" />
             {t("player.compressGuide.title")}
-          </SheetTitle>
-          <SheetDescription>
+          </ActionSheetTitle>
+          <ActionSheetDescription>
             {t("player.compressGuide.description")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         {/* 功能说明列表 */}
         <div className="space-y-3 py-4 px-4">
@@ -97,7 +98,7 @@ export function CompressGuideSheet({
           </ul>
         </div>
 
-        <SheetFooter className="flex-col sm:flex-row gap-3 sm:gap-0">
+        <ActionSheetFooter className="flex-col sm:flex-row gap-3 sm:gap-0">
           {/* 不再提示选项 */}
           <div className="flex items-center space-x-2 mr-auto">
             <Checkbox
@@ -119,9 +120,9 @@ export function CompressGuideSheet({
           <Button onClick={handleClose}>
             {t("player.compressGuide.getStarted")}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

@@ -3,6 +3,7 @@
  * Story 11.3: Task 9 - 配置导入前端 UI (AC: #1, #2, #4, #6)
  * Story 11.15: 移除 Shadow Mode 开关，导入即接管
  * Story 12.1: Task 2 - Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 提供完整的配置导入向导：
  * - 扫描检测 MCP 配置文件
@@ -17,13 +18,13 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetFooter,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -1186,15 +1187,15 @@ export function McpConfigImportSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-2xl flex flex-col" data-testid="mcp-config-import-sheet">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent size="2xl" className="flex flex-col" data-testid="mcp-config-import-sheet">
+        <ActionSheetHeader>
+          <ActionSheetTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5" />
             {getStepTitle()}
-          </SheetTitle>
-          <SheetDescription>{getStepDescription()}</SheetDescription>
-        </SheetHeader>
+          </ActionSheetTitle>
+          <ActionSheetDescription>{getStepDescription()}</ActionSheetDescription>
+        </ActionSheetHeader>
 
         {/* 步骤指示器 */}
         {step !== "scan" && step !== "result" && (
@@ -1217,7 +1218,7 @@ export function McpConfigImportSheet({
         </div>
 
         {/* 底部按钮 */}
-        <SheetFooter className="px-4">
+        <ActionSheetFooter className="px-4">
           {step === "result" ? (
             <Button onClick={() => onOpenChange(false)}>
               {t("common.close")}
@@ -1264,9 +1265,9 @@ export function McpConfigImportSheet({
               </Button>
             </>
           ) : null}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

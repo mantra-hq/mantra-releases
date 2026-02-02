@@ -40,7 +40,9 @@ const mockValidateEnvVarNameSync = vi.mocked(validateEnvVarNameSync);
 const mockGetEnvVariableDecrypted = vi.mocked(getEnvVariableDecrypted);
 
 const mockVariable: EnvVariable = {
+  id: "env-var-1",
   name: "TEST_API_KEY",
+  masked_value: "••••••••",
   description: "Test description",
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
@@ -51,7 +53,7 @@ describe("EnvVariableSheet", () => {
     vi.clearAllMocks();
     mockValidateEnvVarNameSync.mockReturnValue({ is_valid: true, error_message: null, suggestion: null });
     mockGetEnvVariableDecrypted.mockResolvedValue("decrypted-value");
-    mockSetEnvVariable.mockResolvedValue(undefined);
+    mockSetEnvVariable.mockResolvedValue(mockVariable);
   });
 
   describe("添加模式", () => {

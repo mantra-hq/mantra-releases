@@ -18,11 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import {
   Plug,
   Settings2,
@@ -302,15 +302,15 @@ export function McpContextCard({
         </Card>
 
         {/* Story 11.9 Phase 2: 工具策略编辑 Sheet - Story 12.1 改造 */}
-        <Sheet
+        <ActionSheet
           open={!!policyDialogService}
           onOpenChange={(open) => {
             if (!open) setPolicyDialogService(null);
           }}
         >
-          <SheetContent side="right" className="w-full max-w-lg overflow-hidden" data-testid="tool-policy-sheet">
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
+          <ActionSheetContent size="lg" className="overflow-hidden" data-testid="tool-policy-sheet">
+            <ActionSheetHeader>
+              <ActionSheetTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 {t("hub.mcpContext.toolPermissions", "Tool Permissions")}
                 {policyDialogService && (
@@ -318,8 +318,8 @@ export function McpContextCard({
                     {policyDialogService.name}
                   </Badge>
                 )}
-              </SheetTitle>
-            </SheetHeader>
+              </ActionSheetTitle>
+            </ActionSheetHeader>
             {policyDialogService && (
               <ToolPolicyEditor
                 projectId={projectId}
@@ -333,8 +333,8 @@ export function McpContextCard({
                 }}
               />
             )}
-          </SheetContent>
-        </Sheet>
+          </ActionSheetContent>
+        </ActionSheet>
       </>
     );
   }

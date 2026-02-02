@@ -2,6 +2,7 @@
  * EditMessageSheet - 消息编辑 Sheet
  * Story 10.4: Task 3
  * Story 12.1: Task 3 - Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * AC3: 弹出编辑 Sheet，显示原始内容和可编辑区域
  * AC4: 实时显示 Token 变化，确认后更新状态
@@ -10,13 +11,13 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetTitle,
+  ActionSheetDescription,
+  ActionSheetFooter,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -135,19 +136,19 @@ export function EditMessageSheet({
   if (!message) return null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full max-w-2xl flex flex-col"
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent
+        size="2xl"
+        className="flex flex-col"
         data-testid="edit-message-sheet"
         onKeyDown={handleKeyDown}
       >
-        <SheetHeader>
-          <SheetTitle>{t("compress.editDialog.title")}</SheetTitle>
-          <SheetDescription className="sr-only">
+        <ActionSheetHeader>
+          <ActionSheetTitle>{t("compress.editDialog.title")}</ActionSheetTitle>
+          <ActionSheetDescription className="sr-only">
             {t("compress.editDialog.description")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         {/* 原始内容 - 只读 */}
         <div className="flex-shrink-0 px-4">
@@ -195,7 +196,7 @@ export function EditMessageSheet({
           />
         </div>
 
-        <SheetFooter className="px-4">
+        <ActionSheetFooter className="px-4">
           <Button
             variant="outline"
             onClick={handleCancel}
@@ -210,9 +211,9 @@ export function EditMessageSheet({
           >
             {t("compress.editDialog.confirm")}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

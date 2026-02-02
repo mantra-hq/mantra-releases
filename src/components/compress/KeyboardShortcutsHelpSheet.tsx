@@ -2,6 +2,7 @@
  * KeyboardShortcutsHelpSheet - 快捷键帮助面板
  * Story 10.10: Task 3
  * Story 12.3: Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 显示压缩模式可用的快捷键列表
  * 按类别分组: 消息操作、导航、全局
@@ -11,11 +12,11 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { usePlatform, getModifierKey, getShiftKey } from "@/hooks/usePlatform";
 
 /**
@@ -124,15 +125,14 @@ export function KeyboardShortcutsHelpSheet({
   );
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full max-w-md"
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent
+        size="md"
         data-testid="keyboard-shortcuts-help-sheet"
       >
-        <SheetHeader>
-          <SheetTitle>{t("compress.shortcuts.title")}</SheetTitle>
-        </SheetHeader>
+        <ActionSheetHeader>
+          <ActionSheetTitle>{t("compress.shortcuts.title")}</ActionSheetTitle>
+        </ActionSheetHeader>
 
         <div className="space-y-4 py-2 px-4">
           {shortcuts.map((group) => (
@@ -164,8 +164,8 @@ export function KeyboardShortcutsHelpSheet({
         <div className="text-xs text-muted-foreground text-center pt-2 px-4 border-t">
           {t("compress.shortcuts.closeHint")}
         </div>
-      </SheetContent>
-    </Sheet>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

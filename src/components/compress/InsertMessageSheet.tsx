@@ -2,6 +2,7 @@
  * InsertMessageSheet - 消息插入 Sheet 组件
  * Story 10.5: Task 2
  * Story 12.1: Task 4 - Dialog → Sheet 改造
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * AC2: 弹出 Sheet，显示角色选择和内容输入
  * AC3: 确认后调用回调
@@ -11,13 +12,13 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { User, Bot } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetTitle,
+  ActionSheetDescription,
+  ActionSheetFooter,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -172,25 +173,25 @@ export function InsertMessageSheet({
   const isConfirmDisabled = !content.trim();
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full max-w-lg flex flex-col"
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent
+        size="lg"
+        className="flex flex-col"
         data-testid="insert-message-sheet"
         onKeyDown={handleKeyDown}
       >
-        <SheetHeader>
-          <SheetTitle>
+        <ActionSheetHeader>
+          <ActionSheetTitle>
             {isEditMode
               ? t("compress.insertDialog.titleEdit")
               : t("compress.insertDialog.title")}
-          </SheetTitle>
-          <SheetDescription>
+          </ActionSheetTitle>
+          <ActionSheetDescription>
             {isEditMode
               ? t("compress.insertDialog.descriptionEdit")
               : t("compress.insertDialog.description")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         {/* 角色选择 */}
         <div className="flex-shrink-0 px-4">
@@ -251,7 +252,7 @@ export function InsertMessageSheet({
           />
         </div>
 
-        <SheetFooter className="px-4">
+        <ActionSheetFooter className="px-4">
           <Button
             variant="outline"
             onClick={handleCancel}
@@ -268,9 +269,9 @@ export function InsertMessageSheet({
               ? t("compress.insertDialog.confirmEdit")
               : t("compress.insertDialog.confirm")}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

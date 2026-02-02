@@ -1,6 +1,7 @@
 /**
  * OAuth 配置 Sheet
  * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 2
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 支持配置远程 MCP 服务的 OAuth 认证：
  * - OAuth 2.0 配置 (Client ID, Secret, URLs, Scopes)
@@ -12,13 +13,13 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@/lib/ipc-adapter";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetFooter,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -269,17 +270,17 @@ export function OAuthConfigSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent size="lg" className="overflow-y-auto">
+        <ActionSheetHeader>
+          <ActionSheetTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
             {t("hub.oauth.title", { name: serviceName })}
-          </SheetTitle>
-          <SheetDescription>
+          </ActionSheetTitle>
+          <ActionSheetDescription>
             {t("hub.oauth.description")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         <div className="space-y-4 py-4 px-4">
           {/* 状态显示 */}
@@ -409,7 +410,7 @@ export function OAuthConfigSheet({
           )}
         </div>
 
-        <SheetFooter className="gap-2">
+        <ActionSheetFooter className="gap-2">
           {status?.status === "connected" || status?.status === "expired" ? (
             <>
               <Button
@@ -450,9 +451,9 @@ export function OAuthConfigSheet({
               {t("hub.oauth.connect")}
             </Button>
           )}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

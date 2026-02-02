@@ -1,6 +1,7 @@
 /**
  * 环境变量添加/编辑 Sheet
  * Story 12.2: 简单表单 Dialog 改造为 Sheet - Task 1
+ * Story 12.4: 迁移使用 ActionSheet 统一封装组件
  *
  * 支持添加新变量和编辑现有变量
  */
@@ -8,13 +9,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetDescription,
+  ActionSheetFooter,
+  ActionSheetHeader,
+  ActionSheetTitle,
+} from "@/components/ui/action-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,20 +151,20 @@ export function EnvVariableSheet({
   }, [name, value, description, isEditMode, onSuccess, onOpenChange, t]);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-sm">
-        <SheetHeader>
-          <SheetTitle>
+    <ActionSheet open={open} onOpenChange={onOpenChange}>
+      <ActionSheetContent size="sm">
+        <ActionSheetHeader>
+          <ActionSheetTitle>
             {isEditMode
               ? t("hub.envVariables.editTitle")
               : t("hub.envVariables.addTitle")}
-          </SheetTitle>
-          <SheetDescription>
+          </ActionSheetTitle>
+          <ActionSheetDescription>
             {isEditMode
               ? t("hub.envVariables.editDescription")
               : t("hub.envVariables.addDescription")}
-          </SheetDescription>
-        </SheetHeader>
+          </ActionSheetDescription>
+        </ActionSheetHeader>
 
         <div className="space-y-4 py-4 px-4">
           {/* 变量名 */}
@@ -243,7 +244,7 @@ export function EnvVariableSheet({
           </div>
         </div>
 
-        <SheetFooter>
+        <ActionSheetFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -259,9 +260,9 @@ export function EnvVariableSheet({
             {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isEditMode ? t("common.save") : t("common.add")}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ActionSheetFooter>
+      </ActionSheetContent>
+    </ActionSheet>
   );
 }
 

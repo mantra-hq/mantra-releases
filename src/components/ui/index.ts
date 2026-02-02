@@ -64,3 +64,36 @@ export { Input, type InputProps } from "./input";
 export { Skeleton } from "./skeleton";
 export { Checkbox } from "./checkbox";
 export { Progress } from "./progress";
+
+/**
+ * ActionSheet - 统一封装的右侧抽屉组件
+ *
+ * 提供预设尺寸 (sm/md/lg/xl/2xl) 和标准结构，
+ * 默认 side="right"，简化 Sheet 的常见使用模式。
+ *
+ * @example
+ * ```tsx
+ * import { ActionSheet, ActionSheetContent, ActionSheetHeader, ActionSheetTitle } from "@/components/ui";
+ *
+ * <ActionSheet open={open} onOpenChange={setOpen}>
+ *   <ActionSheetContent size="lg">
+ *     <ActionSheetHeader>
+ *       <ActionSheetTitle>标题</ActionSheetTitle>
+ *     </ActionSheetHeader>
+ *     {content}
+ *   </ActionSheetContent>
+ * </ActionSheet>
+ * ```
+ */
+export {
+  ActionSheet,
+  ActionSheetContent,
+  ActionSheetHeader,
+  ActionSheetFooter,
+  ActionSheetTitle,
+  ActionSheetDescription,
+  ActionSheetClose,
+  type ActionSheetProps,
+  type ActionSheetSize,
+  type ActionSheetContentProps,
+} from "./action-sheet";
