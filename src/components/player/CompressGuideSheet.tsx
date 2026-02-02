@@ -54,7 +54,7 @@ export function CompressGuideSheet({
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <SheetContent side="right" className="w-full max-w-md">
+      <SheetContent side="right" className="w-full max-w-md" data-testid="compress-guide-sheet">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Minimize2 className="h-5 w-5 text-primary" />
@@ -148,14 +148,14 @@ CompressGuideSheet.displayName = "CompressGuideSheet";
 export const RefineGuideSheet = CompressGuideSheet;
 export type RefineGuideSheetProps = CompressGuideSheetProps;
 
-// 旧名称向后兼容（将在未来版本移除）
-/** @deprecated 使用 CompressGuideSheet 代替 */
+// 旧名称向后兼容（计划在 v1.1.0 移除）
+/** @deprecated 使用 CompressGuideSheet 代替，将在 v1.1.0 移除 */
 export const CompressGuideDialog = CompressGuideSheet;
-/** @deprecated 使用 CompressGuideSheetProps 代替 */
+/** @deprecated 使用 CompressGuideSheetProps 代替，将在 v1.1.0 移除 */
 export type CompressGuideDialogProps = CompressGuideSheetProps;
-/** @deprecated 使用 RefineGuideSheet 代替 */
+/** @deprecated 使用 RefineGuideSheet 代替，将在 v1.1.0 移除 */
 export const RefineGuideDialog = CompressGuideSheet;
-/** @deprecated 使用 RefineGuideSheetProps 代替 */
+/** @deprecated 使用 RefineGuideSheetProps 代替，将在 v1.1.0 移除 */
 export type RefineGuideDialogProps = CompressGuideSheetProps;
 
 export default CompressGuideSheet;

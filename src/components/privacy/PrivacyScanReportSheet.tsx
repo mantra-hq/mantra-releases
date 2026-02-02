@@ -334,10 +334,10 @@ export function PrivacyScanReportSheet({
     );
 }
 
-// 向后兼容别名 (deprecated)
-/** @deprecated 使用 PrivacyScanReportSheet 代替 */
+// 向后兼容别名（计划在 v1.1.0 移除）
+/** @deprecated 使用 PrivacyScanReportSheet 代替，将在 v1.1.0 移除 */
 export const PrivacyScanReport = PrivacyScanReportSheet;
-/** @deprecated 使用 PrivacyScanReportSheetProps 代替 */
+/** @deprecated 使用 PrivacyScanReportSheetProps 代替，将在 v1.1.0 移除 */
 export type PrivacyScanReportProps = PrivacyScanReportSheetProps;
 
 export default PrivacyScanReportSheet;

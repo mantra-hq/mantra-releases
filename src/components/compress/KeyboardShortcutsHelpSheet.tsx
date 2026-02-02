@@ -169,10 +169,10 @@ export function KeyboardShortcutsHelpSheet({
   );
 }
 
-// 向后兼容别名 (deprecated)
-/** @deprecated 使用 KeyboardShortcutsHelpSheet 代替 */
+// 向后兼容别名（计划在 v1.1.0 移除）
+/** @deprecated 使用 KeyboardShortcutsHelpSheet 代替，将在 v1.1.0 移除 */
 export const KeyboardShortcutsHelp = KeyboardShortcutsHelpSheet;
-/** @deprecated 使用 KeyboardShortcutsHelpSheetProps 代替 */
+/** @deprecated 使用 KeyboardShortcutsHelpSheetProps 代替，将在 v1.1.0 移除 */
 export type KeyboardShortcutsHelpProps = KeyboardShortcutsHelpSheetProps;
 
 export default KeyboardShortcutsHelpSheet;
