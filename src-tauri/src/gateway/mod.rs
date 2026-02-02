@@ -6,10 +6,12 @@
 //! Story 11.11: Integrated MCP Inspector - HTTP Transport
 //! Story 11.12: Remote MCP OAuth Support
 //! Story 11.14: MCP Streamable HTTP 规范合规
+//! Story 11.17: MCP 协议聚合器
 //!
 //! 提供本地 SSE Server 用于 MCP 协议通信。
 //! 监听 127.0.0.1:{port}，仅接受本地请求。
 
+pub mod aggregator;
 mod auth;
 mod error;
 mod handlers;
@@ -43,6 +45,11 @@ pub use session::{
 pub use state::{
     ClientSession, GatewayConfig, GatewayState, GatewayStats, SessionProjectContext,
     SharedGatewayState, SharedGatewayStats,
+};
+// Story 11.17: MCP 协议聚合器
+pub use aggregator::{
+    AggregatorError, McpAggregator, McpPrompt, McpResource, McpTool, ServiceCapabilities,
+    SharedMcpAggregator, WarmupResult,
 };
 
 #[cfg(test)]

@@ -90,6 +90,8 @@ use commands::{
     // Story 11.11: MCP Inspector commands
     McpProcessState, mcp_get_service_capabilities, mcp_call_tool, mcp_read_resource,
     mcp_stop_service, mcp_list_running_services,
+    // Story 11.17: MCP Aggregator Refresh commands
+    gateway_refresh_service, gateway_refresh_all,
 };
 
 use storage::Database;
@@ -401,7 +403,10 @@ pub fn run() {
             mcp_call_tool,
             mcp_read_resource,
             mcp_stop_service,
-            mcp_list_running_services
+            mcp_list_running_services,
+            // Story 11.17: MCP Aggregator Refresh
+            gateway_refresh_service,
+            gateway_refresh_all
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

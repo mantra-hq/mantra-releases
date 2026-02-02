@@ -21,6 +21,7 @@ use tokio::sync::{oneshot, watch, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use super::auth::auth_middleware;
+use super::aggregator::SharedMcpAggregator;
 use super::handlers::{
     health_handler, mcp_delete_handler, mcp_get_handler, mcp_post_handler, message_handler,
     sse_handler, GatewayAppState,
@@ -86,17 +87,37 @@ impl Drop for GatewayServerHandle {
 /// Gateway Server
 pub struct GatewayServer {
     config: GatewayConfig,
+    /// MCP 协议聚合器 (Story 11.17)
+    aggregator: Option<SharedMcpAggregator>,
 }
 
 impl GatewayServer {
     /// 创建新的 Server 实例
     pub fn new(config: GatewayConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            aggregator: None,
+        }
     }
 
     /// 创建带默认配置的 Server 实例
     pub fn with_defaults() -> Self {
         Self::new(GatewayConfig::default())
+    }
+
+    /// 设置 MCP 聚合器
+    ///
+    /// Story 11.17: MCP 协议聚合器
+    pub fn set_aggregator(&mut self, aggregator: SharedMcpAggregator) {
+        self.aggregator = Some(aggregator);
+    }
+
+    /// 创建带聚合器的 Server 实例
+    pub fn with_aggregator(config: GatewayConfig, aggregator: SharedMcpAggregator) -> Self {
+        Self {
+            config,
+            aggregator: Some(aggregator),
+        }
     }
 
     /// 启动 Server
@@ -137,7 +158,13 @@ impl GatewayServer {
         let stats = Arc::new(GatewayStats::new());
 
         // 创建应用状态
-        let app_state = GatewayAppState::new(state.clone(), stats.clone());
+        // Story 11.17: 如果有聚合器，则使用 with_aggregator
+        let app_state = match &self.aggregator {
+            Some(aggregator) => {
+                GatewayAppState::with_aggregator(state.clone(), stats.clone(), aggregator.clone())
+            }
+            None => GatewayAppState::new(state.clone(), stats.clone()),
+        };
 
         // 创建受保护路由（需要认证）
         // 旧版端点（向后兼容 Story 11.1 的 SSE Transport）
@@ -239,6 +266,8 @@ pub struct GatewayServerManager {
     /// 端口变更通知
     port_tx: watch::Sender<u16>,
     port_rx: watch::Receiver<u16>,
+    /// MCP 协议聚合器 (Story 11.17)
+    aggregator: Option<SharedMcpAggregator>,
 }
 
 impl GatewayServerManager {
@@ -256,6 +285,7 @@ impl GatewayServerManager {
             handle: None,
             port_tx,
             port_rx,
+            aggregator: None,
         }
     }
 
@@ -264,13 +294,31 @@ impl GatewayServerManager {
         Self::new(GatewayConfig::default())
     }
 
+    /// 设置 MCP 聚合器
+    ///
+    /// Story 11.17: MCP 协议聚合器
+    pub fn set_aggregator(&mut self, aggregator: SharedMcpAggregator) {
+        self.aggregator = Some(aggregator);
+    }
+
+    /// 获取 MCP 聚合器引用
+    ///
+    /// Story 11.17: MCP 协议聚合器
+    pub fn aggregator(&self) -> Option<&SharedMcpAggregator> {
+        self.aggregator.as_ref()
+    }
+
     /// 启动 Server
     pub async fn start(&mut self) -> Result<(), String> {
         if self.handle.is_some() {
             return Ok(()); // 已经在运行
         }
 
-        let server = GatewayServer::new(self.config.clone());
+        // Story 11.17: 使用聚合器创建 Server
+        let server = match &self.aggregator {
+            Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
+            None => GatewayServer::new(self.config.clone()),
+        };
         let handle = server.start(None).await?;
         let port = handle.port();
         let _ = self.port_tx.send(port);
@@ -295,8 +343,11 @@ impl GatewayServerManager {
             self.config.port = port;
         }
 
-        // 重新启动
-        let server = GatewayServer::new(self.config.clone());
+        // Story 11.17: 重新启动时使用聚合器
+        let server = match &self.aggregator {
+            Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
+            None => GatewayServer::new(self.config.clone()),
+        };
         let handle = server.start(new_port).await?;
         let port = handle.port();
         let _ = self.port_tx.send(port);

@@ -499,3 +499,302 @@ mod http_tests {
         handle.shutdown();
     }
 }
+
+// =====================================================================
+// Story 11.17: MCP Aggregator Tests
+// =====================================================================
+
+#[cfg(test)]
+mod aggregator_integration_tests {
+    use super::*;
+    use crate::gateway::aggregator::{McpAggregator, McpTool, McpResource, McpPrompt};
+
+    // --- Task 9.1: 命名空间转换函数测试 ---
+
+    #[test]
+    fn test_tool_namespace_prefix_add() {
+        let tool = McpTool::new(
+            "service1-id",
+            "service1",
+            "read_file",
+            None,
+            Some("Read a file".to_string()),
+            None,
+            None,
+        );
+        // 验证工具名称包含服务前缀 (格式: service_name/tool_name)
+        assert!(tool.name.starts_with("service1/"));
+        assert_eq!(tool.name, "service1/read_file");
+        assert_eq!(tool.original_name, "read_file");
+    }
+
+    #[test]
+    fn test_tool_namespace_prefix_parse() {
+        // 有命名空间
+        let result = McpAggregator::parse_tool_name("git_mcp/list_commits");
+        assert!(result.is_ok());
+        let (service, tool) = result.unwrap();
+        assert_eq!(service, "git_mcp");
+        assert_eq!(tool, "list_commits");
+
+        // 斜杠在工具名中
+        let result = McpAggregator::parse_tool_name("service/my/tool");
+        assert!(result.is_ok());
+        let (service, tool) = result.unwrap();
+        assert_eq!(service, "service");
+        assert_eq!(tool, "my/tool");
+
+        // 无命名空间
+        let result = McpAggregator::parse_tool_name("read_file");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resource_uri_namespace() {
+        let resource = McpResource::new(
+            "fs_service_id",
+            "fs_service",
+            "file:///home/user/file.txt",
+            Some("User file".to_string()),
+            None,
+            None,
+        );
+        // 验证 URI 包含服务前缀 (格式: service_name:::original_uri)
+        assert!(resource.uri.starts_with("fs_service:::"));
+        assert_eq!(resource.original_uri, "file:///home/user/file.txt");
+
+        // 解析带前缀的 URI
+        let (service, original) = McpResource::parse_prefixed_uri(&resource.uri).unwrap();
+        assert_eq!(service, "fs_service");
+        assert_eq!(original, "file:///home/user/file.txt");
+    }
+
+    #[test]
+    fn test_resource_uri_namespace_preserves_https_scheme() {
+        let resource = McpResource::new(
+            "api_service_id",
+            "api_service",
+            "https://example.com/resource",
+            Some("Remote resource".to_string()),
+            None,
+            None,
+        );
+        // 验证 https:// scheme 被完整保留
+        assert!(resource.uri.starts_with("api_service:::"));
+        assert_eq!(resource.original_uri, "https://example.com/resource");
+
+        let (service, original) = McpResource::parse_prefixed_uri(&resource.uri).unwrap();
+        assert_eq!(service, "api_service");
+        assert_eq!(original, "https://example.com/resource");
+    }
+
+    #[test]
+    fn test_prompt_namespace() {
+        let prompt = McpPrompt::new(
+            "code_service_id",
+            "code_service",
+            "explain_code",
+            Some("Explain code".to_string()),
+            None,
+        );
+        // 提示名称包含服务前缀 (格式: service_name/prompt_name)
+        assert!(prompt.name.starts_with("code_service/"));
+        assert_eq!(prompt.name, "code_service/explain_code");
+        assert_eq!(prompt.original_name, "explain_code");
+    }
+
+    // --- Task 9.2: Tool Policy 过滤逻辑测试 ---
+    // Tool Policy 的核心测试在 models/mcp.rs 中
+    // 这里测试 Aggregator 与 Tool Policy 的集成
+
+    #[tokio::test]
+    async fn test_aggregator_list_tools_empty() {
+        let aggregator = McpAggregator::new(vec![]);
+        let tools = aggregator.list_tools(None).await;
+        assert!(tools.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_aggregator_list_resources_empty() {
+        let aggregator = McpAggregator::new(vec![]);
+        let resources = aggregator.list_resources().await;
+        assert!(resources.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_aggregator_list_prompts_empty() {
+        let aggregator = McpAggregator::new(vec![]);
+        let prompts = aggregator.list_prompts().await;
+        assert!(prompts.is_empty());
+    }
+
+    // --- Task 9.3 & 9.4: 集成测试 - HTTP 端点测试 ---
+    // 这些测试需要实际的 MCP 服务运行，作为 E2E 测试的一部分
+
+    #[tokio::test]
+    async fn test_mcp_endpoint_tools_list_no_aggregator() {
+        // 测试在没有 aggregator 时，tools/list 返回空列表
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::new(config);
+        // 使用 Some(0) 让 OS 自动分配端口
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+
+        // 发送 tools/list 请求
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+
+        // 验证返回空工具列表
+        assert!(body.get("result").is_some());
+        let result = body.get("result").unwrap();
+        let tools = result.get("tools").unwrap().as_array().unwrap();
+        assert!(tools.is_empty());
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_mcp_endpoint_resources_list_no_aggregator() {
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::new(config);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "resources/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let result = body.get("result").unwrap();
+        let resources = result.get("resources").unwrap().as_array().unwrap();
+        assert!(resources.is_empty());
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_mcp_endpoint_prompts_list_no_aggregator() {
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::new(config);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "prompts/list"
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+        let result = body.get("result").unwrap();
+        let prompts = result.get("prompts").unwrap().as_array().unwrap();
+        assert!(prompts.is_empty());
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_mcp_endpoint_tools_call_unknown_tool() {
+        let config = GatewayConfig {
+            port: 0,
+            auth_token: "test-token".to_string(),
+            enabled: true,
+            auto_start: false,
+        };
+        let server = GatewayServer::new(config);
+        let handle = server.start(Some(0)).await.expect("Server should start");
+        let port = handle.port();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+
+        // 调用不存在的工具
+        let response = client
+            .post(format!("http://127.0.0.1:{}/mcp", port))
+            .header("Authorization", "Bearer test-token")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "nonexistent_service/some_tool",
+                    "arguments": {}
+                }
+            }))
+            .send()
+            .await
+            .expect("Request should complete");
+
+        assert!(response.status().is_success());
+
+        let body: serde_json::Value = response.json().await.expect("Should parse JSON");
+
+        // 应该返回错误（服务未找到）
+        assert!(body.get("error").is_some());
+
+        handle.shutdown();
+    }
+}

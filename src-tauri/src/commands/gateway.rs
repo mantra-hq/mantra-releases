@@ -3,6 +3,7 @@
 //! Story 11.1: SSE Server 核心 - Task 7
 //! Story 11.5: 上下文路由 - Task 8 (Tauri IPC 命令支持)
 //! Story 11.12: Remote MCP OAuth Support - Task 6 (OAuth IPC 命令)
+//! Story 11.17: MCP 协议聚合器 - Task 8 (缓存刷新 IPC 命令)
 //!
 //! 提供 Gateway Server 的 Tauri IPC 命令
 
@@ -13,9 +14,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::commands::AppState;
+use crate::commands::{AppState, McpState};
 use crate::error::AppError;
-use crate::gateway::{GatewayServerManager, SessionProjectContext};
+use crate::gateway::{GatewayServerManager, McpAggregator, SessionProjectContext, WarmupResult};
 use crate::services::mcp_config::sync_active_takeovers;
 use crate::services::oauth::{
     CallbackResult, InMemoryTokenStore, OAuthConfig, OAuthManager, OAuthServiceStatus,
@@ -93,10 +94,13 @@ pub async fn update_gateway_config(
 }
 
 /// 启动 Gateway Server
+///
+/// Story 11.17: 启动时创建 McpAggregator 并执行 warmup
 #[tauri::command]
 pub async fn start_gateway(
     gateway_state: State<'_, GatewayServerState>,
     app_state: State<'_, AppState>,
+    mcp_state: State<'_, McpState>,
 ) -> Result<GatewayStatusResponse, AppError> {
     let mut manager = gateway_state.manager.lock().await;
 
@@ -109,6 +113,59 @@ pub async fn start_gateway(
         let db = app_state.db.lock().map_err(|_| AppError::LockError)?;
         let _config = db.get_gateway_config().map_err(|e| AppError::internal(e.to_string()))?;
     };
+
+    // Story 11.17: 创建 McpAggregator 并执行 warmup
+    let aggregator = {
+        // 1. 获取所有启用的 MCP 服务
+        let services = {
+            let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+            db.list_mcp_services()
+                .map_err(|e| AppError::internal(e.to_string()))?
+                .into_iter()
+                .filter(|s| s.enabled)
+                .collect::<Vec<_>>()
+        };
+
+        eprintln!("[Gateway] Creating aggregator with {} enabled services", services.len());
+
+        // 2. 创建 aggregator
+        let aggregator = Arc::new(McpAggregator::new(services));
+
+        // 3. 获取环境变量用于 warmup
+        let env_vars = {
+            let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+            let env_manager = &mcp_state.env_manager;
+            db.list_env_variables()
+                .map_err(|e| AppError::internal(e.to_string()))?
+                .into_iter()
+                .filter_map(|var| {
+                    db.get_env_variable(env_manager, &var.name)
+                        .ok()
+                        .flatten()
+                        .map(|value| (var.name, value))
+                })
+                .collect::<std::collections::HashMap<String, String>>()
+        };
+
+        // 4. 执行 warmup（在设置到 manager 之前释放锁）
+        let env_resolver = move |var_name: &str| -> Option<String> {
+            env_vars.get(var_name).cloned()
+        };
+
+        let warmup_result = aggregator.warmup(env_resolver).await;
+        eprintln!(
+            "[Gateway] Warmup completed: {}/{} services succeeded, {} failed",
+            warmup_result.succeeded, warmup_result.total, warmup_result.failed
+        );
+        for (name, err) in &warmup_result.errors {
+            eprintln!("[Gateway] Service '{}' warmup error: {}", name, err);
+        }
+
+        aggregator
+    };
+
+    // 5. 设置 aggregator 到 manager
+    manager.set_aggregator(aggregator);
 
     // 启动 Server
     manager
@@ -161,13 +218,61 @@ pub async fn stop_gateway(
 }
 
 /// 重启 Gateway Server
+///
+/// Story 11.17: 重启时重新初始化 McpAggregator
 #[tauri::command]
 pub async fn restart_gateway(
     gateway_state: State<'_, GatewayServerState>,
     app_state: State<'_, AppState>,
+    mcp_state: State<'_, McpState>,
     new_port: Option<u16>,
 ) -> Result<GatewayStatusResponse, AppError> {
     let mut manager = gateway_state.manager.lock().await;
+
+    // Story 11.17: 重新创建 McpAggregator 并执行 warmup
+    let aggregator = {
+        let services = {
+            let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+            db.list_mcp_services()
+                .map_err(|e| AppError::internal(e.to_string()))?
+                .into_iter()
+                .filter(|s| s.enabled)
+                .collect::<Vec<_>>()
+        };
+
+        eprintln!("[Gateway] Restarting with {} enabled services", services.len());
+
+        let aggregator = Arc::new(McpAggregator::new(services));
+
+        let env_vars = {
+            let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+            let env_manager = &mcp_state.env_manager;
+            db.list_env_variables()
+                .map_err(|e| AppError::internal(e.to_string()))?
+                .into_iter()
+                .filter_map(|var| {
+                    db.get_env_variable(env_manager, &var.name)
+                        .ok()
+                        .flatten()
+                        .map(|value| (var.name, value))
+                })
+                .collect::<std::collections::HashMap<String, String>>()
+        };
+
+        let env_resolver = move |var_name: &str| -> Option<String> {
+            env_vars.get(var_name).cloned()
+        };
+
+        let warmup_result = aggregator.warmup(env_resolver).await;
+        eprintln!(
+            "[Gateway] Warmup completed: {}/{} services succeeded",
+            warmup_result.succeeded, warmup_result.total
+        );
+
+        aggregator
+    };
+
+    manager.set_aggregator(aggregator);
 
     manager
         .restart(new_port)
@@ -620,4 +725,143 @@ pub async fn oauth_refresh_token(
         .get_status(&service_id)
         .await
         .map_err(|e| AppError::internal(e.to_string()))
+}
+
+// ===== Story 11.17: MCP 协议聚合器 - 缓存刷新 IPC 命令 =====
+
+/// 刷新响应
+#[derive(Debug, Clone, Serialize)]
+pub struct RefreshResponse {
+    /// 总服务数
+    pub total: usize,
+    /// 成功数
+    pub succeeded: usize,
+    /// 失败数
+    pub failed: usize,
+    /// 错误列表
+    pub errors: Vec<RefreshError>,
+}
+
+/// 刷新错误
+#[derive(Debug, Clone, Serialize)]
+pub struct RefreshError {
+    /// 服务名称
+    pub service_name: String,
+    /// 错误信息
+    pub error: String,
+}
+
+impl From<WarmupResult> for RefreshResponse {
+    fn from(result: WarmupResult) -> Self {
+        Self {
+            total: result.total,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            errors: result
+                .errors
+                .into_iter()
+                .map(|(name, err)| RefreshError {
+                    service_name: name,
+                    error: err,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// 刷新单个 MCP 服务的缓存
+///
+/// Story 11.17: MCP 协议聚合器 - Task 8.1 (AC: #8)
+///
+/// 当服务配置变更时调用此命令刷新服务的工具/资源/提示列表
+#[tauri::command]
+pub async fn gateway_refresh_service(
+    gateway_state: State<'_, GatewayServerState>,
+    mcp_state: State<'_, McpState>,
+    service_id: String,
+) -> Result<(), AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let aggregator = manager
+        .aggregator()
+        .ok_or_else(|| AppError::internal("Gateway aggregator not initialized"))?
+        .clone();
+
+    // 在 await 之前释放 manager 锁
+    drop(manager);
+
+    // 预先获取可能需要的环境变量值
+    // 由于闭包需要跨 await 边界，我们预先收集所有可能的环境变量
+    let env_vars = {
+        let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+        let env_manager = &mcp_state.env_manager;
+        db.list_env_variables()
+            .map_err(|e| AppError::internal(e.to_string()))?
+            .into_iter()
+            .filter_map(|var| {
+                db.get_env_variable(env_manager, &var.name)
+                    .ok()
+                    .flatten()
+                    .map(|value| (var.name, value))
+            })
+            .collect::<std::collections::HashMap<String, String>>()
+    };
+
+    // 使用预先收集的环境变量创建解析器
+    let env_resolver = move |var_name: &str| -> Option<String> {
+        env_vars.get(var_name).cloned()
+    };
+
+    aggregator
+        .refresh_service(&service_id, env_resolver)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+
+    Ok(())
+}
+
+/// 刷新所有 MCP 服务的缓存
+///
+/// Story 11.17: MCP 协议聚合器 - Task 8.3 (AC: #8)
+///
+/// 重新获取所有启用服务的工具/资源/提示列表
+#[tauri::command]
+pub async fn gateway_refresh_all(
+    gateway_state: State<'_, GatewayServerState>,
+    mcp_state: State<'_, McpState>,
+) -> Result<RefreshResponse, AppError> {
+    let manager = gateway_state.manager.lock().await;
+
+    let aggregator = manager
+        .aggregator()
+        .ok_or_else(|| AppError::internal("Gateway aggregator not initialized"))?
+        .clone();
+
+    // 在 await 之前释放 manager 锁
+    drop(manager);
+
+    // 预先获取可能需要的环境变量值
+    let env_vars = {
+        let db = mcp_state.db.lock().map_err(|_| AppError::LockError)?;
+        let env_manager = &mcp_state.env_manager;
+        db.list_env_variables()
+            .map_err(|e| AppError::internal(e.to_string()))?
+            .into_iter()
+            .filter_map(|var| {
+                db.get_env_variable(env_manager, &var.name)
+                    .ok()
+                    .flatten()
+                    .map(|value| (var.name, value))
+            })
+            .collect::<std::collections::HashMap<String, String>>()
+    };
+
+    // 使用预先收集的环境变量创建解析器
+    let env_resolver = move |var_name: &str| -> Option<String> {
+        env_vars.get(var_name).cloned()
+    };
+
+    let result = aggregator.refresh_all(env_resolver).await;
+
+    Ok(result.into())
 }

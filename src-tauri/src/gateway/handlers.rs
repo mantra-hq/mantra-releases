@@ -21,6 +21,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+use tokio::time::timeout;
 use tokio_stream::StreamExt;
 
 use super::origin::validate_origin;
@@ -116,6 +117,7 @@ impl JsonRpcResponse {
 ///
 /// Story 11.5: 扩展添加 router 和 registry
 /// Story 11.14: 添加 MCP Session Store
+/// Story 11.17: 添加 MCP Aggregator
 ///
 /// 注意：由于 rusqlite::Connection 不是 Send + Sync，
 /// router 和 registry 需要通过 Tauri 状态管理在外部提供，
@@ -126,6 +128,8 @@ pub struct GatewayAppState {
     pub stats: Arc<GatewayStats>,
     /// MCP Streamable HTTP 会话存储 (Story 11.14)
     pub mcp_sessions: SharedMcpSessionStore,
+    /// MCP 协议聚合器 (Story 11.17)
+    pub aggregator: Option<super::aggregator::SharedMcpAggregator>,
 }
 
 impl GatewayAppState {
@@ -135,6 +139,21 @@ impl GatewayAppState {
             state,
             stats,
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
+            aggregator: None,
+        }
+    }
+
+    /// 创建带 Aggregator 的应用状态
+    pub fn with_aggregator(
+        state: Arc<RwLock<GatewayState>>,
+        stats: Arc<GatewayStats>,
+        aggregator: super::aggregator::SharedMcpAggregator,
+    ) -> Self {
+        Self {
+            state,
+            stats,
+            mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
+            aggregator: Some(aggregator),
         }
     }
 }
@@ -300,10 +319,16 @@ pub async fn message_handler(
             handle_tools_call(&app_state, &session_id, &request).await
         }
         "resources/list" => {
-            handle_resources_list(&request).await
+            handle_resources_list(&app_state, &request).await
         }
         "resources/read" => {
-            handle_resources_read(&request).await
+            handle_resources_read(&app_state, &request).await
+        }
+        "prompts/list" => {
+            handle_prompts_list(&app_state, &request).await
+        }
+        "prompts/get" => {
+            handle_prompts_get(&app_state, &request).await
         }
         _ => {
             // 其他方法暂不支持
@@ -346,12 +371,15 @@ async fn handle_initialize(
     }
 
     // 3. 返回 MCP 初始化响应
+    // Story 11.17: 声明完整的 tools/resources/prompts capabilities
     JsonRpcResponse::success(
         request.id.clone(),
         serde_json::json!({
             "protocolVersion": "2025-03-26",
             "capabilities": {
-                "tools": {}
+                "tools": { "listChanged": true },
+                "resources": { "subscribe": true, "listChanged": true },
+                "prompts": { "listChanged": true }
             },
             "serverInfo": {
                 "name": "mantra-gateway",
@@ -417,11 +445,9 @@ fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
 ///
 /// Story 11.5: 上下文路由 - Task 5
 /// Story 11.10: Project-Level Tool Management - AC 4 (Gateway 拦截 - tools/list 响应过滤)
+/// Story 11.17: MCP 协议聚合器 - AC 1 (工具聚合)
 ///
-/// 返回工具列表。根据项目的 Tool Policy 过滤返回的工具。
-///
-/// 注意：由于 rusqlite 线程安全限制，服务列表查询将通过
-/// Tauri IPC 命令在外部执行。当前实现返回基于 Tool Policy 的过滤结果。
+/// 返回聚合的工具列表。根据项目的 Tool Policy 过滤返回的工具。
 ///
 /// ## Tool Policy 过滤规则 (AC 4)
 /// - `mode = "allow_all"`: 返回所有工具（除了 deniedTools 中的）
@@ -433,23 +459,26 @@ async fn handle_tools_list(
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
     // 获取会话的项目上下文
-    let project_context = {
+    let _project_context = {
         let state = app_state.state.read().await;
         state
             .get_session(session_id)
             .and_then(|s| s.get_effective_project().cloned())
     };
 
-    // 当前返回空工具列表
-    // 完整实现将在 Task 6/7 中通过 MCP 子进程管理器获取实际工具
-    // 此处仅演示 Tool Policy 过滤逻辑的占位
-    let tools: Vec<serde_json::Value> = Vec::new();
-
-    // 如果有项目上下文，记录日志
-    if let Some(ref _ctx) = project_context {
-        // Tool Policy 过滤将在实际工具列表获取后执行
-        // 由于 rusqlite 线程安全限制，需要通过 Tauri IPC 查询 Tool Policy
-    }
+    // Story 11.17: 从 Aggregator 获取聚合的工具列表
+    let tools: Vec<serde_json::Value> = match &app_state.aggregator {
+        Some(aggregator) => {
+            // TODO: Tool Policy 过滤需要通过 Tauri IPC 获取项目配置
+            // 当前返回所有工具，Tool Policy 过滤留待后续实现
+            let mcp_tools = aggregator.list_tools(None).await;
+            mcp_tools.iter().map(|t| t.to_mcp_format()).collect()
+        }
+        None => {
+            // 没有 Aggregator，返回空列表
+            Vec::new()
+        }
+    };
 
     JsonRpcResponse::success(
         request.id.clone(),
@@ -461,11 +490,24 @@ async fn handle_tools_list(
 
 /// 处理 resources/list 请求
 ///
-/// 返回可用资源列表。当前返回空列表（占位实现）。
-async fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
-    // 当前返回空资源列表
-    // 完整实现将通过 MCP 子进程管理器获取实际资源
-    let resources: Vec<serde_json::Value> = Vec::new();
+/// Story 11.17: MCP 协议聚合器 - AC 4 (资源聚合)
+///
+/// 返回聚合的资源列表。
+async fn handle_resources_list(
+    app_state: &GatewayAppState,
+    request: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    // 从 Aggregator 获取聚合的资源列表
+    let resources: Vec<serde_json::Value> = match &app_state.aggregator {
+        Some(aggregator) => {
+            let mcp_resources = aggregator.list_resources().await;
+            mcp_resources.iter().map(|r| r.to_mcp_format()).collect()
+        }
+        None => {
+            // 没有 Aggregator，返回空列表
+            Vec::new()
+        }
+    };
 
     JsonRpcResponse::success(
         request.id.clone(),
@@ -477,29 +519,315 @@ async fn handle_resources_list(request: &JsonRpcRequest) -> JsonRpcResponse {
 
 /// 处理 resources/read 请求
 ///
-/// 读取指定资源的内容。当前返回错误（占位实现）。
-async fn handle_resources_read(request: &JsonRpcRequest) -> JsonRpcResponse {
-    let uri = request
+/// Story 11.17: MCP 协议聚合器 - AC 5 (资源读取路由)
+///
+/// 读取指定资源的内容。根据 URI 前缀路由到对应的 MCP 服务。
+async fn handle_resources_read(
+    app_state: &GatewayAppState,
+    request: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    use crate::models::mcp::McpTransportType;
+
+    let uri = match request
         .params
         .as_ref()
         .and_then(|p| p.get("uri"))
-        .and_then(|v| v.as_str());
+        .and_then(|v| v.as_str())
+    {
+        Some(u) => u,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                "Missing uri parameter".to_string(),
+            );
+        }
+    };
 
-    match uri {
-        Some(uri) => {
-            // 当前返回未实现错误
-            // 完整实现将通过 MCP 子进程管理器读取实际资源
-            JsonRpcResponse::error(
+    // 解析 URI 格式: service_name://path
+    let (service_name, original_uri) = match super::aggregator::McpResource::parse_prefixed_uri(uri) {
+        Some((svc, orig)) => (svc, orig),
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                format!("Invalid resource URI format: {}", uri),
+            );
+        }
+    };
+
+    // 检查是否有 Aggregator
+    let aggregator = match &app_state.aggregator {
+        Some(agg) => agg,
+        None => {
+            return JsonRpcResponse::error(
                 request.id.clone(),
                 -32603,
-                format!("Resource read not yet implemented for: {}", uri),
-            )
+                "MCP Aggregator not initialized".to_string(),
+            );
         }
-        None => JsonRpcResponse::error(
+    };
+
+    // 获取服务 ID
+    let service_id = match aggregator.get_service_id_by_name(&service_name).await {
+        Some(id) => id,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 获取服务配置
+    let service = match aggregator.get_service(&service_id).await {
+        Some(svc) => svc,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 构造 MCP resources/read 请求（使用原始 URI）
+    let mcp_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": request.id,
+        "method": "resources/read",
+        "params": {
+            "uri": original_uri
+        }
+    });
+
+    // 根据传输类型转发请求（带超时控制）
+    const RESOURCE_READ_TIMEOUT: Duration = Duration::from_secs(60);
+
+    let forward_future = async {
+        match service.transport_type {
+            McpTransportType::Stdio => {
+                aggregator.process_manager().send_request(&service_id, mcp_request).await
+                    .map_err(|e| format!("Failed to read resource: {}", e))
+            }
+            McpTransportType::Http => {
+                let http_client = aggregator.get_http_client(&service_id).await
+                    .ok_or_else(|| format!("HTTP client not initialized for service: {}", service_name))?;
+                http_client.send_request(mcp_request).await
+                    .map_err(|e| format!("Failed to read resource: {}", e))
+            }
+        }
+    };
+
+    let response = match timeout(RESOURCE_READ_TIMEOUT, forward_future).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                e,
+            );
+        }
+        Err(_) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                format!("Resource read timed out after {}s", RESOURCE_READ_TIMEOUT.as_secs()),
+            );
+        }
+    };
+
+    // 透传响应
+    if let Some(result) = response.get("result") {
+        JsonRpcResponse::success(request.id.clone(), result.clone())
+    } else if let Some(error) = response.get("error") {
+        let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-32603) as i32;
+        let message = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
+        JsonRpcResponse::error(request.id.clone(), code, message.to_string())
+    } else {
+        JsonRpcResponse::error(
             request.id.clone(),
-            -32602,
-            "Missing uri parameter".to_string(),
-        ),
+            -32603,
+            "Invalid response from MCP service".to_string(),
+        )
+    }
+}
+
+/// 处理 prompts/list 请求
+///
+/// Story 11.17: MCP 协议聚合器 - AC 6 (提示聚合)
+///
+/// 返回聚合的提示列表。
+async fn handle_prompts_list(
+    app_state: &GatewayAppState,
+    request: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    // 从 Aggregator 获取聚合的提示列表
+    let prompts: Vec<serde_json::Value> = match &app_state.aggregator {
+        Some(aggregator) => {
+            let mcp_prompts = aggregator.list_prompts().await;
+            mcp_prompts.iter().map(|p| p.to_mcp_format()).collect()
+        }
+        None => {
+            // 没有 Aggregator，返回空列表
+            Vec::new()
+        }
+    };
+
+    JsonRpcResponse::success(
+        request.id.clone(),
+        serde_json::json!({
+            "prompts": prompts
+        }),
+    )
+}
+
+/// 处理 prompts/get 请求
+///
+/// Story 11.17: MCP 协议聚合器 - AC 6 (提示获取路由)
+///
+/// 获取指定提示的详情。根据提示名称前缀路由到对应的 MCP 服务。
+async fn handle_prompts_get(
+    app_state: &GatewayAppState,
+    request: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    use crate::models::mcp::McpTransportType;
+
+    let prompt_name = match request
+        .params
+        .as_ref()
+        .and_then(|p| p.get("name"))
+        .and_then(|v| v.as_str())
+    {
+        Some(n) => n,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                "Missing name parameter".to_string(),
+            );
+        }
+    };
+
+    let arguments = request
+        .params
+        .as_ref()
+        .and_then(|p| p.get("arguments"))
+        .cloned();
+
+    // 解析提示名称格式: service_name/prompt_name
+    let (service_name, original_name) = match super::aggregator::McpAggregator::parse_tool_name(prompt_name) {
+        Ok((svc, name)) => (svc, name),
+        Err(_) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                format!("Invalid prompt name format: {}, expected: service_name/prompt_name", prompt_name),
+            );
+        }
+    };
+
+    // 检查是否有 Aggregator
+    let aggregator = match &app_state.aggregator {
+        Some(agg) => agg,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                "MCP Aggregator not initialized".to_string(),
+            );
+        }
+    };
+
+    // 获取服务 ID
+    let service_id = match aggregator.get_service_id_by_name(&service_name).await {
+        Some(id) => id,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 获取服务配置
+    let service = match aggregator.get_service(&service_id).await {
+        Some(svc) => svc,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 构造 MCP prompts/get 请求（使用原始提示名）
+    let mut params = serde_json::json!({
+        "name": original_name
+    });
+    if let Some(args) = arguments {
+        params["arguments"] = args;
+    }
+
+    let mcp_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": request.id,
+        "method": "prompts/get",
+        "params": params
+    });
+
+    // 根据传输类型转发请求（带超时控制）
+    const PROMPT_GET_TIMEOUT: Duration = Duration::from_secs(60);
+
+    let forward_future = async {
+        match service.transport_type {
+            McpTransportType::Stdio => {
+                aggregator.process_manager().send_request(&service_id, mcp_request).await
+                    .map_err(|e| format!("Failed to get prompt: {}", e))
+            }
+            McpTransportType::Http => {
+                let http_client = aggregator.get_http_client(&service_id).await
+                    .ok_or_else(|| format!("HTTP client not initialized for service: {}", service_name))?;
+                http_client.send_request(mcp_request).await
+                    .map_err(|e| format!("Failed to get prompt: {}", e))
+            }
+        }
+    };
+
+    let response = match timeout(PROMPT_GET_TIMEOUT, forward_future).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                e,
+            );
+        }
+        Err(_) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                format!("Prompt get timed out after {}s", PROMPT_GET_TIMEOUT.as_secs()),
+            );
+        }
+    };
+
+    // 透传响应
+    if let Some(result) = response.get("result") {
+        JsonRpcResponse::success(request.id.clone(), result.clone())
+    } else if let Some(error) = response.get("error") {
+        let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-32603) as i32;
+        let message = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
+        JsonRpcResponse::error(request.id.clone(), code, message.to_string())
+    } else {
+        JsonRpcResponse::error(
+            request.id.clone(),
+            -32603,
+            "Invalid response from MCP service".to_string(),
+        )
     }
 }
 
@@ -507,14 +835,12 @@ async fn handle_resources_read(request: &JsonRpcRequest) -> JsonRpcResponse {
 ///
 /// Story 11.5: 上下文路由 - Task 7
 /// Story 11.10: Project-Level Tool Management - AC 5 (Gateway 拦截 - tools/call 请求拦截)
+/// Story 11.17: MCP 协议聚合器 - AC 2 (工具调用路由)
 ///
-/// 1. 解析工具名称和参数
+/// 1. 解析工具名称 (格式: service_name/tool_name)
 /// 2. 检查 Tool Policy 是否允许该工具
 /// 3. 路由到对应的 MCP 服务
-/// 4. 转发请求并返回响应
-///
-/// 注意：由于 rusqlite 线程安全限制，实际的工具调用转发
-/// 需要通过 Tauri IPC 命令在外部执行。当前实现返回占位响应。
+/// 4. 转发请求并透传响应
 ///
 /// ## Tool Policy 拦截规则 (AC 5)
 /// 当工具被 Tool Policy 禁止时：
@@ -526,6 +852,8 @@ async fn handle_tools_call(
     session_id: &str,
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
+    use crate::models::mcp::McpTransportType;
+
     // 1. 解析工具名称和参数
     let params = match &request.params {
         Some(p) => p,
@@ -549,47 +877,126 @@ async fn handle_tools_call(
         }
     };
 
+    let arguments = params.get("arguments").cloned().unwrap_or(serde_json::json!({}));
+
     // 2. 解析工具名称格式: service_name/tool_name
-    let parts: Vec<&str> = tool_name.splitn(2, '/').collect();
-    if parts.len() != 2 {
-        return JsonRpcResponse::error(
-            request.id.clone(),
-            -32602,
-            "Invalid tool name format, expected: service_name/tool_name".to_string(),
-        );
-    }
+    let (service_name, actual_tool_name) = match super::aggregator::McpAggregator::parse_tool_name(tool_name) {
+        Ok((svc, tool)) => (svc, tool),
+        Err(_) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                "Invalid tool name format, expected: service_name/tool_name".to_string(),
+            );
+        }
+    };
 
-    let service_name = parts[0];
-    let actual_tool_name = parts[1];
-
-    // 3. 获取会话的项目上下文
-    let project_context = {
+    // 3. 获取会话的项目上下文（用于 Tool Policy）
+    let _project_context = {
         let state = app_state.state.read().await;
         state
             .get_session(session_id)
             .and_then(|s| s.get_effective_project().cloned())
     };
 
-    // 4. Tool Policy 检查将在实际转发时执行
-    // 由于 rusqlite 线程安全限制，Tool Policy 查询需要通过 Tauri IPC 命令执行
-    if let Some(ref _ctx) = project_context {
-        // 实际 Tool Policy 检查将通过 Tauri IPC 命令在外部执行
-        // 这里仅用于占位，完整实现需要：
-        // 1. 查询项目的 Tool Policy
-        // 2. 如果工具被禁止，调用 tool_blocked_error 并记录审计日志
-        let _ = (service_name, actual_tool_name);
-    }
+    // 4. 检查是否有 Aggregator
+    let aggregator = match &app_state.aggregator {
+        Some(agg) => agg,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                "MCP Aggregator not initialized".to_string(),
+            );
+        }
+    };
 
-    // 5. 当前返回占位响应
-    // 完整实现需要：
-    // - 通过 Tauri IPC 查询 Tool Policy
-    // - 如果工具被禁止，返回 -32601 错误并记录审计日志
-    // - 否则，查找服务配置，启动 MCP 子进程，转发请求
-    JsonRpcResponse::error(
-        request.id.clone(),
-        -32603,
-        "Tool call forwarding not yet implemented. Use Tauri IPC commands.".to_string(),
-    )
+    // 5. 获取服务 ID
+    let service_id = match aggregator.get_service_id_by_name(&service_name).await {
+        Some(id) => id,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 6. 获取服务配置
+    let service = match aggregator.get_service(&service_id).await {
+        Some(svc) => svc,
+        None => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Service not found: {}", service_name),
+            );
+        }
+    };
+
+    // 7. 构造 MCP tools/call 请求（使用原始工具名）
+    let mcp_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": request.id,
+        "method": "tools/call",
+        "params": {
+            "name": actual_tool_name,
+            "arguments": arguments
+        }
+    });
+
+    // 8. 根据传输类型转发请求（带超时控制）
+    const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(120);
+
+    let forward_future = async {
+        match service.transport_type {
+            McpTransportType::Stdio => {
+                aggregator.process_manager().send_request(&service_id, mcp_request).await
+                    .map_err(|e| format!("Failed to call tool: {}", e))
+            }
+            McpTransportType::Http => {
+                let http_client = aggregator.get_http_client(&service_id).await
+                    .ok_or_else(|| format!("HTTP client not initialized for service: {}", service_name))?;
+                http_client.send_request(mcp_request).await
+                    .map_err(|e| format!("Failed to call tool: {}", e))
+            }
+        }
+    };
+
+    let response = match timeout(TOOL_CALL_TIMEOUT, forward_future).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                e,
+            );
+        }
+        Err(_) => {
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32603,
+                format!("Tool call timed out after {}s", TOOL_CALL_TIMEOUT.as_secs()),
+            );
+        }
+    };
+
+    // 9. 透传响应
+    // 响应已经是完整的 JSON-RPC 格式，直接使用
+    if let Some(result) = response.get("result") {
+        JsonRpcResponse::success(request.id.clone(), result.clone())
+    } else if let Some(error) = response.get("error") {
+        let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-32603) as i32;
+        let message = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
+        JsonRpcResponse::error(request.id.clone(), code, message.to_string())
+    } else {
+        JsonRpcResponse::error(
+            request.id.clone(),
+            -32603,
+            "Invalid response from MCP service".to_string(),
+        )
+    }
 }
 
 /// 检查工具是否被 Tool Policy 阻止
@@ -850,8 +1257,10 @@ async fn handle_mcp_request(
         "ping" => JsonRpcResponse::success(id, serde_json::json!({})),
         "tools/list" => handle_tools_list(app_state, &session_id, &request).await,
         "tools/call" => handle_tools_call(app_state, &session_id, &request).await,
-        "resources/list" => handle_resources_list(&request).await,
-        "resources/read" => handle_resources_read(&request).await,
+        "resources/list" => handle_resources_list(app_state, &request).await,
+        "resources/read" => handle_resources_read(app_state, &request).await,
+        "prompts/list" => handle_prompts_list(app_state, &request).await,
+        "prompts/get" => handle_prompts_get(app_state, &request).await,
         _ => JsonRpcResponse::method_not_found(id),
     };
 
@@ -905,10 +1314,13 @@ async fn handle_mcp_initialize(
     }
 
     // 4. 构建初始化响应
+    // Story 11.17: 声明完整的 tools/resources/prompts capabilities
     let result = serde_json::json!({
         "protocolVersion": "2025-03-26",
         "capabilities": {
-            "tools": {}
+            "tools": { "listChanged": true },
+            "resources": { "subscribe": true, "listChanged": true },
+            "prompts": { "listChanged": true }
         },
         "serverInfo": {
             "name": "mantra-gateway",
@@ -953,8 +1365,10 @@ async fn handle_legacy_request(
         "ping" => JsonRpcResponse::success(id, serde_json::json!({})),
         "tools/list" => handle_tools_list(app_state, &session_id, &request).await,
         "tools/call" => handle_tools_call(app_state, &session_id, &request).await,
-        "resources/list" => handle_resources_list(&request).await,
-        "resources/read" => handle_resources_read(&request).await,
+        "resources/list" => handle_resources_list(app_state, &request).await,
+        "resources/read" => handle_resources_read(app_state, &request).await,
+        "prompts/list" => handle_prompts_list(app_state, &request).await,
+        "prompts/get" => handle_prompts_get(app_state, &request).await,
         _ => JsonRpcResponse::method_not_found(id),
     };
 
@@ -1403,7 +1817,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_tools_call_valid_format_not_implemented() {
+    async fn test_handle_tools_call_service_not_found() {
         let app_state = create_test_app_state();
 
         let request = JsonRpcRequest {
@@ -1411,7 +1825,7 @@ mod tests {
             id: Some(serde_json::json!(1)),
             method: "tools/call".to_string(),
             params: Some(serde_json::json!({
-                "name": "service_name/tool_name",
+                "name": "nonexistent_service/tool_name",
                 "arguments": {"key": "value"}
             })),
         };
@@ -1419,9 +1833,10 @@ mod tests {
         let response = handle_tools_call(&app_state, "test-session", &request).await;
         assert!(response.error.is_some());
         let error = response.error.unwrap();
-        // 当前返回 -32603 (Internal error) 因为转发未实现
+        // Story 11.17: 当没有 aggregator 时返回 -32603 (Internal error)
         assert_eq!(error.code, -32603);
-        assert!(error.message.contains("not yet implemented"));
+        // 测试 app_state 没有 aggregator，所以返回 "not initialized" 错误
+        assert!(error.message.contains("not initialized") || error.message.contains("Aggregator"));
     }
 
     // ===== Story 11.5: tools/list 测试 =====
