@@ -1058,6 +1058,7 @@
     "envVariables": {
       "title": "Environment Variables",
       "description": "Manage API Keys and sensitive configurations for MCP services",
+      "goToSettings": "Manage environment variables in Settings",
       "add": "Add Variable",
       "addTitle": "Add Environment Variable",
       "addDescription": "Add a new environment variable. Values will be encrypted.",

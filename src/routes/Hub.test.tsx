@@ -4,9 +4,19 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Hub } from "./Hub";
+
+// Mock navigate
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Mock IPC adapter
 const mockInvokeFn = vi.fn();
@@ -39,6 +49,7 @@ function renderWithRouter(ui: React.ReactElement) {
 describe("Hub Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
 
     // Mock Gateway status
     mockInvokeFn.mockImplementation((cmd: string) => {
@@ -53,21 +64,6 @@ describe("Hub Page", () => {
             total_requests: 0,
           });
         case "list_mcp_services":
-          return Promise.resolve([
-            {
-              id: "service-1",
-              name: "git-mcp",
-              command: "npx",
-              args: ["--yes", "@anthropic/mcp-server-git"],
-              env: null,
-              source: "imported",
-              source_file: null,
-              enabled: true,
-              created_at: "2024-01-01T00:00:00Z",
-              updated_at: "2024-01-01T00:00:00Z",
-            },
-          ]);
-        case "list_env_variables":
           return Promise.resolve([]);
         case "list_active_takeovers":
           return Promise.resolve([]);
@@ -143,13 +139,27 @@ describe("Hub Page", () => {
         expect(mockInvokeFn).toHaveBeenCalledWith("list_mcp_services");
       });
     });
+  });
 
-    it("应该加载环境变量列表", async () => {
+  describe("环境变量链接卡片", () => {
+    it("应该显示环境变量链接卡片", async () => {
       renderWithRouter(<Hub />);
 
       await waitFor(() => {
-        expect(mockInvokeFn).toHaveBeenCalledWith("list_env_variables");
+        expect(screen.getByTestId("hub-env-settings-link")).toBeInTheDocument();
       });
+    });
+
+    it("点击链接卡片应导航到 Settings 页面", async () => {
+      renderWithRouter(<Hub />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("hub-env-settings-link")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId("hub-env-settings-link"));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/settings");
     });
   });
 

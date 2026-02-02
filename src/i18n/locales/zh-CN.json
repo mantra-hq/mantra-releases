@@ -1063,6 +1063,7 @@
     "envVariables": {
       "title": "环境变量",
       "description": "管理 MCP 服务所需的 API Keys 和敏感配置",
+      "goToSettings": "在设置中管理环境变量",
       "add": "添加变量",
       "addTitle": "添加环境变量",
       "addDescription": "添加新的环境变量，值将被加密存储",
