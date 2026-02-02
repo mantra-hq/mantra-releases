@@ -323,7 +323,7 @@ export function McpServiceSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 px-4">
           {/* 服务名称 */}
           <div className="space-y-2">
             <Label htmlFor="service-name">{t("hub.services.form.nameLabel")}</Label>

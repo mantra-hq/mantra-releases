@@ -281,7 +281,7 @@ export function OAuthConfigSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 px-4">
           {/* 状态显示 */}
           <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-lg">
             <span className="text-sm text-muted-foreground">

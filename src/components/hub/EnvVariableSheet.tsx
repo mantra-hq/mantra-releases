@@ -165,7 +165,7 @@ export function EnvVariableSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 px-4">
           {/* 变量名 */}
           <div className="space-y-2">
             <Label htmlFor="env-name">{t("hub.envVariables.nameLabel")}</Label>

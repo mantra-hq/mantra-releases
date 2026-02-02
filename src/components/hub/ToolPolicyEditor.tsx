@@ -52,6 +52,8 @@ interface ToolPolicyEditorProps {
   collapsible?: boolean;
   /** 默认展开状态 */
   defaultOpen?: boolean;
+  /** 嵌入模式：只渲染内容，不渲染 Card 包装（用于 Sheet 内嵌） */
+  embedded?: boolean;
 }
 
 /**
@@ -92,6 +94,7 @@ export function ToolPolicyEditor({
   onSaved,
   collapsible = false,
   defaultOpen = false,
+  embedded = false,
 }: ToolPolicyEditorProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -309,7 +312,174 @@ export function ToolPolicyEditor({
     }
   }, [buildPolicy, isGlobalMode, projectId, serviceId, onPolicyChange, onSaved, t]);
 
-  // 渲染内容
+  // 渲染工具列表项
+  const renderToolItem = (tool: McpTool) => {
+    const isSelected = selectedTools.has(tool.name);
+    return (
+      <div
+        key={tool.name}
+        className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50"
+        data-testid={`tool-item-${tool.name}`}
+      >
+        <Checkbox
+          id={`tool-${tool.name}`}
+          checked={isSelected}
+          onCheckedChange={(checked) => handleToggleTool(tool.name, checked === true)}
+          data-testid={`tool-checkbox-${tool.name}`}
+        />
+        <div className="flex-1 min-w-0">
+          <label
+            htmlFor={`tool-${tool.name}`}
+            className="text-sm font-medium cursor-pointer truncate block"
+          >
+            {tool.name}
+          </label>
+          {tool.description && (
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              {tool.description}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // 渲染工具列表头部（模式显示 + 操作按钮）
+  const renderToolsHeader = () => (
+    <>
+      {/* 当前模式显示 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {getModeIcon(currentMode)}
+          <span className="text-sm font-medium">
+            {t(`hub.toolPolicy.mode${currentMode === 'allow_all' ? 'AllowAll' : currentMode === 'deny_all' ? 'DenyAll' : 'Custom'}`)}
+          </span>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          {t('hub.toolPolicy.selectedCount', { selected: selectedTools.size, total: tools.length })}
+        </Badge>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex items-center justify-between">
+        <Label>{t('hub.toolPolicy.tools')}</Label>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSelectAll}
+            className="h-7 text-xs"
+            data-testid="select-all-button"
+          >
+            <CheckSquare className="h-3 w-3 mr-1" />
+            {t('hub.toolPolicy.selectAll')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDeselectAll}
+            className="h-7 text-xs"
+            data-testid="deselect-all-button"
+          >
+            <Square className="h-3 w-3 mr-1" />
+            {t('hub.toolPolicy.deselectAll')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefreshTools}
+            disabled={isRefreshing}
+            className="h-7 text-xs"
+            data-testid="refresh-tools-button"
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            {t('hub.toolPolicy.refreshTools')}
+          </Button>
+        </div>
+      </div>
+
+      {fromCache && cachedAt && (
+        <p className="text-xs text-muted-foreground">
+          {t('hub.toolPolicy.cachedAt', { time: new Date(cachedAt).toLocaleString() })}
+        </p>
+      )}
+    </>
+  );
+
+  // 渲染保存按钮
+  const renderSaveButton = (className?: string) => (
+    <div className={className}>
+      <Button
+        onClick={handleSave}
+        disabled={isSaving || !hasChanges}
+        data-testid="save-policy-button"
+        className="w-full"
+      >
+        {isSaving ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Save className="h-4 w-4 mr-2" />
+        )}
+        {t('hub.toolPolicy.save')}
+      </Button>
+    </div>
+  );
+
+  // 嵌入模式内容（用于 Sheet，全高布局）
+  const renderEmbeddedContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col flex-1 min-h-0 px-4">
+          <div className="space-y-3 py-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="flex-1 py-2">
+            <Skeleton className="h-full w-full" />
+          </div>
+          <div className="py-4">
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* 头部：模式 + 操作按钮 */}
+        <div className="space-y-3 px-4 py-4 border-b">
+          {renderToolsHeader()}
+        </div>
+
+        {/* 工具列表：占据剩余空间 */}
+        <div className="flex-1 overflow-hidden">
+          {tools.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="text-center">
+                <p className="text-sm">{t('hub.toolPolicy.noTools')}</p>
+                <p className="text-xs mt-1">{t('hub.toolPolicy.noToolsHint')}</p>
+              </div>
+            </div>
+          ) : (
+            <ScrollArea className="h-full">
+              <div className="space-y-1 p-4">
+                {tools.map(renderToolItem)}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* 底部：保存按钮（类似 SheetFooter） */}
+        {renderSaveButton("border-t p-4")}
+      </div>
+    );
+  };
+
+  // 渲染内容（用于 Card 和 Collapsible 模式）
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -446,6 +616,11 @@ export function ToolPolicyEditor({
       </div>
     );
   };
+
+  // 嵌入模式：全高布局，适用于 Sheet
+  if (embedded) {
+    return renderEmbeddedContent();
+  }
 
   // 可展开模式
   if (collapsible) {

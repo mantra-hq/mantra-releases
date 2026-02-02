@@ -142,7 +142,7 @@ export function BindSessionSheet({
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="py-4">
+                <div className="py-4 px-4">
                     <label className="text-sm font-medium mb-2 block">
                         {t("session.selectProject", "选择项目")}
                     </label>

@@ -129,7 +129,7 @@ export function AddRuleSheet({
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 px-4">
                     {/* 规则名称 */}
                     <div className="space-y-2">
                         <Label htmlFor="rule-name">{t('privacy.rules.name')}</Label>

@@ -308,7 +308,7 @@ export function McpContextCard({
             if (!open) setPolicyDialogService(null);
           }}
         >
-          <SheetContent side="right" className="w-full max-w-lg overflow-y-auto" data-testid="tool-policy-sheet">
+          <SheetContent side="right" className="w-full max-w-lg overflow-hidden" data-testid="tool-policy-sheet">
             <SheetHeader>
               <SheetTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
@@ -325,6 +325,7 @@ export function McpContextCard({
                 projectId={projectId}
                 serviceId={policyDialogService.id}
                 serviceName={policyDialogService.name}
+                embedded
                 onSaved={() => {
                   setPolicyDialogService(null); // 关闭 Sheet
                   loadStatus(); // Refresh badges
