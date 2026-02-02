@@ -1254,7 +1254,16 @@
       "selectAll": "全选",
       "deselectAll": "全不选",
       "selectedCount": "{{selected}}/{{total}}",
-      "save": "保存"
+      "save": "保存",
+      "globalEntry": "全局工具权限",
+      "projectEntry": "项目工具权限",
+      "globalHint": "正在编辑服务的默认策略，将影响所有未单独配置的项目",
+      "projectHint": "正在为项目 {{project}} 定制策略，将覆盖全局默认",
+      "inheritingFrom": "当前继承自全局默认: {{mode}}",
+      "customPolicy": "使用自定义策略",
+      "inheritGlobal": "继承全局默认",
+      "isCustom": "自定义",
+      "isInherited": "继承中"
     },
     "oauth": {
       "title": "OAuth 设置 - {{name}}",

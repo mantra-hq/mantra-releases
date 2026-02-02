@@ -273,13 +273,13 @@ export function McpContextCard({
                   </div>
                   {/* Story 11.9 Phase 2: 策略状态徽标 */}
                   <PolicyBadge service={service} t={t} />
-                  {/* Story 11.9 Phase 2: 管理工具按钮 */}
+                  {/* Story 11.9 Phase 2: 管理工具按钮 - Story 12.5: 文案区分 */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
                     onClick={() => setPolicyDialogService(service)}
-                    title={t("hub.mcpContext.manageTools", "Manage Tools")}
+                    title={t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
                     data-testid={`mcp-manage-tools-${service.id}`}
                   >
                     <Shield className="h-3.5 w-3.5" />
@@ -320,6 +320,7 @@ export function McpContextCard({
                 )}
               </ActionSheetTitle>
             </ActionSheetHeader>
+            {/* Story 12.5: 从 McpContextCard 打开的是项目级编辑器 */}
             {policyDialogService && (
               <ToolPolicyEditor
                 projectId={projectId}

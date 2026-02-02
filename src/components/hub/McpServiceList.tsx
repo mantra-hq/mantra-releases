@@ -524,10 +524,10 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
                             <Shield className="h-4 w-4 mr-2" />
                             {t("hub.oauth.configure")}
                           </DropdownMenuItem>
-                          {/* Story 11.9 Phase 2: 全局 Tool Policy 入口 */}
+                          {/* Story 11.9 Phase 2: 全局 Tool Policy 入口 - Story 12.5: 文案区分 */}
                           <DropdownMenuItem onClick={() => setPolicyDialogService(service)}>
                             <Shield className="h-4 w-4 mr-2" />
-                            {t("hub.mcpContext.manageTools", "Manage Tools")}
+                            {t("hub.toolPolicy.globalEntry", "Global Tool Policy")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

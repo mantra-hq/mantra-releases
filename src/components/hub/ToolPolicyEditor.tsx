@@ -33,7 +33,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { RefreshCw, ChevronDown, Shield, ShieldOff, Settings, Loader2, Save, CheckSquare, Square } from "lucide-react";
+import { RefreshCw, ChevronDown, Shield, ShieldOff, Settings, Loader2, Save, CheckSquare, Square, Info, Globe, FolderOpen } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import type { ToolPolicy, ToolPolicyMode, McpTool, ToolDiscoveryResult } from "@/types/mcp";
 
@@ -42,6 +42,8 @@ interface ToolPolicyEditorProps {
   projectId?: string;
   serviceId: string;
   serviceName?: string;
+  /** 项目名称（用于上下文提示） */
+  projectName?: string;
   /** 初始策略（可选，如果未提供会从后端加载） */
   initialPolicy?: ToolPolicy;
   /** 策略变更回调 */
@@ -54,6 +56,65 @@ interface ToolPolicyEditorProps {
   defaultOpen?: boolean;
   /** 嵌入模式：只渲染内容，不渲染 Card 包装（用于 Sheet 内嵌） */
   embedded?: boolean;
+}
+
+/**
+ * Story 12.5: 上下文提示组件
+ * 区分全局模式和项目模式的策略编辑范围
+ */
+function PolicyContextHint({
+  isGlobalMode,
+  projectName,
+  globalDefaultMode,
+  isInherited,
+  t,
+}: {
+  isGlobalMode: boolean;
+  projectName?: string;
+  globalDefaultMode?: ToolPolicyMode;
+  isInherited?: boolean;
+  t: (key: string, fallback?: string, opts?: Record<string, unknown>) => string;
+}) {
+  if (isGlobalMode) {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+        <Globe className="h-4 w-4 text-blue-500 shrink-0" />
+        <span className="text-sm text-blue-200">
+          {t("hub.toolPolicy.globalHint", "Editing the service's default policy. This will affect all projects without custom configuration.")}
+        </span>
+      </div>
+    );
+  }
+
+  // AC3: 项目模式下显示继承状态
+  const modeLabel = globalDefaultMode === 'allow_all'
+    ? t('hub.toolPolicy.modeAllowAll')
+    : globalDefaultMode === 'deny_all'
+    ? t('hub.toolPolicy.modeDenyAll')
+    : t('hub.toolPolicy.modeCustom');
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+        <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
+        <span className="text-sm text-amber-200">
+          {t("hub.toolPolicy.projectHint", "Customizing policy for project {{project}}. This will override the global default.", { project: projectName || "this project" })}
+        </span>
+      </div>
+      {/* AC3: 继承状态指示 */}
+      {isInherited && globalDefaultMode && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg">
+          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground">
+            {t("hub.toolPolicy.inheritingFrom", "Inheriting from global default: {{mode}}", { mode: modeLabel })}
+          </span>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 ml-auto">
+            {t("hub.toolPolicy.isInherited", "Inherited")}
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -89,6 +150,7 @@ export function ToolPolicyEditor({
   projectId,
   serviceId,
   serviceName = "",
+  projectName,
   initialPolicy,
   onPolicyChange,
   onSaved,
@@ -116,6 +178,10 @@ export function ToolPolicyEditor({
   // 是否为全局模式（无 projectId）
   const isGlobalMode = !projectId;
 
+  // Story 12.5 AC3: 全局默认策略（用于项目模式下显示继承状态）
+  const [globalDefaultPolicy, setGlobalDefaultPolicy] = useState<ToolPolicy | null>(null);
+  const [isInherited, setIsInherited] = useState(false);
+
   // 从策略初始化选中状态
   const initializeSelection = useCallback((policy: ToolPolicy, toolList: McpTool[]) => {
     const selected = new Set<string>();
@@ -142,6 +208,22 @@ export function ToolPolicyEditor({
     setSelectedTools(selected);
   }, []);
 
+  /**
+   * 比较两个策略是否相同（用于检测是否继承自全局）
+   */
+  const arePoliciesEqual = useCallback((p1: ToolPolicy, p2: ToolPolicy): boolean => {
+    if (p1.mode !== p2.mode) return false;
+    if (p1.mode === 'custom') {
+      const allowed1 = new Set(p1.allowedTools);
+      const allowed2 = new Set(p2.allowedTools);
+      if (allowed1.size !== allowed2.size) return false;
+      for (const tool of allowed1) {
+        if (!allowed2.has(tool)) return false;
+      }
+    }
+    return true;
+  }, []);
+
   // 加载策略和工具列表
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -154,15 +236,19 @@ export function ToolPolicyEditor({
       setFromCache(result.fromCache);
       setCachedAt(result.cachedAt);
 
+      // Story 12.5 AC3: 始终加载全局默认策略（用于项目模式下对比）
+      const globalPolicy = await invoke<ToolPolicy>('get_service_default_policy', {
+        serviceId,
+      });
+      setGlobalDefaultPolicy(globalPolicy);
+
       // 加载工具策略
       let loadedPolicy: ToolPolicy;
       if (initialPolicy) {
         loadedPolicy = initialPolicy;
       } else if (isGlobalMode) {
-        // 全局模式：加载服务级默认策略
-        loadedPolicy = await invoke<ToolPolicy>('get_service_default_policy', {
-          serviceId,
-        });
+        // 全局模式：使用已加载的全局策略
+        loadedPolicy = globalPolicy;
       } else {
         // 项目模式：加载项目级策略
         loadedPolicy = await invoke<ToolPolicy>('get_project_tool_policy', {
@@ -173,13 +259,19 @@ export function ToolPolicyEditor({
 
       setOriginalPolicy(loadedPolicy);
       initializeSelection(loadedPolicy, result.tools);
+
+      // Story 12.5 AC3: 检测是否继承自全局（仅项目模式）
+      if (!isGlobalMode) {
+        const inherited = arePoliciesEqual(loadedPolicy, globalPolicy);
+        setIsInherited(inherited);
+      }
     } catch (error) {
       console.error('[ToolPolicyEditor] Failed to load data:', error);
       feedback.error(t('hub.toolPolicy.loadError'), (error as Error).message);
     } finally {
       setIsLoading(false);
     }
-  }, [isGlobalMode, projectId, serviceId, initialPolicy, t, initializeSelection]);
+  }, [isGlobalMode, projectId, serviceId, initialPolicy, t, initializeSelection, arePoliciesEqual]);
 
   // 初始加载
   useEffect(() => {
@@ -265,19 +357,15 @@ export function ToolPolicyEditor({
   const hasChanges = useMemo(() => {
     if (!originalPolicy) return false;
     const currentPolicy = buildPolicy();
+    return !arePoliciesEqual(currentPolicy, originalPolicy);
+  }, [originalPolicy, buildPolicy, arePoliciesEqual]);
 
-    if (currentPolicy.mode !== originalPolicy.mode) return true;
-    if (currentPolicy.mode === 'custom') {
-      // 对于 custom 模式，比较 allowedTools
-      const currentAllowed = new Set(currentPolicy.allowedTools);
-      const originalAllowed = new Set(originalPolicy.allowedTools);
-      if (currentAllowed.size !== originalAllowed.size) return true;
-      for (const tool of currentAllowed) {
-        if (!originalAllowed.has(tool)) return true;
-      }
-    }
-    return false;
-  }, [originalPolicy, buildPolicy]);
+  // Story 12.5 AC3: 当前编辑状态是否与全局一致（用于显示继承状态）
+  const currentIsInherited = useMemo(() => {
+    if (isGlobalMode || !globalDefaultPolicy) return false;
+    const currentPolicy = buildPolicy();
+    return arePoliciesEqual(currentPolicy, globalDefaultPolicy);
+  }, [isGlobalMode, globalDefaultPolicy, buildPolicy, arePoliciesEqual]);
 
   // 保存策略
   const handleSave = useCallback(async () => {
@@ -354,6 +442,17 @@ export function ToolPolicyEditor({
           <span className="text-sm font-medium">
             {t(`hub.toolPolicy.mode${currentMode === 'allow_all' ? 'AllowAll' : currentMode === 'deny_all' ? 'DenyAll' : 'Custom'}`)}
           </span>
+          {/* Story 12.5 AC3: 项目模式下显示自定义/继承状态徽章 */}
+          {!isGlobalMode && (
+            <Badge
+              variant={currentIsInherited ? "secondary" : "default"}
+              className="text-[10px] px-1.5 py-0 h-5"
+            >
+              {currentIsInherited
+                ? t('hub.toolPolicy.isInherited', 'Inherited')
+                : t('hub.toolPolicy.isCustom', 'Custom')}
+            </Badge>
+          )}
         </div>
         <Badge variant="outline" className="text-xs">
           {t('hub.toolPolicy.selectedCount', { selected: selectedTools.size, total: tools.length })}
@@ -450,8 +549,19 @@ export function ToolPolicyEditor({
 
     return (
       <div className="flex flex-col flex-1 min-h-0">
+        {/* Story 12.5: 上下文提示 + AC3 继承状态 */}
+        <div className="px-4 pt-4">
+          <PolicyContextHint
+            isGlobalMode={isGlobalMode}
+            projectName={projectName}
+            globalDefaultMode={globalDefaultPolicy?.mode}
+            isInherited={currentIsInherited}
+            t={t}
+          />
+        </div>
+
         {/* 头部：模式 + 操作按钮 */}
-        <div className="space-y-3 px-4 py-4 border-b">
+        <div className="space-y-3 px-4 pb-4 border-b">
           {renderToolsHeader()}
         </div>
 

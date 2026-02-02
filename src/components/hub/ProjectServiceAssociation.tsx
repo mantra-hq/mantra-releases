@@ -230,6 +230,7 @@ export function ProjectServiceAssociation({
                                 <Badge variant="outline" className="text-xs">
                                   {t("hub.projectAssociation.linked")}
                                 </Badge>
+                                {/* Story 12.5: 文案区分 - 项目工具权限 */}
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -237,7 +238,7 @@ export function ProjectServiceAssociation({
                                   className="h-7 text-xs gap-1"
                                 >
                                   <Shield className="h-3 w-3" />
-                                  {t("hub.mcpContext.manageTools", "管理工具")}
+                                  {t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
                                 </Button>
                               </>
                             )}
@@ -304,10 +305,12 @@ export function ProjectServiceAssociation({
             </ActionSheetHeader>
 
             <div className="flex-1 overflow-hidden">
+              {/* Story 12.5: 添加 projectName 用于上下文提示 */}
               <ToolPolicyEditor
                 serviceId={service.id}
                 projectId={policyProjectId}
                 serviceName={service.name}
+                projectName={policyProjectName}
                 embedded
                 onSaved={() => {
                   feedback.success(t("hub.projectAssociation.overrideSaveSuccess"));

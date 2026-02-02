@@ -1248,7 +1248,16 @@
       "selectAll": "Select All",
       "deselectAll": "Deselect All",
       "selectedCount": "{{selected}}/{{total}}",
-      "save": "Save"
+      "save": "Save",
+      "globalEntry": "Global Tool Policy",
+      "projectEntry": "Project Tool Policy",
+      "globalHint": "Editing the service's default policy. This will affect all projects without custom configuration.",
+      "projectHint": "Customizing policy for project {{project}}. This will override the global default.",
+      "inheritingFrom": "Inheriting from global default: {{mode}}",
+      "customPolicy": "Custom Policy",
+      "inheritGlobal": "Use Global Default",
+      "isCustom": "Custom",
+      "isInherited": "Inherited"
     },
     "oauth": {
       "title": "OAuth Settings - {{name}}",
