@@ -38,4 +38,8 @@ export { showSyncResult } from "./SyncResultToast";
 export { ProjectRenameInput } from "./ProjectRenameInput";
 export type { ProjectRenameInputProps } from "./ProjectRenameInput";
 
+// Story 12.1: 项目信息 Sheet
+export { ProjectInfoSheet } from "./ProjectInfoSheet";
+export type { ProjectInfoSheetProps } from "./ProjectInfoSheet";
+
 export type { SessionSummary } from "./types";
