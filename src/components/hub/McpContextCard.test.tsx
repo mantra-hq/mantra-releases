@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { McpContextCard } from "./McpContextCard";
 
 // Mock IPC adapter
@@ -58,6 +59,11 @@ vi.mock("@/components/import/SourceIcons", () => ({
 // Import after mocking
 import { invoke } from "@/lib/ipc-adapter";
 const mockInvokeFn = vi.mocked(invoke);
+
+// Helper to render with required providers
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+};
 
 // ===== Test Data =====
 
@@ -131,7 +137,7 @@ describe("McpContextCard", () => {
     it("加载中显示 spinner", () => {
       mockInvokeFn.mockReturnValue(new Promise(() => {})); // never resolves
 
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       expect(
         screen.getByTestId("mcp-context-card-loading")
@@ -141,7 +147,7 @@ describe("McpContextCard", () => {
     it("调用 check_project_mcp_status", async () => {
       mockInvokeFn.mockResolvedValue(emptyStatus);
 
-      render(<McpContextCard projectId="proj-1" projectPath="/my/project" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" projectPath="/my/project" />);
 
       await waitFor(() => {
         expect(mockInvokeFn).toHaveBeenCalledWith(
@@ -163,7 +169,7 @@ describe("McpContextCard", () => {
     });
 
     it("渲染 mcp-context-card", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(screen.getByTestId("mcp-context-card")).toBeInTheDocument();
@@ -171,7 +177,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示服务列表", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(screen.getByTestId("mcp-service-svc-1")).toBeInTheDocument();
@@ -181,7 +187,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示服务名称", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(screen.getByText("git-mcp")).toBeInTheDocument();
@@ -191,7 +197,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示适配器图标", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -207,7 +213,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示 Manage Services 按钮", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -220,7 +226,7 @@ describe("McpContextCard", () => {
       const onNavigateToHub = vi.fn();
       const user = userEvent.setup();
 
-      render(
+      renderWithProviders(
         <McpContextCard
           projectId="proj-1"
           onNavigateToHub={onNavigateToHub}
@@ -240,7 +246,7 @@ describe("McpContextCard", () => {
     // ===== Phase 2: PolicyBadge =====
 
     it("deny_all 服务显示 PolicyBadge", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -254,7 +260,7 @@ describe("McpContextCard", () => {
     });
 
     it("custom 服务显示 PolicyBadge 含工具数量", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -264,7 +270,7 @@ describe("McpContextCard", () => {
     });
 
     it("allow_all 或 null 服务不显示 PolicyBadge", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(screen.getByTestId("mcp-context-card")).toBeInTheDocument();
@@ -278,7 +284,7 @@ describe("McpContextCard", () => {
     // ===== Phase 2: 管理工具按钮 =====
 
     it("每个服务有管理工具按钮", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -296,7 +302,7 @@ describe("McpContextCard", () => {
     it("点击管理工具按钮打开 ToolPolicyEditor Dialog", async () => {
       const user = userEvent.setup();
 
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -322,7 +328,7 @@ describe("McpContextCard", () => {
     });
 
     it("渲染 takeover 卡片", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -332,7 +338,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示检测到的配置数量", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         // 2 + 1 = 3 configs
@@ -341,7 +347,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示适配器图标", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(screen.getByText("Claude")).toBeInTheDocument();
@@ -350,7 +356,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示 Import & Takeover 按钮", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -362,7 +368,7 @@ describe("McpContextCard", () => {
     it("点击 Import & Takeover 打开导入对话框", async () => {
       const user = userEvent.setup();
 
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -386,7 +392,7 @@ describe("McpContextCard", () => {
     });
 
     it("渲染 empty 卡片", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -396,7 +402,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示空状态提示文字", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -406,7 +412,7 @@ describe("McpContextCard", () => {
     });
 
     it("显示 Add Services 按钮", async () => {
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(
@@ -419,7 +425,7 @@ describe("McpContextCard", () => {
       const onNavigateToHub = vi.fn();
       const user = userEvent.setup();
 
-      render(
+      renderWithProviders(
         <McpContextCard
           projectId="proj-1"
           onNavigateToHub={onNavigateToHub}
@@ -443,7 +449,7 @@ describe("McpContextCard", () => {
     it("API 调用失败时显示空状态", async () => {
       mockInvokeFn.mockRejectedValue(new Error("Network error"));
 
-      render(<McpContextCard projectId="proj-1" />);
+      renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
         expect(

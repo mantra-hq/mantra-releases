@@ -14,7 +14,7 @@ use super::error::StorageError;
 use crate::models::mcp::{
     CreateMcpServiceRequest, McpService, McpServiceSource, McpServiceTool, McpServiceWithOverride,
     McpTransportType, ProjectMcpService, TakeoverBackup, TakeoverScope, TakeoverStatus, ToolPolicy,
-    ToolPolicyMode, ToolType, UpdateMcpServiceRequest,
+    ToolType, UpdateMcpServiceRequest,
 };
 
 /// 从数据库行解析 McpService
@@ -2027,9 +2027,7 @@ mod tests {
 
         // 获取默认策略应返回 AllowAll
         let policy = db.get_service_default_policy(&service.id).unwrap();
-        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
-        assert!(policy.allowed_tools.is_empty());
-        assert!(policy.denied_tools.is_empty());
+        assert!(policy.is_allow_all());
     }
 
     #[test]
@@ -2050,17 +2048,13 @@ mod tests {
         };
         let service = db.create_mcp_service(&request).unwrap();
 
-        // 更新默认策略为 DenyAll
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::DenyAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
+        // 更新默认策略为 Custom（仅允许特定工具）
+        let policy = ToolPolicy::custom(vec!["read_file".to_string()]);
         let updated = db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
         assert!(updated.default_tool_policy.is_some());
 
         let retrieved_policy = db.get_service_default_policy(&service.id).unwrap();
-        assert_eq!(retrieved_policy.mode, ToolPolicyMode::DenyAll);
+        assert!(retrieved_policy.is_custom());
     }
 
     #[test]
@@ -2082,17 +2076,14 @@ mod tests {
         let service = db.create_mcp_service(&request).unwrap();
 
         // 更新为 Custom 策略
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::Custom,
-            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
-            denied_tools: vec!["write_file".to_string()],
-        };
+        let policy = ToolPolicy::custom(vec!["read_file".to_string(), "list_commits".to_string()]);
         db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
 
         let retrieved = db.get_service_default_policy(&service.id).unwrap();
-        assert_eq!(retrieved.mode, ToolPolicyMode::Custom);
-        assert_eq!(retrieved.allowed_tools, vec!["read_file", "list_commits"]);
-        assert_eq!(retrieved.denied_tools, vec!["write_file"]);
+        assert!(retrieved.is_custom());
+        let allowed = retrieved.allowed_tools.unwrap();
+        assert!(allowed.contains(&"read_file".to_string()));
+        assert!(allowed.contains(&"list_commits".to_string()));
     }
 
     #[test]
@@ -2113,21 +2104,17 @@ mod tests {
         };
         let service = db.create_mcp_service(&request).unwrap();
 
-        // 先设置策略
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::DenyAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
+        // 先设置 Custom 策略
+        let policy = ToolPolicy::custom(vec!["some_tool".to_string()]);
         db.update_service_default_policy(&service.id, Some(&policy)).unwrap();
 
         // 然后清除策略
         let updated = db.update_service_default_policy(&service.id, None).unwrap();
         assert!(updated.default_tool_policy.is_none());
 
-        // 获取策略应返回默认值
+        // 获取策略应返回默认值（AllowAll）
         let retrieved = db.get_service_default_policy(&service.id).unwrap();
-        assert_eq!(retrieved.mode, ToolPolicyMode::AllowAll);
+        assert!(retrieved.is_allow_all());
     }
 
     #[test]

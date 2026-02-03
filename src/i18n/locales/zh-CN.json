@@ -1261,6 +1261,8 @@
       "projectHint": "正在为项目 {{project}} 定制策略，将覆盖全局默认",
       "inheritingFrom": "当前继承自全局默认: {{mode}}",
       "customPolicy": "使用自定义策略",
+      "resetInherit": "重置为继承",
+      "customActive": "正在为此项目使用自定义策略",
       "inheritGlobal": "继承全局默认",
       "projectScope": "项目: {{project}}",
       "isCustom": "自定义",

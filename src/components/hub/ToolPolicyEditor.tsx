@@ -1,7 +1,6 @@
 /**
  * Tool Policy 编辑器组件
- * Story 11.10: Project-Level Tool Management - Task 4.1, 4.2, 4.3, 4.4
- * Story 11.9 Phase 2: Task 10 - 支持全局模式（服务级默认策略）
+ * Story 11.10 → Story 11.18: 简化的 Tool Policy 模型
  *
  * 用于编辑 MCP 工具策略：
  * - 项目级模式：当 projectId 有值时，编辑项目级策略覆盖
@@ -9,7 +8,11 @@
  * - Checkbox 列表选择工具
  * - 全选/全不选 按钮
  * - 手动保存按钮
- * - Mode 从选择状态自动推导
+ *
+ * Story 11.18 简化：
+ * - allowedTools = null → 继承全局
+ * - allowedTools = [] → 全选
+ * - allowedTools = [...] → 部分选
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -33,9 +36,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { RefreshCw, ChevronDown, Shield, ShieldOff, Settings, Loader2, Save, CheckSquare, Square, Info } from "lucide-react";
+import { RefreshCw, ChevronDown, Shield, Settings, Loader2, Save, CheckSquare, Square, Info, ArrowLeft } from "lucide-react";
 import { feedback } from "@/lib/feedback";
-import type { ToolPolicy, ToolPolicyMode, McpTool, ToolDiscoveryResult } from "@/types/mcp";
+import type { ToolPolicy, McpTool, ToolDiscoveryResult } from "@/types/mcp";
+import {
+  isInheritPolicy,
+  isAllowAllPolicy,
+} from "@/types/mcp";
 
 interface ToolPolicyEditorProps {
   /** 项目 ID（可选，不提供则为全局模式） */
@@ -59,23 +66,41 @@ interface ToolPolicyEditorProps {
 }
 
 /**
- * Story 12.5: 上下文提示组件
+ * Story 11.18: 策略状态类型
+ * - inherit: 继承全局
+ * - allow_all: 全选
+ * - custom: 部分选
+ */
+type PolicyStatus = 'inherit' | 'allow_all' | 'custom';
+
+/**
+ * 从 ToolPolicy 获取状态
+ */
+function getPolicyStatus(policy: ToolPolicy): PolicyStatus {
+  if (isInheritPolicy(policy)) return 'inherit';
+  if (isAllowAllPolicy(policy)) return 'allow_all';
+  return 'custom';
+}
+
+/**
+ * Story 11.18: 上下文提示组件
  * 区分全局模式和项目模式的策略编辑范围
- * AC2: 使用 Info 图标 + 浅色背景
  */
 function PolicyContextHint({
   isGlobalMode,
   projectName,
-  globalDefaultMode,
+  globalDefaultStatus,
   isInherited,
   onStartCustomize,
+  onResetToInherit,
   t,
 }: {
   isGlobalMode: boolean;
   projectName?: string;
-  globalDefaultMode?: ToolPolicyMode;
+  globalDefaultStatus?: PolicyStatus;
   isInherited?: boolean;
   onStartCustomize?: () => void;
+  onResetToInherit?: () => void;
   t: ReturnType<typeof useTranslation>['t'];
 }) {
   if (isGlobalMode) {
@@ -89,11 +114,9 @@ function PolicyContextHint({
     );
   }
 
-  // AC3: 项目模式下显示继承状态
-  const modeLabel = globalDefaultMode === 'allow_all'
+  // 项目模式：显示继承状态
+  const statusLabel = globalDefaultStatus === 'allow_all'
     ? t('hub.toolPolicy.modeAllowAll')
-    : globalDefaultMode === 'deny_all'
-    ? t('hub.toolPolicy.modeDenyAll')
     : t('hub.toolPolicy.modeCustom');
 
   return (
@@ -104,12 +127,12 @@ function PolicyContextHint({
           {t("hub.toolPolicy.projectHint", "Customizing policy for project {{project}}. This will override the global default.", { project: projectName || "this project" })}
         </span>
       </div>
-      {/* AC3: 继承状态指示 + "使用自定义策略"开关 */}
-      {isInherited && globalDefaultMode && (
+      {/* Story 11.18: 继承状态指示 + 操作按钮 */}
+      {isInherited && globalDefaultStatus && (
         <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg">
           <Info className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-xs text-muted-foreground flex-1">
-            {t("hub.toolPolicy.inheritingFrom", "Inheriting from global default: {{mode}}", { mode: modeLabel })}
+            {t("hub.toolPolicy.inheritingFrom", "Inheriting from global default: {{mode}}", { mode: statusLabel })}
           </span>
           {onStartCustomize && (
             <Button
@@ -124,33 +147,49 @@ function PolicyContextHint({
           )}
         </div>
       )}
+      {/* Story 11.18: 已自定义时显示恢复继承按钮 */}
+      {!isInherited && onResetToInherit && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg">
+          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs text-muted-foreground flex-1">
+            {t("hub.toolPolicy.customActive", "Using custom policy for this project")}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={onResetToInherit}
+            data-testid="reset-inherit-button"
+          >
+            <ArrowLeft className="h-3 w-3 mr-1" />
+            {t("hub.toolPolicy.resetInherit", "Reset to Inherit")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * 获取 Mode 图标
+ * Story 11.18: 获取状态图标
  */
-function getModeIcon(mode: ToolPolicyMode) {
-  switch (mode) {
+function getStatusIcon(status: PolicyStatus) {
+  switch (status) {
     case 'allow_all':
       return <Shield className="h-4 w-4 text-green-500" />;
-    case 'deny_all':
-      return <ShieldOff className="h-4 w-4 text-red-500" />;
     case 'custom':
       return <Settings className="h-4 w-4 text-yellow-500" />;
+    case 'inherit':
+      return <Shield className="h-4 w-4 text-muted-foreground" />;
     default:
       return null;
   }
 }
 
 /**
- * 从选中的工具列表推导 Mode
+ * Story 11.18: 从选中的工具列表推导状态
  */
-function deriveMode(selectedTools: Set<string>, totalTools: number): ToolPolicyMode {
-  if (selectedTools.size === 0) {
-    return 'deny_all';
-  }
+function deriveStatus(selectedTools: Set<string>, totalTools: number): PolicyStatus {
   if (selectedTools.size === totalTools) {
     return 'allow_all';
   }
@@ -192,24 +231,20 @@ export function ToolPolicyEditor({
   // Story 12.5 AC3: 全局默认策略（用于项目模式下显示继承状态）
   const [globalDefaultPolicy, setGlobalDefaultPolicy] = useState<ToolPolicy | null>(null);
 
-  // 从策略初始化选中状态
+  // Story 11.18: 从策略初始化选中状态
   const initializeSelection = useCallback((policy: ToolPolicy, toolList: McpTool[]) => {
     const selected = new Set<string>();
 
-    if (policy.mode === 'allow_all') {
-      // allow_all: 全部选中，除了 deniedTools
+    // Story 11.18: 简化的逻辑
+    // - allowedTools = null (继承) 或 [] (全选): 全部选中
+    // - allowedTools = [...] (部分选): 只选中列表中的
+    if (policy.allowedTools === null || policy.allowedTools.length === 0) {
+      // 继承或全选: 全部选中
       for (const tool of toolList) {
-        if (!policy.deniedTools.includes(tool.name)) {
-          selected.add(tool.name);
-        }
-      }
-    } else if (policy.mode === 'deny_all') {
-      // deny_all: 全部不选，除了 allowedTools
-      for (const toolName of policy.allowedTools) {
-        selected.add(toolName);
+        selected.add(tool.name);
       }
     } else {
-      // custom: 只选中 allowedTools
+      // 部分选: 只选中 allowedTools 中的
       for (const toolName of policy.allowedTools) {
         selected.add(toolName);
       }
@@ -219,13 +254,17 @@ export function ToolPolicyEditor({
   }, []);
 
   /**
-   * 比较两个策略是否相同（用于检测是否继承自全局）
+   * Story 11.18: 比较两个策略是否相同
    */
   const arePoliciesEqual = useCallback((p1: ToolPolicy, p2: ToolPolicy): boolean => {
-    if (p1.mode !== p2.mode) return false;
-    if (p1.mode === 'custom') {
-      const allowed1 = new Set(p1.allowedTools);
-      const allowed2 = new Set(p2.allowedTools);
+    const status1 = getPolicyStatus(p1);
+    const status2 = getPolicyStatus(p2);
+
+    if (status1 !== status2) return false;
+
+    if (status1 === 'custom') {
+      const allowed1 = new Set(p1.allowedTools || []);
+      const allowed2 = new Set(p2.allowedTools || []);
       if (allowed1.size !== allowed2.size) return false;
       for (const tool of allowed1) {
         if (!allowed2.has(tool)) return false;
@@ -335,26 +374,22 @@ export function ToolPolicyEditor({
     setSelectedTools(new Set());
   }, []);
 
-  // 计算当前 mode
-  const currentMode = useMemo(() => {
-    return deriveMode(selectedTools, tools.length);
+  // 计算当前状态
+  const currentStatus = useMemo(() => {
+    return deriveStatus(selectedTools, tools.length);
   }, [selectedTools, tools.length]);
 
-  // 构建当前策略
+  // Story 11.18: 构建当前策略
   const buildPolicy = useCallback((): ToolPolicy => {
-    const mode = deriveMode(selectedTools, tools.length);
+    const status = deriveStatus(selectedTools, tools.length);
 
-    if (mode === 'allow_all') {
-      return { mode: 'allow_all', allowedTools: [], deniedTools: [] };
+    if (status === 'allow_all') {
+      // 全选: allowedTools = []
+      return { allowedTools: [] };
     }
-    if (mode === 'deny_all') {
-      return { mode: 'deny_all', allowedTools: [], deniedTools: [] };
-    }
-    // custom: 只有选中的工具在 allowedTools 中
+    // 部分选: allowedTools = [...]
     return {
-      mode: 'custom',
       allowedTools: Array.from(selectedTools),
-      deniedTools: [],
     };
   }, [selectedTools, tools.length]);
 
@@ -365,18 +400,17 @@ export function ToolPolicyEditor({
     return !arePoliciesEqual(currentPolicy, originalPolicy);
   }, [originalPolicy, buildPolicy, arePoliciesEqual]);
 
-  // Story 12.5 AC3: 当前编辑状态是否与全局一致（用于显示继承状态）
+  // Story 11.18: 当前编辑状态是否与全局一致（用于显示继承状态）
   const currentIsInherited = useMemo(() => {
     if (isGlobalMode || !globalDefaultPolicy) return false;
     const currentPolicy = buildPolicy();
     return arePoliciesEqual(currentPolicy, globalDefaultPolicy);
   }, [isGlobalMode, globalDefaultPolicy, buildPolicy, arePoliciesEqual]);
 
-  // Story 12.5 AC3: 开始自定义策略（取消选中一个工具触发变更）
+  // Story 11.18: 开始自定义策略（取消选中一个工具触发变更）
   const handleStartCustomize = useCallback(() => {
     // 触发一个小变更让用户开始自定义
-    // 如果当前是 allow_all，取消选中第一个工具
-    // 如果当前是 deny_all，选中第一个工具
+    // 取消选中第一个工具
     if (tools.length === 0) return;
 
     const firstTool = tools[0].name;
@@ -390,6 +424,13 @@ export function ToolPolicyEditor({
       return next;
     });
   }, [tools]);
+
+  // Story 11.18: 重置到继承模式（恢复到全局默认）
+  const handleResetToInherit = useCallback(() => {
+    if (!globalDefaultPolicy) return;
+    // 恢复选中状态到全局默认
+    initializeSelection(globalDefaultPolicy, tools);
+  }, [globalDefaultPolicy, tools, initializeSelection]);
 
   // 保存策略
   const handleSave = useCallback(async () => {
@@ -462,9 +503,9 @@ export function ToolPolicyEditor({
       {/* 当前模式显示 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {getModeIcon(currentMode)}
+          {getStatusIcon(currentStatus)}
           <span className="text-sm font-medium">
-            {t(`hub.toolPolicy.mode${currentMode === 'allow_all' ? 'AllowAll' : currentMode === 'deny_all' ? 'DenyAll' : 'Custom'}`)}
+            {t(`hub.toolPolicy.mode${currentStatus === 'allow_all' ? 'AllowAll' : 'Custom'}`)}
           </span>
         </div>
         <Badge variant="outline" className="text-xs">
@@ -567,9 +608,10 @@ export function ToolPolicyEditor({
           <PolicyContextHint
             isGlobalMode={isGlobalMode}
             projectName={projectName}
-            globalDefaultMode={globalDefaultPolicy?.mode}
+            globalDefaultStatus={globalDefaultPolicy ? getPolicyStatus(globalDefaultPolicy) : undefined}
             isInherited={currentIsInherited}
             onStartCustomize={handleStartCustomize}
+            onResetToInherit={handleResetToInherit}
             t={t}
           />
         </div>
@@ -620,9 +662,9 @@ export function ToolPolicyEditor({
         {/* 当前模式显示 */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {getModeIcon(currentMode)}
+            {getStatusIcon(currentStatus)}
             <span className="text-sm font-medium">
-              {t(`hub.toolPolicy.mode${currentMode === 'allow_all' ? 'AllowAll' : currentMode === 'deny_all' ? 'DenyAll' : 'Custom'}`)}
+              {t(`hub.toolPolicy.mode${currentStatus === 'allow_all' ? 'AllowAll' : 'Custom'}`)}
             </span>
           </div>
           <Badge variant="outline" className="text-xs">
@@ -758,7 +800,7 @@ export function ToolPolicyEditor({
             data-testid="tool-policy-trigger"
           >
             <span className="flex items-center gap-2">
-              {getModeIcon(currentMode)}
+              {getStatusIcon(currentStatus)}
               <span className="text-sm">{t('hub.toolPolicy.title')}</span>
             </span>
             <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -776,7 +818,7 @@ export function ToolPolicyEditor({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          {getModeIcon(currentMode)}
+          {getStatusIcon(currentStatus)}
           {t('hub.toolPolicy.title')}
         </CardTitle>
         <CardDescription>

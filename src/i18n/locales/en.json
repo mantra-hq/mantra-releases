@@ -1255,6 +1255,8 @@
       "projectHint": "Customizing policy for project {{project}}. This will override the global default.",
       "inheritingFrom": "Inheriting from global default: {{mode}}",
       "customPolicy": "Use Custom Policy",
+      "resetInherit": "Reset to Inherit",
+      "customActive": "Using custom policy for this project",
       "inheritGlobal": "Use Global Default",
       "projectScope": "Project: {{project}}",
       "isCustom": "Custom",

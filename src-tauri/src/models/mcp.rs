@@ -190,16 +190,16 @@ impl McpService {
 impl ProjectMcpService {
     /// 获取项目的 Tool Policy
     ///
-    /// Story 11.10: Project-Level Tool Management - AC 1, AC 6
+    /// Story 11.10 → Story 11.18: Project-Level Tool Management
     ///
     /// 从 `config_override.toolPolicy` 解析 Tool Policy。
-    /// 如果未配置或解析失败，返回默认策略 (AllowAll)。
+    /// 如果未配置或解析失败，返回继承策略 (inherit) 以回退到服务默认。
     pub fn get_tool_policy(&self) -> ToolPolicy {
         self.config_override
             .as_ref()
             .and_then(|config| config.get("toolPolicy"))
             .and_then(|policy_value| serde_json::from_value(policy_value.clone()).ok())
-            .unwrap_or_default()
+            .unwrap_or_else(ToolPolicy::inherit)
     }
 
     /// 设置 Tool Policy
@@ -276,16 +276,11 @@ pub struct EnvVariableNameValidation {
     pub error_message: Option<String>,
 }
 
-// ===== Story 11.10: Project-Level Tool Management =====
+// ===== Story 11.10 → Story 11.18: Tool Policy 简化 =====
 
-/// Tool Policy 模式
+/// Tool Policy 模式 (已废弃，仅用于向后兼容反序列化)
 ///
-/// Story 11.10: Project-Level Tool Management - AC 1
-///
-/// 定义工具策略的三种模式:
-/// - `allow_all`: 允许所有工具（默认）
-/// - `deny_all`: 禁止所有工具
-/// - `custom`: 自定义模式，需配合 allowed_tools 和 denied_tools 使用
+/// Story 11.18: 从旧格式迁移时使用
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolPolicyMode {
@@ -297,65 +292,111 @@ pub enum ToolPolicyMode {
 
 /// Tool Policy 配置
 ///
-/// Story 11.10: Project-Level Tool Management - AC 1
+/// Story 11.18: MCP 权限管理 UX 系统性重构 - AC 1
 ///
-/// 用于控制项目级别的 MCP 工具访问权限。
-///
-/// ## 优先级规则
-/// `denied_tools` > `allowed_tools` > `mode`
-///
-/// 即:
-/// 1. 如果工具在 `denied_tools` 中，无论其他设置如何都被禁止
-/// 2. 当 `mode = custom` 时，工具必须在 `allowed_tools` 中且不在 `denied_tools` 中才可用
-/// 3. 当 `mode = allow_all` 时，允许所有不在 `denied_tools` 中的工具
-/// 4. 当 `mode = deny_all` 时，禁止所有工具
+/// 简化的权限模型:
+/// - `allowed_tools = None` → 继承全局默认（仅项目级有效）
+/// - `allowed_tools = Some([])` → 全选（允许所有工具）
+/// - `allowed_tools = Some([...])` → 部分选（仅允许指定工具）
+/// - 不关联服务 = 禁用（等同于旧 deny_all）
 ///
 /// ## 示例
 /// ```json
-/// {
-///   "toolPolicy": {
-///     "mode": "custom",
-///     "allowedTools": ["git-mcp/read_file", "git-mcp/list_commits"],
-///     "deniedTools": ["git-mcp/write_file", "git-mcp/execute_command"]
-///   }
-/// }
+/// // 全选（允许所有工具）
+/// { "allowedTools": [] }
+///
+/// // 部分选
+/// { "allowedTools": ["read_file", "list_commits"] }
+///
+/// // 继承全局默认
+/// { "allowedTools": null }
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolPolicy {
-    /// 策略模式
+    /// 允许的工具列表
+    ///
+    /// - `None`: 继承全局默认（仅项目级有效）
+    /// - `Some([])`: 全选（允许所有工具）
+    /// - `Some([...])`: 部分选（仅允许指定工具）
     #[serde(default)]
-    pub mode: ToolPolicyMode,
-    /// 允许的工具列表（仅在 Custom 模式下生效）
-    /// 格式: "tool_name" (不含 service 前缀)
-    #[serde(default)]
-    pub allowed_tools: Vec<String>,
-    /// 禁止的工具列表（优先级最高）
-    /// 格式: "tool_name" (不含 service 前缀)
-    #[serde(default)]
-    pub denied_tools: Vec<String>,
+    pub allowed_tools: Option<Vec<String>>,
+
+    // === 向后兼容字段（反序列化时接收，不再使用） ===
+    /// 已废弃：旧模式字段，反序列化后忽略
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    mode: Option<ToolPolicyMode>,
+    /// 已废弃：旧禁止列表字段，反序列化后忽略
+    #[serde(default, skip_serializing, rename = "deniedTools")]
+    #[allow(dead_code)]
+    denied_tools: Option<Vec<String>>,
+}
+
+impl Default for ToolPolicy {
+    /// 默认策略：全选（允许所有工具）
+    fn default() -> Self {
+        Self {
+            allowed_tools: Some(vec![]),
+            mode: None,
+            denied_tools: None,
+        }
+    }
 }
 
 impl ToolPolicy {
+    /// 创建全选策略（允许所有工具）
+    pub fn allow_all() -> Self {
+        Self {
+            allowed_tools: Some(vec![]),
+            mode: None,
+            denied_tools: None,
+        }
+    }
+
+    /// 创建继承策略（继承全局默认）
+    pub fn inherit() -> Self {
+        Self {
+            allowed_tools: None,
+            mode: None,
+            denied_tools: None,
+        }
+    }
+
+    /// 创建部分选策略
+    pub fn custom(tools: Vec<String>) -> Self {
+        Self {
+            allowed_tools: Some(tools),
+            mode: None,
+            denied_tools: None,
+        }
+    }
+
+    /// 是否为继承模式
+    pub fn is_inherit(&self) -> bool {
+        self.allowed_tools.is_none()
+    }
+
+    /// 是否为全选模式
+    pub fn is_allow_all(&self) -> bool {
+        matches!(&self.allowed_tools, Some(tools) if tools.is_empty())
+    }
+
+    /// 是否为部分选模式
+    pub fn is_custom(&self) -> bool {
+        matches!(&self.allowed_tools, Some(tools) if !tools.is_empty())
+    }
+
     /// 检查工具是否被允许
     ///
-    /// ## 优先级规则
-    /// 1. `denied_tools` 优先级最高 - 任何在此列表中的工具都被禁止
-    /// 2. 根据 `mode` 判断:
-    ///    - `AllowAll`: 允许所有工具
-    ///    - `DenyAll`: 禁止所有工具
-    ///    - `Custom`: 仅允许在 `allowed_tools` 中的工具
+    /// - `None` (继承): 返回 true（实际继承由 PolicyResolver 处理）
+    /// - `Some([])` (全选): 返回 true
+    /// - `Some([...])` (部分选): 工具在列表中才返回 true
     pub fn is_tool_allowed(&self, tool_name: &str) -> bool {
-        // 1. denied_tools 优先级最高
-        if self.denied_tools.iter().any(|t| t == tool_name) {
-            return false;
-        }
-
-        // 2. 根据 mode 判断
-        match self.mode {
-            ToolPolicyMode::AllowAll => true,
-            ToolPolicyMode::DenyAll => false,
-            ToolPolicyMode::Custom => self.allowed_tools.iter().any(|t| t == tool_name),
+        match &self.allowed_tools {
+            None => true, // 继承 = 由上层决定，此处默认允许
+            Some(tools) if tools.is_empty() => true, // 全选
+            Some(tools) => tools.iter().any(|t| t == tool_name), // 部分选
         }
     }
 
@@ -365,6 +406,27 @@ impl ToolPolicy {
             .iter()
             .filter(|tool| self.is_tool_allowed(get_name(tool)))
             .collect()
+    }
+
+    /// 从旧格式 ToolPolicy 迁移到新格式
+    ///
+    /// Story 11.18: 数据迁移逻辑
+    /// - deny_all → None（表示应删除关联）
+    /// - allow_all → Some([])
+    /// - custom → Some(allowed_tools)
+    pub fn migrate_from_legacy(json: &serde_json::Value) -> Option<Self> {
+        let mode = json.get("mode").and_then(|v| v.as_str()).unwrap_or("allow_all");
+        let allowed_tools: Vec<String> = json
+            .get("allowedTools")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+        match mode {
+            "deny_all" => None, // 表示应删除关联
+            "allow_all" => Some(ToolPolicy::allow_all()),
+            "custom" => Some(ToolPolicy::custom(allowed_tools)),
+            _ => Some(ToolPolicy::allow_all()),
+        }
     }
 }
 
@@ -910,164 +972,137 @@ mod tests {
         assert_eq!(McpTransportType::from_str("unknown"), None);
     }
 
-    // ===== Story 11.10: Tool Policy 测试 =====
-
-    #[test]
-    fn test_tool_policy_mode_serialization() {
-        // 测试序列化
-        assert_eq!(
-            serde_json::to_string(&ToolPolicyMode::AllowAll).unwrap(),
-            r#""allow_all""#
-        );
-        assert_eq!(
-            serde_json::to_string(&ToolPolicyMode::DenyAll).unwrap(),
-            r#""deny_all""#
-        );
-        assert_eq!(
-            serde_json::to_string(&ToolPolicyMode::Custom).unwrap(),
-            r#""custom""#
-        );
-
-        // 测试反序列化
-        let allow_all: ToolPolicyMode = serde_json::from_str(r#""allow_all""#).unwrap();
-        assert_eq!(allow_all, ToolPolicyMode::AllowAll);
-        let deny_all: ToolPolicyMode = serde_json::from_str(r#""deny_all""#).unwrap();
-        assert_eq!(deny_all, ToolPolicyMode::DenyAll);
-        let custom: ToolPolicyMode = serde_json::from_str(r#""custom""#).unwrap();
-        assert_eq!(custom, ToolPolicyMode::Custom);
-    }
+    // ===== Story 11.18: 简化 Tool Policy 测试 =====
 
     #[test]
     fn test_tool_policy_default() {
         let policy = ToolPolicy::default();
-        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
-        assert!(policy.allowed_tools.is_empty());
-        assert!(policy.denied_tools.is_empty());
+        assert!(policy.is_allow_all());
+        assert!(!policy.is_inherit());
+        assert!(!policy.is_custom());
+        assert_eq!(policy.allowed_tools, Some(vec![]));
     }
 
     #[test]
-    fn test_tool_policy_is_tool_allowed_allow_all_mode() {
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::AllowAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
-
-        // AllowAll 模式下，所有工具都被允许
-        assert!(policy.is_tool_allowed("read_file"));
-        assert!(policy.is_tool_allowed("write_file"));
-        assert!(policy.is_tool_allowed("execute_command"));
+    fn test_tool_policy_allow_all() {
+        let policy = ToolPolicy::allow_all();
+        assert!(policy.is_allow_all());
+        assert!(policy.is_tool_allowed("any_tool"));
+        assert!(policy.is_tool_allowed("another_tool"));
     }
 
     #[test]
-    fn test_tool_policy_is_tool_allowed_deny_all_mode() {
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::DenyAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
-
-        // DenyAll 模式下，所有工具都被禁止
-        assert!(!policy.is_tool_allowed("read_file"));
-        assert!(!policy.is_tool_allowed("write_file"));
-        assert!(!policy.is_tool_allowed("execute_command"));
+    fn test_tool_policy_inherit() {
+        let policy = ToolPolicy::inherit();
+        assert!(policy.is_inherit());
+        assert!(!policy.is_allow_all());
+        assert!(!policy.is_custom());
+        // 继承模式下默认允许（实际继承由 PolicyResolver 处理）
+        assert!(policy.is_tool_allowed("any_tool"));
     }
 
     #[test]
-    fn test_tool_policy_is_tool_allowed_custom_mode() {
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::Custom,
-            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
-            denied_tools: vec![],
-        };
-
-        // Custom 模式下，只有 allowed_tools 中的工具被允许
+    fn test_tool_policy_custom() {
+        let policy = ToolPolicy::custom(vec!["read_file".to_string(), "list_commits".to_string()]);
+        assert!(policy.is_custom());
+        assert!(!policy.is_allow_all());
+        assert!(!policy.is_inherit());
         assert!(policy.is_tool_allowed("read_file"));
         assert!(policy.is_tool_allowed("list_commits"));
         assert!(!policy.is_tool_allowed("write_file"));
-        assert!(!policy.is_tool_allowed("execute_command"));
     }
 
     #[test]
-    fn test_tool_policy_denied_tools_highest_priority() {
-        // denied_tools 优先级最高，即使在 AllowAll 模式下也应该被禁止
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::AllowAll,
-            allowed_tools: vec![],
-            denied_tools: vec!["write_file".to_string(), "execute_command".to_string()],
-        };
+    fn test_tool_policy_serialization_new_format() {
+        // 全选
+        let allow_all = ToolPolicy::allow_all();
+        let json = serde_json::to_string(&allow_all).unwrap();
+        assert!(json.contains(r#""allowedTools":[]"#));
+        assert!(!json.contains("mode")); // mode 不再序列化
+        assert!(!json.contains("deniedTools")); // deniedTools 不再序列化
 
+        // 部分选
+        let custom = ToolPolicy::custom(vec!["read_file".to_string()]);
+        let json = serde_json::to_string(&custom).unwrap();
+        assert!(json.contains("read_file"));
+        assert!(!json.contains("mode"));
+
+        // 继承
+        let inherit = ToolPolicy::inherit();
+        let json = serde_json::to_string(&inherit).unwrap();
+        assert!(json.contains(r#""allowedTools":null"#));
+    }
+
+    #[test]
+    fn test_tool_policy_backward_compat_deserialization() {
+        // 旧格式: allow_all
+        let old_json = r#"{"mode":"allow_all","allowedTools":[],"deniedTools":[]}"#;
+        let policy: ToolPolicy = serde_json::from_str(old_json).unwrap();
+        assert!(policy.is_allow_all());
+
+        // 旧格式: custom
+        let old_json = r#"{"mode":"custom","allowedTools":["read_file","list_commits"],"deniedTools":["write_file"]}"#;
+        let policy: ToolPolicy = serde_json::from_str(old_json).unwrap();
+        // 新模型忽略 mode 和 deniedTools，只看 allowedTools
+        assert!(policy.is_custom());
+        assert!(policy.is_tool_allowed("read_file"));
+        assert!(policy.is_tool_allowed("list_commits"));
+        // write_file 在 deniedTools 中，但新模型不再使用 deniedTools
+        assert!(!policy.is_tool_allowed("write_file")); // 不在 allowedTools 中所以不允许
+
+        // 新格式: 只有 allowedTools
+        let new_json = r#"{"allowedTools":["read_file"]}"#;
+        let policy: ToolPolicy = serde_json::from_str(new_json).unwrap();
+        assert!(policy.is_custom());
         assert!(policy.is_tool_allowed("read_file"));
         assert!(!policy.is_tool_allowed("write_file"));
-        assert!(!policy.is_tool_allowed("execute_command"));
-    }
-
-    #[test]
-    fn test_tool_policy_denied_overrides_allowed() {
-        // denied_tools 优先于 allowed_tools
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::Custom,
-            allowed_tools: vec![
-                "read_file".to_string(),
-                "write_file".to_string(),
-                "execute_command".to_string(),
-            ],
-            denied_tools: vec!["write_file".to_string()],
-        };
-
-        assert!(policy.is_tool_allowed("read_file"));
-        assert!(!policy.is_tool_allowed("write_file")); // denied 优先
-        assert!(policy.is_tool_allowed("execute_command"));
-    }
-
-    #[test]
-    fn test_tool_policy_serialization() {
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::Custom,
-            allowed_tools: vec!["read_file".to_string(), "list_commits".to_string()],
-            denied_tools: vec!["write_file".to_string()],
-        };
-
-        let json = serde_json::to_string(&policy).unwrap();
-        assert!(json.contains("custom"));
-        assert!(json.contains("read_file"));
-        assert!(json.contains("write_file"));
-
-        let deserialized: ToolPolicy = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.mode, ToolPolicyMode::Custom);
-        assert_eq!(deserialized.allowed_tools.len(), 2);
-        assert_eq!(deserialized.denied_tools.len(), 1);
     }
 
     #[test]
     fn test_tool_policy_from_config_override() {
-        // 测试从 config_override JSON 中解析 ToolPolicy
+        // 新格式
         let config_override = serde_json::json!({
             "toolPolicy": {
-                "mode": "custom",
-                "allowedTools": ["read_file", "list_commits"],
-                "deniedTools": ["write_file"]
+                "allowedTools": ["read_file", "list_commits"]
             }
         });
 
         let tool_policy_value = config_override.get("toolPolicy").unwrap();
         let policy: ToolPolicy = serde_json::from_value(tool_policy_value.clone()).unwrap();
 
-        assert_eq!(policy.mode, ToolPolicyMode::Custom);
+        assert!(policy.is_custom());
         assert!(policy.is_tool_allowed("read_file"));
         assert!(policy.is_tool_allowed("list_commits"));
         assert!(!policy.is_tool_allowed("write_file"));
     }
 
     #[test]
-    fn test_tool_policy_missing_fields_use_defaults() {
-        // 测试缺少字段时使用默认值
-        let partial_json = r#"{"mode": "custom"}"#;
-        let policy: ToolPolicy = serde_json::from_str(partial_json).unwrap();
+    fn test_tool_policy_migrate_from_legacy() {
+        // deny_all → None (删除关联)
+        let deny_all = serde_json::json!({"mode": "deny_all", "allowedTools": [], "deniedTools": []});
+        assert!(ToolPolicy::migrate_from_legacy(&deny_all).is_none());
 
-        assert_eq!(policy.mode, ToolPolicyMode::Custom);
-        assert!(policy.allowed_tools.is_empty());
-        assert!(policy.denied_tools.is_empty());
+        // allow_all → 全选
+        let allow_all = serde_json::json!({"mode": "allow_all", "allowedTools": [], "deniedTools": []});
+        let migrated = ToolPolicy::migrate_from_legacy(&allow_all).unwrap();
+        assert!(migrated.is_allow_all());
+
+        // custom → 保留 allowedTools
+        let custom = serde_json::json!({"mode": "custom", "allowedTools": ["read_file", "list"], "deniedTools": ["write"]});
+        let migrated = ToolPolicy::migrate_from_legacy(&custom).unwrap();
+        assert!(migrated.is_custom());
+        assert_eq!(migrated.allowed_tools, Some(vec!["read_file".to_string(), "list".to_string()]));
+    }
+
+    #[test]
+    fn test_tool_policy_filter_tools() {
+        let tools = vec!["read_file", "write_file", "list_commits", "execute"];
+        let policy = ToolPolicy::custom(vec!["read_file".to_string(), "list_commits".to_string()]);
+
+        let filtered = policy.filter_tools(&tools, |t| t);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.contains(&&"read_file"));
+        assert!(filtered.contains(&&"list_commits"));
     }
 
     #[test]
@@ -1079,9 +1114,9 @@ mod tests {
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 
-        // 无配置时返回默认策略 (AllowAll)
+        // Story 11.18: 无配置时返回继承策略 (inherit)，以回退到服务默认
         let policy = service.get_tool_policy();
-        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+        assert!(policy.is_inherit());
     }
 
     #[test]
@@ -1091,23 +1126,21 @@ mod tests {
             service_id: "service-456".to_string(),
             config_override: Some(serde_json::json!({
                 "toolPolicy": {
-                    "mode": "custom",
-                    "allowedTools": ["read_file"],
-                    "deniedTools": ["write_file"]
+                    "allowedTools": ["read_file"]
                 }
             })),
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 
         let policy = service.get_tool_policy();
-        assert_eq!(policy.mode, ToolPolicyMode::Custom);
+        assert!(policy.is_custom());
         assert!(policy.is_tool_allowed("read_file"));
         assert!(!policy.is_tool_allowed("write_file"));
     }
 
     #[test]
     fn test_project_mcp_service_get_tool_policy_invalid_json() {
-        // 如果 toolPolicy 格式无效，应该返回默认策略
+        // Story 11.18: 如果 toolPolicy 格式无效，返回继承策略 (inherit)
         let service = ProjectMcpService {
             project_id: "proj-123".to_string(),
             service_id: "service-456".to_string(),
@@ -1118,7 +1151,25 @@ mod tests {
         };
 
         let policy = service.get_tool_policy();
-        assert_eq!(policy.mode, ToolPolicyMode::AllowAll);
+        assert!(policy.is_inherit());
+    }
+
+    #[test]
+    fn test_project_mcp_service_get_tool_policy_inherit() {
+        // Story 11.18: 测试继承模式
+        let service = ProjectMcpService {
+            project_id: "proj-123".to_string(),
+            service_id: "service-456".to_string(),
+            config_override: Some(serde_json::json!({
+                "toolPolicy": {
+                    "allowedTools": null
+                }
+            })),
+            created_at: "2026-01-31T00:00:00Z".to_string(),
+        };
+
+        let policy = service.get_tool_policy();
+        assert!(policy.is_inherit());
     }
 
     // ===== Story 11.15: TakeoverBackup 模型测试 =====

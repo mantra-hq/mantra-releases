@@ -724,7 +724,7 @@ pub async fn check_project_mcp_status(
         // 如果 Gateway 运行且服务已启用，视为运行状态
         let is_running = gateway_running && svc.service.enabled;
 
-        // Story 11.9 Phase 2: 提取 Tool Policy 信息
+        // Story 11.18: 简化的 Tool Policy 信息提取
         // 优先级: 项目级 config_override.toolPolicy > 服务级 default_tool_policy > 默认 AllowAll
         let effective_policy = {
             // 尝试从项目级 config_override 获取
@@ -734,9 +734,8 @@ pub async fn check_project_mcp_status(
                 .and_then(|v| serde_json::from_value::<crate::models::mcp::ToolPolicy>(v.clone()).ok());
 
             match project_policy {
-                Some(p) if p.mode != crate::models::mcp::ToolPolicyMode::AllowAll
-                    || !p.allowed_tools.is_empty()
-                    || !p.denied_tools.is_empty() => Some(p),
+                // 如果项目级不是继承模式，使用项目级策略
+                Some(p) if !p.is_inherit() => Some(p),
                 _ => {
                     // 回退到服务级默认
                     svc.service.default_tool_policy.clone()
@@ -746,21 +745,22 @@ pub async fn check_project_mcp_status(
 
         let (tool_policy_mode, custom_tools_count) = match &effective_policy {
             Some(policy) => {
-                let mode = match policy.mode {
-                    crate::models::mcp::ToolPolicyMode::AllowAll => "allow_all",
-                    crate::models::mcp::ToolPolicyMode::DenyAll => "deny_all",
-                    crate::models::mcp::ToolPolicyMode::Custom => "custom",
+                // Story 11.18: 简化的模式判断
+                let mode = if policy.is_inherit() {
+                    "inherit" // 继承全局
+                } else if policy.is_allow_all() {
+                    "allow_all" // 全选
+                } else {
+                    "custom" // 部分选
                 };
-                let count = match policy.mode {
-                    crate::models::mcp::ToolPolicyMode::Custom => {
-                        Some(policy.allowed_tools.len() + policy.denied_tools.len())
-                    }
-                    crate::models::mcp::ToolPolicyMode::DenyAll => Some(0),
-                    _ => None,
+                let count = if policy.is_custom() {
+                    policy.allowed_tools.as_ref().map(|tools| tools.len())
+                } else {
+                    None
                 };
                 (Some(mode.to_string()), count)
             }
-            None => (None, None),
+            None => (Some("allow_all".to_string()), None), // 无策略 = 默认全选
         };
 
         associated_services.push(McpServiceSummary {

@@ -1652,6 +1652,7 @@ fn session_not_found_response(session_id: &str) -> Response {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use crate::models::mcp::ToolPolicy;
 
     #[test]
     fn test_json_rpc_response_success() {
@@ -1982,66 +1983,33 @@ mod tests {
         );
     }
 
-    // ===== Story 11.10: Tool Policy 拦截测试 =====
+    // ===== Story 11.18: 简化 Tool Policy 拦截测试 =====
 
     #[test]
     fn test_is_tool_blocked_allow_all() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+        let policy = ToolPolicy::allow_all();
 
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::AllowAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
-
-        // AllowAll 模式下，所有工具都被允许
+        // 全选模式下，所有工具都被允许
         assert!(!is_tool_blocked("read_file", &policy));
         assert!(!is_tool_blocked("write_file", &policy));
     }
 
     #[test]
-    fn test_is_tool_blocked_deny_all() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
-
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::DenyAll,
-            allowed_tools: vec![],
-            denied_tools: vec![],
-        };
-
-        // DenyAll 模式下，所有工具都被阻止
-        assert!(is_tool_blocked("read_file", &policy));
-        assert!(is_tool_blocked("write_file", &policy));
-    }
-
-    #[test]
     fn test_is_tool_blocked_custom() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+        let policy = ToolPolicy::custom(vec!["read_file".to_string()]);
 
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::Custom,
-            allowed_tools: vec!["read_file".to_string()],
-            denied_tools: vec![],
-        };
-
-        // Custom 模式下，只有 allowed_tools 中的工具被允许
+        // 部分选模式下，只有 allowedTools 中的工具被允许
         assert!(!is_tool_blocked("read_file", &policy));
         assert!(is_tool_blocked("write_file", &policy));
     }
 
     #[test]
-    fn test_is_tool_blocked_denied_overrides() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+    fn test_is_tool_blocked_inherit() {
+        let policy = ToolPolicy::inherit();
 
-        let policy = ToolPolicy {
-            mode: ToolPolicyMode::AllowAll,
-            allowed_tools: vec![],
-            denied_tools: vec!["write_file".to_string()],
-        };
-
-        // denied_tools 优先级最高
+        // 继承模式下，默认允许（实际继承由 PolicyResolver 处理）
         assert!(!is_tool_blocked("read_file", &policy));
-        assert!(is_tool_blocked("write_file", &policy));
+        assert!(!is_tool_blocked("write_file", &policy));
     }
 
     #[test]

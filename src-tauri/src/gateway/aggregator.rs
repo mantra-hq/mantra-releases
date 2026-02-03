@@ -1304,7 +1304,7 @@ mod tests {
     /// Story 11.9 Phase 2: 测试服务级 Tool Policy 过滤
     #[tokio::test]
     async fn test_aggregator_list_tools_with_service_policies() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+        use crate::models::mcp::ToolPolicy;
 
         let aggregator = McpAggregator::new(vec![]);
 
@@ -1355,15 +1355,12 @@ mod tests {
         let all_tools = aggregator.list_tools(None).await;
         assert_eq!(all_tools.len(), 4);
 
-        // 测试 2: 服务 1 使用 DenyAll Policy
+        // 测试 2: 服务 1 使用不可能匹配的 custom policy 模拟 "deny all" 行为
+        // 新模型中没有 DenyAll，使用 custom 策略配合不存在的工具名来阻止所有工具
         let mut policies = HashMap::new();
         policies.insert(
             "svc-1".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::DenyAll,
-                allowed_tools: vec![],
-                denied_tools: vec![],
-            },
+            ToolPolicy::custom(vec!["__none__".to_string()]),
         );
 
         let tools_with_policy = aggregator.list_tools(Some(&policies)).await;
@@ -1373,11 +1370,7 @@ mod tests {
         // 测试 3: 服务 1 使用 Custom Policy（只允许 read_file）
         policies.insert(
             "svc-1".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::Custom,
-                allowed_tools: vec!["read_file".to_string()],
-                denied_tools: vec![],
-            },
+            ToolPolicy::custom(vec!["read_file".to_string()]),
         );
 
         let tools_custom = aggregator.list_tools(Some(&policies)).await;
@@ -1388,21 +1381,19 @@ mod tests {
         // 测试 4: 两个服务都有 Policy
         policies.insert(
             "svc-2".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::Custom,
-                allowed_tools: vec!["list_dir".to_string()],
-                denied_tools: vec![],
-            },
+            ToolPolicy::custom(vec!["list_dir".to_string()]),
         );
 
         let tools_both = aggregator.list_tools(Some(&policies)).await;
         assert_eq!(tools_both.len(), 2); // 服务 1 的 read_file + 服务 2 的 list_dir
     }
 
-    /// Story 11.9 Phase 2: AllowAll + denied_tools 过滤
+    /// Story 11.9 Phase 2: Custom Policy 部分选过滤
+    ///
+    /// 注意：新模型不再支持 denied_tools，改用部分选模式
     #[tokio::test]
-    async fn test_aggregator_list_tools_allow_all_with_denied() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+    async fn test_aggregator_list_tools_custom_partial_select() {
+        use crate::models::mcp::ToolPolicy;
 
         let aggregator = McpAggregator::new(vec![]);
 
@@ -1428,15 +1419,14 @@ mod tests {
             );
         }
 
-        // AllowAll + denied_tools: delete_file 被禁止
+        // 使用 custom 策略只允许 read_file 和 write_file（不包括 delete_file）
         let mut policies = HashMap::new();
         policies.insert(
             "svc-1".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::AllowAll,
-                allowed_tools: vec![],
-                denied_tools: vec!["delete_file".to_string()],
-            },
+            ToolPolicy::custom(vec![
+                "read_file".to_string(),
+                "write_file".to_string(),
+            ]),
         );
 
         let tools = aggregator.list_tools(Some(&policies)).await;
@@ -1480,8 +1470,6 @@ mod tests {
     /// Story 11.9 Phase 2: 未初始化服务不返回工具
     #[tokio::test]
     async fn test_aggregator_list_tools_uninitialised_service_excluded() {
-        use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
-
         let aggregator = McpAggregator::new(vec![]);
 
         {

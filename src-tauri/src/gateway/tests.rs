@@ -808,7 +808,7 @@ mod policy_integration_tests {
     use super::*;
     use crate::gateway::aggregator::{McpAggregator, McpTool, ServiceCache, ServiceCapabilities};
     use crate::gateway::policy::{PolicyResolver, SharedPolicyResolver};
-    use crate::models::mcp::{ToolPolicy, ToolPolicyMode};
+    use crate::models::mcp::ToolPolicy;
     use async_trait::async_trait;
     use std::collections::HashMap;
     use std::time::Duration;
@@ -956,15 +956,11 @@ mod policy_integration_tests {
         let aggregator = create_test_aggregator().await;
 
         let mut mock_resolver = MockPolicyResolver::new();
-        // 服务 A 全局 DenyAll
+        // 服务 A 全局 DenyAll - 使用 custom 配置一个不存在的工具来模拟 deny all
         mock_resolver.add_policy(
             None,
             "svc-a".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::DenyAll,
-                allowed_tools: vec![],
-                denied_tools: vec![],
-            },
+            ToolPolicy::custom(vec!["__none__".to_string()]),
         );
 
         let resolver: SharedPolicyResolver = Arc::new(mock_resolver);
@@ -1019,11 +1015,7 @@ mod policy_integration_tests {
         mock_resolver.add_policy(
             None,
             "svc-a".to_string(),
-            ToolPolicy {
-                mode: ToolPolicyMode::Custom,
-                allowed_tools: vec!["read_file".to_string()],
-                denied_tools: vec![],
-            },
+            ToolPolicy::custom(vec!["read_file".to_string()]),
         );
 
         let resolver: SharedPolicyResolver = Arc::new(mock_resolver);
@@ -1085,7 +1077,7 @@ mod policy_e2e_tests {
     use crate::gateway::aggregator::{McpAggregator, McpTool, ServiceCache, ServiceCapabilities};
     use crate::gateway::policy::StoragePolicyResolver;
     use crate::models::mcp::{
-        CreateMcpServiceRequest, McpServiceSource, ToolPolicy, ToolPolicyMode,
+        CreateMcpServiceRequest, McpServiceSource, ToolPolicy,
     };
     use crate::storage::Database;
     use std::sync::{Arc, Mutex};
@@ -1122,11 +1114,7 @@ mod policy_e2e_tests {
             let service = db_guard.create_mcp_service(&request).unwrap();
 
             // 设置全局 Tool Policy: 只允许 read_file
-            let policy = ToolPolicy {
-                mode: ToolPolicyMode::Custom,
-                allowed_tools: vec!["read_file".to_string()],
-                denied_tools: vec![],
-            };
+            let policy = ToolPolicy::custom(vec!["read_file".to_string()]);
             db_guard
                 .update_service_default_policy(&service.id, Some(&policy))
                 .unwrap();
@@ -1228,12 +1216,8 @@ mod policy_e2e_tests {
             };
             let service = db_guard.create_mcp_service(&request).unwrap();
 
-            // 全局 Policy: DenyAll
-            let global_policy = ToolPolicy {
-                mode: ToolPolicyMode::DenyAll,
-                allowed_tools: vec![],
-                denied_tools: vec![],
-            };
+            // 全局 Policy: DenyAll - 使用 custom 配置一个不存在的工具来模拟 deny all
+            let global_policy = ToolPolicy::custom(vec!["__none__".to_string()]);
             db_guard
                 .update_service_default_policy(&service.id, Some(&global_policy))
                 .unwrap();
