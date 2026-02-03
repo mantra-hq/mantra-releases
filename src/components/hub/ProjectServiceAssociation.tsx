@@ -177,7 +177,7 @@ export function ProjectServiceAssociation({
 
   return (
     <ActionSheet open={open} onOpenChange={onOpenChange}>
-      <ActionSheetContent size="lg">
+      <ActionSheetContent size="lg" className="overflow-hidden">
         {/* 列表视图 */}
         {currentView === "list" && (
           <>
@@ -280,7 +280,7 @@ export function ProjectServiceAssociation({
           </>
         )}
 
-        {/* 工具策略视图 - 与 MCP 页面样式一致 */}
+        {/* 工具策略视图 - Story 11.18 Fix: 与 McpContextSection 布局保持一致 */}
         {currentView === "toolPolicy" && service && policyProjectId && (
           <>
             <ActionSheetHeader>
@@ -303,20 +303,21 @@ export function ProjectServiceAssociation({
                 {t("hub.toolPolicy.projectScope", "项目: {{project}}", { project: policyProjectName })}
               </ActionSheetDescription>
             </ActionSheetHeader>
-
-            <div className="flex-1 overflow-hidden">
-              {/* Story 12.5: 添加 projectName 用于上下文提示 */}
-              <ToolPolicyEditor
-                serviceId={service.id}
-                projectId={policyProjectId}
-                serviceName={service.name}
-                projectName={policyProjectName}
-                embedded
-                onSaved={() => {
-                  feedback.success(t("hub.projectAssociation.overrideSaveSuccess"));
-                }}
-              />
-            </div>
+            {/* Story 12.5: 添加 projectName 用于上下文提示 */}
+            {/* Story 11.18 Fix: 移除包装 div，直接放置 ToolPolicyEditor */}
+            <ToolPolicyEditor
+              serviceId={service.id}
+              projectId={policyProjectId}
+              serviceName={service.name}
+              projectName={policyProjectName}
+              embedded
+              onSaved={() => {
+                // Story 11.18 Fix: 与项目详情入口保持一致的行为
+                handleBackToList();  // 返回列表视图
+                loadData();          // 刷新数据（确保策略变更可见）
+                feedback.success(t("hub.projectAssociation.overrideSaveSuccess"));
+              }}
+            />
           </>
         )}
       </ActionSheetContent>
