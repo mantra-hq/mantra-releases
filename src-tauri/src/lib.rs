@@ -231,17 +231,20 @@ pub fn run() {
             });
 
             // Story 11.1: 如果 Gateway 配置为自动启动，则启动 Gateway Server
+            // Story 11.17: 复用 start_gateway 命令逻辑，确保 aggregator 和 warmup 被正确执行
             if gateway_config.auto_start && gateway_config.enabled {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, GatewayServerState> = app_handle.state();
-                    let mut manager = state.manager.lock().await;
-                    match manager.start().await {
-                        Ok(_) => {
-                            println!("[Mantra] Gateway Server started on port {}", manager.current_port());
+                    let gateway_state: tauri::State<'_, GatewayServerState> = app_handle.state();
+                    let app_state: tauri::State<'_, AppState> = app_handle.state();
+                    let mcp_state: tauri::State<'_, McpState> = app_handle.state();
+
+                    match start_gateway(gateway_state, app_state, mcp_state).await {
+                        Ok(status) => {
+                            println!("[Mantra] Gateway Server started on port {}", status.port.unwrap_or(0));
                         }
                         Err(e) => {
-                            eprintln!("[Mantra] Failed to start Gateway Server: {}", e);
+                            eprintln!("[Mantra] Failed to start Gateway Server: {:?}", e);
                         }
                     }
                 });
