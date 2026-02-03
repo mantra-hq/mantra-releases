@@ -838,8 +838,9 @@ fn scan_detectable_configs(project_path: &str) -> Vec<DetectableConfig> {
                     // 项目级配置：相对于项目路径
                     project_path.join(&pattern)
                 }
-                ConfigScope::User => {
+                ConfigScope::User | ConfigScope::Local => {
                     // 用户级配置：替换 ~ 为用户主目录
+                    // Local scope 在扫描模式中不会出现，但为完整性处理
                     if let Some(ref home) = home_dir {
                         if pattern.starts_with('~') {
                             home.join(pattern.trim_start_matches("~/"))
@@ -868,6 +869,7 @@ fn scan_detectable_configs(project_path: &str) -> Vec<DetectableConfig> {
                             scope: match scope {
                                 ConfigScope::Project => "project".to_string(),
                                 ConfigScope::User => "user".to_string(),
+                                ConfigScope::Local => "local".to_string(),
                             },
                             service_count,
                         });
@@ -1934,4 +1936,99 @@ pub async fn execute_full_tool_takeover_cmd(
     }
 
     Ok(result)
+}
+
+// ===== Story 11.21: Local Scope 相关命令 =====
+
+/// 扫描 Claude Code Local Scope 项目列表
+///
+/// Story 11.21: Claude Code Local Scope 完整支持 - Task 8.1
+///
+/// 扫描 ~/.claude.json 中的 projects.* 配置，返回所有包含 mcpServers 的项目列表。
+///
+/// # Returns
+/// Local Scope 项目列表，每项包含项目路径、服务数量、服务名称
+#[tauri::command]
+pub fn scan_local_scopes() -> Result<Vec<crate::models::mcp::LocalScopeScanResult>, AppError> {
+    use crate::models::mcp::{LocalScopeScanResult, ToolType};
+    use crate::services::mcp_adapters::ClaudeAdapter;
+
+    let user_config = ToolType::ClaudeCode.get_user_config_path();
+
+    if !user_config.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = std::fs::read_to_string(&user_config)
+        .map_err(|e| AppError::internal(format!("Failed to read ~/.claude.json: {}", e)))?;
+
+    let adapter = ClaudeAdapter;
+    let projects = adapter
+        .list_local_scope_projects(&content)
+        .map_err(|e| AppError::internal(format!("Failed to parse local scopes: {}", e)))?;
+
+    // 转换类型
+    let results = projects
+        .into_iter()
+        .map(|p| LocalScopeScanResult {
+            project_path: p.project_path,
+            service_count: p.service_count,
+            service_names: p.service_names,
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// 恢复单个 Local Scope 接管备份
+///
+/// Story 11.21: Claude Code Local Scope 完整支持 - Task 8.2
+///
+/// 从备份文件恢复指定项目的 mcpServers 配置到 ~/.claude.json
+///
+/// # Arguments
+/// * `backup_id` - 备份记录 ID
+///
+/// # Returns
+/// 恢复后的备份记录
+#[tauri::command]
+pub fn restore_local_scope_takeover_cmd(
+    backup_id: String,
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::TakeoverBackup, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    crate::services::mcp_config::restore_local_scope_takeover(&db, &backup_id)
+        .map_err(|e| AppError::internal(e.to_string()))
+}
+
+/// 恢复所有活跃的 Local Scope 接管备份
+///
+/// Story 11.21: Claude Code Local Scope 完整支持 - Task 8.3
+///
+/// 恢复所有 scope=local 的活跃备份
+///
+/// # Returns
+/// (成功恢复的数量, 失败的错误列表)
+#[tauri::command]
+pub fn restore_all_local_scope_takeovers_cmd(
+    state: State<'_, McpState>,
+) -> Result<(usize, Vec<String>), AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    crate::services::mcp_config::restore_all_local_scope_takeovers(&db)
+        .map_err(|e| AppError::internal(e.to_string()))
+}
+
+/// 获取所有活跃的 Local Scope 备份列表
+///
+/// Story 11.21: Claude Code Local Scope 完整支持 - Task 8.4
+///
+/// # Returns
+/// 活跃的 Local Scope 备份列表
+#[tauri::command]
+pub fn get_active_local_scope_takeovers(
+    state: State<'_, McpState>,
+) -> Result<Vec<crate::models::mcp::TakeoverBackup>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_active_local_scope_takeovers()
+        .map_err(|e| AppError::internal(e.to_string()))
 }

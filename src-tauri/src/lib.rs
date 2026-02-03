@@ -91,6 +91,8 @@ use commands::{
     preview_smart_takeover, execute_smart_takeover_cmd,
     // Story 11.20: Full Tool Takeover commands
     preview_full_tool_takeover, detect_installed_tools, scan_all_tool_configs, execute_full_tool_takeover_cmd,
+    // Story 11.21: Local Scope commands
+    scan_local_scopes, restore_local_scope_takeover_cmd, restore_all_local_scope_takeovers_cmd, get_active_local_scope_takeovers,
     // Story 11.7: Tray commands
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
     // Story 11.12: OAuth commands
@@ -414,6 +416,11 @@ pub fn run() {
             detect_installed_tools,
             scan_all_tool_configs,
             execute_full_tool_takeover_cmd,
+            // Story 11.21: Local Scope
+            scan_local_scopes,
+            restore_local_scope_takeover_cmd,
+            restore_all_local_scope_takeovers_cmd,
+            get_active_local_scope_takeovers,
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,

@@ -805,6 +805,10 @@ pub struct ToolTakeoverPreview {
     pub user_scope_preview: Option<ScopeTakeoverPreview>,
     /// Project Scope 的三档分类结果
     pub project_scope_preview: Option<ScopeTakeoverPreview>,
+    /// Local Scope 项目列表 (Claude Code 特有)
+    /// Story 11.21: 支持 ~/.claude.json 中 projects.{path}.mcpServers 配置
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_scopes: Vec<LocalScopeScanResult>,
     /// 总服务数量
     pub total_service_count: usize,
     /// 需要决策的冲突数量
@@ -957,16 +961,22 @@ impl TakeoverStatus {
 /// 接管作用域
 ///
 /// Story 11.16: 接管状态模块系统性重构 - AC 1, AC 2
+/// Story 11.21: Claude Code Local Scope 完整支持 - AC 2
 ///
-/// 区分用户级和项目级配置接管
+/// 区分用户级、项目级和 Local Scope 配置接管
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TakeoverScope {
-    /// 用户级配置（如 ~/.claude.json）
+    /// 用户级配置（如 ~/.claude.json 顶层 mcpServers）
     #[default]
     User,
-    /// 项目级配置（如 project/.mcp.json）
+    /// 项目级配置（如 project/.mcp.json 独立文件）
     Project,
+    /// Local Scope 配置（~/.claude.json 中 projects.{path}.mcpServers）
+    ///
+    /// Story 11.21: Claude Code 的 local scope 配置存储在用户配置文件中，
+    /// 但属于特定项目。需要单独备份和恢复。
+    Local,
 }
 
 impl TakeoverScope {
@@ -975,6 +985,7 @@ impl TakeoverScope {
         match self {
             TakeoverScope::User => "user",
             TakeoverScope::Project => "project",
+            TakeoverScope::Local => "local",
         }
     }
 
@@ -983,8 +994,19 @@ impl TakeoverScope {
         match s {
             "user" => Some(TakeoverScope::User),
             "project" => Some(TakeoverScope::Project),
+            "local" => Some(TakeoverScope::Local),
             _ => None,
         }
+    }
+
+    /// 检查是否需要 local_project_path 字段
+    pub fn requires_project_path(&self) -> bool {
+        matches!(self, TakeoverScope::Project | TakeoverScope::Local)
+    }
+
+    /// 检查是否是 local scope (Story 11.21)
+    pub fn is_local(&self) -> bool {
+        matches!(self, TakeoverScope::Local)
     }
 }
 
@@ -992,6 +1014,7 @@ impl TakeoverScope {
 ///
 /// Story 11.15: MCP 接管流程重构 - AC 3, AC 4, AC 5
 /// Story 11.16: 接管状态模块系统性重构 - AC 1, AC 2
+/// Story 11.21: Claude Code Local Scope 完整支持 - AC 2
 ///
 /// 记录 MCP 配置接管的备份信息，支持一键恢复
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1001,14 +1024,20 @@ pub struct TakeoverBackup {
     pub id: String,
     /// 工具类型
     pub tool_type: ToolType,
-    /// 接管作用域 (Story 11.16)
+    /// 接管作用域 (Story 11.16, 11.21)
+    /// - user: 用户级配置 (~/.claude.json 顶层 mcpServers)
+    /// - project: 项目级配置 (project/.mcp.json)
+    /// - local: Local Scope 配置 (~/.claude.json 中 projects.{path}.mcpServers)
     #[serde(default)]
     pub scope: TakeoverScope,
-    /// 项目路径（仅项目级接管时有值）(Story 11.16)
+    /// 项目路径（project/local scope 时有值）(Story 11.16, 11.21)
+    /// - project scope: 配置文件所在的项目目录
+    /// - local scope: ~/.claude.json 中 projects 下的项目路径键
     pub project_path: Option<PathBuf>,
     /// 原始配置文件路径
     pub original_path: PathBuf,
     /// 备份文件路径
+    /// - local scope: 备份的是该项目的 mcpServers JSON 片段
     pub backup_path: PathBuf,
     /// 接管时间 (ISO 8601)
     pub taken_over_at: String,
@@ -1073,6 +1102,14 @@ impl TakeoverBackup {
     /// 检查是否是用户级接管 (Story 11.16)
     pub fn is_user_level(&self) -> bool {
         self.scope == TakeoverScope::User
+    }
+
+    /// 检查是否是 local scope 接管 (Story 11.21)
+    ///
+    /// Local scope 是 Claude Code 特有的概念，配置存储在 ~/.claude.json 的
+    /// projects.{path}.mcpServers 中，属于特定项目但位于用户配置文件内。
+    pub fn is_local_level(&self) -> bool {
+        self.scope == TakeoverScope::Local
     }
 }
 
@@ -2078,5 +2115,94 @@ mod tests {
         let deserialized: TakeoverBackup = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.scope, TakeoverScope::Project);
         assert_eq!(deserialized.project_path, Some(PathBuf::from("/home/user/my-project")));
+    }
+
+    // ===== Story 11.21: Local Scope 支持 =====
+
+    #[test]
+    fn test_takeover_scope_local_as_str() {
+        assert_eq!(TakeoverScope::Local.as_str(), "local");
+    }
+
+    #[test]
+    fn test_takeover_scope_local_from_str() {
+        assert_eq!(TakeoverScope::from_str("local"), Some(TakeoverScope::Local));
+        assert_eq!(TakeoverScope::from_str("user"), Some(TakeoverScope::User));
+        assert_eq!(TakeoverScope::from_str("project"), Some(TakeoverScope::Project));
+        assert_eq!(TakeoverScope::from_str("invalid"), None);
+    }
+
+    #[test]
+    fn test_takeover_scope_requires_project_path() {
+        assert!(!TakeoverScope::User.requires_project_path());
+        assert!(TakeoverScope::Project.requires_project_path());
+        assert!(TakeoverScope::Local.requires_project_path());
+    }
+
+    #[test]
+    fn test_takeover_scope_is_local() {
+        assert!(!TakeoverScope::User.is_local());
+        assert!(!TakeoverScope::Project.is_local());
+        assert!(TakeoverScope::Local.is_local());
+    }
+
+    #[test]
+    fn test_takeover_scope_local_serialization() {
+        let scope = TakeoverScope::Local;
+        let json = serde_json::to_string(&scope).unwrap();
+        assert_eq!(json, r#""local""#);
+
+        let deserialized: TakeoverScope = serde_json::from_str(r#""local""#).unwrap();
+        assert_eq!(deserialized, TakeoverScope::Local);
+    }
+
+    #[test]
+    fn test_takeover_backup_local_scope() {
+        let backup = TakeoverBackup {
+            id: "backup-local-123".to_string(),
+            tool_type: ToolType::ClaudeCode,
+            scope: TakeoverScope::Local,
+            project_path: Some(PathBuf::from("/home/user/project-a")),
+            original_path: PathBuf::from("/home/user/.claude.json"),
+            backup_path: PathBuf::from("/home/user/.mantra/backups/project-a-local.backup"),
+            taken_over_at: "2026-02-03T10:00:00Z".to_string(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        };
+
+        // 序列化测试
+        let json = serde_json::to_string(&backup).unwrap();
+        assert!(json.contains(r#""scope":"local""#));
+        assert!(json.contains("projectPath"));
+        assert!(json.contains("project-a"));
+        assert!(json.contains(".claude.json"));
+
+        // 反序列化测试
+        let deserialized: TakeoverBackup = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.scope, TakeoverScope::Local);
+        assert_eq!(deserialized.project_path, Some(PathBuf::from("/home/user/project-a")));
+        assert_eq!(deserialized.original_path, PathBuf::from("/home/user/.claude.json"));
+
+        // 方法测试
+        assert!(deserialized.is_local_level());
+        assert!(!deserialized.is_user_level());
+        assert!(!deserialized.is_project_level());
+    }
+
+    #[test]
+    fn test_takeover_backup_new_with_scope_local() {
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.mantra/backups/project-b-local.backup"),
+            TakeoverScope::Local,
+            Some(PathBuf::from("/home/user/project-b")),
+        );
+
+        assert_eq!(backup.tool_type, ToolType::ClaudeCode);
+        assert_eq!(backup.scope, TakeoverScope::Local);
+        assert_eq!(backup.project_path, Some(PathBuf::from("/home/user/project-b")));
+        assert!(backup.is_local_level());
+        assert_eq!(backup.status, TakeoverStatus::Active);
     }
 }

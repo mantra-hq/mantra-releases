@@ -43,6 +43,7 @@ pub const GATEWAY_SERVICE_NAME: &str = "mantra-gateway";
 
 // Re-exports
 pub use claude::ClaudeAdapter;
+pub use claude::LocalScopeProject;
 pub use cursor::CursorAdapter;
 pub use codex::CodexAdapter;
 pub use gemini::GeminiAdapter;
@@ -51,13 +52,19 @@ pub use common::{merge_json_config, merge_toml_config};
 // ===== 核心类型定义 =====
 
 /// 配置作用域
+///
+/// Story 11.21: 新增 Local 作用域支持 Claude Code 的 projects.{path}.mcpServers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigScope {
     /// 项目级配置 (如 .mcp.json)
     Project,
-    /// 用户级配置 (如 ~/.claude.json)
+    /// 用户级配置 (如 ~/.claude.json 顶层 mcpServers)
     User,
+    /// Local Scope 配置 (如 ~/.claude.json 中 projects.{path}.mcpServers)
+    ///
+    /// Story 11.21: Claude Code 特有，存储在用户配置文件中但属于特定项目
+    Local,
 }
 
 impl ConfigScope {
@@ -66,7 +73,13 @@ impl ConfigScope {
         match self {
             ConfigScope::Project => "Project",
             ConfigScope::User => "User",
+            ConfigScope::Local => "Local",
         }
+    }
+
+    /// 是否是 local scope (Story 11.21)
+    pub fn is_local(&self) -> bool {
+        matches!(self, ConfigScope::Local)
     }
 }
 
@@ -97,6 +110,8 @@ impl GatewayInjectionConfig {
 }
 
 /// 检测到的 MCP 服务
+///
+/// Story 11.21: 新增 local_project_path 字段支持 Local Scope
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectedService {
     /// 服务名称
@@ -121,6 +136,12 @@ pub struct DetectedService {
     pub adapter_id: String,
     /// 配置作用域
     pub scope: ConfigScope,
+    /// Local Scope 关联的项目路径 (Story 11.21)
+    ///
+    /// 仅当 scope == ConfigScope::Local 时有值，
+    /// 对应 ~/.claude.json 中 projects.{path} 的 path 键
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_project_path: Option<String>,
 }
 
 /// 检测到的配置文件
@@ -350,17 +371,83 @@ mod tests {
     fn test_config_scope_serialization() {
         let project = ConfigScope::Project;
         let user = ConfigScope::User;
+        let local = ConfigScope::Local;
 
         let project_json = serde_json::to_string(&project).unwrap();
         let user_json = serde_json::to_string(&user).unwrap();
+        let local_json = serde_json::to_string(&local).unwrap();
 
         assert_eq!(project_json, "\"project\"");
         assert_eq!(user_json, "\"user\"");
+        assert_eq!(local_json, "\"local\"");
 
         let project_parsed: ConfigScope = serde_json::from_str(&project_json).unwrap();
         let user_parsed: ConfigScope = serde_json::from_str(&user_json).unwrap();
+        let local_parsed: ConfigScope = serde_json::from_str(&local_json).unwrap();
 
         assert_eq!(project_parsed, ConfigScope::Project);
         assert_eq!(user_parsed, ConfigScope::User);
+        assert_eq!(local_parsed, ConfigScope::Local);
+    }
+
+    // ===== Story 11.21: Local Scope 测试 =====
+
+    #[test]
+    fn test_config_scope_local_display_name() {
+        assert_eq!(ConfigScope::Local.display_name(), "Local");
+        assert!(ConfigScope::Local.is_local());
+        assert!(!ConfigScope::User.is_local());
+        assert!(!ConfigScope::Project.is_local());
+    }
+
+    #[test]
+    fn test_detected_service_with_local_project_path() {
+        let service = DetectedService {
+            name: "test-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "test-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/home/user/.claude.json"),
+            adapter_id: "claude".to_string(),
+            scope: ConfigScope::Local,
+            local_project_path: Some("/home/user/my-project".to_string()),
+        };
+
+        assert_eq!(service.scope, ConfigScope::Local);
+        assert_eq!(service.local_project_path, Some("/home/user/my-project".to_string()));
+
+        // 测试序列化
+        let json = serde_json::to_string(&service).unwrap();
+        assert!(json.contains("\"local_project_path\":\"/home/user/my-project\""));
+        assert!(json.contains("\"scope\":\"local\""));
+
+        // 测试反序列化
+        let deserialized: DetectedService = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.scope, ConfigScope::Local);
+        assert_eq!(deserialized.local_project_path, Some("/home/user/my-project".to_string()));
+    }
+
+    #[test]
+    fn test_detected_service_without_local_project_path() {
+        let service = DetectedService {
+            name: "test-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/home/user/.claude.json"),
+            adapter_id: "claude".to_string(),
+            scope: ConfigScope::User,
+            local_project_path: None,
+        };
+
+        // 序列化时不应包含 local_project_path 字段（skip_serializing_if = "Option::is_none"）
+        let json = serde_json::to_string(&service).unwrap();
+        assert!(!json.contains("local_project_path"));
     }
 }

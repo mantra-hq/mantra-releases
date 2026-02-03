@@ -2190,3 +2190,206 @@ use crate::storage::Database;
         assert!(result.can_auto_execute);
         assert_eq!(result.total_conflict_count, 0);
     }
+
+    // ===== Story 11.21: Local Scope 备份和恢复测试 =====
+
+    #[test]
+    fn test_local_scope_backup_path_generation() {
+        use super::executor::ImportExecutor;
+
+        let db = Database::new_in_memory().unwrap();
+        let env_manager = crate::services::EnvManager::new(&[0u8; 32]);
+        let executor = ImportExecutor::new(&db, &env_manager);
+
+        // 测试备份路径生成
+        let project_path = "/home/user/projects/my-project";
+        let backup_path = executor.generate_local_scope_backup_path_for_test(project_path);
+
+        // 验证路径格式
+        assert!(backup_path.to_string_lossy().contains(".mantra"));
+        assert!(backup_path.to_string_lossy().contains("local-scope"));
+        assert!(backup_path.to_string_lossy().ends_with(".json"));
+    }
+
+    #[test]
+    fn test_local_scope_takeover_and_restore() {
+        use crate::models::mcp::{TakeoverScope, TakeoverStatus, ToolType};
+        use super::executor::ImportExecutor;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+        let env_manager = crate::services::EnvManager::new(&[0u8; 32]);
+
+        // 创建模拟的 ~/.claude.json 配置文件
+        let claude_config = temp_dir.path().join(".claude.json");
+        let project_path = "/home/user/my-project";
+        let config_content = format!(r#"{{
+            "mcpServers": {{
+                "global-service": {{"command": "global"}}
+            }},
+            "projects": {{
+                "{}": {{
+                    "mcpServers": {{
+                        "local-service-1": {{"command": "local1"}},
+                        "local-service-2": {{"command": "local2"}}
+                    }}
+                }}
+            }}
+        }}"#, project_path);
+        fs::write(&claude_config, &config_content).unwrap();
+
+        // 执行 Local Scope 接管
+        let mut executor = ImportExecutor::new(&db, &env_manager);
+        let backup_id = executor
+            .apply_local_scope_takeover(&claude_config, project_path)
+            .unwrap();
+
+        // 验证备份记录已创建
+        let backup = db.get_takeover_backup_by_id(&backup_id).unwrap().unwrap();
+        assert_eq!(backup.tool_type, ToolType::ClaudeCode);
+        assert_eq!(backup.scope, TakeoverScope::Local);
+        assert_eq!(backup.status, TakeoverStatus::Active);
+        assert_eq!(
+            backup.project_path.unwrap().to_string_lossy(),
+            project_path
+        );
+
+        // 验证备份文件存在
+        assert!(backup.backup_path.exists());
+
+        // 验证备份内容
+        let backup_content = fs::read_to_string(&backup.backup_path).unwrap();
+        let backup_json: serde_json::Value = serde_json::from_str(&backup_content).unwrap();
+        assert!(backup_json.get("local-service-1").is_some());
+        assert!(backup_json.get("local-service-2").is_some());
+
+        // 验证配置文件中的 mcpServers 已被清空
+        let updated_config = fs::read_to_string(&claude_config).unwrap();
+        let updated_json: serde_json::Value = serde_json::from_str(&updated_config).unwrap();
+        let project_mcp = &updated_json["projects"][project_path]["mcpServers"];
+        assert!(project_mcp.is_null() || project_mcp.as_object().map_or(false, |o| o.is_empty()));
+
+        // 验证全局 mcpServers 未受影响
+        assert!(updated_json["mcpServers"]["global-service"].is_object());
+
+        // 执行恢复
+        let restored_backup = super::restore_local_scope_takeover(&db, &backup_id).unwrap();
+        assert_eq!(restored_backup.status, TakeoverStatus::Restored);
+
+        // 验证配置文件已恢复
+        let restored_config = fs::read_to_string(&claude_config).unwrap();
+        let restored_json: serde_json::Value = serde_json::from_str(&restored_config).unwrap();
+        let restored_mcp = &restored_json["projects"][project_path]["mcpServers"];
+        assert!(restored_mcp["local-service-1"].is_object());
+        assert!(restored_mcp["local-service-2"].is_object());
+    }
+
+    #[test]
+    fn test_local_scope_takeover_idempotent() {
+        use super::executor::ImportExecutor;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+        let env_manager = crate::services::EnvManager::new(&[0u8; 32]);
+
+        // 创建配置文件
+        let claude_config = temp_dir.path().join(".claude.json");
+        let project_path = "/home/user/my-project";
+        let config_content = format!(r#"{{
+            "projects": {{
+                "{}": {{
+                    "mcpServers": {{
+                        "test-service": {{"command": "test"}}
+                    }}
+                }}
+            }}
+        }}"#, project_path);
+        fs::write(&claude_config, &config_content).unwrap();
+
+        // 第一次接管
+        let mut executor = ImportExecutor::new(&db, &env_manager);
+        let backup_id_1 = executor
+            .apply_local_scope_takeover(&claude_config, project_path)
+            .unwrap();
+
+        // 第二次接管（应该返回相同的 backup_id）
+        let backup_id_2 = executor
+            .apply_local_scope_takeover(&claude_config, project_path)
+            .unwrap();
+
+        assert_eq!(backup_id_1, backup_id_2);
+    }
+
+    #[test]
+    fn test_local_scope_takeover_no_mcp_servers_error() {
+        use super::executor::ImportExecutor;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+        let env_manager = crate::services::EnvManager::new(&[0u8; 32]);
+
+        // 创建没有 mcpServers 的配置
+        let claude_config = temp_dir.path().join(".claude.json");
+        let project_path = "/home/user/my-project";
+        let config_content = format!(r#"{{
+            "projects": {{
+                "{}": {{
+                    "allowedTools": ["tool1"]
+                }}
+            }}
+        }}"#, project_path);
+        fs::write(&claude_config, &config_content).unwrap();
+
+        // 接管应该失败
+        let mut executor = ImportExecutor::new(&db, &env_manager);
+        let result = executor.apply_local_scope_takeover(&claude_config, project_path);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No mcpServers found"));
+    }
+
+    #[test]
+    fn test_restore_all_local_scope_takeovers() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, TakeoverStatus, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建模拟的配置文件
+        let claude_config = temp_dir.path().join(".claude.json");
+        let config_content = r#"{
+            "projects": {
+                "/project-a": { "mcpServers": {} },
+                "/project-b": { "mcpServers": {} }
+            }
+        }"#;
+        fs::write(&claude_config, config_content).unwrap();
+
+        // 创建多个 local scope 备份记录
+        for (i, project) in ["/project-a", "/project-b"].iter().enumerate() {
+            let backup_file = temp_dir.path().join(format!("backup-{}.json", i));
+            fs::write(&backup_file, r#"{"service": {"command": "test"}}"#).unwrap();
+
+            let backup = TakeoverBackup::new_with_scope(
+                ToolType::ClaudeCode,
+                claude_config.clone(),
+                backup_file,
+                TakeoverScope::Local,
+                Some(PathBuf::from(project)),
+            );
+            db.create_takeover_backup(&backup).unwrap();
+        }
+
+        // 验证有 2 个活跃的 local scope 备份
+        let active_backups = db.get_active_local_scope_takeovers().unwrap();
+        assert_eq!(active_backups.len(), 2);
+
+        // 恢复所有
+        let (restored_count, errors) = super::restore_all_local_scope_takeovers(&db).unwrap();
+        assert_eq!(restored_count, 2);
+        assert!(errors.is_empty());
+
+        // 验证所有备份都已恢复
+        let active_backups_after = db.get_active_local_scope_takeovers().unwrap();
+        assert!(active_backups_after.is_empty());
+    }

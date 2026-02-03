@@ -683,6 +683,48 @@ pub fn execute_full_tool_takeover(
         return result;
     }
 
+    // Phase 3: 处理 Claude Code Local Scope (Story 11.21 - Task 5)
+    // Local Scope 是 Claude Code 特有的功能，对应 ~/.claude.json 中的 projects.{path}.mcpServers
+    let claude_user_config = ToolType::ClaudeCode.get_user_config_path();
+    if claude_user_config.exists() {
+        use crate::services::mcp_adapters::ClaudeAdapter;
+
+        let adapter = ClaudeAdapter;
+        if let Ok(config_content) = fs::read_to_string(&claude_user_config) {
+            // 获取所有 local scope 项目
+            if let Ok(local_projects) = adapter.list_local_scope_projects(&config_content) {
+                let project_paths: Vec<String> = local_projects
+                    .iter()
+                    .filter(|p| p.service_count > 0) // 只处理有服务的项目
+                    .map(|p| p.project_path.clone())
+                    .collect();
+
+                if !project_paths.is_empty() {
+                    // 批量执行 Local Scope 接管
+                    let (backup_ids, local_errors) =
+                        executor.apply_all_local_scope_takeovers(&claude_user_config, &project_paths);
+
+                    // 记录成功的备份
+                    for backup_id in backup_ids {
+                        transaction.record_local_scope_backup(backup_id.clone());
+                        result.takeover_backup_ids.push(backup_id);
+                    }
+
+                    // 记录失败的错误（作为警告，不影响整体成功）
+                    for (project_path, error) in local_errors {
+                        result.warnings.push(format!(
+                            "Local scope takeover failed for '{}': {}",
+                            project_path, error
+                        ));
+                    }
+
+                    // 更新统计
+                    result.stats.local_scope_count = project_paths.len();
+                }
+            }
+        }
+    }
+
     // 成功：提交事务
     if let Err(e) = transaction.commit() {
         result.warnings.push(format!("Failed to commit transaction: {}", e));
@@ -968,7 +1010,7 @@ fn process_decision_transactional(
     Ok(())
 }
 
-/// 确定接管作用域 (Story 11.20)
+/// 确定接管作用域 (Story 11.20, 11.21)
 fn determine_takeover_scope(config: &DetectedConfig) -> (TakeoverScope, Option<PathBuf>) {
     match &config.scope {
         Some(ConfigScope::Project) => {
@@ -985,6 +1027,125 @@ fn determine_takeover_scope(config: &DetectedConfig) -> (TakeoverScope, Option<P
             });
             (TakeoverScope::Project, proj_path)
         }
+        Some(ConfigScope::Local) => {
+            // Story 11.21: Local scope 不在此函数处理
+            // Local scope 由专门的 apply_local_scope_takeover 处理
+            (TakeoverScope::Local, None)
+        }
         _ => (TakeoverScope::User, None),
     }
+}
+
+// ===== Story 11.21: Local Scope 恢复 =====
+
+/// 恢复 Local Scope 接管 (Story 11.21 - Task 7)
+///
+/// 从备份文件恢复指定项目的 mcpServers 配置到 ~/.claude.json
+///
+/// # Arguments
+/// * `db` - 数据库
+/// * `backup_id` - 备份记录 ID
+///
+/// # Returns
+/// 更新后的备份记录
+pub fn restore_local_scope_takeover(
+    db: &Database,
+    backup_id: &str,
+) -> Result<TakeoverBackup, StorageError> {
+    use crate::services::mcp_adapters::ClaudeAdapter;
+
+    // 1. 获取备份记录
+    let backup = db
+        .get_takeover_backup_by_id(backup_id)?
+        .ok_or_else(|| StorageError::NotFound(format!("Local scope backup not found: {}", backup_id)))?;
+
+    // 2. 验证是 local scope 备份
+    if backup.scope != TakeoverScope::Local {
+        return Err(StorageError::InvalidInput(format!(
+            "Backup {} is not a local scope backup (scope: {:?})",
+            backup_id, backup.scope
+        )));
+    }
+
+    // 3. 检查是否可以恢复
+    if backup.status != TakeoverStatus::Active {
+        return Err(StorageError::InvalidInput(format!(
+            "Backup {} is already restored",
+            backup_id
+        )));
+    }
+
+    // 4. 获取项目路径
+    let project_path = backup.project_path.as_ref()
+        .ok_or_else(|| StorageError::InvalidInput(
+            "Local scope backup missing project_path".to_string()
+        ))?
+        .to_string_lossy()
+        .to_string();
+
+    // 5. 读取备份文件内容（mcpServers JSON 片段）
+    let backup_content = fs::read_to_string(&backup.backup_path).map_err(|e| {
+        StorageError::InvalidInput(format!("Failed to read backup file: {}", e))
+    })?;
+    let backup_mcp_servers: serde_json::Value = serde_json::from_str(&backup_content)
+        .map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to parse backup content: {}", e))
+        })?;
+
+    // 6. 读取当前配置文件
+    let current_content = if backup.original_path.exists() {
+        fs::read_to_string(&backup.original_path).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to read config file: {}", e))
+        })?
+    } else {
+        return Err(StorageError::InvalidInput(format!(
+            "Config file not found: {:?}",
+            backup.original_path
+        )));
+    };
+
+    // 7. 使用 ClaudeAdapter 恢复 mcpServers
+    let adapter = ClaudeAdapter;
+    let restored_content = adapter
+        .restore_local_scope_mcp_servers(&current_content, &project_path, &backup_mcp_servers)
+        .map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to restore local scope: {}", e))
+        })?;
+
+    // 8. 写回配置文件
+    fs::write(&backup.original_path, restored_content).map_err(|e| {
+        StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+    })?;
+
+    // 9. 更新数据库记录状态
+    db.update_backup_status_restored(backup_id)?;
+
+    // 10. 返回更新后的备份记录
+    db.get_takeover_backup_by_id(backup_id)?
+        .ok_or_else(|| StorageError::NotFound(format!("Backup not found after update: {}", backup_id)))
+}
+
+/// 恢复所有活跃的 Local Scope 接管 (Story 11.21 - Task 7)
+///
+/// # Returns
+/// (成功恢复的数量, 失败的错误列表)
+pub fn restore_all_local_scope_takeovers(
+    db: &Database,
+) -> Result<(usize, Vec<String>), StorageError> {
+    let local_backups = db.get_active_local_scope_takeovers()?;
+
+    let mut restored_count = 0;
+    let mut errors = Vec::new();
+
+    for backup in local_backups {
+        match restore_local_scope_takeover(db, &backup.id) {
+            Ok(_) => restored_count += 1,
+            Err(e) => errors.push(format!(
+                "Failed to restore local scope for {:?}: {}",
+                backup.project_path, e
+            )),
+        }
+    }
+
+    Ok((restored_count, errors))
 }

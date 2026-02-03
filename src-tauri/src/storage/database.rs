@@ -168,6 +168,9 @@ impl Database {
         // Migration: Add scope and project_path to takeover backups (Story 11.16)
         Self::run_mcp_takeover_scope_migration(conn)?;
 
+        // Migration: Add 'local' scope support (Story 11.21)
+        Self::run_mcp_takeover_local_scope_migration(conn)?;
+
         // Migration: Add default_tool_policy to mcp_services (Story 11.9 Phase 2)
         Self::run_mcp_default_tool_policy_migration(conn)?;
 
@@ -763,6 +766,85 @@ impl Database {
                 "#,
             )?;
         }
+
+        Ok(())
+    }
+
+    /// Migration for MCP takeover local scope support (Story 11.21)
+    ///
+    /// Updates the scope CHECK constraint to include 'local' value.
+    /// SQLite doesn't support ALTER CONSTRAINT, so we need to:
+    /// 1. Create a new table with updated constraint
+    /// 2. Copy data from old table
+    /// 3. Drop old table
+    /// 4. Rename new table
+    ///
+    /// Local scope is used for Claude Code's ~/.claude.json projects.{path}.mcpServers
+    fn run_mcp_takeover_local_scope_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if migration is needed by trying to insert and rollback a 'local' scope value
+        // We use a different approach: check if 'local' is already allowed by looking at table_info
+        // Since SQLite stores CHECK constraint in sql column of sqlite_master, we check there
+        let table_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='mcp_takeover_backups'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
+
+        // If 'local' is already in the CHECK constraint, skip migration
+        if table_sql.contains("'local'") {
+            return Ok(());
+        }
+
+        // If scope column doesn't exist yet, skip this migration (will be created by scope_migration)
+        let has_scope: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('mcp_takeover_backups') WHERE name = 'scope'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_scope {
+            return Ok(());
+        }
+
+        // SQLite doesn't allow modifying CHECK constraints, so we recreate the table
+        conn.execute_batch(
+            r#"
+            -- Story 11.21: 添加 'local' scope 支持
+            -- 1. 创建临时表（带更新的 CHECK 约束）
+            CREATE TABLE mcp_takeover_backups_new (
+                id TEXT PRIMARY KEY,
+                tool_type TEXT NOT NULL CHECK(tool_type IN ('claude_code', 'cursor', 'codex', 'gemini_cli')),
+                original_path TEXT NOT NULL,
+                backup_path TEXT NOT NULL,
+                taken_over_at TEXT NOT NULL,
+                restored_at TEXT,
+                status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'restored')),
+                scope TEXT NOT NULL DEFAULT 'user' CHECK(scope IN ('user', 'project', 'local')),
+                project_path TEXT
+            );
+
+            -- 2. 复制数据
+            INSERT INTO mcp_takeover_backups_new
+                SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+                FROM mcp_takeover_backups;
+
+            -- 3. 删除旧表
+            DROP TABLE mcp_takeover_backups;
+
+            -- 4. 重命名新表
+            ALTER TABLE mcp_takeover_backups_new RENAME TO mcp_takeover_backups;
+
+            -- 5. 重建索引
+            CREATE INDEX IF NOT EXISTS idx_takeover_status ON mcp_takeover_backups(status);
+            CREATE INDEX IF NOT EXISTS idx_takeover_tool ON mcp_takeover_backups(tool_type);
+            CREATE INDEX IF NOT EXISTS idx_takeover_scope ON mcp_takeover_backups(scope);
+            CREATE INDEX IF NOT EXISTS idx_takeover_project_path ON mcp_takeover_backups(project_path);
+            "#,
+        )?;
 
         Ok(())
     }
@@ -2250,5 +2332,82 @@ mod tests {
 
         assert!(adapter_id.is_none());
         assert!(config_path.is_none());
+    }
+
+    // ===== Story 11.21: Local Scope 迁移测试 =====
+
+    #[test]
+    fn test_mcp_takeover_backups_local_scope_check_constraint() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 验证可以插入 'local' scope
+        let result = db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope, project_path) VALUES ('test-local-1', 'claude_code', '/home/user/.claude.json', '/home/user/.mantra/backups/test.backup', '2026-02-03T10:00:00Z', 'active', 'local', '/home/user/project-a')",
+            [],
+        );
+        assert!(result.is_ok(), "Should be able to insert 'local' scope: {:?}", result.err());
+
+        // 验证读取
+        let scope: String = db
+            .connection()
+            .query_row(
+                "SELECT scope FROM mcp_takeover_backups WHERE id = 'test-local-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(scope, "local");
+
+        // 验证无效 scope 仍然被拒绝
+        let invalid = db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope) VALUES ('test-invalid', 'claude_code', '/path', '/backup', '2026-02-03T10:00:00Z', 'active', 'invalid_scope')",
+            [],
+        );
+        assert!(invalid.is_err(), "Should reject invalid scope value");
+    }
+
+    #[test]
+    fn test_mcp_takeover_backups_query_by_local_scope() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 插入多种 scope 的备份
+        db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope, project_path) VALUES ('user-1', 'claude_code', '~/.claude.json', '/backup/user.backup', '2026-02-03T10:00:00Z', 'active', 'user', NULL)",
+            [],
+        ).unwrap();
+        db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope, project_path) VALUES ('project-1', 'claude_code', '/proj/.mcp.json', '/backup/proj.backup', '2026-02-03T10:01:00Z', 'active', 'project', '/proj')",
+            [],
+        ).unwrap();
+        db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope, project_path) VALUES ('local-1', 'claude_code', '~/.claude.json', '/backup/local-a.backup', '2026-02-03T10:02:00Z', 'active', 'local', '/home/user/project-a')",
+            [],
+        ).unwrap();
+        db.connection().execute(
+            "INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, status, scope, project_path) VALUES ('local-2', 'claude_code', '~/.claude.json', '/backup/local-b.backup', '2026-02-03T10:03:00Z', 'active', 'local', '/home/user/project-b')",
+            [],
+        ).unwrap();
+
+        // 只查询 local scope
+        let local_count: i32 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM mcp_takeover_backups WHERE scope = 'local' AND status = 'active'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(local_count, 2);
+
+        // 按 project_path 查询 local scope
+        let local_a: Option<String> = db
+            .connection()
+            .query_row(
+                "SELECT id FROM mcp_takeover_backups WHERE scope = 'local' AND project_path = '/home/user/project-a'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        assert_eq!(local_a, Some("local-1".to_string()));
     }
 }

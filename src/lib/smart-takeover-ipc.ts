@@ -16,7 +16,7 @@ import { invoke } from "@/lib/ipc-adapter";
 // ===== 类型定义 =====
 
 /** 接管 Scope */
-export type TakeoverScope = "project" | "user";
+export type TakeoverScope = "project" | "user" | "local";
 
 /** 配置摘要 */
 export interface ServiceConfigSummary {
@@ -153,9 +153,19 @@ export interface ToolScanResult {
   adapter_id: string;
   installed: boolean;
   user_scope: ScopeScanResult | null;
-  local_scopes: Array<{ project_path: string; service_count: number; service_names: string[] }>;
+  local_scopes: LocalScopeScanResult[];
   project_scope: ScopeScanResult | null;
   total_service_count: number;
+}
+
+/** Local Scope 扫描结果 (Story 11.21) */
+export interface LocalScopeScanResult {
+  /** 项目路径 (projects 的 key) */
+  project_path: string;
+  /** 检测到的服务数量 */
+  service_count: number;
+  /** 检测到的服务名称列表 */
+  service_names: string[];
 }
 
 /** 所有工具的扫描结果 */
@@ -187,8 +197,18 @@ export interface ToolTakeoverPreview {
   selected: boolean;
   user_scope_preview: ScopeTakeoverPreview | null;
   project_scope_preview: ScopeTakeoverPreview | null;
+  /** Local Scope 扫描结果列表 (Story 11.21: Claude Code 特有) */
+  local_scopes: LocalScopeScanResult[];
   total_service_count: number;
   conflict_count: number;
+}
+
+/** Local Scope 接管预览 (Story 11.21) - 用于前端展示 */
+export interface LocalScopeTakeoverPreview {
+  /** 项目路径 */
+  project_path: string;
+  /** Scope 接管预览 */
+  preview: ScopeTakeoverPreview;
 }
 
 /** 全工具接管预览 */
@@ -321,6 +341,55 @@ export async function executeFullToolTakeover(
     preview,
     decisions,
   });
+}
+
+// ===== Story 11.21: Local Scope IPC 函数 =====
+
+/**
+ * 扫描 Claude Code Local Scopes
+ *
+ * @returns Local Scope 扫描结果列表
+ */
+export async function scanLocalScopes(): Promise<LocalScopeScanResult[]> {
+  return invoke<LocalScopeScanResult[]>("scan_local_scopes", {});
+}
+
+/**
+ * 恢复单个 Local Scope 接管
+ *
+ * @param backupId - 备份记录 ID
+ */
+export async function restoreLocalScopeTakeover(backupId: string): Promise<void> {
+  return invoke<void>("restore_local_scope_takeover_cmd", { backupId });
+}
+
+/**
+ * 恢复所有 Local Scope 接管
+ *
+ * @returns [恢复成功数量, 错误列表]
+ */
+export async function restoreAllLocalScopeTakeovers(): Promise<[number, string[]]> {
+  return invoke<[number, string[]]>("restore_all_local_scope_takeovers_cmd", {});
+}
+
+/**
+ * 获取活跃的 Local Scope 接管列表
+ */
+export async function getActiveLocalScopeTakeovers(): Promise<TakeoverBackup[]> {
+  return invoke<TakeoverBackup[]>("get_active_local_scope_takeovers", {});
+}
+
+/** 接管备份记录 (Story 11.21) */
+export interface TakeoverBackup {
+  id: string;
+  toolType: string;
+  scope: TakeoverScope;
+  projectPath: string | null;
+  originalPath: string;
+  backupPath: string;
+  takenOverAt: string;
+  restoredAt: string | null;
+  status: "active" | "restored";
 }
 
 // ===== 辅助函数 =====
@@ -462,6 +531,8 @@ export function convertToTakeoverPreview(
       auto_skip.push(...tool.project_scope_preview.auto_skip);
       needs_decision.push(...tool.project_scope_preview.needs_decision);
     }
+    // Note: Local scopes (Story 11.21) are handled by the backend during execution
+    // The local_scopes field contains scan results, not preview data
   }
 
   return {

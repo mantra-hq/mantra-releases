@@ -488,4 +488,175 @@ impl<'a> ImportExecutor<'a> {
         );
         path.parent().unwrap_or(Path::new(".")).join(backup_name)
     }
+
+    // ===== Story 11.21: Local Scope 备份接管 =====
+
+    /// 执行 Local Scope 配置接管 (Story 11.21 - Task 4)
+    ///
+    /// Local Scope 是 Claude Code 特有的功能，配置存储在 ~/.claude.json 的
+    /// `projects.{path}.mcpServers` 中。接管流程：
+    ///
+    /// 1. 提取指定项目的 mcpServers JSON 片段
+    /// 2. 保存到独立的备份文件
+    /// 3. 创建 TakeoverBackup 记录（scope=Local）
+    /// 4. 清空该项目的 mcpServers（保留项目配置的其他字段）
+    ///
+    /// # Arguments
+    /// * `user_config_path` - ~/.claude.json 的路径
+    /// * `project_path` - 要接管的项目路径（projects 的 key）
+    ///
+    /// # Returns
+    /// 创建的备份 ID
+    pub(super) fn apply_local_scope_takeover(
+        &mut self,
+        user_config_path: &Path,
+        project_path: &str,
+    ) -> Result<String, StorageError> {
+        use crate::services::mcp_adapters::ClaudeAdapter;
+
+        let adapter = ClaudeAdapter;
+
+        // 1. 检查是否已有该项目的 local scope 备份
+        if let Ok(Some(existing)) = self.db.get_active_takeover_by_tool_and_scope(
+            &ToolType::ClaudeCode,
+            &TakeoverScope::Local,
+            Some(project_path),
+        ) {
+            // 已存在活跃的 local scope 备份，直接返回已有记录的 ID
+            return Ok(existing.id);
+        }
+
+        // 2. 读取配置文件内容
+        let config_content = if user_config_path.exists() {
+            fs::read_to_string(user_config_path).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to read config file: {}", e))
+            })?
+        } else {
+            return Err(StorageError::InvalidInput(format!(
+                "Config file not found: {:?}",
+                user_config_path
+            )));
+        };
+
+        // 3. 提取该项目的 mcpServers 用于备份
+        let backup_mcp_servers = adapter
+            .extract_local_scope_backup(&config_content, project_path)
+            .map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to extract local scope backup: {}", e))
+            })?;
+
+        // 如果 mcpServers 为空，无需备份
+        if backup_mcp_servers == serde_json::json!({}) {
+            return Err(StorageError::InvalidInput(format!(
+                "No mcpServers found for project: {}",
+                project_path
+            )));
+        }
+
+        // 4. 生成备份文件路径
+        //    格式: ~/.mantra/backups/local-scope/<project-hash>.json
+        let backup_path = self.generate_local_scope_backup_path(project_path);
+
+        // 5. 确保备份目录存在
+        if let Some(parent) = backup_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to create backup directory: {}", e))
+            })?;
+        }
+
+        // 6. 保存备份内容（JSON 片段）
+        let backup_content = serde_json::to_string_pretty(&backup_mcp_servers).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to serialize backup content: {}", e))
+        })?;
+        fs::write(&backup_path, backup_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to write backup file: {}", e))
+        })?;
+
+        // 7. 清空该项目的 mcpServers
+        let new_content = adapter
+            .clear_local_scope_for_project(&config_content, project_path)
+            .map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to clear local scope: {}", e))
+            })?;
+
+        // 8. 写回配置文件
+        fs::write(user_config_path, new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        })?;
+
+        // 9. 创建备份记录并存储到数据库
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            user_config_path.to_path_buf(),
+            backup_path.clone(),
+            TakeoverScope::Local,
+            Some(PathBuf::from(project_path)),
+        );
+        let backup_id = backup.id.clone();
+        self.db.create_takeover_backup(&backup)?;
+
+        // 10. 添加到备份管理器（用于可能的回滚）
+        self.backup_manager.add_backup_path(backup_path);
+
+        Ok(backup_id)
+    }
+
+    /// 批量执行 Local Scope 接管 (Story 11.21 - Task 5)
+    ///
+    /// 接管 Claude Code ~/.claude.json 中所有 local scope 项目
+    ///
+    /// # Arguments
+    /// * `user_config_path` - ~/.claude.json 的路径
+    /// * `project_paths` - 要接管的项目路径列表
+    ///
+    /// # Returns
+    /// (成功的备份 ID 列表, 失败的项目路径和错误)
+    pub(super) fn apply_all_local_scope_takeovers(
+        &mut self,
+        user_config_path: &Path,
+        project_paths: &[String],
+    ) -> (Vec<String>, Vec<(String, String)>) {
+        let mut backup_ids = Vec::new();
+        let mut errors = Vec::new();
+
+        for project_path in project_paths {
+            match self.apply_local_scope_takeover(user_config_path, project_path) {
+                Ok(backup_id) => backup_ids.push(backup_id),
+                Err(e) => errors.push((project_path.clone(), e.to_string())),
+            }
+        }
+
+        (backup_ids, errors)
+    }
+
+    /// 生成 Local Scope 备份文件路径
+    ///
+    /// 格式: ~/.mantra/backups/local-scope/<project-hash>-<timestamp>.json
+    fn generate_local_scope_backup_path(&self, project_path: &str) -> PathBuf {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        // 生成项目路径的 hash（避免路径中的特殊字符）
+        let mut hasher = DefaultHasher::new();
+        project_path.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let backup_name = format!("{:x}-{}.json", hash, timestamp);
+
+        // 备份目录: ~/.mantra/backups/local-scope/
+        let backup_dir = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".mantra")
+            .join("backups")
+            .join("local-scope");
+
+        backup_dir.join(backup_name)
+    }
+
+    /// 测试辅助方法：暴露 generate_local_scope_backup_path 用于测试
+    #[cfg(test)]
+    pub fn generate_local_scope_backup_path_for_test(&self, project_path: &str) -> PathBuf {
+        self.generate_local_scope_backup_path(project_path)
+    }
 }

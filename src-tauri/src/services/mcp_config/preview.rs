@@ -224,11 +224,12 @@ pub(crate) fn create_config_summary(detected: &DetectedService) -> ServiceConfig
     }
 }
 
-/// 将 ConfigScope 转换为 TakeoverScope (Story 11.19)
+/// 将 ConfigScope 转换为 TakeoverScope (Story 11.19, 11.21)
 fn config_scope_to_takeover_scope(scope: &ConfigScope) -> TakeoverScope {
     match scope {
         ConfigScope::Project => TakeoverScope::Project,
         ConfigScope::User => TakeoverScope::User,
+        ConfigScope::Local => TakeoverScope::Local,
     }
 }
 

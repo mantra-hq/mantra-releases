@@ -383,6 +383,9 @@ pub struct TakeoverStats {
     pub takeover_count: usize,
     /// 处理的工具数量
     pub tool_count: usize,
+    /// 处理的 Local Scope 项目数量 (Story 11.21)
+    #[serde(default)]
+    pub local_scope_count: usize,
 }
 
 impl FullTakeoverResult {

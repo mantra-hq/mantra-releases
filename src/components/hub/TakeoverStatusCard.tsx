@@ -70,9 +70,9 @@ import { SourceIcon } from "@/components/import/SourceIcons";
 type ToolType = "claude_code" | "cursor" | "codex" | "gemini_cli";
 
 /**
- * 接管作用域 (Story 11.16: AC1, AC2)
+ * 接管作用域 (Story 11.16: AC1, AC2; Story 11.21: Local Scope)
  */
-type TakeoverScope = "user" | "project";
+type TakeoverScope = "user" | "project" | "local";
 
 /**
  * 接管备份记录
@@ -251,7 +251,9 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   // 分组展开状态
   const [userExpanded, setUserExpanded] = useState(true);
   const [projectExpanded, setProjectExpanded] = useState(false);
+  const [localExpanded, setLocalExpanded] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [expandedLocalProjects, setExpandedLocalProjects] = useState<Set<string>>(new Set());
 
   // 文件预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -267,6 +269,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   const groupedBackups = useMemo(() => {
     const userBackups = backups.filter((b) => b.scope === "user");
     const projectBackups = backups.filter((b) => b.scope === "project");
+    const localBackups = backups.filter((b) => b.scope === "local");
 
     // 项目级按 projectPath 子分组
     const projectGroups = new Map<string, TakeoverBackup[]>();
@@ -276,10 +279,20 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
       projectGroups.set(path, [...existing, backup]);
     }
 
+    // Local Scope 按 projectPath 子分组 (Story 11.21)
+    const localGroups = new Map<string, TakeoverBackup[]>();
+    for (const backup of localBackups) {
+      const path = backup.projectPath || "unknown";
+      const existing = localGroups.get(path) || [];
+      localGroups.set(path, [...existing, backup]);
+    }
+
     return {
       user: userBackups,
       project: projectGroups,
       projectCount: projectBackups.length,
+      local: localGroups,
+      localCount: localBackups.length,
     };
   }, [backups]);
 
@@ -363,6 +376,19 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     });
   }, []);
 
+  // 切换 Local Scope 项目分组展开 (Story 11.21)
+  const toggleLocalProjectGroup = useCallback((projectPath: string) => {
+    setExpandedLocalProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectPath)) {
+        next.delete(projectPath);
+      } else {
+        next.add(projectPath);
+      }
+      return next;
+    });
+  }, []);
+
   // 初始加载
   useEffect(() => {
     loadBackups();
@@ -385,6 +411,22 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
 
       {/* 工具名称 */}
       <span className="font-medium w-24 shrink-0">{getToolLabel(backup.toolType)}</span>
+
+      {/* Local Scope 项目路径标签 (Story 11.21) */}
+      {backup.scope === "local" && backup.projectPath && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="text-[10px] shrink-0 max-w-[120px] truncate text-emerald-500 border-emerald-500/30">
+                {getProjectName(backup.projectPath)}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">{backup.projectPath}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
 
       {/* 当前配置路径 + 预览按钮 */}
       <div className="flex items-center gap-1 flex-1 min-w-0">
@@ -472,9 +514,15 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>{t("hub.takeover.restoreConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("hub.takeover.restoreConfirmDescription", {
-                tool: getToolLabel(backup.toolType),
-              })}
+              {backup.scope === "local"
+                ? t("hub.takeover.restoreLocalScopeDescription", {
+                    tool: getToolLabel(backup.toolType),
+                    project: backup.projectPath ? getProjectName(backup.projectPath) : "",
+                    defaultValue: `Restore {{tool}} local scope configuration for project "{{project}}". Only this project's MCP services will be restored, other projects and user scope will not be affected.`,
+                  })
+                : t("hub.takeover.restoreConfirmDescription", {
+                    tool: getToolLabel(backup.toolType),
+                  })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4 space-y-2 text-sm">
@@ -490,6 +538,17 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               <span>{t("hub.takeover.restoreWillDo3")}</span>
             </div>
+            {/* Local Scope 影响范围提示 (Story 11.21) */}
+            {backup.scope === "local" && backup.projectPath && (
+              <div className="mt-2 p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                <p className="text-xs text-emerald-400">
+                  {t("hub.takeover.restoreLocalScopeHint", {
+                    project: backup.projectPath,
+                    defaultValue: "Scope: only {{project}} local MCP configuration",
+                  })}
+                </p>
+              </div>
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
@@ -592,6 +651,60 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                             </Tooltip>
                           </TooltipProvider>
                           <Badge variant="outline" className="ml-auto text-xs">
+                            {items.length}
+                          </Badge>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pl-4 mt-0.5 space-y-0.5">
+                          {items.map(renderBackupItem)}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* Local Scope 配置分组 (Story 11.21) */}
+              {groupedBackups.localCount > 0 && (
+                <Collapsible open={localExpanded} onOpenChange={setLocalExpanded}>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-muted/50 rounded-md text-sm font-medium">
+                    {localExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    <FolderOpen className="h-4 w-4 text-emerald-500" />
+                    <span>{t("hub.takeover.localLevel", "Local Scope")}</span>
+                    <Badge variant="secondary" className="ml-auto text-xs bg-emerald-500/10 text-emerald-500">
+                      {groupedBackups.localCount}
+                    </Badge>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pl-4 mt-1 space-y-1 border-l-2 border-emerald-500/30 ml-2">
+                    {Array.from(groupedBackups.local.entries()).map(([projectPath, items]) => (
+                      <Collapsible
+                        key={projectPath}
+                        open={expandedLocalProjects.has(projectPath)}
+                        onOpenChange={() => toggleLocalProjectGroup(projectPath)}
+                      >
+                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-1.5 hover:bg-muted/50 rounded text-sm">
+                          {expandedLocalProjects.has(projectPath) ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                          <FolderOpen className="h-3.5 w-3.5 text-emerald-500/70" />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground truncate">
+                                  {getProjectName(projectPath)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                <p className="text-xs">{projectPath}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <Badge variant="outline" className="ml-auto text-xs text-emerald-500 border-emerald-500/30">
                             {items.length}
                           </Badge>
                         </CollapsibleTrigger>

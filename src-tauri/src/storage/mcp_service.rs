@@ -979,12 +979,12 @@ impl Database {
         Ok(backup)
     }
 
-    /// 按工具类型和作用域获取活跃的接管备份 (Story 11.16)
+    /// 按工具类型和作用域获取活跃的接管备份 (Story 11.16, 11.21)
     ///
     /// # Arguments
     /// * `tool_type` - 工具类型
     /// * `scope` - 接管作用域
-    /// * `project_path` - 项目路径（仅 project 作用域需要）
+    /// * `project_path` - 项目路径（project/local 作用域需要）
     pub fn get_active_takeover_by_tool_and_scope(
         &self,
         tool_type: &ToolType,
@@ -1003,16 +1003,17 @@ impl Database {
                 stmt.query_row([tool_type.as_str()], parse_takeover_backup_row)
                     .optional()?
             }
-            TakeoverScope::Project => {
+            TakeoverScope::Project | TakeoverScope::Local => {
+                // Project 和 Local scope 都需要按 project_path 查询
                 let mut stmt = self.connection().prepare(
                     r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
                        FROM mcp_takeover_backups
-                       WHERE tool_type = ?1 AND status = 'active' AND scope = 'project' AND project_path = ?2
+                       WHERE tool_type = ?1 AND status = 'active' AND scope = ?2 AND project_path = ?3
                        ORDER BY taken_over_at DESC
                        LIMIT 1"#,
                 )?;
                 stmt.query_row(
-                    params![tool_type.as_str(), project_path.unwrap_or("")],
+                    params![tool_type.as_str(), scope.as_str(), project_path.unwrap_or("")],
                     parse_takeover_backup_row,
                 )
                 .optional()?
@@ -1039,6 +1040,27 @@ impl Database {
 
         let backups = stmt
             .query_map([project_path], parse_takeover_backup_row)?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(backups)
+    }
+
+    /// 获取所有 local scope 的活跃接管备份 (Story 11.21)
+    ///
+    /// 用于列出 Claude Code 所有项目的 local scope 接管状态
+    pub fn get_active_local_scope_takeovers(
+        &self,
+    ) -> Result<Vec<TakeoverBackup>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+               FROM mcp_takeover_backups
+               WHERE scope = 'local' AND status = 'active'
+               ORDER BY project_path ASC, taken_over_at DESC"#,
+        )?;
+
+        let backups = stmt
+            .query_map([], parse_takeover_backup_row)?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -2339,5 +2361,124 @@ mod tests {
         let policy = ToolPolicy::default();
         let result = db.update_service_default_policy("nonexistent-id", Some(&policy));
         assert!(result.is_err());
+    }
+
+    // ===== Story 11.21: Local Scope 存储测试 =====
+
+    #[test]
+    fn test_create_takeover_backup_local_scope() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.mantra/backups/project-a-local.backup"),
+            TakeoverScope::Local,
+            Some(PathBuf::from("/home/user/project-a")),
+        );
+
+        let result = db.create_takeover_backup(&backup);
+        assert!(result.is_ok(), "Should successfully create local scope backup: {:?}", result.err());
+
+        // 验证保存的数据
+        let retrieved = db.get_takeover_backup_by_id(&backup.id).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.scope, TakeoverScope::Local);
+        assert_eq!(retrieved.project_path, Some(PathBuf::from("/home/user/project-a")));
+        assert!(retrieved.is_local_level());
+    }
+
+    #[test]
+    fn test_get_active_takeover_by_tool_and_scope_local() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建 user scope 备份
+        let user_backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.mantra/backups/user.backup"),
+            TakeoverScope::User,
+            None,
+        );
+        db.create_takeover_backup(&user_backup).unwrap();
+
+        // 创建 local scope 备份
+        let local_backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.mantra/backups/local-a.backup"),
+            TakeoverScope::Local,
+            Some(PathBuf::from("/home/user/project-a")),
+        );
+        db.create_takeover_backup(&local_backup).unwrap();
+
+        // 查询 local scope
+        let result = db.get_active_takeover_by_tool_and_scope(
+            &ToolType::ClaudeCode,
+            &TakeoverScope::Local,
+            Some("/home/user/project-a"),
+        ).unwrap();
+
+        assert!(result.is_some());
+        let retrieved = result.unwrap();
+        assert_eq!(retrieved.id, local_backup.id);
+        assert_eq!(retrieved.scope, TakeoverScope::Local);
+
+        // 查询不存在的 local scope 项目
+        let not_found = db.get_active_takeover_by_tool_and_scope(
+            &ToolType::ClaudeCode,
+            &TakeoverScope::Local,
+            Some("/home/user/project-nonexistent"),
+        ).unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_get_active_local_scope_takeovers() {
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建多个 local scope 备份
+        for (i, project) in ["project-a", "project-b", "project-c"].iter().enumerate() {
+            let backup = TakeoverBackup::new_with_scope(
+                ToolType::ClaudeCode,
+                PathBuf::from("/home/user/.claude.json"),
+                PathBuf::from(format!("/home/user/.mantra/backups/{}.backup", project)),
+                TakeoverScope::Local,
+                Some(PathBuf::from(format!("/home/user/{}", project))),
+            );
+            db.create_takeover_backup(&backup).unwrap();
+
+            // project-c 设为 restored
+            if i == 2 {
+                db.update_backup_status_restored(&backup.id).unwrap();
+            }
+        }
+
+        // 创建一个 user scope 备份（应被排除）
+        let user_backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/home/user/.claude.json"),
+            PathBuf::from("/home/user/.mantra/backups/user.backup"),
+            TakeoverScope::User,
+            None,
+        );
+        db.create_takeover_backup(&user_backup).unwrap();
+
+        // 查询所有活跃的 local scope 备份
+        let local_backups = db.get_active_local_scope_takeovers().unwrap();
+
+        // 应该只有 2 个（project-c 已恢复，user scope 不算）
+        assert_eq!(local_backups.len(), 2);
+
+        // 验证按 project_path 排序
+        assert!(local_backups[0].project_path.as_ref().unwrap().to_string_lossy().contains("project-a"));
+        assert!(local_backups[1].project_path.as_ref().unwrap().to_string_lossy().contains("project-b"));
+
+        // 验证都是 local scope
+        for backup in &local_backups {
+            assert!(backup.is_local_level());
+            assert_eq!(backup.tool_type, ToolType::ClaudeCode);
+        }
     }
 }

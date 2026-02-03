@@ -55,6 +55,7 @@ impl McpToolAdapter for CursorAdapter {
                         source_file: path.to_path_buf(),
                         adapter_id: self.id().to_string(),
                         scope,
+                        local_project_path: None,
                     });
                 }
                 // 跳过 URL 模式的服务

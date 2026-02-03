@@ -55,6 +55,8 @@ import {
   CircleSlash,
   User,
   FolderGit2,
+  FolderOpen,
+  Server,
 } from "lucide-react";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import { ConfigDiffView } from "./ConfigDiffView";
@@ -67,6 +69,7 @@ import {
   type FullToolTakeoverPreview,
   type ToolTakeoverPreview,
   type ScopeTakeoverPreview,
+  type LocalScopeScanResult,
   type TakeoverDecision,
   type TakeoverDecisionOption,
   type ConflictDetail,
@@ -115,6 +118,8 @@ function getScopeLabel(scope: string, t: (key: string, fallback: string) => stri
       return t("hub.smartTakeover.scopeProject", "Project");
     case "user":
       return t("hub.smartTakeover.scopeUser", "User");
+    case "local":
+      return t("hub.smartTakeover.scopeLocal", "Local");
     default:
       return scope;
   }
@@ -227,6 +232,7 @@ export function SmartTakeoverSheet({
       if (tool.project_scope_preview) {
         conflicts.push(...tool.project_scope_preview.needs_decision);
       }
+      // Note: Local scopes (Story 11.21) are scan results only, no conflict data
     }
     return conflicts;
   }, [fullPreview, selectedTools]);
@@ -647,6 +653,14 @@ function ToolPreviewCard({
               t={t}
             />
           )}
+
+          {/* Local Scopes (Story 11.21) */}
+          {tool.local_scopes && tool.local_scopes.length > 0 && (
+            <LocalScopeScanGroup
+              localScopes={tool.local_scopes}
+              t={t}
+            />
+          )}
         </div>
       )}
     </div>
@@ -757,6 +771,120 @@ function ScopePreviewSection({
             ))}
           </div>
         )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ===== Local Scope 扫描结果分组 (Story 11.21) =====
+
+interface LocalScopeScanGroupProps {
+  localScopes: LocalScopeScanResult[];
+  t: (key: string, fallback: string, opts?: Record<string, unknown>) => string;
+}
+
+/**
+ * 从完整路径中提取项目名称
+ */
+function getProjectNameFromPath(projectPath: string): string {
+  return projectPath.split("/").pop() || projectPath;
+}
+
+/**
+ * 缩短路径显示
+ */
+function shortenLocalPath(path: string): string {
+  const homeDir = path.match(/^\/(?:home\/[^/]+|Users\/[^/]+)/)?.[0];
+  if (homeDir) {
+    return path.replace(homeDir, "~");
+  }
+  return path;
+}
+
+function LocalScopeScanGroup({
+  localScopes,
+  t,
+}: LocalScopeScanGroupProps) {
+  const [isGroupOpen, setIsGroupOpen] = useState(true);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const totalServices = localScopes.reduce((sum, ls) => sum + ls.service_count, 0);
+
+  const togglePath = useCallback((path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  return (
+    <Collapsible open={isGroupOpen} onOpenChange={setIsGroupOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors">
+        {isGroupOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <FolderGit2 className="h-4 w-4 text-emerald-500" />
+        <span className="text-sm font-medium">
+          {t("hub.smartTakeover.scopeLocal", "Local Scope")}
+        </span>
+        <Badge variant="outline" className="ml-auto text-xs">
+          {localScopes.length} {t("hub.smartTakeover.projects", "projects")}
+        </Badge>
+        <Badge variant="secondary" className="text-xs bg-emerald-500/10 text-emerald-500">
+          {totalServices}
+        </Badge>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="pl-4 space-y-1 pt-1">
+        {localScopes.map((localScope) => {
+          const isExpanded = expandedPaths.has(localScope.project_path);
+
+          return (
+            <Collapsible
+              key={localScope.project_path}
+              open={isExpanded}
+              onOpenChange={() => togglePath(localScope.project_path)}
+            >
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-1.5 rounded hover:bg-muted/50 transition-colors">
+                {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <FolderOpen className="h-3.5 w-3.5 text-emerald-500/70" />
+                <span className="text-sm truncate" title={localScope.project_path}>
+                  {getProjectNameFromPath(localScope.project_path)}
+                </span>
+                <code className="text-[10px] text-muted-foreground truncate hidden sm:inline">
+                  {shortenLocalPath(localScope.project_path)}
+                </code>
+                <Badge variant="outline" className="ml-auto text-xs shrink-0 text-emerald-500 border-emerald-500/30">
+                  {localScope.service_count} {t("hub.smartTakeover.services", "services")}
+                </Badge>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent className="pl-6 space-y-1 pt-1">
+                {/* 显示服务名称列表 */}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Server className="h-3 w-3 text-emerald-500" />
+                    <span>{t("hub.smartTakeover.localServices", "MCP Services")}</span>
+                  </div>
+                  {localScope.service_names.map((serviceName) => (
+                    <div
+                      key={`${localScope.project_path}-${serviceName}`}
+                      className="flex items-center justify-between p-2 rounded-md bg-muted/30 text-sm"
+                    >
+                      <span>{serviceName}</span>
+                      <Badge variant="outline" className="text-xs text-emerald-500 border-emerald-500/50">
+                        {t("hub.smartTakeover.willTakeover", "Will takeover")}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        })}
       </CollapsibleContent>
     </Collapsible>
   );

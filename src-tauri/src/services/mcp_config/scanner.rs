@@ -62,7 +62,8 @@ pub fn scan_mcp_configs(project_path: Option<&Path>) -> ScanResult {
                         continue;
                     }
                 }
-                ConfigScope::User => {
+                ConfigScope::User | ConfigScope::Local => {
+                    // Local scope 在 scan_patterns 中不会出现，但为完整性处理
                     if let Some(ref home) = home_dir {
                         if pattern.starts_with("~/") {
                             home.join(&pattern[2..])
@@ -190,7 +191,8 @@ pub fn scan_all_tool_configs(project_path: &Path) -> crate::models::mcp::AllTool
             for (scope, pattern) in adapter.scan_patterns() {
                 let path = match scope {
                     ConfigScope::Project => project_path.join(&pattern),
-                    ConfigScope::User => {
+                    ConfigScope::User | ConfigScope::Local => {
+                        // Local scope 在 scan_patterns 中不会出现，但为完整性处理
                         if let Some(ref home) = home_dir {
                             if pattern.starts_with("~/") {
                                 home.join(&pattern[2..])
@@ -232,12 +234,38 @@ pub fn scan_all_tool_configs(project_path: &Path) -> crate::models::mcp::AllTool
                     ConfigScope::Project => {
                         result.project_scope = Some(scope_result);
                     }
+                    ConfigScope::Local => {
+                        // Local scope 不在 scan_patterns 中，跳过
+                        // Local scope 由下面的 Claude Code 特殊处理逻辑处理
+                    }
                 }
             }
         }
 
-        // Note: Local Scope (Claude Code projects.*) 将在 Story 11-21 中实现
-        // 目前 local_scopes 保持为空
+        // Story 11.21: 扫描 Claude Code Local Scope (projects.*)
+        // 只有 Claude Code 支持 Local Scope
+        if tool_type == ToolType::ClaudeCode {
+            let user_config = tool_type.get_user_config_path();
+            if user_config.exists() {
+                if let Ok(content) = fs::read_to_string(&user_config) {
+                    use crate::services::mcp_adapters::ClaudeAdapter;
+                    use crate::models::mcp::LocalScopeScanResult;
+
+                    let adapter = ClaudeAdapter;
+                    if let Ok(local_projects) = adapter.list_local_scope_projects(&content) {
+                        // 转换 LocalScopeProject -> LocalScopeScanResult
+                        result.local_scopes = local_projects
+                            .into_iter()
+                            .map(|p| LocalScopeScanResult {
+                                project_path: p.project_path,
+                                service_count: p.service_count,
+                                service_names: p.service_names,
+                            })
+                            .collect();
+                    }
+                }
+            }
+        }
 
         // 计算总服务数量
         result.update_total_service_count();
@@ -282,6 +310,7 @@ pub fn generate_full_tool_takeover_preview(
             selected: tool_scan.installed, // 默认选中已安装的工具
             user_scope_preview: None,
             project_scope_preview: None,
+            local_scopes: tool_scan.local_scopes.clone(), // Story 11.21
             total_service_count: 0,
             conflict_count: 0,
         };

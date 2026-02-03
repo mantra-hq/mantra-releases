@@ -43,6 +43,11 @@ pub enum TakeoverOperation {
         /// 服务 ID
         service_id: String,
     },
+    /// 创建了 Local Scope 备份 (Story 11.21)
+    LocalScopeBackupCreated {
+        /// 备份记录 ID
+        backup_id: String,
+    },
 }
 
 /// 接管事务
@@ -150,6 +155,11 @@ impl TakeoverTransaction {
             project_id,
             service_id,
         });
+    }
+
+    /// 记录 Local Scope 备份 (Story 11.21)
+    pub fn record_local_scope_backup(&mut self, backup_id: String) {
+        self.add_operation(TakeoverOperation::LocalScopeBackupCreated { backup_id });
     }
 
     /// 添加临时文件（提交时清理）
@@ -297,6 +307,19 @@ impl TakeoverTransaction {
                         }
                     }
                     result.success_count += 1;
+                }
+
+                TakeoverOperation::LocalScopeBackupCreated { backup_id } => {
+                    // Story 11.21: 回滚 Local Scope 备份
+                    // 恢复备份并删除备份记录
+                    if let Err(e) = crate::services::mcp_config::restore_local_scope_takeover(db, backup_id) {
+                        result.errors.push(format!(
+                            "Failed to restore local scope backup {}: {}",
+                            backup_id, e
+                        ));
+                    } else {
+                        result.success_count += 1;
+                    }
                 }
             }
         }
