@@ -1779,3 +1779,159 @@ pub async fn execute_smart_takeover_cmd(
 
     Ok(result)
 }
+
+// ===== Story 11.20: 全工具接管命令 =====
+
+/// 生成全工具接管预览
+///
+/// Story 11.20: 全工具自动接管生成 - AC 3
+///
+/// 扫描所有已安装工具的配置，为每个工具每个 Scope 生成接管预览。
+/// 预览包含三档分类：auto_create, auto_skip, needs_decision
+///
+/// # Arguments
+/// * `project_path` - 项目路径
+///
+/// # Returns
+/// 全工具接管预览，按工具分组
+#[tauri::command]
+pub fn preview_full_tool_takeover(
+    project_path: String,
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::FullToolTakeoverPreview, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let path = std::path::Path::new(&project_path);
+
+    crate::services::mcp_config::generate_full_tool_takeover_preview(path, &db)
+        .map_err(AppError::from)
+}
+
+/// 检测已安装的 AI 编程工具
+///
+/// Story 11.20: 全工具自动接管生成 - AC 1
+///
+/// 扫描所有支持的 AI 编程工具，检测其用户级配置文件是否存在
+/// 配置文件存在即视为工具已安装
+///
+/// # Returns
+/// 所有工具的检测结果，包括各工具的安装状态和配置路径
+#[tauri::command]
+pub fn detect_installed_tools() -> crate::models::mcp::AllToolsDetectionResult {
+    crate::services::mcp_config::detect_installed_tools()
+}
+
+/// 扫描所有工具的配置（按工具分组）
+///
+/// Story 11.20: 全工具自动接管生成 - AC 2
+///
+/// # Arguments
+/// * `project_path` - 项目路径
+///
+/// # Returns
+/// 所有工具的扫描结果，按工具分组
+#[tauri::command]
+pub fn scan_all_tool_configs(
+    project_path: String,
+) -> crate::models::mcp::AllToolsScanResult {
+    let path = std::path::Path::new(&project_path);
+    crate::services::mcp_config::scan_all_tool_configs(path)
+}
+
+/// 执行全工具接管（带事务支持）
+///
+/// Story 11.20: 全工具自动接管生成 - Task 5
+///
+/// 遍历所有检测到的工具配置，执行统一的接管操作。
+/// 任意工具接管失败时，回滚所有已执行的操作。
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `preview` - 智能接管预览结果
+/// * `decisions` - 用户决策列表
+///
+/// # Returns
+/// 执行结果（包含回滚状态）
+#[tauri::command]
+pub async fn execute_full_tool_takeover_cmd(
+    project_id: String,
+    preview: TakeoverPreview,
+    decisions: Vec<TakeoverDecision>,
+    state: State<'_, McpState>,
+    gateway_state: State<'_, GatewayServerState>,
+) -> Result<crate::services::mcp_config::FullTakeoverResult, AppError> {
+    use std::collections::HashMap;
+
+    // 1. 检查 Gateway 运行状态
+    let (gateway_running, gateway_url, gateway_token) = {
+        let manager = gateway_state.manager.lock().await;
+        let running = manager.is_running();
+        if running {
+            let port = manager.current_port();
+            let token = manager.auth_token().to_string();
+            let url = format!("http://127.0.0.1:{}", port);
+            (true, Some(url), Some(token))
+        } else {
+            (false, None, None)
+        }
+    };
+
+    // 2. Gateway 必须运行才能执行接管
+    let gateway_url = match gateway_url {
+        Some(url) => url,
+        None => {
+            return Ok(crate::services::mcp_config::FullTakeoverResult::empty()
+                .fail("Gateway 未运行，无法执行接管".to_string()));
+        }
+    };
+
+    // 3. 执行全工具接管
+    let result = {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        crate::services::mcp_config::execute_full_tool_takeover(
+            &preview,
+            &decisions,
+            &project_id,
+            &db,
+            &state.env_manager,
+            &gateway_url,
+            gateway_token.as_deref(),
+            gateway_running,
+        )
+    };
+
+    // 4. 如果成功且有新创建的服务，刷新 aggregator 缓存
+    if result.success && !result.created_service_ids.is_empty() {
+        let manager = gateway_state.manager.lock().await;
+        if let Some(aggregator) = manager.aggregator() {
+            let aggregator = aggregator.clone();
+            drop(manager);
+
+            // 获取环境变量用于刷新
+            let env_vars = {
+                let db = state.db.lock().map_err(|_| AppError::LockError)?;
+                let env_manager = &state.env_manager;
+                db.list_env_variables()
+                    .map_err(|e| AppError::internal(e.to_string()))?
+                    .into_iter()
+                    .filter_map(|var| {
+                        db.get_env_variable(env_manager, &var.name)
+                            .ok()
+                            .flatten()
+                            .map(|value| (var.name, value))
+                    })
+                    .collect::<HashMap<String, String>>()
+            };
+
+            let env_resolver = move |var_name: &str| -> Option<String> {
+                env_vars.get(var_name).cloned()
+            };
+
+            // 刷新新创建的服务
+            for service_id in &result.created_service_ids {
+                let _ = aggregator.refresh_service(service_id, &env_resolver).await;
+            }
+        }
+    }
+
+    Ok(result)
+}

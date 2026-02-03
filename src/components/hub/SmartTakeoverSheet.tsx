@@ -1,8 +1,13 @@
 /**
  * SmartTakeoverSheet - 智能接管预览 Sheet
  * Story 11.19: MCP 智能接管合并引擎 - Task 5
+ * Story 11.20: 全工具自动接管生成 - Task 6
  *
  * 功能：
+ * - 全工具分组展示（按工具类型分组）
+ * - 工具勾选/取消勾选功能
+ * - 显示工具检测状态（已安装/未安装图标）
+ * - 显示各 Scope 的服务数量徽章
  * - 三档分类展示 UI（可直接导入 / 已存在 / 需决策）
  * - 配置冲突 Diff 对比视图
  * - Scope 冲突选择 UI
@@ -26,6 +31,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -46,20 +52,25 @@ import {
   ChevronRight,
   Circle,
   CircleDot,
+  CircleSlash,
+  User,
+  FolderGit2,
 } from "lucide-react";
 import { SourceIcon } from "@/components/import/SourceIcons";
 import { ConfigDiffView } from "./ConfigDiffView";
 import {
-  previewSmartTakeover,
-  executeSmartTakeover,
-  previewNeedsDecision,
-  previewIsEmpty,
-  getPreviewStats,
-  type TakeoverPreview,
+  previewFullToolTakeover,
+  executeFullToolTakeover,
+  fullPreviewIsEmpty,
+  getFullPreviewStats,
+  convertToTakeoverPreview,
+  type FullToolTakeoverPreview,
+  type ToolTakeoverPreview,
+  type ScopeTakeoverPreview,
   type TakeoverDecision,
   type TakeoverDecisionOption,
   type ConflictDetail,
-  type SmartTakeoverResult,
+  type FullTakeoverResult,
 } from "@/lib/smart-takeover-ipc";
 
 // ===== 类型定义 =====
@@ -123,17 +134,16 @@ export function SmartTakeoverSheet({
 
   // 状态
   const [step, setStep] = useState<SheetStep>("loading");
-  const [preview, setPreview] = useState<TakeoverPreview | null>(null);
+  const [fullPreview, setFullPreview] = useState<FullToolTakeoverPreview | null>(null);
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
   const [decisions, setDecisions] = useState<Map<string, TakeoverDecision>>(new Map());
-  const [result, setResult] = useState<SmartTakeoverResult | null>(null);
+  const [result, setResult] = useState<FullTakeoverResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 折叠状态
-  const [autoCreateOpen, setAutoCreateOpen] = useState(true);
-  const [autoSkipOpen, setAutoSkipOpen] = useState(false);
-  const [needsDecisionOpen, setNeedsDecisionOpen] = useState(true);
+  const [toolsExpandedState, setToolsExpandedState] = useState<Record<string, boolean>>({});
 
-  // 加载预览
+  // 加载全工具预览
   const loadPreview = useCallback(async () => {
     setStep("loading");
     setError(null);
@@ -141,15 +151,28 @@ export function SmartTakeoverSheet({
     setResult(null);
 
     try {
-      const previewResult = await previewSmartTakeover(projectId, projectPath);
-      setPreview(previewResult);
+      const previewResult = await previewFullToolTakeover(projectPath);
+      setFullPreview(previewResult);
+
+      // 默认选中所有已安装且有配置的工具
+      const initialSelected = new Set<string>();
+      const initialExpanded: Record<string, boolean> = {};
+      for (const tool of previewResult.tools) {
+        if (tool.installed && tool.total_service_count > 0) {
+          initialSelected.add(tool.adapter_id);
+          initialExpanded[tool.adapter_id] = true;
+        }
+      }
+      setSelectedTools(initialSelected);
+      setToolsExpandedState(initialExpanded);
+
       setStep("preview");
     } catch (err) {
       console.error("[SmartTakeoverSheet] Failed to load preview:", err);
       setError((err as Error).message || t("hub.smartTakeover.errorLoadPreview", "Failed to load preview"));
       setStep("preview");
     }
-  }, [projectId, projectPath, t]);
+  }, [projectPath, t]);
 
   // 打开时加载预览
   useEffect(() => {
@@ -157,6 +180,27 @@ export function SmartTakeoverSheet({
       loadPreview();
     }
   }, [open, loadPreview]);
+
+  // 切换工具选择
+  const toggleToolSelection = useCallback((adapterId: string) => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(adapterId)) {
+        next.delete(adapterId);
+      } else {
+        next.add(adapterId);
+      }
+      return next;
+    });
+  }, []);
+
+  // 切换工具展开状态
+  const toggleToolExpanded = useCallback((adapterId: string) => {
+    setToolsExpandedState((prev) => ({
+      ...prev,
+      [adapterId]: !prev[adapterId],
+    }));
+  }, []);
 
   // 设置决策
   const setDecision = useCallback((serviceName: string, decision: TakeoverDecisionOption, candidateIndex?: number) => {
@@ -171,27 +215,45 @@ export function SmartTakeoverSheet({
     });
   }, []);
 
-  // 检查是否所有冲突都已决策
+  // 获取选中工具的冲突列表
+  const selectedConflicts = useMemo(() => {
+    if (!fullPreview) return [];
+    const conflicts: ConflictDetail[] = [];
+    for (const tool of fullPreview.tools) {
+      if (!selectedTools.has(tool.adapter_id)) continue;
+      if (tool.user_scope_preview) {
+        conflicts.push(...tool.user_scope_preview.needs_decision);
+      }
+      if (tool.project_scope_preview) {
+        conflicts.push(...tool.project_scope_preview.needs_decision);
+      }
+    }
+    return conflicts;
+  }, [fullPreview, selectedTools]);
+
+  // 检查是否所有选中工具的冲突都已决策
   const allDecisionsMade = useMemo(() => {
-    if (!preview) return true;
-    return preview.needs_decision.every((conflict) => decisions.has(conflict.service_name));
-  }, [preview, decisions]);
+    return selectedConflicts.every((conflict) => decisions.has(conflict.service_name));
+  }, [selectedConflicts, decisions]);
 
   // 执行接管
   const handleExecute = useCallback(async () => {
-    if (!preview) return;
+    if (!fullPreview) return;
 
     setStep("executing");
     setError(null);
 
     try {
+      // 转换为标准 TakeoverPreview
+      const preview = convertToTakeoverPreview(fullPreview, Array.from(selectedTools));
       const decisionsList = Array.from(decisions.values());
-      const executeResult = await executeSmartTakeover(projectId, preview, decisionsList);
+
+      const executeResult = await executeFullToolTakeover(projectId, preview, decisionsList);
       setResult(executeResult);
       setStep("result");
 
       // 如果成功，调用回调
-      if (executeResult.errors.length === 0) {
+      if (executeResult.success && executeResult.errors.length === 0) {
         onSuccess?.();
       }
     } catch (err) {
@@ -199,7 +261,7 @@ export function SmartTakeoverSheet({
       setError((err as Error).message || t("hub.smartTakeover.errorExecute", "Failed to execute takeover"));
       setStep("preview");
     }
-  }, [preview, decisions, projectId, onSuccess, t]);
+  }, [fullPreview, selectedTools, decisions, projectId, onSuccess, t]);
 
   // 关闭 Sheet
   const handleClose = useCallback(() => {
@@ -207,7 +269,20 @@ export function SmartTakeoverSheet({
   }, [onOpenChange]);
 
   // 预览统计
-  const stats = preview ? getPreviewStats(preview) : null;
+  const stats = fullPreview ? getFullPreviewStats(fullPreview) : null;
+
+  // 选中工具的服务统计
+  const selectedStats = useMemo(() => {
+    if (!fullPreview) return { serviceCount: 0, conflictCount: 0 };
+    let serviceCount = 0;
+    let conflictCount = 0;
+    for (const tool of fullPreview.tools) {
+      if (!selectedTools.has(tool.adapter_id)) continue;
+      serviceCount += tool.total_service_count;
+      conflictCount += tool.conflict_count;
+    }
+    return { serviceCount, conflictCount };
+  }, [fullPreview, selectedTools]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -249,149 +324,83 @@ export function SmartTakeoverSheet({
           )}
 
           {/* 预览状态 */}
-          {step === "preview" && preview && !error && (
+          {step === "preview" && fullPreview && !error && (
             <div className="space-y-6 py-4">
               {/* 统计摘要 */}
               {stats && (
-                <div className="flex gap-4 text-sm">
+                <div className="flex gap-4 text-sm flex-wrap">
                   <div className="flex items-center gap-1.5">
-                    <Plus className="h-4 w-4 text-green-500" />
-                    <span>{t("hub.smartTakeover.statsAutoCreate", "{{count}} new", { count: stats.autoCreateCount })}</span>
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>{t("hub.smartTakeover.statsInstalled", "{{count}} tools installed", { count: stats.installedCount })}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <SkipForward className="h-4 w-4 text-blue-500" />
-                    <span>{t("hub.smartTakeover.statsAutoSkip", "{{count}} existing", { count: stats.autoSkipCount })}</span>
+                    <Plus className="h-4 w-4 text-blue-500" />
+                    <span>{t("hub.smartTakeover.statsTotalServices", "{{count}} services", { count: stats.totalServiceCount })}</span>
                   </div>
-                  {stats.needsDecisionCount > 0 && (
+                  {stats.conflictCount > 0 && (
                     <div className="flex items-center gap-1.5">
                       <HelpCircle className="h-4 w-4 text-amber-500" />
-                      <span>{t("hub.smartTakeover.statsNeedsDecision", "{{count}} need decision", { count: stats.needsDecisionCount })}</span>
+                      <span>{t("hub.smartTakeover.statsConflicts", "{{count}} conflicts", { count: stats.conflictCount })}</span>
                     </div>
                   )}
                 </div>
               )}
 
               {/* 空状态 */}
-              {previewIsEmpty(preview) && (
+              {fullPreviewIsEmpty(fullPreview) && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>{t("hub.smartTakeover.emptyTitle", "No configurations found")}</AlertTitle>
                   <AlertDescription>
-                    {t("hub.smartTakeover.emptyDescription", "No MCP configurations were detected in this project.")}
+                    {t("hub.smartTakeover.emptyDescription", "No MCP configurations were detected for any installed tools.")}
                   </AlertDescription>
                 </Alert>
               )}
 
-              {/* 三档分类展示 */}
-              <div className="space-y-2">
-                {/* 可直接导入 */}
-                {preview.auto_create.length > 0 && (
-                  <Collapsible open={autoCreateOpen} onOpenChange={setAutoCreateOpen}>
-                    <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                      {autoCreateOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      <Plus className="h-4 w-4 text-green-500" />
-                      <span className="font-medium">{t("hub.smartTakeover.sectionAutoCreate", "New Services")}</span>
-                      <Badge variant="secondary" className="ml-auto">
-                        {preview.auto_create.length}
-                      </Badge>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-2 pl-4">
-                      <div className="space-y-2">
-                        {preview.auto_create.map((item) => (
-                          <div
-                            key={`${item.service_name}-${item.adapter_id}`}
-                            className="flex items-center justify-between p-2 rounded-md bg-muted/50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <SourceIcon source={item.adapter_id as "claude" | "cursor" | "codex" | "gemini"} className="h-4 w-4" />
-                              <span className="font-medium">{item.service_name}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="text-xs">
-                                {getAdapterLabel(item.adapter_id)}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {getScopeLabel(item.scope, t)}
-                              </Badge>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-
-                {/* 已存在（跳过） */}
-                {preview.auto_skip.length > 0 && (
-                  <Collapsible open={autoSkipOpen} onOpenChange={setAutoSkipOpen}>
-                    <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                      {autoSkipOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      <SkipForward className="h-4 w-4 text-blue-500" />
-                      <span className="font-medium">{t("hub.smartTakeover.sectionAutoSkip", "Existing Services")}</span>
-                      <Badge variant="secondary" className="ml-auto">
-                        {preview.auto_skip.length}
-                      </Badge>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-2 pl-4">
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {t("hub.smartTakeover.autoSkipHint", "These services already exist with identical configuration.")}
-                      </p>
-                      <div className="space-y-2">
-                        {preview.auto_skip.map((item) => (
-                          <div
-                            key={`${item.service_name}-${item.detected_adapter_id}`}
-                            className="flex items-center justify-between p-2 rounded-md bg-muted/50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                              <span className="font-medium">{item.service_name}</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {getAdapterLabel(item.detected_adapter_id)}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-
-                {/* 需要决策 */}
-                {preview.needs_decision.length > 0 && (
-                  <Collapsible open={needsDecisionOpen} onOpenChange={setNeedsDecisionOpen}>
-                    <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg border border-amber-500/50 hover:bg-muted/50 transition-colors">
-                      {needsDecisionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      <HelpCircle className="h-4 w-4 text-amber-500" />
-                      <span className="font-medium">{t("hub.smartTakeover.sectionNeedsDecision", "Needs Decision")}</span>
-                      <Badge variant="secondary" className="ml-auto bg-amber-500/10 text-amber-500">
-                        {preview.needs_decision.length}
-                      </Badge>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-2 pl-4">
-                      <div className="space-y-4">
-                        {preview.needs_decision.map((conflict) => (
-                          <ConflictDecisionPanel
-                            key={conflict.service_name}
-                            conflict={conflict}
-                            decision={decisions.get(conflict.service_name)}
-                            onDecision={setDecision}
-                            t={t}
-                          />
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
+              {/* 工具分组展示 */}
+              <div className="space-y-3">
+                {fullPreview.tools.map((tool) => (
+                  <ToolPreviewCard
+                    key={tool.adapter_id}
+                    tool={tool}
+                    selected={selectedTools.has(tool.adapter_id)}
+                    expanded={toolsExpandedState[tool.adapter_id] ?? false}
+                    onToggleSelect={() => toggleToolSelection(tool.adapter_id)}
+                    onToggleExpand={() => toggleToolExpanded(tool.adapter_id)}
+                    decisions={decisions}
+                    onDecision={setDecision}
+                    t={t}
+                  />
+                ))}
               </div>
 
+              {/* 选中统计 */}
+              {selectedTools.size > 0 && (
+                <div className="p-3 rounded-lg bg-muted/50 border">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {t("hub.smartTakeover.selectedSummary", "Selected: {{tools}} tools, {{services}} services", {
+                        tools: selectedTools.size,
+                        services: selectedStats.serviceCount,
+                      })}
+                    </span>
+                    {selectedStats.conflictCount > 0 && (
+                      <Badge variant="outline" className="text-amber-500 border-amber-500/50">
+                        {t("hub.smartTakeover.pendingDecisions", "{{count}} decisions needed", { count: selectedStats.conflictCount })}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 环境变量提示 */}
-              {preview.env_vars_needed.length > 0 && (
+              {fullPreview.env_vars_needed.length > 0 && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>{t("hub.smartTakeover.envVarsTitle", "Environment Variables Required")}</AlertTitle>
                   <AlertDescription>
                     {t("hub.smartTakeover.envVarsDescription", "The following environment variables are needed: {{vars}}", {
-                      vars: preview.env_vars_needed.join(", "),
+                      vars: fullPreview.env_vars_needed.join(", "),
                     })}
                   </AlertDescription>
                 </Alert>
@@ -413,18 +422,32 @@ export function SmartTakeoverSheet({
           {step === "result" && result && (
             <div className="space-y-4 py-4">
               {/* 成功/失败摘要 */}
-              {result.errors.length === 0 ? (
+              {result.success && result.errors.length === 0 ? (
                 <Alert className="border-green-500/50 bg-green-500/10">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                   <AlertTitle className="text-green-500">
                     {t("hub.smartTakeover.successTitle", "Takeover Complete")}
                   </AlertTitle>
                   <AlertDescription>
-                    {t("hub.smartTakeover.successDescription", "Successfully imported {{created}} services, skipped {{skipped}}, updated {{updated}}.", {
-                      created: result.created_count,
-                      skipped: result.skipped_count,
-                      updated: result.updated_count,
+                    {t("hub.smartTakeover.successDescriptionFull", "Successfully imported {{created}} services ({{skipped}} skipped, {{updated}} updated) from {{tools}} tools.", {
+                      created: result.stats.created_count,
+                      skipped: result.stats.skipped_count,
+                      updated: result.stats.updated_count,
+                      tools: result.stats.tool_count,
                     })}
+                  </AlertDescription>
+                </Alert>
+              ) : result.rolled_back ? (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertTitle>{t("hub.smartTakeover.rolledBackTitle", "Takeover Failed - Rolled Back")}</AlertTitle>
+                  <AlertDescription>
+                    <p>{t("hub.smartTakeover.rolledBackDescription", "The takeover failed and all changes have been rolled back.")}</p>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      {result.errors.map((err, idx) => (
+                        <li key={idx} className="text-sm">{err}</li>
+                      ))}
+                    </ul>
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -435,6 +458,21 @@ export function SmartTakeoverSheet({
                     <ul className="list-disc list-inside mt-2 space-y-1">
                       {result.errors.map((err, idx) => (
                         <li key={idx} className="text-sm">{err}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* 警告信息 */}
+              {result.warnings.length > 0 && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>{t("hub.smartTakeover.warningsTitle", "Warnings")}</AlertTitle>
+                  <AlertDescription>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      {result.warnings.map((warn, idx) => (
+                        <li key={idx} className="text-sm">{warn}</li>
                       ))}
                     </ul>
                   </AlertDescription>
@@ -469,7 +507,12 @@ export function SmartTakeoverSheet({
               </Button>
               <Button
                 onClick={handleExecute}
-                disabled={!preview || previewIsEmpty(preview) || (previewNeedsDecision(preview) && !allDecisionsMade)}
+                disabled={
+                  !fullPreview ||
+                  fullPreviewIsEmpty(fullPreview) ||
+                  selectedTools.size === 0 ||
+                  (selectedStats.conflictCount > 0 && !allDecisionsMade)
+                }
               >
                 {t("hub.smartTakeover.execute", "Execute Takeover")}
               </Button>
@@ -486,6 +529,239 @@ export function SmartTakeoverSheet({
   );
 }
 
+// ===== 工具预览卡片 =====
+
+interface ToolPreviewCardProps {
+  tool: ToolTakeoverPreview;
+  selected: boolean;
+  expanded: boolean;
+  onToggleSelect: () => void;
+  onToggleExpand: () => void;
+  decisions: Map<string, TakeoverDecision>;
+  onDecision: (serviceName: string, decision: TakeoverDecisionOption, candidateIndex?: number) => void;
+  t: (key: string, fallback: string, opts?: Record<string, unknown>) => string;
+}
+
+function ToolPreviewCard({
+  tool,
+  selected,
+  expanded,
+  onToggleSelect,
+  onToggleExpand,
+  decisions,
+  onDecision,
+  t,
+}: ToolPreviewCardProps) {
+  const hasServices = tool.total_service_count > 0;
+  const hasConflicts = tool.conflict_count > 0;
+
+  return (
+    <div
+      className={`border rounded-lg transition-colors ${
+        selected ? "border-primary/50 bg-primary/5" : "border-border"
+      } ${!tool.installed ? "opacity-60" : ""}`}
+    >
+      {/* 工具头部 */}
+      <div className="flex items-center gap-3 p-3">
+        {/* 勾选框 */}
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onToggleSelect}
+          disabled={!tool.installed || !hasServices}
+          className="shrink-0"
+        />
+
+        {/* 工具图标和名称 */}
+        <button
+          type="button"
+          className="flex items-center gap-2 flex-1 text-left"
+          onClick={onToggleExpand}
+          disabled={!hasServices}
+        >
+          <SourceIcon
+            source={tool.adapter_id as "claude" | "cursor" | "codex" | "gemini"}
+            className="h-5 w-5 shrink-0"
+          />
+          <span className="font-medium">{tool.display_name}</span>
+
+          {/* 安装状态 */}
+          {!tool.installed && (
+            <Badge variant="outline" className="text-xs text-muted-foreground">
+              <CircleSlash className="h-3 w-3 mr-1" />
+              {t("hub.smartTakeover.notInstalled", "Not installed")}
+            </Badge>
+          )}
+        </button>
+
+        {/* 统计徽章 */}
+        <div className="flex items-center gap-2">
+          {hasServices && (
+            <Badge variant="secondary" className="text-xs">
+              {tool.total_service_count} {t("hub.smartTakeover.services", "services")}
+            </Badge>
+          )}
+          {hasConflicts && (
+            <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+              {tool.conflict_count}
+            </Badge>
+          )}
+          {hasServices && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="p-1 hover:bg-muted rounded"
+            >
+              {expanded ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 展开内容 */}
+      {expanded && hasServices && (
+        <div className="px-3 pb-3 pt-0 space-y-3">
+          <Separator />
+
+          {/* User Scope */}
+          {tool.user_scope_preview && tool.user_scope_preview.service_count > 0 && (
+            <ScopePreviewSection
+              scope="user"
+              preview={tool.user_scope_preview}
+              decisions={decisions}
+              onDecision={onDecision}
+              t={t}
+            />
+          )}
+
+          {/* Project Scope */}
+          {tool.project_scope_preview && tool.project_scope_preview.service_count > 0 && (
+            <ScopePreviewSection
+              scope="project"
+              preview={tool.project_scope_preview}
+              decisions={decisions}
+              onDecision={onDecision}
+              t={t}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Scope 预览区域 =====
+
+interface ScopePreviewSectionProps {
+  scope: "user" | "project";
+  preview: ScopeTakeoverPreview;
+  decisions: Map<string, TakeoverDecision>;
+  onDecision: (serviceName: string, decision: TakeoverDecisionOption, candidateIndex?: number) => void;
+  t: (key: string, fallback: string, opts?: Record<string, unknown>) => string;
+}
+
+function ScopePreviewSection({
+  scope,
+  preview,
+  decisions,
+  onDecision,
+  t,
+}: ScopePreviewSectionProps) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  const ScopeIcon = scope === "user" ? User : FolderGit2;
+  const scopeLabel = scope === "user"
+    ? t("hub.smartTakeover.scopeUser", "User Scope")
+    : t("hub.smartTakeover.scopeProject", "Project Scope");
+
+  const hasAutoCreate = preview.auto_create.length > 0;
+  const hasAutoSkip = preview.auto_skip.length > 0;
+  const hasNeedsDecision = preview.needs_decision.length > 0;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors">
+        {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <ScopeIcon className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">{scopeLabel}</span>
+        <Badge variant="outline" className="ml-auto text-xs">
+          {preview.service_count}
+        </Badge>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="pl-6 space-y-2 pt-2">
+        {/* 可直接导入 */}
+        {hasAutoCreate && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Plus className="h-3 w-3 text-green-500" />
+              <span>{t("hub.smartTakeover.newServices", "New")}</span>
+            </div>
+            {preview.auto_create.map((item) => (
+              <div
+                key={`${item.service_name}-${item.adapter_id}`}
+                className="flex items-center justify-between p-2 rounded-md bg-muted/30 text-sm"
+              >
+                <span>{item.service_name}</span>
+                <Badge variant="outline" className="text-xs text-green-500 border-green-500/50">
+                  {t("hub.smartTakeover.willCreate", "Will create")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 已存在（跳过） */}
+        {hasAutoSkip && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <SkipForward className="h-3 w-3 text-blue-500" />
+              <span>{t("hub.smartTakeover.existingServices", "Existing")}</span>
+            </div>
+            {preview.auto_skip.map((item) => (
+              <div
+                key={`${item.service_name}-${item.detected_adapter_id}`}
+                className="flex items-center justify-between p-2 rounded-md bg-muted/30 text-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <span>{item.service_name}</span>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {t("hub.smartTakeover.willSkip", "Will skip")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 需要决策 */}
+        {hasNeedsDecision && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <HelpCircle className="h-3 w-3 text-amber-500" />
+              <span>{t("hub.smartTakeover.needsDecision", "Needs decision")}</span>
+            </div>
+            {preview.needs_decision.map((conflict) => (
+              <ConflictDecisionPanel
+                key={conflict.service_name}
+                conflict={conflict}
+                decision={decisions.get(conflict.service_name)}
+                onDecision={onDecision}
+                t={t}
+                compact
+              />
+            ))}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // ===== 冲突决策面板 =====
 
 interface ConflictDecisionPanelProps {
@@ -493,9 +769,10 @@ interface ConflictDecisionPanelProps {
   decision?: TakeoverDecision;
   onDecision: (serviceName: string, decision: TakeoverDecisionOption, candidateIndex?: number) => void;
   t: (key: string, fallback: string, opts?: Record<string, unknown>) => string;
+  compact?: boolean;
 }
 
-function ConflictDecisionPanel({ conflict, decision, onDecision, t }: ConflictDecisionPanelProps) {
+function ConflictDecisionPanel({ conflict, decision, onDecision, t, compact }: ConflictDecisionPanelProps) {
   const getConflictTypeLabel = (type: string): string => {
     switch (type) {
       case "config_diff":
@@ -574,7 +851,7 @@ function ConflictDecisionPanel({ conflict, decision, onDecision, t }: ConflictDe
     <button
       type="button"
       onClick={onSelect}
-      className="flex items-start gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors"
+      className={`flex items-start gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors ${compact ? "py-1.5" : ""}`}
     >
       {selected ? (
         <CircleDot className="h-4 w-4 mt-0.5 text-primary shrink-0" />
@@ -582,40 +859,40 @@ function ConflictDecisionPanel({ conflict, decision, onDecision, t }: ConflictDe
         <Circle className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
       )}
       <div className="grid gap-0.5 min-w-0">
-        <span className="text-sm font-medium">{label}</span>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <span className={`font-medium ${compact ? "text-xs" : "text-sm"}`}>{label}</span>
+        {!compact && <p className="text-xs text-muted-foreground">{description}</p>}
       </div>
     </button>
   );
 
   return (
-    <div className="border rounded-lg p-4 space-y-3">
+    <div className={`border rounded-lg space-y-2 ${compact ? "p-2 border-amber-500/30" : "p-4"}`}>
       {/* 服务名称和冲突类型 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          <span className="font-medium">{conflict.service_name}</span>
+          <AlertTriangle className={`text-amber-500 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
+          <span className={`font-medium ${compact ? "text-sm" : ""}`}>{conflict.service_name}</span>
         </div>
-        <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+        <Badge variant="outline" className={`text-amber-500 border-amber-500/50 ${compact ? "text-[10px]" : "text-xs"}`}>
           {getConflictTypeLabel(conflict.conflict_type)}
         </Badge>
       </div>
 
       {/* 配置差异对比 (如果有) */}
-      {conflict.existing_service && conflict.candidates.length > 0 && conflict.conflict_type === "config_diff" && (
+      {!compact && conflict.existing_service && conflict.candidates.length > 0 && conflict.conflict_type === "config_diff" && (
         <ConfigDiffView
           serviceName={conflict.service_name}
           existing={{
-            command: conflict.existing_service.config_summary.command,
-            args: conflict.existing_service.config_summary.args,
+            command: conflict.existing_service.config_summary.command ?? "",
+            args: conflict.existing_service.config_summary.args ?? null,
             env: null,
           }}
           candidates={conflict.candidates.map((c) => ({
             name: conflict.service_name,
             source_file: c.config_path,
             adapter_id: c.adapter_id,
-            command: c.config_summary.command,
-            args: c.config_summary.args,
+            command: c.config_summary.command ?? "",
+            args: c.config_summary.args ?? null,
             env: null,
           }))}
           getSourceText={getAdapterLabel}
@@ -624,7 +901,7 @@ function ConflictDecisionPanel({ conflict, decision, onDecision, t }: ConflictDe
 
       {/* 候选项选择 (multi_source) */}
       {conflict.conflict_type === "multi_source" && conflict.candidates.length > 1 && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">
             {t("hub.smartTakeover.selectCandidate", "Select configuration source:")}
           </Label>
@@ -634,15 +911,15 @@ function ConflictDecisionPanel({ conflict, decision, onDecision, t }: ConflictDe
                 key={idx}
                 type="button"
                 onClick={() => onDecision(conflict.service_name, "use_new", idx)}
-                className="flex items-center gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors"
+                className={`flex items-center gap-2 w-full text-left p-2 rounded hover:bg-muted/50 transition-colors ${compact ? "py-1" : ""}`}
               >
                 {decision?.selected_candidate_index === idx ? (
-                  <CircleDot className="h-4 w-4 text-primary shrink-0" />
+                  <CircleDot className="h-3 w-3 text-primary shrink-0" />
                 ) : (
-                  <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <Circle className="h-3 w-3 text-muted-foreground shrink-0" />
                 )}
-                <SourceIcon source={candidate.adapter_id as "claude" | "cursor" | "codex" | "gemini"} className="h-3.5 w-3.5" />
-                <span className="text-sm">
+                <SourceIcon source={candidate.adapter_id as "claude" | "cursor" | "codex" | "gemini"} className="h-3 w-3" />
+                <span className={compact ? "text-xs" : "text-sm"}>
                   {getAdapterLabel(candidate.adapter_id)} ({getScopeLabel(candidate.scope, t)})
                 </span>
               </button>

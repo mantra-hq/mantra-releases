@@ -576,6 +576,350 @@ impl ToolType {
             ToolType::GeminiCli => "Gemini CLI",
         }
     }
+
+    /// 获取所有支持的工具类型
+    ///
+    /// Story 11.20: 全工具自动接管生成 - AC 1
+    pub fn all() -> Vec<Self> {
+        vec![
+            ToolType::ClaudeCode,
+            ToolType::Cursor,
+            ToolType::Codex,
+            ToolType::GeminiCli,
+        ]
+    }
+}
+
+// ===== Story 11.20: 全工具自动接管生成 =====
+
+/// 单个工具的检测结果
+///
+/// Story 11.20: 全工具自动接管生成 - AC 1
+///
+/// 表示对单个 AI 编程工具的安装检测结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDetectionResult {
+    /// 工具类型
+    pub tool_type: ToolType,
+    /// 是否已安装（用户配置文件存在）
+    pub installed: bool,
+    /// 用户级配置文件路径
+    pub user_config_path: PathBuf,
+    /// 用户级配置文件是否存在
+    pub user_config_exists: bool,
+    /// 工具显示名称
+    pub display_name: String,
+    /// 适配器 ID
+    pub adapter_id: String,
+}
+
+/// 所有工具的检测结果
+///
+/// Story 11.20: 全工具自动接管生成 - AC 1
+///
+/// 聚合所有支持工具的检测结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AllToolsDetectionResult {
+    /// 各工具的检测结果列表
+    pub tools: Vec<ToolDetectionResult>,
+    /// 已安装工具数量
+    pub installed_count: usize,
+    /// 总工具数量
+    pub total_count: usize,
+}
+
+// ===== Story 11.20: 全 Scope 扫描结果 =====
+
+/// Scope 扫描结果
+///
+/// Story 11.20: 全工具自动接管生成 - AC 2
+///
+/// 单个 Scope 的扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeScanResult {
+    /// 配置文件路径
+    pub config_path: PathBuf,
+    /// 配置文件是否存在
+    pub exists: bool,
+    /// 检测到的服务数量
+    pub service_count: usize,
+    /// 检测到的服务名称列表
+    pub service_names: Vec<String>,
+    /// 解析错误（如有）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parse_errors: Vec<String>,
+}
+
+impl ScopeScanResult {
+    /// 创建空结果（配置文件不存在）
+    pub fn not_found(config_path: PathBuf) -> Self {
+        Self {
+            config_path,
+            exists: false,
+            service_count: 0,
+            service_names: Vec::new(),
+            parse_errors: Vec::new(),
+        }
+    }
+
+    /// 创建成功结果
+    pub fn success(config_path: PathBuf, service_names: Vec<String>) -> Self {
+        Self {
+            config_path,
+            exists: true,
+            service_count: service_names.len(),
+            service_names,
+            parse_errors: Vec::new(),
+        }
+    }
+
+    /// 创建错误结果
+    pub fn with_error(config_path: PathBuf, error: String) -> Self {
+        Self {
+            config_path,
+            exists: true,
+            service_count: 0,
+            service_names: Vec::new(),
+            parse_errors: vec![error],
+        }
+    }
+}
+
+/// Local Scope 扫描结果 (Claude Code projects.*)
+///
+/// Story 11.20: 全工具自动接管生成 - AC 2
+///
+/// Claude Code 特有的 Local Scope，对应 ~/.claude.json 中的 projects.* 配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalScopeScanResult {
+    /// 项目路径 (projects 的 key)
+    pub project_path: String,
+    /// 检测到的服务数量
+    pub service_count: usize,
+    /// 检测到的服务名称列表
+    pub service_names: Vec<String>,
+}
+
+/// 单个工具的扫描结果
+///
+/// Story 11.20: 全工具自动接管生成 - AC 2
+///
+/// 包含工具在各 Scope 下的配置扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolScanResult {
+    /// 工具类型
+    pub tool_type: ToolType,
+    /// 工具显示名称
+    pub display_name: String,
+    /// 适配器 ID
+    pub adapter_id: String,
+    /// 是否已安装（用户配置文件存在）
+    pub installed: bool,
+    /// User Scope 扫描结果
+    pub user_scope: Option<ScopeScanResult>,
+    /// Local Scope 扫描结果列表 (仅 Claude Code)
+    /// 对应 ~/.claude.json 中的 projects.* 配置
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_scopes: Vec<LocalScopeScanResult>,
+    /// Project Scope 扫描结果
+    pub project_scope: Option<ScopeScanResult>,
+    /// 总服务数量（所有 Scope 累计）
+    pub total_service_count: usize,
+}
+
+impl ToolScanResult {
+    /// 创建新的工具扫描结果
+    pub fn new(tool_type: ToolType) -> Self {
+        Self {
+            display_name: tool_type.display_name().to_string(),
+            adapter_id: tool_type.to_adapter_id().to_string(),
+            installed: false,
+            tool_type,
+            user_scope: None,
+            local_scopes: Vec::new(),
+            project_scope: None,
+            total_service_count: 0,
+        }
+    }
+
+    /// 计算并更新总服务数量
+    pub fn update_total_service_count(&mut self) {
+        let user_count = self.user_scope.as_ref().map_or(0, |s| s.service_count);
+        let local_count: usize = self.local_scopes.iter().map(|s| s.service_count).sum();
+        let project_count = self.project_scope.as_ref().map_or(0, |s| s.service_count);
+        self.total_service_count = user_count + local_count + project_count;
+    }
+
+    /// 检查是否有任何配置
+    pub fn has_any_config(&self) -> bool {
+        self.total_service_count > 0
+    }
+}
+
+/// 全工具扫描结果
+///
+/// Story 11.20: 全工具自动接管生成 - AC 2
+///
+/// 聚合所有支持工具的扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AllToolsScanResult {
+    /// 各工具的扫描结果
+    pub tools: Vec<ToolScanResult>,
+    /// 扫描的项目路径
+    pub project_path: String,
+    /// 已安装工具数量
+    pub installed_count: usize,
+    /// 有配置的工具数量
+    pub tools_with_config_count: usize,
+    /// 总服务数量（所有工具累计）
+    pub total_service_count: usize,
+}
+
+// ===== Story 11.20: 全工具接管预览 =====
+
+/// 单个工具的接管预览
+///
+/// Story 11.20: 全工具自动接管生成 - AC 3
+///
+/// 包含工具检测信息 + 三档分类结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolTakeoverPreview {
+    /// 工具类型
+    pub tool_type: ToolType,
+    /// 工具显示名称
+    pub display_name: String,
+    /// 适配器 ID
+    pub adapter_id: String,
+    /// 是否已安装
+    pub installed: bool,
+    /// 是否选中接管（默认 true）
+    pub selected: bool,
+    /// User Scope 的三档分类结果
+    pub user_scope_preview: Option<ScopeTakeoverPreview>,
+    /// Project Scope 的三档分类结果
+    pub project_scope_preview: Option<ScopeTakeoverPreview>,
+    /// 总服务数量
+    pub total_service_count: usize,
+    /// 需要决策的冲突数量
+    pub conflict_count: usize,
+}
+
+/// 单个 Scope 的接管预览
+///
+/// Story 11.20: 全工具自动接管生成 - AC 3
+///
+/// 包含该 Scope 下的三档分类结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeTakeoverPreview {
+    /// Scope 类型
+    pub scope: TakeoverScope,
+    /// 配置文件路径
+    pub config_path: String,
+    /// 配置文件是否存在
+    pub exists: bool,
+    /// 自动创建项
+    pub auto_create: Vec<AutoCreateItem>,
+    /// 自动跳过项
+    pub auto_skip: Vec<AutoSkipItem>,
+    /// 需要决策项
+    pub needs_decision: Vec<ConflictDetail>,
+    /// 服务数量
+    pub service_count: usize,
+}
+
+impl ScopeTakeoverPreview {
+    /// 创建空预览
+    pub fn empty(scope: TakeoverScope, config_path: String) -> Self {
+        Self {
+            scope,
+            config_path,
+            exists: false,
+            auto_create: Vec::new(),
+            auto_skip: Vec::new(),
+            needs_decision: Vec::new(),
+            service_count: 0,
+        }
+    }
+
+    /// 是否有需要决策的冲突
+    pub fn has_conflicts(&self) -> bool {
+        !self.needs_decision.is_empty()
+    }
+
+    /// 获取分类统计
+    pub fn get_stats(&self) -> (usize, usize, usize) {
+        (
+            self.auto_create.len(),
+            self.auto_skip.len(),
+            self.needs_decision.len(),
+        )
+    }
+}
+
+/// 全工具接管预览
+///
+/// Story 11.20: 全工具自动接管生成 - AC 3
+///
+/// 聚合所有工具的接管预览，用于前端展示
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FullToolTakeoverPreview {
+    /// 项目路径
+    pub project_path: String,
+    /// 各工具的接管预览
+    pub tools: Vec<ToolTakeoverPreview>,
+    /// 已安装工具数量
+    pub installed_count: usize,
+    /// 需要的环境变量列表
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_vars_needed: Vec<String>,
+    /// 总服务数量
+    pub total_service_count: usize,
+    /// 总冲突数量
+    pub total_conflict_count: usize,
+    /// 是否可以一键执行（无冲突）
+    pub can_auto_execute: bool,
+}
+
+impl FullToolTakeoverPreview {
+    /// 创建空预览
+    pub fn empty(project_path: &str) -> Self {
+        Self {
+            project_path: project_path.to_string(),
+            tools: Vec::new(),
+            installed_count: 0,
+            env_vars_needed: Vec::new(),
+            total_service_count: 0,
+            total_conflict_count: 0,
+            can_auto_execute: true,
+        }
+    }
+
+    /// 是否有需要决策的冲突
+    pub fn has_conflicts(&self) -> bool {
+        self.total_conflict_count > 0
+    }
+
+    /// 获取选中的工具
+    pub fn get_selected_tools(&self) -> Vec<&ToolTakeoverPreview> {
+        self.tools.iter().filter(|t| t.selected).collect()
+    }
+
+    /// 计算汇总统计
+    pub fn update_stats(&mut self) {
+        self.installed_count = self.tools.iter().filter(|t| t.installed).count();
+        self.total_service_count = self.tools.iter().map(|t| t.total_service_count).sum();
+        self.total_conflict_count = self.tools.iter().map(|t| t.conflict_count).sum();
+        self.can_auto_execute = self.total_conflict_count == 0;
+    }
 }
 
 /// 接管状态

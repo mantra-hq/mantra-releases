@@ -89,6 +89,8 @@ use commands::{
     get_service_default_policy, update_service_default_policy,
     // Story 11.19: MCP Smart Takeover Merge Engine commands
     preview_smart_takeover, execute_smart_takeover_cmd,
+    // Story 11.20: Full Tool Takeover commands
+    preview_full_tool_takeover, detect_installed_tools, scan_all_tool_configs, execute_full_tool_takeover_cmd,
     // Story 11.7: Tray commands
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
     // Story 11.12: OAuth commands
@@ -407,6 +409,11 @@ pub fn run() {
             // Story 11.19: MCP Smart Takeover Merge Engine
             preview_smart_takeover,
             execute_smart_takeover_cmd,
+            // Story 11.20: Full Tool Takeover
+            preview_full_tool_takeover,
+            detect_installed_tools,
+            scan_all_tool_configs,
+            execute_full_tool_takeover_cmd,
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,

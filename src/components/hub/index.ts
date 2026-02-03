@@ -51,3 +51,6 @@ export { OAuthConfigSheet, type OAuthServiceStatus, type OAuthConfig } from "./O
 
 // Story 11.19: 智能接管
 export { SmartTakeoverSheet, type SmartTakeoverSheetProps } from "./SmartTakeoverSheet";
+
+// Story 11.20: 工具接管管理
+export { TakeoverToolManager, type TakeoverToolManagerProps } from "./TakeoverToolManager";

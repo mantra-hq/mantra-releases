@@ -42,4 +42,8 @@ pub enum StorageError {
     /// Path already exists in current project (Story 1.12)
     #[error("该路径已添加到当前项目")]
     PathAlreadyInProject,
+
+    /// Conflict error (Story 11.20)
+    #[error("操作冲突: {0}")]
+    Conflict(String),
 }

@@ -8,6 +8,7 @@ pub mod mcp_config;
 pub mod mcp_registry;
 pub mod mcp_tool_discovery;
 pub mod oauth;
+pub mod takeover_transaction;
 
 pub use env_manager::EnvManager;
 pub use mcp_adapters::{
@@ -19,4 +20,5 @@ pub use mcp_tool_discovery::{McpToolDiscovery, ToolDefinition, ToolDiscoveryResu
 pub use oauth::{
     OAuthConfig, OAuthError, OAuthManager, OAuthServiceStatus, OAuthStatus, OAuthToken,
 };
+pub use takeover_transaction::{RollbackResult, TakeoverOperation, TakeoverTransaction};
 

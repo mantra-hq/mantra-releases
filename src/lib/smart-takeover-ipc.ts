@@ -1,10 +1,14 @@
 /**
  * smart-takeover-ipc - 智能接管 Tauri IPC 封装
  * Story 11.19: MCP 智能接管合并引擎 - Task 5
+ * Story 11.20: 全工具自动接管生成 - Task 6
  *
  * 提供智能接管功能的 Tauri IPC 调用封装：
  * - previewSmartTakeover - 生成智能接管预览
  * - executeSmartTakeover - 执行智能接管
+ * - previewFullToolTakeover - 生成全工具接管预览 (Story 11.20)
+ * - executeFullToolTakeover - 执行全工具接管 (Story 11.20)
+ * - detectInstalledTools - 检测已安装工具 (Story 11.20)
  */
 
 import { invoke } from "@/lib/ipc-adapter";
@@ -111,6 +115,116 @@ export interface SmartTakeoverResult {
   gateway_running: boolean;
 }
 
+// ===== Story 11.20: 全工具接管类型定义 =====
+
+/** 工具类型 */
+export type ToolType = "claude_code" | "cursor" | "codex" | "gemini_cli";
+
+/** 单个工具的检测结果 */
+export interface ToolDetectionResult {
+  tool_type: ToolType;
+  installed: boolean;
+  user_config_path: string;
+  user_config_exists: boolean;
+  display_name: string;
+  adapter_id: string;
+}
+
+/** 所有工具的检测结果 */
+export interface AllToolsDetectionResult {
+  tools: ToolDetectionResult[];
+  installed_count: number;
+  total_count: number;
+}
+
+/** 单个 Scope 的扫描结果 */
+export interface ScopeScanResult {
+  config_path: string;
+  exists: boolean;
+  service_count: number;
+  service_names: string[];
+  parse_errors: string[];
+}
+
+/** 单个工具的扫描结果 */
+export interface ToolScanResult {
+  tool_type: ToolType;
+  display_name: string;
+  adapter_id: string;
+  installed: boolean;
+  user_scope: ScopeScanResult | null;
+  local_scopes: Array<{ project_path: string; service_count: number; service_names: string[] }>;
+  project_scope: ScopeScanResult | null;
+  total_service_count: number;
+}
+
+/** 所有工具的扫描结果 */
+export interface AllToolsScanResult {
+  tools: ToolScanResult[];
+  project_path: string;
+  installed_count: number;
+  tools_with_config_count: number;
+  total_service_count: number;
+}
+
+/** 单个 Scope 的接管预览 */
+export interface ScopeTakeoverPreview {
+  scope: TakeoverScope;
+  config_path: string;
+  exists: boolean;
+  auto_create: AutoCreateItem[];
+  auto_skip: AutoSkipItem[];
+  needs_decision: ConflictDetail[];
+  service_count: number;
+}
+
+/** 单个工具的接管预览 */
+export interface ToolTakeoverPreview {
+  tool_type: ToolType;
+  display_name: string;
+  adapter_id: string;
+  installed: boolean;
+  selected: boolean;
+  user_scope_preview: ScopeTakeoverPreview | null;
+  project_scope_preview: ScopeTakeoverPreview | null;
+  total_service_count: number;
+  conflict_count: number;
+}
+
+/** 全工具接管预览 */
+export interface FullToolTakeoverPreview {
+  project_path: string;
+  tools: ToolTakeoverPreview[];
+  installed_count: number;
+  env_vars_needed: string[];
+  total_service_count: number;
+  total_conflict_count: number;
+  can_auto_execute: boolean;
+}
+
+/** 接管统计信息 */
+export interface TakeoverStats {
+  created_count: number;
+  skipped_count: number;
+  updated_count: number;
+  renamed_count: number;
+  takeover_count: number;
+  tool_count: number;
+}
+
+/** 全工具接管结果 */
+export interface FullTakeoverResult {
+  success: boolean;
+  rolled_back: boolean;
+  stats: TakeoverStats;
+  errors: string[];
+  warnings: string[];
+  created_service_ids: string[];
+  takeover_backup_ids: string[];
+  takeover_config_paths: string[];
+  gateway_running: boolean;
+}
+
 // ===== IPC 函数 =====
 
 /**
@@ -144,6 +258,65 @@ export async function executeSmartTakeover(
   decisions: TakeoverDecision[]
 ): Promise<SmartTakeoverResult> {
   return invoke<SmartTakeoverResult>("execute_smart_takeover_cmd", {
+    projectId,
+    preview,
+    decisions,
+  });
+}
+
+// ===== Story 11.20: 全工具接管 IPC 函数 =====
+
+/**
+ * 检测已安装的 AI 编程工具
+ *
+ * @returns 所有工具的检测结果
+ */
+export async function detectInstalledTools(): Promise<AllToolsDetectionResult> {
+  return invoke<AllToolsDetectionResult>("detect_installed_tools", {});
+}
+
+/**
+ * 扫描所有工具的配置（按工具分组）
+ *
+ * @param projectPath - 项目路径
+ * @returns 所有工具的扫描结果
+ */
+export async function scanAllToolConfigs(
+  projectPath: string
+): Promise<AllToolsScanResult> {
+  return invoke<AllToolsScanResult>("scan_all_tool_configs", {
+    projectPath,
+  });
+}
+
+/**
+ * 生成全工具接管预览
+ *
+ * @param projectPath - 项目路径
+ * @returns 全工具接管预览
+ */
+export async function previewFullToolTakeover(
+  projectPath: string
+): Promise<FullToolTakeoverPreview> {
+  return invoke<FullToolTakeoverPreview>("preview_full_tool_takeover", {
+    projectPath,
+  });
+}
+
+/**
+ * 执行全工具接管（带事务支持）
+ *
+ * @param projectId - 项目 ID
+ * @param preview - 智能接管预览结果（兼容 TakeoverPreview）
+ * @param decisions - 用户决策列表
+ * @returns 全工具接管结果
+ */
+export async function executeFullToolTakeover(
+  projectId: string,
+  preview: TakeoverPreview,
+  decisions: TakeoverDecision[]
+): Promise<FullTakeoverResult> {
+  return invoke<FullTakeoverResult>("execute_full_tool_takeover_cmd", {
     projectId,
     preview,
     decisions,
@@ -221,4 +394,118 @@ export function getPreviewStats(preview: TakeoverPreview): {
     needsDecisionCount: preview.needs_decision.length,
     totalCount: preview.total_services,
   };
+}
+
+// ===== Story 11.20: 全工具预览辅助函数 =====
+
+/**
+ * 检查全工具预览是否需要用户决策
+ */
+export function fullPreviewNeedsDecision(preview: FullToolTakeoverPreview): boolean {
+  return preview.total_conflict_count > 0;
+}
+
+/**
+ * 检查全工具预览是否为空
+ */
+export function fullPreviewIsEmpty(preview: FullToolTakeoverPreview): boolean {
+  return preview.total_service_count === 0;
+}
+
+/**
+ * 获取全工具预览统计信息
+ */
+export function getFullPreviewStats(preview: FullToolTakeoverPreview): {
+  installedCount: number;
+  selectedCount: number;
+  totalServiceCount: number;
+  conflictCount: number;
+  canAutoExecute: boolean;
+} {
+  const selectedTools = preview.tools.filter((t) => t.selected);
+  return {
+    installedCount: preview.installed_count,
+    selectedCount: selectedTools.length,
+    totalServiceCount: preview.total_service_count,
+    conflictCount: preview.total_conflict_count,
+    canAutoExecute: preview.can_auto_execute,
+  };
+}
+
+/**
+ * 将全工具预览转换为标准 TakeoverPreview
+ * 用于执行接管时传递给后端
+ */
+export function convertToTakeoverPreview(
+  fullPreview: FullToolTakeoverPreview,
+  selectedAdapterIds: string[]
+): TakeoverPreview {
+  const selectedTools = fullPreview.tools.filter(
+    (t) => selectedAdapterIds.includes(t.adapter_id)
+  );
+
+  const auto_create: AutoCreateItem[] = [];
+  const auto_skip: AutoSkipItem[] = [];
+  const needs_decision: ConflictDetail[] = [];
+  const env_vars_needed: string[] = [...fullPreview.env_vars_needed];
+
+  for (const tool of selectedTools) {
+    // User scope
+    if (tool.user_scope_preview) {
+      auto_create.push(...tool.user_scope_preview.auto_create);
+      auto_skip.push(...tool.user_scope_preview.auto_skip);
+      needs_decision.push(...tool.user_scope_preview.needs_decision);
+    }
+    // Project scope
+    if (tool.project_scope_preview) {
+      auto_create.push(...tool.project_scope_preview.auto_create);
+      auto_skip.push(...tool.project_scope_preview.auto_skip);
+      needs_decision.push(...tool.project_scope_preview.needs_decision);
+    }
+  }
+
+  return {
+    project_path: fullPreview.project_path,
+    auto_create,
+    auto_skip,
+    needs_decision,
+    env_vars_needed,
+    total_services: auto_create.length + auto_skip.length + needs_decision.length,
+  };
+}
+
+/**
+ * 获取工具的显示名称
+ */
+export function getToolDisplayName(toolType: ToolType): string {
+  switch (toolType) {
+    case "claude_code":
+      return "Claude Code";
+    case "cursor":
+      return "Cursor";
+    case "codex":
+      return "Codex";
+    case "gemini_cli":
+      return "Gemini CLI";
+    default:
+      return toolType;
+  }
+}
+
+/**
+ * 获取工具的适配器 ID
+ */
+export function getToolAdapterId(toolType: ToolType): string {
+  switch (toolType) {
+    case "claude_code":
+      return "claude";
+    case "cursor":
+      return "cursor";
+    case "codex":
+      return "codex";
+    case "gemini_cli":
+      return "gemini";
+    default:
+      return toolType;
+  }
 }
