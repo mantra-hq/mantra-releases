@@ -37,6 +37,10 @@ use std::sync::Arc;
 
 use crate::models::mcp::McpTransportType;
 
+/// Mantra Gateway 自身注入到工具配置中的服务名称。
+/// 接管扫描时应跳过此服务，避免将自身服务显示在接管列表中。
+pub const GATEWAY_SERVICE_NAME: &str = "mantra-gateway";
+
 // Re-exports
 pub use claude::ClaudeAdapter;
 pub use cursor::CursorAdapter;

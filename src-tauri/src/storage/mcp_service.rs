@@ -1045,6 +1045,31 @@ impl Database {
         Ok(backups)
     }
 
+    /// 按原始配置文件路径获取活跃接管备份
+    ///
+    /// 用于判断某个配置文件是否已被接管，避免重复创建备份
+    ///
+    /// # Arguments
+    /// * `original_path` - 原始配置文件路径
+    pub fn get_active_takeover_by_original_path(
+        &self,
+        original_path: &str,
+    ) -> Result<Option<TakeoverBackup>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+               FROM mcp_takeover_backups
+               WHERE original_path = ?1 AND status = 'active'
+               ORDER BY taken_over_at DESC
+               LIMIT 1"#,
+        )?;
+
+        let backup = stmt
+            .query_row([original_path], parse_takeover_backup_row)
+            .optional()?;
+
+        Ok(backup)
+    }
+
     /// 更新备份记录状态为已恢复
     ///
     /// Story 11.15: MCP 接管流程重构 - Task 2.5
@@ -2073,6 +2098,56 @@ mod tests {
             )
             .unwrap();
 
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_active_takeover_by_original_path() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/project/.mcp.json"),
+            PathBuf::from("/project/.mcp.json.mantra-backup.20260203"),
+            TakeoverScope::Project,
+            Some(PathBuf::from("/project")),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 查询存在的路径
+        let result = db
+            .get_active_takeover_by_original_path("/project/.mcp.json")
+            .unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().id, backup.id);
+
+        // 查询不存在的路径
+        let result = db
+            .get_active_takeover_by_original_path("/other/.mcp.json")
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_active_takeover_by_original_path_excludes_restored() {
+        let db = Database::new_in_memory().unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            PathBuf::from("/project/.mcp.json"),
+            PathBuf::from("/project/.mcp.json.mantra-backup.20260203"),
+            TakeoverScope::Project,
+            Some(PathBuf::from("/project")),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 标记为已恢复
+        db.update_backup_status_restored(&backup.id).unwrap();
+
+        // 查询应返回 None（已恢复的不算活跃）
+        let result = db
+            .get_active_takeover_by_original_path("/project/.mcp.json")
+            .unwrap();
         assert!(result.is_none());
     }
 

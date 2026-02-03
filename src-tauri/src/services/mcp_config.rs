@@ -24,6 +24,7 @@ use crate::services::EnvManager;
 use crate::services::mcp_adapters::{
     ConfigScope, DetectedConfig as AdapterDetectedConfig,
     DetectedService as AdapterDetectedService, GatewayInjectionConfig, ToolAdapterRegistry,
+    GATEWAY_SERVICE_NAME,
 };
 use crate::storage::{Database, StorageError};
 
@@ -691,6 +692,11 @@ pub fn generate_import_preview(
     // 收集所有服务并按名称分组
     for config in configs {
         for service in &config.services {
+            // 跳过 Mantra Gateway 自身注入的服务，不应出现在导入列表中
+            if service.name == GATEWAY_SERVICE_NAME {
+                continue;
+            }
+
             service_map
                 .entry(service.name.clone())
                 .or_default()
@@ -976,6 +982,11 @@ pub fn generate_smart_takeover_preview(
     // 收集所有服务并按名称分组
     for config in configs {
         for service in &config.services {
+            // 跳过 Mantra Gateway 自身注入的服务，不应出现在接管列表中
+            if service.name == GATEWAY_SERVICE_NAME {
+                continue;
+            }
+
             service_map
                 .entry(service.name.clone())
                 .or_default()
@@ -1608,20 +1619,19 @@ impl<'a> ImportExecutor<'a> {
         scope: TakeoverScope,
         project_path: Option<PathBuf>,
     ) -> Result<String, StorageError> {
-        // 1. 生成备份文件路径
+        // 1. 检查该配置文件是否已有活跃的接管记录（按 original_path 判断）
+        let path_str = path.to_string_lossy().to_string();
+        if let Ok(Some(existing)) = self.db.get_active_takeover_by_original_path(&path_str) {
+            // 已经接管过，更新配置文件但返回已有记录的 ID（不创建新备份记录）
+            self.update_gateway_config(path, adapter_id, gateway_url, gateway_token)?;
+            return Ok(existing.id);
+        }
+
+        // 2. 生成备份文件路径
         let backup_path = self.generate_backup_path(path);
 
-        // 2. 检查是否已有活跃的接管记录 (Story 11.16: 按 scope 和 project_path 检查)
-        let project_path_str = project_path.as_ref().map(|p| p.to_string_lossy().to_string());
-        if let Ok(Some(_)) = self.db.get_active_takeover_by_tool_and_scope(
-            tool_type,
-            &scope,
-            project_path_str.as_deref(),
-        ) {
-            // 已经接管过，跳过（但不报错）
-            // 这里我们仍然更新配置文件，但不创建新的备份
-        } else if path.exists() {
-            // 3. 备份原文件（仅当文件存在且未接管过）
+        // 3. 备份原文件（仅当文件存在）
+        if path.exists() {
             fs::copy(path, &backup_path).map_err(|e| {
                 StorageError::InvalidInput(format!("Failed to backup file: {}", e))
             })?;
@@ -1686,6 +1696,61 @@ impl<'a> ImportExecutor<'a> {
         self.backup_manager.add_backup_path(path.to_path_buf());
 
         Ok(backup_id)
+    }
+
+    /// 更新 Gateway 配置（不创建备份）
+    ///
+    /// 用于已有活跃接管记录时更新配置文件内容
+    fn update_gateway_config(
+        &self,
+        path: &Path,
+        adapter_id: &str,
+        gateway_url: &str,
+        gateway_token: Option<&str>,
+    ) -> Result<(), StorageError> {
+        // 确保父目录存在
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to create directory: {}", e))
+            })?;
+        }
+
+        // 读取原始内容（如果存在）
+        let original_content = if path.exists() {
+            fs::read_to_string(path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // 使用适配器生成新配置
+        let registry = ToolAdapterRegistry::new();
+        let token = gateway_token.unwrap_or("");
+        let new_content = if let Some(adapter) = registry.get(adapter_id) {
+            let config = GatewayInjectionConfig::new(gateway_url, token);
+            adapter
+                .inject_gateway(&original_content, &config)
+                .map_err(|e| StorageError::InvalidInput(format!("Failed to inject gateway: {}", e)))?
+        } else {
+            // 回退到默认 JSON 格式
+            serde_json::json!({
+                "mcpServers": {
+                    GATEWAY_SERVICE_NAME: {
+                        "url": gateway_url,
+                        "headers": {
+                            "Authorization": format!("Bearer {}", token)
+                        }
+                    }
+                }
+            })
+            .to_string()
+        };
+
+        // 写入新配置
+        fs::write(path, new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        })?;
+
+        Ok(())
     }
 
     /// 生成备份文件路径
@@ -3636,6 +3701,51 @@ mod tests {
         );
         assert!(!preview.needs_decision[0].diff_details.is_empty());
         assert!(!preview.can_auto_execute());
+    }
+
+    #[test]
+    fn test_generate_smart_takeover_preview_filters_gateway_service() {
+        let db = Database::new_in_memory().unwrap();
+
+        let configs = vec![DetectedConfig {
+            adapter_id: "claude".to_string(),
+            path: PathBuf::from("/project/.mcp.json"),
+            scope: Some(ConfigScope::Project),
+            services: vec![
+                DetectedService {
+                    name: "mantra-gateway".to_string(),
+                    transport_type: crate::models::mcp::McpTransportType::Http,
+                    command: String::new(),
+                    args: None,
+                    env: None,
+                    url: Some("http://127.0.0.1:8080/mcp".to_string()),
+                    headers: None,
+                    source_file: PathBuf::from("/project/.mcp.json"),
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
+                },
+                DetectedService {
+                    name: "real-service".to_string(),
+                    transport_type: crate::models::mcp::McpTransportType::Stdio,
+                    command: "npx".to_string(),
+                    args: None,
+                    env: None,
+                    url: None,
+                    headers: None,
+                    source_file: PathBuf::from("/project/.mcp.json"),
+                    adapter_id: "claude".to_string(),
+                    scope: Some(ConfigScope::Project),
+                },
+            ],
+            parse_errors: Vec::new(),
+        }];
+
+        let preview = super::generate_smart_takeover_preview(&configs, &db, "/project").unwrap();
+
+        // mantra-gateway 应被过滤，只剩 real-service
+        assert_eq!(preview.total_services, 1);
+        assert_eq!(preview.auto_create.len(), 1);
+        assert_eq!(preview.auto_create[0].service_name, "real-service");
     }
 
     #[test]
