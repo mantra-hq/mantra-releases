@@ -100,6 +100,14 @@ pub struct McpService {
     pub source: McpServiceSource,
     /// 导入来源的原始配置文件路径
     pub source_file: Option<String>,
+    /// 首次导入时的工具来源 (Story 11.19)
+    /// 如 "claude"、"cursor"、"codex"、"gemini"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_adapter_id: Option<String>,
+    /// 首次导入时的 scope (Story 11.19)
+    /// 'project' 或 'user'
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_scope: Option<String>,
     /// 是否启用
     pub enabled: bool,
     /// 创建时间 (ISO 8601)
@@ -168,6 +176,13 @@ pub struct ProjectMcpService {
     /// 项目级配置覆盖，JSON 对象格式
     /// 支持 `toolPolicy` 字段 (Story 11.10)
     pub config_override: Option<serde_json::Value>,
+    /// 该项目发现此服务时的工具 ID (Story 11.19)
+    /// 如 "claude"、"cursor"、"codex"、"gemini"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_adapter_id: Option<String>,
+    /// 该项目发现此服务时的配置文件路径 (Story 11.19)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_config_path: Option<String>,
     /// 创建时间 (ISO 8601)
     pub created_at: String,
 }
@@ -226,6 +241,8 @@ impl ProjectMcpService {
 }
 
 /// MCP 服务及其项目级配置覆盖
+///
+/// Story 11.19: 扩展支持 detected_adapter_id 和 detected_config_path
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServiceWithOverride {
     /// 服务配置
@@ -233,6 +250,12 @@ pub struct McpServiceWithOverride {
     pub service: McpService,
     /// 项目级配置覆盖
     pub config_override: Option<serde_json::Value>,
+    /// 项目发现此服务时的工具 ID (Story 11.19)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detected_adapter_id: Option<String>,
+    /// 项目发现此服务时的配置文件路径 (Story 11.19)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detected_config_path: Option<String>,
 }
 
 /// 环境变量（列表展示用，值已脱敏）
@@ -709,6 +732,244 @@ impl TakeoverBackup {
     }
 }
 
+// ===== Story 11.19: 智能接管合并引擎 =====
+
+/// 合并分类 (Story 11.19)
+///
+/// 三档分类用于智能接管预览
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeClassification {
+    /// 自动创建：全局池无此服务，将自动创建
+    AutoCreate,
+    /// 自动跳过：全局池有同名服务且配置完全一致，自动跳过
+    AutoSkip,
+    /// 需要决策：配置冲突或多 Scope 冲突
+    NeedsDecision,
+}
+
+impl Default for MergeClassification {
+    fn default() -> Self {
+        MergeClassification::NeedsDecision
+    }
+}
+
+/// 冲突类型 (Story 11.19)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictType {
+    /// 配置差异：同名服务的配置不同
+    ConfigDiff,
+    /// Scope 冲突：同一服务名在 project + user 级都存在
+    ScopeConflict,
+    /// 多来源冲突：多个工具都有同名服务配置
+    MultiSource,
+}
+
+/// 配置字段差异详情 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigDiffDetail {
+    /// 差异字段名
+    pub field: String,
+    /// 现有值
+    pub existing_value: Option<String>,
+    /// 新值
+    pub new_value: Option<String>,
+}
+
+/// 冲突候选项 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictCandidate {
+    /// 来源适配器 ID (claude/cursor/codex/gemini)
+    pub adapter_id: String,
+    /// 配置文件路径
+    pub config_path: String,
+    /// Scope (project/user)
+    pub scope: TakeoverScope,
+    /// 服务配置摘要
+    pub config_summary: ServiceConfigSummary,
+}
+
+/// 服务配置摘要 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceConfigSummary {
+    /// 传输类型
+    pub transport_type: McpTransportType,
+    /// 命令 (stdio 模式)
+    pub command: Option<String>,
+    /// 参数数量
+    pub args_count: usize,
+    /// 环境变量数量
+    pub env_count: usize,
+    /// URL (http 模式)
+    pub url: Option<String>,
+}
+
+/// 冲突详情 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictDetail {
+    /// 服务名称
+    pub service_name: String,
+    /// 冲突类型
+    pub conflict_type: ConflictType,
+    /// 现有服务 (如有)
+    pub existing_service: Option<McpServiceSummary>,
+    /// 冲突候选项列表
+    pub candidates: Vec<ConflictCandidate>,
+    /// 配置差异详情 (仅 ConfigDiff 类型)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diff_details: Vec<ConfigDiffDetail>,
+}
+
+/// MCP 服务摘要 (Story 11.19)
+///
+/// 用于展示现有服务的简要信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServiceSummary {
+    /// 服务 ID
+    pub id: String,
+    /// 服务名称
+    pub name: String,
+    /// 来源适配器 ID
+    pub source_adapter_id: Option<String>,
+    /// 来源 Scope
+    pub source_scope: Option<String>,
+    /// 配置摘要
+    pub config_summary: ServiceConfigSummary,
+}
+
+impl McpServiceSummary {
+    /// 从 McpService 创建摘要
+    pub fn from_service(service: &McpService) -> Self {
+        let config_summary = ServiceConfigSummary {
+            transport_type: service.transport_type.clone(),
+            command: if service.command.is_empty() { None } else { Some(service.command.clone()) },
+            args_count: service.args.as_ref().map_or(0, |a| a.len()),
+            env_count: service.env.as_ref().map_or(0, |e| {
+                e.as_object().map_or(0, |o| o.len())
+            }),
+            url: service.url.clone(),
+        };
+
+        Self {
+            id: service.id.clone(),
+            name: service.name.clone(),
+            source_adapter_id: service.source_adapter_id.clone(),
+            source_scope: service.source_scope.clone(),
+            config_summary,
+        }
+    }
+}
+
+/// 自动跳过项 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoSkipItem {
+    /// 服务名称
+    pub service_name: String,
+    /// 检测到的适配器 ID
+    pub detected_adapter_id: String,
+    /// 检测到的配置文件路径
+    pub detected_config_path: String,
+    /// 检测到的 Scope
+    pub detected_scope: TakeoverScope,
+    /// 现有服务摘要
+    pub existing_service: McpServiceSummary,
+}
+
+/// 自动创建项 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoCreateItem {
+    /// 服务名称
+    pub service_name: String,
+    /// 来源适配器 ID
+    pub adapter_id: String,
+    /// 配置文件路径
+    pub config_path: String,
+    /// Scope
+    pub scope: TakeoverScope,
+    /// 配置摘要
+    pub config_summary: ServiceConfigSummary,
+}
+
+/// 用户决策选项 (Story 11.19)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TakeoverDecisionOption {
+    /// 保留现有：跳过导入
+    KeepExisting,
+    /// 使用新配置：更新现有服务
+    UseNew,
+    /// 都保留：重命名新服务为 `{name}-{adapter_id}`
+    KeepBoth,
+    /// 使用 Project 级配置 (Scope 冲突专用)
+    UseProjectScope,
+    /// 使用 User 级配置 (Scope 冲突专用)
+    UseUserScope,
+}
+
+/// 用户决策 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeoverDecision {
+    /// 服务名称
+    pub service_name: String,
+    /// 选择的决策选项
+    pub decision: TakeoverDecisionOption,
+    /// 如果是 KeepBoth，选择的候选项索引
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_candidate_index: Option<usize>,
+}
+
+/// 智能接管预览结果 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeoverPreview {
+    /// 项目路径
+    pub project_path: String,
+    /// 自动创建项：全局池无此服务，将自动创建
+    pub auto_create: Vec<AutoCreateItem>,
+    /// 自动跳过项：全局池有同名服务且配置完全一致
+    pub auto_skip: Vec<AutoSkipItem>,
+    /// 需要决策项：配置冲突或多 Scope 冲突
+    pub needs_decision: Vec<ConflictDetail>,
+    /// 需要的环境变量列表
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_vars_needed: Vec<String>,
+    /// 总服务数
+    pub total_services: usize,
+}
+
+impl TakeoverPreview {
+    /// 创建空预览
+    pub fn empty(project_path: &str) -> Self {
+        Self {
+            project_path: project_path.to_string(),
+            auto_create: Vec::new(),
+            auto_skip: Vec::new(),
+            needs_decision: Vec::new(),
+            env_vars_needed: Vec::new(),
+            total_services: 0,
+        }
+    }
+
+    /// 检查是否有需要用户决策的冲突
+    pub fn has_conflicts(&self) -> bool {
+        !self.needs_decision.is_empty()
+    }
+
+    /// 检查是否可以一键执行（无冲突）
+    pub fn can_auto_execute(&self) -> bool {
+        self.needs_decision.is_empty()
+    }
+
+    /// 获取分类统计
+    pub fn get_stats(&self) -> (usize, usize, usize) {
+        (
+            self.auto_create.len(),
+            self.auto_skip.len(),
+            self.needs_decision.len(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -763,6 +1024,8 @@ mod tests {
             headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
@@ -794,6 +1057,8 @@ mod tests {
             headers: None,
             source: McpServiceSource::Imported,
             source_file: Some(".mcp.json".to_string()),
+            source_adapter_id: Some("claude".to_string()),
+            source_scope: Some("project".to_string()),
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
@@ -868,6 +1133,8 @@ mod tests {
             project_id: "project-123".to_string(),
             service_id: "service-456".to_string(),
             config_override: Some(serde_json::json!({"args": ["--custom"]})),
+            detected_adapter_id: Some("claude".to_string()),
+            detected_config_path: Some("/project/.mcp.json".to_string()),
             created_at: "2026-01-30T00:00:00Z".to_string(),
         };
 
@@ -875,6 +1142,8 @@ mod tests {
         assert!(json.contains("project-123"));
         assert!(json.contains("service-456"));
         assert!(json.contains("--custom"));
+        assert!(json.contains("claude"));
+        assert!(json.contains("/project/.mcp.json"));
     }
 
     #[test]
@@ -925,6 +1194,8 @@ mod tests {
             headers: None,
             source: McpServiceSource::Manual,
             source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
             enabled: true,
             created_at: "2026-01-30T00:00:00Z".to_string(),
             updated_at: "2026-01-30T00:00:00Z".to_string(),
@@ -934,6 +1205,8 @@ mod tests {
         let with_override = McpServiceWithOverride {
             service,
             config_override: Some(serde_json::json!({"args": ["--verbose"]})),
+            detected_adapter_id: None,
+            detected_config_path: None,
         };
 
         let json = serde_json::to_string(&with_override).unwrap();
@@ -1111,6 +1384,8 @@ mod tests {
             project_id: "proj-123".to_string(),
             service_id: "service-456".to_string(),
             config_override: None,
+            detected_adapter_id: None,
+            detected_config_path: None,
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 
@@ -1129,6 +1404,8 @@ mod tests {
                     "allowedTools": ["read_file"]
                 }
             })),
+            detected_adapter_id: None,
+            detected_config_path: None,
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 
@@ -1147,6 +1424,8 @@ mod tests {
             config_override: Some(serde_json::json!({
                 "toolPolicy": "invalid_not_an_object"
             })),
+            detected_adapter_id: None,
+            detected_config_path: None,
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 
@@ -1165,6 +1444,8 @@ mod tests {
                     "allowedTools": null
                 }
             })),
+            detected_adapter_id: None,
+            detected_config_path: None,
             created_at: "2026-01-31T00:00:00Z".to_string(),
         };
 

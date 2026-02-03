@@ -171,6 +171,9 @@ impl Database {
         // Migration: Add default_tool_policy to mcp_services (Story 11.9 Phase 2)
         Self::run_mcp_default_tool_policy_migration(conn)?;
 
+        // Migration: Add smart takeover fields (Story 11.19)
+        Self::run_mcp_smart_takeover_migration(conn)?;
+
         Ok(())
     }
 
@@ -783,6 +786,57 @@ impl Database {
                 r#"
                 -- 添加服务级默认 Tool Policy 字段 (Story 11.9 Phase 2)
                 ALTER TABLE mcp_services ADD COLUMN default_tool_policy TEXT;
+                "#,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Migration for MCP smart takeover fields (Story 11.19)
+    ///
+    /// Adds:
+    /// - mcp_services.source_adapter_id: Tool ID that first imported this service
+    /// - mcp_services.source_scope: Scope when first imported ('project' | 'user')
+    /// - project_mcp_services.detected_adapter_id: Tool ID that detected this service for the project
+    /// - project_mcp_services.detected_config_path: Config file path where service was detected
+    fn run_mcp_smart_takeover_migration(conn: &Connection) -> Result<(), StorageError> {
+        // Check if source_adapter_id column exists on mcp_services
+        let has_source_adapter_id: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('mcp_services') WHERE name = 'source_adapter_id'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_source_adapter_id {
+            conn.execute_batch(
+                r#"
+                -- 添加来源适配器 ID 字段 (Story 11.19)
+                ALTER TABLE mcp_services ADD COLUMN source_adapter_id TEXT;
+                -- 添加来源作用域字段 (Story 11.19)
+                ALTER TABLE mcp_services ADD COLUMN source_scope TEXT;
+                "#,
+            )?;
+        }
+
+        // Check if detected_adapter_id column exists on project_mcp_services
+        let has_detected_adapter_id: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_mcp_services') WHERE name = 'detected_adapter_id'",
+                [],
+                |row| row.get::<_, i32>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_detected_adapter_id {
+            conn.execute_batch(
+                r#"
+                -- 添加检测适配器 ID 字段 (Story 11.19)
+                ALTER TABLE project_mcp_services ADD COLUMN detected_adapter_id TEXT;
+                -- 添加检测配置文件路径字段 (Story 11.19)
+                ALTER TABLE project_mcp_services ADD COLUMN detected_config_path TEXT;
                 "#,
             )?;
         }
@@ -2022,5 +2076,179 @@ mod tests {
             )
             .unwrap();
         assert_eq!(project_b_count, 1);
+    }
+
+    // ===== Story 11.19: Smart Takeover Migration Tests =====
+
+    #[test]
+    fn test_mcp_services_smart_takeover_columns_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify source_adapter_id and source_scope columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(mcp_services)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"source_adapter_id".to_string()));
+        assert!(columns.contains(&"source_scope".to_string()));
+    }
+
+    #[test]
+    fn test_project_mcp_services_smart_takeover_columns_exist() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Verify detected_adapter_id and detected_config_path columns exist
+        let columns: Vec<String> = db
+            .connection()
+            .prepare("PRAGMA table_info(project_mcp_services)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(columns.contains(&"detected_adapter_id".to_string()));
+        assert!(columns.contains(&"detected_config_path".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_services_source_adapter_crud() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Insert a service with source_adapter_id and source_scope
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source, source_adapter_id, source_scope) VALUES ('s1', 'git-mcp', 'npx', 'imported', 'claude', 'project')",
+                [],
+            )
+            .unwrap();
+
+        // Verify the values
+        let (adapter_id, scope): (Option<String>, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT source_adapter_id, source_scope FROM mcp_services WHERE id = 's1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(adapter_id, Some("claude".to_string()));
+        assert_eq!(scope, Some("project".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_services_source_adapter_nullable() {
+        let db = Database::new_in_memory().unwrap();
+
+        // Insert a service without source_adapter_id and source_scope (should be NULL)
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('s1', 'manual-service', 'npx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Verify the values are NULL
+        let (adapter_id, scope): (Option<String>, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT source_adapter_id, source_scope FROM mcp_services WHERE id = 's1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert!(adapter_id.is_none());
+        assert!(scope.is_none());
+    }
+
+    #[test]
+    fn test_project_mcp_services_detected_adapter_crud() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project and a service
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('svc1', 'Service 1', 'npx', 'imported')",
+                [],
+            )
+            .unwrap();
+
+        // Insert a link with detected_adapter_id and detected_config_path
+        db.connection()
+            .execute(
+                "INSERT INTO project_mcp_services (project_id, service_id, detected_adapter_id, detected_config_path) VALUES ('proj1', 'svc1', 'cursor', '/project/.mcp.json')",
+                [],
+            )
+            .unwrap();
+
+        // Verify the values
+        let (adapter_id, config_path): (Option<String>, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT detected_adapter_id, detected_config_path FROM project_mcp_services WHERE project_id = 'proj1' AND service_id = 'svc1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(adapter_id, Some("cursor".to_string()));
+        assert_eq!(config_path, Some("/project/.mcp.json".to_string()));
+    }
+
+    #[test]
+    fn test_project_mcp_services_detected_adapter_nullable() {
+        let db = Database::new_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Create a project and a service
+        db.connection()
+            .execute(
+                "INSERT INTO projects (id, name, cwd, created_at, last_activity) VALUES ('proj1', 'Project 1', '/path', ?1, ?1)",
+                [&now],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO mcp_services (id, name, command, source) VALUES ('svc1', 'Service 1', 'npx', 'manual')",
+                [],
+            )
+            .unwrap();
+
+        // Insert a link without detected fields (should be NULL)
+        db.connection()
+            .execute(
+                "INSERT INTO project_mcp_services (project_id, service_id) VALUES ('proj1', 'svc1')",
+                [],
+            )
+            .unwrap();
+
+        // Verify the values are NULL
+        let (adapter_id, config_path): (Option<String>, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT detected_adapter_id, detected_config_path FROM project_mcp_services WHERE project_id = 'proj1' AND service_id = 'svc1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert!(adapter_id.is_none());
+        assert!(config_path.is_none());
     }
 }

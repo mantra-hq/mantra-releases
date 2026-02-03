@@ -3,6 +3,7 @@
 //! Story 11.2: MCP 服务数据模型 - Task 6
 //! Story 11.3: 配置导入与接管 - Task 7
 //! Story 11.9: 项目详情页 MCP 集成 - Task 1
+//! Story 11.19: MCP 智能接管合并引擎 - Task 4
 //!
 //! 提供 MCP 服务、项目关联、环境变量管理和配置导入的 Tauri IPC 命令
 
@@ -16,14 +17,15 @@ use crate::error::AppError;
 use crate::gateway::McpHttpClient;
 use crate::models::mcp::{
     CreateMcpServiceRequest, EnvVariable, EnvVariableNameValidation, McpService, McpServiceSource,
-    McpServiceWithOverride, McpTransportType, SetEnvVariableRequest, TakeoverBackup, ToolType,
-    UpdateMcpServiceRequest,
+    McpServiceWithOverride, McpTransportType, SetEnvVariableRequest, TakeoverBackup,
+    TakeoverDecision, TakeoverPreview, ToolType, UpdateMcpServiceRequest,
 };
 use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
 use crate::services::mcp_config::{
-    scan_mcp_configs, generate_import_preview, rollback_from_backups,
-    restore_mcp_takeover, restore_mcp_takeover_by_tool, get_takeover_status,
-    ImportExecutor, ImportPreview, ImportRequest, ImportResult, ScanResult,
+    execute_smart_takeover, generate_import_preview, generate_smart_takeover_preview,
+    get_takeover_status, restore_mcp_takeover, restore_mcp_takeover_by_tool, rollback_from_backups,
+    scan_mcp_configs, ImportExecutor, ImportPreview, ImportRequest, ImportResult, ScanResult,
+    SmartTakeoverResult,
 };
 use crate::services::EnvManager;
 use crate::storage::Database;
@@ -766,9 +768,20 @@ pub async fn check_project_mcp_status(
         associated_services.push(McpServiceSummary {
             id: svc.service.id.clone(),
             name: svc.service.name.clone(),
-            adapter_id: svc.service.source_file
-                .as_ref()
-                .and_then(|path| infer_adapter_id_from_path(path))
+            // Story 11.19 AC6: 三级回退逻辑获取 adapter_id
+            // 1. project_mcp_map.detected_adapter_id (项目关联时记录)
+            // 2. mcp_services.source_adapter_id (首次导入时记录)
+            // 3. infer_adapter_id_from_path(source_file) (回退推断)
+            adapter_id: svc
+                .detected_adapter_id
+                .clone()
+                .or_else(|| svc.service.source_adapter_id.clone())
+                .or_else(|| {
+                    svc.service
+                        .source_file
+                        .as_ref()
+                        .and_then(|path| infer_adapter_id_from_path(path))
+                })
                 .unwrap_or_else(|| "unknown".to_string()),
             is_running,
             error_message: None,
@@ -1636,4 +1649,133 @@ fn resolve_service_env(
     }
 
     Ok(env)
+}
+
+// ===== Story 11.19: MCP 智能接管合并引擎命令 =====
+
+/// 智能接管预览
+///
+/// Story 11.19: MCP 智能接管合并引擎 - AC 2, 3, 4
+///
+/// 扫描项目和全局配置，生成三档分类预览：
+/// - auto_create: 全局池无此服务，将自动创建
+/// - auto_skip: 全局池有同名服务且配置完全一致，自动跳过
+/// - needs_decision: 需用户决策（配置冲突 / 多 scope 冲突）
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `project_path` - 项目路径
+///
+/// # Returns
+/// 智能接管预览结果
+#[tauri::command]
+pub fn preview_smart_takeover(
+    project_id: String,
+    project_path: String,
+    state: State<'_, McpState>,
+) -> Result<TakeoverPreview, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    // 1. 扫描配置文件
+    let scan_result = scan_mcp_configs(Some(std::path::Path::new(&project_path)));
+
+    // 2. 生成智能预览
+    let preview = generate_smart_takeover_preview(&scan_result.configs, &db, &project_path)
+        .map_err(AppError::from)?;
+
+    // 3. 记录项目 ID 以便后续使用（通过 project_path 关联）
+    let _ = project_id; // project_id 用于日志追踪
+
+    Ok(preview)
+}
+
+/// 执行智能接管
+///
+/// Story 11.19: MCP 智能接管合并引擎 - AC 5, 7, 8
+///
+/// 根据预览结果和用户决策执行合并：
+/// - auto_create 项: 创建服务 + 写入 source_adapter_id/source_scope + 关联项目
+/// - auto_skip 项: 仅创建项目关联
+/// - needs_decision 项: 按用户决策执行
+///
+/// # Arguments
+/// * `project_id` - 项目 ID
+/// * `preview` - 智能接管预览结果
+/// * `decisions` - 用户决策列表
+///
+/// # Returns
+/// 执行结果
+#[tauri::command]
+pub async fn execute_smart_takeover_cmd(
+    project_id: String,
+    preview: TakeoverPreview,
+    decisions: Vec<TakeoverDecision>,
+    state: State<'_, McpState>,
+    gateway_state: State<'_, GatewayServerState>,
+) -> Result<SmartTakeoverResult, AppError> {
+    // 1. 检查 Gateway 运行状态
+    let (gateway_running, gateway_url, gateway_token) = {
+        let manager = gateway_state.manager.lock().await;
+        let running = manager.is_running();
+        if running {
+            let port = manager.current_port();
+            let token = manager.auth_token().to_string();
+            let url = format!("http://127.0.0.1:{}", port);
+            (true, Some(url), Some(token))
+        } else {
+            (false, None, None)
+        }
+    };
+
+    // 2. 执行智能接管
+    let result = {
+        let db = state.db.lock().map_err(|_| AppError::LockError)?;
+        execute_smart_takeover(
+            &preview,
+            &decisions,
+            &project_id,
+            &db,
+            &state.env_manager,
+            gateway_url.as_deref(),
+            gateway_token.as_deref(),
+            gateway_running,
+        )
+        .map_err(AppError::from)?
+    };
+
+    // 3. 如果 Gateway 运行中且有新创建的服务，刷新 aggregator 缓存
+    if gateway_running && !result.created_service_ids.is_empty() {
+        let manager = gateway_state.manager.lock().await;
+        if let Some(aggregator) = manager.aggregator() {
+            let aggregator = aggregator.clone();
+            drop(manager);
+
+            // 获取环境变量用于刷新
+            let env_vars = {
+                let db = state.db.lock().map_err(|_| AppError::LockError)?;
+                let env_manager = &state.env_manager;
+                db.list_env_variables()
+                    .map_err(|e| AppError::internal(e.to_string()))?
+                    .into_iter()
+                    .filter_map(|var| {
+                        db.get_env_variable(env_manager, &var.name)
+                            .ok()
+                            .flatten()
+                            .map(|value| (var.name, value))
+                    })
+                    .collect::<HashMap<String, String>>()
+            };
+
+            let env_resolver = move |var_name: &str| -> Option<String> {
+                env_vars.get(var_name).cloned()
+            };
+
+            // 刷新新创建的服务
+            for service_id in &result.created_service_ids {
+                let _ = aggregator.refresh_service(service_id, &env_resolver).await;
+            }
+        }
+    }
+
+    Ok(result)
 }

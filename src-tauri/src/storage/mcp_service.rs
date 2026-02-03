@@ -49,6 +49,10 @@ fn parse_mcp_service_row(row: &Row) -> rusqlite::Result<McpService> {
     let default_tool_policy: Option<ToolPolicy> =
         default_tool_policy_json.and_then(|s| serde_json::from_str(&s).ok());
 
+    // 解析 source_adapter_id 和 source_scope (Story 11.19)
+    let source_adapter_id: Option<String> = row.get(14).ok().flatten();
+    let source_scope: Option<String> = row.get(15).ok().flatten();
+
     Ok(McpService {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -60,6 +64,8 @@ fn parse_mcp_service_row(row: &Row) -> rusqlite::Result<McpService> {
         headers,
         source,
         source_file: row.get(6)?,
+        source_adapter_id,
+        source_scope,
         enabled: enabled != 0,
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
@@ -133,6 +139,55 @@ impl Database {
         self.get_mcp_service(&id)
     }
 
+    /// 创建 MCP 服务（带来源追踪字段）(Story 11.19)
+    ///
+    /// # Arguments
+    /// * `request` - 创建服务的请求参数
+    /// * `source_adapter_id` - 首次导入时的工具来源
+    /// * `source_scope` - 首次导入时的 scope ('project' | 'user')
+    ///
+    /// # Returns
+    /// 创建的 MCP 服务
+    pub fn create_mcp_service_with_source(
+        &self,
+        request: &CreateMcpServiceRequest,
+        source_adapter_id: Option<&str>,
+        source_scope: Option<&str>,
+    ) -> Result<McpService, StorageError> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 序列化 args、env 和 headers 为 JSON
+        let args_json = request.args.as_ref().and_then(|a| serde_json::to_string(a).ok());
+        let env_json = request.env.as_ref().and_then(|e| serde_json::to_string(e).ok());
+        let headers_json = request
+            .headers
+            .as_ref()
+            .and_then(|h| serde_json::to_string(h).ok());
+
+        self.connection().execute(
+            r#"INSERT INTO mcp_services (id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, source_adapter_id, source_scope)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?8, ?9, ?10, ?11, ?12, ?13)"#,
+            params![
+                &id,
+                &request.name,
+                &request.command,
+                &args_json,
+                &env_json,
+                request.source.as_str(),
+                &request.source_file,
+                &now,
+                request.transport_type.as_str(),
+                &request.url,
+                &headers_json,
+                source_adapter_id,
+                source_scope,
+            ],
+        )?;
+
+        self.get_mcp_service(&id)
+    }
+
     /// 按 ID 获取 MCP 服务
     ///
     /// # Arguments
@@ -143,7 +198,7 @@ impl Database {
     pub fn get_mcp_service(&self, id: &str) -> Result<McpService, StorageError> {
         self.connection()
             .query_row(
-                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
+                r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy, source_adapter_id, source_scope
                    FROM mcp_services WHERE id = ?1"#,
                 [id],
                 parse_mcp_service_row,
@@ -162,7 +217,7 @@ impl Database {
     /// MCP 服务，如果不存在则返回 None
     pub fn get_mcp_service_by_name(&self, name: &str) -> Result<Option<McpService>, StorageError> {
         let result = self.connection().query_row(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy, source_adapter_id, source_scope
                FROM mcp_services WHERE name = ?1 LIMIT 1"#,
             [name],
             parse_mcp_service_row,
@@ -181,7 +236,7 @@ impl Database {
     /// 所有 MCP 服务列表
     pub fn list_mcp_services(&self) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy, source_adapter_id, source_scope
                FROM mcp_services ORDER BY name ASC"#,
         )?;
 
@@ -205,7 +260,7 @@ impl Database {
         source: &McpServiceSource,
     ) -> Result<Vec<McpService>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy, source_adapter_id, source_scope
                FROM mcp_services WHERE source = ?1 ORDER BY name ASC"#,
         )?;
 
@@ -389,6 +444,45 @@ impl Database {
             project_id: project_id.to_string(),
             service_id: service_id.to_string(),
             config_override: config_override.cloned(),
+            detected_adapter_id: None,
+            detected_config_path: None,
+            created_at: now,
+        })
+    }
+
+    /// 关联 MCP 服务到项目（带检测信息）(Story 11.19)
+    ///
+    /// # Arguments
+    /// * `project_id` - 项目 ID
+    /// * `service_id` - 服务 ID
+    /// * `config_override` - 项目级配置覆盖（可选）
+    /// * `detected_adapter_id` - 检测到此服务的工具 ID
+    /// * `detected_config_path` - 检测到此服务的配置文件路径
+    pub fn link_service_to_project_with_detection(
+        &self,
+        project_id: &str,
+        service_id: &str,
+        config_override: Option<&serde_json::Value>,
+        detected_adapter_id: Option<&str>,
+        detected_config_path: Option<&str>,
+    ) -> Result<ProjectMcpService, StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 序列化 config_override 为 JSON
+        let config_json = config_override.and_then(|c| serde_json::to_string(c).ok());
+
+        self.connection().execute(
+            r#"INSERT INTO project_mcp_services (project_id, service_id, config_override, created_at, detected_adapter_id, detected_config_path)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6)"#,
+            params![project_id, service_id, &config_json, &now, detected_adapter_id, detected_config_path],
+        )?;
+
+        Ok(ProjectMcpService {
+            project_id: project_id.to_string(),
+            service_id: service_id.to_string(),
+            config_override: config_override.cloned(),
+            detected_adapter_id: detected_adapter_id.map(|s| s.to_string()),
+            detected_config_path: detected_config_path.map(|s| s.to_string()),
             created_at: now,
         })
     }
@@ -420,18 +514,21 @@ impl Database {
 
     /// 获取项目的 MCP 服务列表（包含配置覆盖）
     ///
+    /// Story 11.19: 扩展返回 detected_adapter_id 和 detected_config_path
+    ///
     /// # Arguments
     /// * `project_id` - 项目 ID
     ///
     /// # Returns
-    /// 项目关联的 MCP 服务列表，包含项目级配置覆盖
+    /// 项目关联的 MCP 服务列表，包含项目级配置覆盖和检测信息
     pub fn get_project_services(
         &self,
         project_id: &str,
     ) -> Result<Vec<McpServiceWithOverride>, StorageError> {
         let mut stmt = self.connection().prepare(
             r#"SELECT s.id, s.name, s.command, s.args, s.env, s.source, s.source_file, s.enabled, s.created_at, s.updated_at,
-                      s.transport_type, s.url, s.headers, s.default_tool_policy, ps.config_override
+                      s.transport_type, s.url, s.headers, s.default_tool_policy, s.source_adapter_id, s.source_scope,
+                      ps.config_override, ps.detected_adapter_id, ps.detected_config_path
                FROM mcp_services s
                INNER JOIN project_mcp_services ps ON s.id = ps.service_id
                WHERE ps.project_id = ?1
@@ -441,12 +538,17 @@ impl Database {
         let services = stmt
             .query_map([project_id], |row| {
                 let service = parse_mcp_service_row(row)?;
-                let config_json: Option<String> = row.get(14)?;
+                // config_override 在索引 16, detected_adapter_id 在索引 17, detected_config_path 在索引 18
+                let config_json: Option<String> = row.get(16)?;
                 let config_override = config_json.and_then(|s| serde_json::from_str(&s).ok());
+                let detected_adapter_id: Option<String> = row.get(17)?;
+                let detected_config_path: Option<String> = row.get(18)?;
 
                 Ok(McpServiceWithOverride {
                     service,
                     config_override,
+                    detected_adapter_id,
+                    detected_config_path,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -523,7 +625,7 @@ impl Database {
         let pattern_braced = format!("%${{{}}}%", var_name);
 
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at
+            r#"SELECT id, name, command, args, env, source, source_file, enabled, created_at, updated_at, transport_type, url, headers, default_tool_policy, source_adapter_id, source_scope
                FROM mcp_services
                WHERE env LIKE ?1 OR env LIKE ?2
                ORDER BY name ASC"#,
@@ -569,7 +671,7 @@ impl Database {
         service_id: &str,
     ) -> Result<Option<ProjectMcpService>, StorageError> {
         let result = self.connection().query_row(
-            r#"SELECT project_id, service_id, config_override, created_at
+            r#"SELECT project_id, service_id, config_override, created_at, detected_adapter_id, detected_config_path
                FROM project_mcp_services WHERE project_id = ?1 AND service_id = ?2"#,
             params![project_id, service_id],
             |row| {
@@ -580,6 +682,8 @@ impl Database {
                     project_id: row.get(0)?,
                     service_id: row.get(1)?,
                     config_override,
+                    detected_adapter_id: row.get(4)?,
+                    detected_config_path: row.get(5)?,
                     created_at: row.get(3)?,
                 })
             },
@@ -590,6 +694,42 @@ impl Database {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(StorageError::Database(e)),
         }
+    }
+
+    /// 获取项目的所有服务关联记录 (Story 11.19)
+    ///
+    /// # Arguments
+    /// * `project_id` - 项目 ID
+    ///
+    /// # Returns
+    /// 项目的所有关联记录列表
+    pub fn get_project_service_links(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectMcpService>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT project_id, service_id, config_override, created_at, detected_adapter_id, detected_config_path
+               FROM project_mcp_services WHERE project_id = ?1"#,
+        )?;
+
+        let links = stmt
+            .query_map(params![project_id], |row| {
+                let config_json: Option<String> = row.get(2)?;
+                let config_override = config_json.and_then(|s| serde_json::from_str(&s).ok());
+
+                Ok(ProjectMcpService {
+                    project_id: row.get(0)?,
+                    service_id: row.get(1)?,
+                    config_override,
+                    detected_adapter_id: row.get(4)?,
+                    detected_config_path: row.get(5)?,
+                    created_at: row.get(3)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(links)
     }
 
     // ===== Story 11.10: MCP 服务工具缓存 =====

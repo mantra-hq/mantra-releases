@@ -743,6 +743,369 @@ pub fn generate_import_preview(
     })
 }
 
+// ===== Story 11.19: 智能接管预览引擎 =====
+
+use crate::models::mcp::{
+    AutoCreateItem, AutoSkipItem, ConflictCandidate, ConflictDetail, ConflictType,
+    ConfigDiffDetail, McpServiceSummary, MergeClassification, ServiceConfigSummary,
+    TakeoverPreview,
+};
+
+/// 比较检测到的服务与现有服务的配置是否相等 (Story 11.19)
+///
+/// 比较的字段：transport_type, command, args, url
+/// 不比较的字段：env, headers（可能包含敏感信息）
+fn config_equals(existing: &McpService, detected: &DetectedService) -> bool {
+    // 传输类型必须一致
+    if existing.transport_type != detected.transport_type {
+        return false;
+    }
+
+    // 命令必须一致
+    if existing.command != detected.command {
+        return false;
+    }
+
+    // 参数必须一致
+    let existing_args = existing.args.clone().unwrap_or_default();
+    let detected_args = detected.args.clone().unwrap_or_default();
+    if existing_args != detected_args {
+        return false;
+    }
+
+    // URL 必须一致 (HTTP 模式)
+    if existing.url != detected.url {
+        return false;
+    }
+
+    true
+}
+
+/// 计算配置差异详情 (Story 11.19)
+fn compute_config_diff(existing: &McpService, detected: &DetectedService) -> Vec<ConfigDiffDetail> {
+    let mut diffs = Vec::new();
+
+    // 检查传输类型
+    if existing.transport_type != detected.transport_type {
+        diffs.push(ConfigDiffDetail {
+            field: "transport_type".to_string(),
+            existing_value: Some(existing.transport_type.as_str().to_string()),
+            new_value: Some(detected.transport_type.as_str().to_string()),
+        });
+    }
+
+    // 检查命令
+    if existing.command != detected.command {
+        diffs.push(ConfigDiffDetail {
+            field: "command".to_string(),
+            existing_value: if existing.command.is_empty() {
+                None
+            } else {
+                Some(existing.command.clone())
+            },
+            new_value: if detected.command.is_empty() {
+                None
+            } else {
+                Some(detected.command.clone())
+            },
+        });
+    }
+
+    // 检查参数
+    let existing_args = existing.args.clone().unwrap_or_default();
+    let detected_args = detected.args.clone().unwrap_or_default();
+    if existing_args != detected_args {
+        diffs.push(ConfigDiffDetail {
+            field: "args".to_string(),
+            existing_value: if existing_args.is_empty() {
+                None
+            } else {
+                Some(existing_args.join(", "))
+            },
+            new_value: if detected_args.is_empty() {
+                None
+            } else {
+                Some(detected_args.join(", "))
+            },
+        });
+    }
+
+    // 检查 URL
+    if existing.url != detected.url {
+        diffs.push(ConfigDiffDetail {
+            field: "url".to_string(),
+            existing_value: existing.url.clone(),
+            new_value: detected.url.clone(),
+        });
+    }
+
+    diffs
+}
+
+/// 从检测到的服务创建配置摘要 (Story 11.19)
+fn create_config_summary(detected: &DetectedService) -> ServiceConfigSummary {
+    ServiceConfigSummary {
+        transport_type: detected.transport_type.clone(),
+        command: if detected.command.is_empty() {
+            None
+        } else {
+            Some(detected.command.clone())
+        },
+        args_count: detected.args.as_ref().map_or(0, |a| a.len()),
+        env_count: detected.env.as_ref().map_or(0, |e| e.len()),
+        url: detected.url.clone(),
+    }
+}
+
+/// 将 ConfigScope 转换为 TakeoverScope (Story 11.19)
+fn config_scope_to_takeover_scope(scope: &ConfigScope) -> TakeoverScope {
+    match scope {
+        ConfigScope::Project => TakeoverScope::Project,
+        ConfigScope::User => TakeoverScope::User,
+    }
+}
+
+/// 对检测到的服务进行合并分类 (Story 11.19)
+///
+/// 返回三档分类：AutoCreate, AutoSkip, NeedsDecision
+fn classify_for_merge(
+    _service_name: &str,
+    candidates: &[DetectedService],
+    existing: Option<&McpService>,
+) -> MergeClassification {
+    // 无现有服务
+    if existing.is_none() {
+        if candidates.len() == 1 {
+            // 单一候选，无冲突 -> 自动创建
+            return MergeClassification::AutoCreate;
+        } else {
+            // 多个候选 -> 需要决策（多来源或多 Scope 冲突）
+            return MergeClassification::NeedsDecision;
+        }
+    }
+
+    let existing = existing.unwrap();
+
+    // 有现有服务
+    if candidates.len() == 1 {
+        // 单一候选，检查配置是否一致
+        if config_equals(existing, &candidates[0]) {
+            // 配置完全一致 -> 自动跳过
+            return MergeClassification::AutoSkip;
+        } else {
+            // 配置不同 -> 需要决策
+            return MergeClassification::NeedsDecision;
+        }
+    }
+
+    // 多个候选 + 现有服务 -> 复杂冲突，需要决策
+    MergeClassification::NeedsDecision
+}
+
+/// 检测 Scope 冲突 (Story 11.19)
+///
+/// 检查同一服务名在 project + user 级是否都存在
+fn has_scope_conflict(candidates: &[DetectedService]) -> bool {
+    if candidates.len() < 2 {
+        return false;
+    }
+
+    let mut has_project = false;
+    let mut has_user = false;
+
+    for candidate in candidates {
+        // 通过 source_file 路径判断 scope
+        // Project 级通常是 .mcp.json, .cursor/mcp.json 等项目目录下的文件
+        // User 级通常是 ~/.claude.json, ~/.cursor/mcp.json 等用户目录下的文件
+        let path_str = candidate.source_file.to_string_lossy();
+        if path_str.starts_with("~") || path_str.contains("/.") {
+            has_user = true;
+        } else {
+            has_project = true;
+        }
+    }
+
+    has_project && has_user
+}
+
+/// 确定冲突类型 (Story 11.19)
+fn determine_conflict_type(
+    candidates: &[DetectedService],
+    _existing: Option<&McpService>,
+) -> ConflictType {
+    // 检查 Scope 冲突
+    if has_scope_conflict(candidates) {
+        return ConflictType::ScopeConflict;
+    }
+
+    // 检查多来源冲突（不同适配器）
+    if candidates.len() > 1 {
+        let adapter_ids: std::collections::HashSet<&str> =
+            candidates.iter().map(|c| c.adapter_id.as_str()).collect();
+        if adapter_ids.len() > 1 {
+            return ConflictType::MultiSource;
+        }
+    }
+
+    // 默认为配置差异冲突
+    ConflictType::ConfigDiff
+}
+
+/// 生成智能接管预览 (Story 11.19)
+///
+/// 将检测到的服务分为三档：
+/// - auto_create: 全局池无此服务，将自动创建
+/// - auto_skip: 全局池有同名服务且配置完全一致，自动跳过
+/// - needs_decision: 需用户决策（配置冲突 / 多 scope 冲突 / 多来源冲突）
+///
+/// # Arguments
+/// * `configs` - 检测到的配置列表
+/// * `db` - 数据库连接
+/// * `project_path` - 项目路径
+///
+/// # Returns
+/// 智能接管预览结果
+pub fn generate_smart_takeover_preview(
+    configs: &[DetectedConfig],
+    db: &Database,
+    project_path: &str,
+) -> Result<TakeoverPreview, StorageError> {
+    let mut service_map: HashMap<String, Vec<DetectedService>> = HashMap::new();
+    let mut env_vars_needed: Vec<String> = Vec::new();
+
+    // 收集所有服务并按名称分组
+    for config in configs {
+        for service in &config.services {
+            service_map
+                .entry(service.name.clone())
+                .or_default()
+                .push(service.clone());
+
+            // 提取环境变量引用
+            for var in extract_env_var_references(&service.env) {
+                if !env_vars_needed.contains(&var) {
+                    env_vars_needed.push(var);
+                }
+            }
+        }
+    }
+
+    let total_services = service_map.len();
+
+    let mut auto_create = Vec::new();
+    let mut auto_skip = Vec::new();
+    let mut needs_decision = Vec::new();
+
+    // 对每个服务进行分类
+    for (name, candidates) in service_map {
+        let existing = db.get_mcp_service_by_name(&name)?;
+        let classification = classify_for_merge(&name, &candidates, existing.as_ref());
+
+        match classification {
+            MergeClassification::AutoCreate => {
+                // 取第一个候选（单一候选情况）
+                let candidate = &candidates[0];
+                let scope = configs
+                    .iter()
+                    .find(|c| c.services.iter().any(|s| s.name == name))
+                    .and_then(|c| c.scope.as_ref())
+                    .map(config_scope_to_takeover_scope)
+                    .unwrap_or(TakeoverScope::Project);
+
+                auto_create.push(AutoCreateItem {
+                    service_name: name,
+                    adapter_id: candidate.adapter_id.clone(),
+                    config_path: candidate.source_file.to_string_lossy().to_string(),
+                    scope,
+                    config_summary: create_config_summary(candidate),
+                });
+            }
+            MergeClassification::AutoSkip => {
+                // 配置完全一致，跳过导入
+                let candidate = &candidates[0];
+                let existing = existing.unwrap();
+                let scope = configs
+                    .iter()
+                    .find(|c| c.services.iter().any(|s| s.name == name))
+                    .and_then(|c| c.scope.as_ref())
+                    .map(config_scope_to_takeover_scope)
+                    .unwrap_or(TakeoverScope::Project);
+
+                auto_skip.push(AutoSkipItem {
+                    service_name: name,
+                    detected_adapter_id: candidate.adapter_id.clone(),
+                    detected_config_path: candidate.source_file.to_string_lossy().to_string(),
+                    detected_scope: scope,
+                    existing_service: McpServiceSummary::from_service(&existing),
+                });
+            }
+            MergeClassification::NeedsDecision => {
+                // 需要用户决策
+                let conflict_type = determine_conflict_type(&candidates, existing.as_ref());
+
+                // 构建冲突候选项
+                let conflict_candidates: Vec<ConflictCandidate> = candidates
+                    .iter()
+                    .map(|c| {
+                        let scope = configs
+                            .iter()
+                            .find(|cfg| cfg.services.iter().any(|s| s.name == name))
+                            .and_then(|cfg| cfg.scope.as_ref())
+                            .map(config_scope_to_takeover_scope)
+                            .unwrap_or(TakeoverScope::Project);
+
+                        ConflictCandidate {
+                            adapter_id: c.adapter_id.clone(),
+                            config_path: c.source_file.to_string_lossy().to_string(),
+                            scope,
+                            config_summary: create_config_summary(c),
+                        }
+                    })
+                    .collect();
+
+                // 计算配置差异（如果有现有服务且是 ConfigDiff 类型）
+                let diff_details = if conflict_type == ConflictType::ConfigDiff {
+                    if let Some(ref existing) = existing {
+                        candidates
+                            .first()
+                            .map(|c| compute_config_diff(existing, c))
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                needs_decision.push(ConflictDetail {
+                    service_name: name,
+                    conflict_type,
+                    existing_service: existing.as_ref().map(McpServiceSummary::from_service),
+                    candidates: conflict_candidates,
+                    diff_details,
+                });
+            }
+        }
+    }
+
+    // 检查环境变量是否已存在
+    let mut missing_env_vars = Vec::new();
+    for var in &env_vars_needed {
+        if !db.env_variable_exists(var)? {
+            missing_env_vars.push(var.clone());
+        }
+    }
+
+    Ok(TakeoverPreview {
+        project_path: project_path.to_string(),
+        auto_create,
+        auto_skip,
+        needs_decision,
+        env_vars_needed: missing_env_vars,
+        total_services,
+    })
+}
+
 // ===== 备份管理器 =====
 
 /// 备份条目
@@ -1561,6 +1924,458 @@ pub struct SyncTakeoverResult {
     pub failed_count: usize,
     /// 错误信息列表
     pub errors: Vec<String>,
+}
+
+// ===== Story 11.19: 智能接管执行引擎 =====
+
+use crate::models::mcp::{TakeoverDecision, TakeoverDecisionOption};
+
+/// 智能接管执行结果 (Story 11.19)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmartTakeoverResult {
+    /// 成功创建的服务数量
+    pub created_count: usize,
+    /// 跳过的服务数量（auto_skip + keep_existing）
+    pub skipped_count: usize,
+    /// 更新的服务数量（use_new）
+    pub updated_count: usize,
+    /// 重命名创建的服务数量（keep_both）
+    pub renamed_count: usize,
+    /// 错误信息列表
+    pub errors: Vec<String>,
+    /// 创建的服务 ID 列表
+    pub created_service_ids: Vec<String>,
+    /// 接管备份记录 ID 列表
+    pub takeover_backup_ids: Vec<String>,
+    /// 配置文件接管路径列表
+    pub takeover_config_paths: Vec<PathBuf>,
+    /// Gateway 是否运行中
+    pub gateway_running: bool,
+}
+
+impl SmartTakeoverResult {
+    /// 创建空结果
+    pub fn empty() -> Self {
+        Self {
+            created_count: 0,
+            skipped_count: 0,
+            updated_count: 0,
+            renamed_count: 0,
+            errors: Vec::new(),
+            created_service_ids: Vec::new(),
+            takeover_backup_ids: Vec::new(),
+            takeover_config_paths: Vec::new(),
+            gateway_running: false,
+        }
+    }
+
+    /// 是否完全成功（无错误）
+    pub fn is_success(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+/// 执行智能接管 (Story 11.19)
+///
+/// 根据预览结果和用户决策执行合并操作：
+/// - auto_create: 创建服务 + 写入 source_adapter_id/source_scope + 关联项目
+/// - auto_skip: 仅关联项目（服务已存在且配置一致）
+/// - needs_decision: 按用户决策执行
+///
+/// # Arguments
+/// * `preview` - 智能接管预览结果
+/// * `decisions` - 用户决策列表（对 needs_decision 项的选择）
+/// * `project_id` - 项目 ID
+/// * `db` - 数据库连接
+/// * `env_manager` - 环境变量管理器
+/// * `gateway_url` - Gateway URL（可选，用于配置文件接管）
+/// * `gateway_token` - Gateway Token（可选）
+/// * `gateway_running` - Gateway 是否运行中
+///
+/// # Returns
+/// 执行结果
+pub fn execute_smart_takeover(
+    preview: &TakeoverPreview,
+    decisions: &[TakeoverDecision],
+    project_id: &str,
+    db: &Database,
+    env_manager: &EnvManager,
+    gateway_url: Option<&str>,
+    gateway_token: Option<&str>,
+    gateway_running: bool,
+) -> Result<SmartTakeoverResult, StorageError> {
+    let mut result = SmartTakeoverResult::empty();
+    result.gateway_running = gateway_running;
+
+    // 构建决策映射（service_name -> decision）
+    let decision_map: HashMap<String, &TakeoverDecision> = decisions
+        .iter()
+        .map(|d| (d.service_name.clone(), d))
+        .collect();
+
+    // 扫描以获取完整的服务信息
+    let scan_result = scan_mcp_configs(Some(Path::new(&preview.project_path)));
+    let all_detected: HashMap<String, Vec<DetectedService>> = scan_result
+        .configs
+        .iter()
+        .flat_map(|c| c.services.clone())
+        .fold(HashMap::new(), |mut acc, service| {
+            acc.entry(service.name.clone()).or_default().push(service);
+            acc
+        });
+
+    // 1. 处理 auto_create 项：创建服务 + 关联项目
+    for item in &preview.auto_create {
+        if let Some(services) = all_detected.get(&item.service_name) {
+            if let Some(detected) = services.first() {
+                match create_and_link_service(
+                    detected,
+                    project_id,
+                    db,
+                    &item.scope,
+                ) {
+                    Ok(service_id) => {
+                        result.created_count += 1;
+                        result.created_service_ids.push(service_id);
+                    }
+                    Err(e) => {
+                        result.errors.push(format!(
+                            "Failed to create service '{}': {}",
+                            item.service_name, e
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 处理 auto_skip 项：仅关联项目
+    for item in &preview.auto_skip {
+        let service_id = &item.existing_service.id;
+
+        // 检查是否已关联
+        if !is_service_linked(db, project_id, service_id)? {
+            if let Err(e) = db.link_service_to_project_with_detection(
+                project_id,
+                service_id,
+                None,
+                Some(&item.detected_adapter_id),
+                Some(&item.detected_config_path),
+            ) {
+                result.errors.push(format!(
+                    "Failed to link service '{}' to project: {}",
+                    item.service_name, e
+                ));
+            } else {
+                result.skipped_count += 1;
+            }
+        } else {
+            result.skipped_count += 1;
+        }
+    }
+
+    // 3. 处理 needs_decision 项：按用户决策执行
+    for conflict in &preview.needs_decision {
+        if let Some(decision) = decision_map.get(&conflict.service_name) {
+            match &decision.decision {
+                TakeoverDecisionOption::KeepExisting => {
+                    // 保留现有，跳过导入，但仍关联项目
+                    if let Some(existing) = &conflict.existing_service {
+                        if !is_service_linked(db, project_id, &existing.id)? {
+                            // 使用第一个候选的检测信息进行关联
+                            let (adapter_id, config_path) = conflict
+                                .candidates
+                                .first()
+                                .map(|c| (c.adapter_id.as_str(), c.config_path.as_str()))
+                                .unwrap_or(("", ""));
+
+                            if let Err(e) = db.link_service_to_project_with_detection(
+                                project_id,
+                                &existing.id,
+                                None,
+                                Some(adapter_id),
+                                Some(config_path),
+                            ) {
+                                result.errors.push(format!(
+                                    "Failed to link existing service '{}': {}",
+                                    conflict.service_name, e
+                                ));
+                            }
+                        }
+                    }
+                    result.skipped_count += 1;
+                }
+                TakeoverDecisionOption::UseNew => {
+                    // 使用新配置：更新现有服务
+                    let candidate_idx = decision.selected_candidate_index.unwrap_or(0);
+                    if let Some(candidate) = conflict.candidates.get(candidate_idx) {
+                        if let Some(services) = all_detected.get(&conflict.service_name) {
+                            if let Some(detected) = services
+                                .iter()
+                                .find(|s| s.source_file.to_string_lossy() == candidate.config_path)
+                                .or_else(|| services.first())
+                            {
+                                if let Some(existing) = &conflict.existing_service {
+                                    // 更新现有服务
+                                    match update_service_from_detected(db, &existing.id, detected) {
+                                        Ok(_) => {
+                                            // 确保关联到项目
+                                            if !is_service_linked(db, project_id, &existing.id)? {
+                                                let _ = db.link_service_to_project_with_detection(
+                                                    project_id,
+                                                    &existing.id,
+                                                    None,
+                                                    Some(&candidate.adapter_id),
+                                                    Some(&candidate.config_path),
+                                                );
+                                            }
+                                            result.updated_count += 1;
+                                        }
+                                        Err(e) => {
+                                            result.errors.push(format!(
+                                                "Failed to update service '{}': {}",
+                                                conflict.service_name, e
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    // 没有现有服务，创建新的
+                                    match create_and_link_service(detected, project_id, db, &candidate.scope) {
+                                        Ok(service_id) => {
+                                            result.created_count += 1;
+                                            result.created_service_ids.push(service_id);
+                                        }
+                                        Err(e) => {
+                                            result.errors.push(format!(
+                                                "Failed to create service '{}': {}",
+                                                conflict.service_name, e
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                TakeoverDecisionOption::KeepBoth => {
+                    // 都保留：重命名新服务为 {name}-{adapter_id}
+                    let candidate_idx = decision.selected_candidate_index.unwrap_or(0);
+                    if let Some(candidate) = conflict.candidates.get(candidate_idx) {
+                        if let Some(services) = all_detected.get(&conflict.service_name) {
+                            if let Some(detected) = services
+                                .iter()
+                                .find(|s| s.source_file.to_string_lossy() == candidate.config_path)
+                                .or_else(|| services.first())
+                            {
+                                // 重命名服务
+                                let new_name =
+                                    format!("{}-{}", conflict.service_name, candidate.adapter_id);
+                                let mut renamed_detected = detected.clone();
+                                renamed_detected.name = new_name;
+
+                                match create_and_link_service(&renamed_detected, project_id, db, &candidate.scope)
+                                {
+                                    Ok(service_id) => {
+                                        result.renamed_count += 1;
+                                        result.created_service_ids.push(service_id);
+                                    }
+                                    Err(e) => {
+                                        result.errors.push(format!(
+                                            "Failed to create renamed service '{}': {}",
+                                            conflict.service_name, e
+                                        ));
+                                    }
+                                }
+
+                                // 同时关联现有服务到项目
+                                if let Some(existing) = &conflict.existing_service {
+                                    if !is_service_linked(db, project_id, &existing.id)? {
+                                        let _ = db.link_service_to_project_with_detection(
+                                            project_id,
+                                            &existing.id,
+                                            None,
+                                            Some(&candidate.adapter_id),
+                                            Some(&candidate.config_path),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                TakeoverDecisionOption::UseProjectScope | TakeoverDecisionOption::UseUserScope => {
+                    // Scope 冲突处理：选择指定 scope 的候选
+                    let target_scope = match &decision.decision {
+                        TakeoverDecisionOption::UseProjectScope => TakeoverScope::Project,
+                        TakeoverDecisionOption::UseUserScope => TakeoverScope::User,
+                        _ => TakeoverScope::Project,
+                    };
+
+                    // 找到匹配 scope 的候选
+                    if let Some(candidate) = conflict
+                        .candidates
+                        .iter()
+                        .find(|c| c.scope == target_scope)
+                        .or_else(|| conflict.candidates.first())
+                    {
+                        if let Some(services) = all_detected.get(&conflict.service_name) {
+                            if let Some(detected) = services
+                                .iter()
+                                .find(|s| s.source_file.to_string_lossy() == candidate.config_path)
+                                .or_else(|| services.first())
+                            {
+                                match create_and_link_service(detected, project_id, db, &candidate.scope) {
+                                    Ok(service_id) => {
+                                        result.created_count += 1;
+                                        result.created_service_ids.push(service_id);
+                                    }
+                                    Err(e) => {
+                                        result.errors.push(format!(
+                                            "Failed to create service '{}': {}",
+                                            conflict.service_name, e
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // 没有决策，跳过
+            result.skipped_count += 1;
+        }
+    }
+
+    // 4. 执行配置文件接管（如果提供了 gateway_url）
+    if let Some(url) = gateway_url {
+        let scan_result = scan_mcp_configs(Some(Path::new(&preview.project_path)));
+
+        for config in &scan_result.configs {
+            if config.services.is_empty() {
+                continue;
+            }
+
+            if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
+                let (scope, project_path) = match &config.scope {
+                    Some(ConfigScope::Project) => {
+                        let proj_path = config.path.parent().and_then(|p| {
+                            let path_str = p.to_string_lossy();
+                            if path_str.contains(".cursor")
+                                || path_str.contains(".codex")
+                                || path_str.contains(".gemini")
+                            {
+                                p.parent().map(|pp| pp.to_path_buf())
+                            } else {
+                                Some(p.to_path_buf())
+                            }
+                        });
+                        (TakeoverScope::Project, proj_path)
+                    }
+                    _ => (TakeoverScope::User, None),
+                };
+
+                // 创建一个临时的 ImportExecutor 来执行接管
+                let mut executor = ImportExecutor::new(db, env_manager);
+
+                match executor.apply_takeover(
+                    &config.path,
+                    &config.adapter_id,
+                    url,
+                    gateway_token,
+                    &tool_type,
+                    scope,
+                    project_path,
+                ) {
+                    Ok(backup_id) => {
+                        result.takeover_config_paths.push(config.path.clone());
+                        result.takeover_backup_ids.push(backup_id);
+                    }
+                    Err(e) => {
+                        result.errors.push(format!(
+                            "Failed to takeover {} config at {:?}: {}",
+                            tool_type.display_name(),
+                            config.path,
+                            e
+                        ));
+                    }
+                }
+
+                // 提交备份（成功则不回滚）
+                executor.backup_manager.commit();
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// 创建服务并关联到项目 (Story 11.19)
+fn create_and_link_service(
+    detected: &DetectedService,
+    project_id: &str,
+    db: &Database,
+    scope: &TakeoverScope,
+) -> Result<String, StorageError> {
+    // 创建服务请求
+    let request = CreateMcpServiceRequest {
+        name: detected.name.clone(),
+        transport_type: detected.transport_type.clone(),
+        command: detected.command.clone(),
+        args: detected.args.clone(),
+        env: detected.env.as_ref().map(|e| serde_json::to_value(e).unwrap()),
+        url: detected.url.clone(),
+        headers: detected.headers.clone(),
+        source: McpServiceSource::Imported,
+        source_file: Some(detected.source_file.to_string_lossy().to_string()),
+    };
+
+    // 创建服务（带来源追踪）
+    let service = db.create_mcp_service_with_source(
+        &request,
+        Some(&detected.adapter_id),
+        Some(scope.as_str()),
+    )?;
+
+    // 关联到项目（带检测信息）
+    db.link_service_to_project_with_detection(
+        project_id,
+        &service.id,
+        None,
+        Some(&detected.adapter_id),
+        Some(&detected.source_file.to_string_lossy()),
+    )?;
+
+    Ok(service.id)
+}
+
+/// 从检测到的服务更新现有服务 (Story 11.19)
+fn update_service_from_detected(
+    db: &Database,
+    service_id: &str,
+    detected: &DetectedService,
+) -> Result<(), StorageError> {
+    use crate::models::mcp::UpdateMcpServiceRequest;
+
+    let update = UpdateMcpServiceRequest {
+        name: Some(detected.name.clone()),
+        transport_type: Some(detected.transport_type.clone()),
+        command: Some(detected.command.clone()),
+        args: detected.args.clone(),
+        env: detected.env.as_ref().map(|e| serde_json::to_value(e).unwrap()),
+        url: detected.url.clone(),
+        headers: detected.headers.clone(),
+        enabled: Some(true),
+    };
+
+    db.update_mcp_service(service_id, &update)?;
+    Ok(())
+}
+
+/// 检查服务是否已关联到项目 (Story 11.19)
+fn is_service_linked(db: &Database, project_id: &str, service_id: &str) -> Result<bool, StorageError> {
+    let links = db.get_project_service_links(project_id)?;
+    Ok(links.iter().any(|l| l.service_id == service_id))
 }
 
 #[cfg(test)]
@@ -2385,5 +3200,861 @@ mod tests {
         assert_eq!(restored, 1);
         let content = fs::read_to_string(&original_file).unwrap();
         assert_eq!(content, "original content");
+    }
+
+    // ===== Story 11.19: 智能接管预览引擎测试 =====
+
+    #[test]
+    fn test_config_equals_identical() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some("/test/.mcp.json".to_string()),
+            source_adapter_id: Some("claude".to_string()),
+            source_scope: Some("project".to_string()),
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let detected = DetectedService {
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        };
+
+        assert!(super::config_equals(&existing, &detected));
+    }
+
+    #[test]
+    fn test_config_equals_different_command() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let detected = DetectedService {
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "uvx".to_string(), // Different command
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        };
+
+        assert!(!super::config_equals(&existing, &detected));
+    }
+
+    #[test]
+    fn test_config_equals_different_args() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "old-package".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let detected = DetectedService {
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "new-package".to_string()]), // Different args
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        };
+
+        assert!(!super::config_equals(&existing, &detected));
+    }
+
+    #[test]
+    fn test_classify_for_merge_auto_create() {
+        use crate::models::mcp::McpTransportType;
+
+        let candidates = vec![DetectedService {
+            name: "new-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        }];
+
+        let classification = super::classify_for_merge("new-service", &candidates, None);
+        assert_eq!(classification, super::MergeClassification::AutoCreate);
+    }
+
+    #[test]
+    fn test_classify_for_merge_auto_skip() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let candidates = vec![DetectedService {
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "@anthropic/git-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        }];
+
+        let classification = super::classify_for_merge("git-mcp", &candidates, Some(&existing));
+        assert_eq!(classification, super::MergeClassification::AutoSkip);
+    }
+
+    #[test]
+    fn test_classify_for_merge_needs_decision_config_diff() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "old-package".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let candidates = vec![DetectedService {
+            name: "git-mcp".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "new-package".to_string()]), // Different
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        }];
+
+        let classification = super::classify_for_merge("git-mcp", &candidates, Some(&existing));
+        assert_eq!(classification, super::MergeClassification::NeedsDecision);
+    }
+
+    #[test]
+    fn test_classify_for_merge_needs_decision_multiple_candidates() {
+        use crate::models::mcp::McpTransportType;
+
+        let candidates = vec![
+            DetectedService {
+                name: "git-mcp".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source_file: PathBuf::from("/project/.mcp.json"),
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+            DetectedService {
+                name: "git-mcp".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: Some(vec!["--verbose".to_string()]),
+                env: None,
+                url: None,
+                headers: None,
+                source_file: PathBuf::from("~/.cursor/mcp.json"),
+                adapter_id: "cursor".to_string(),
+                scope: Some(ConfigScope::User),
+            },
+        ];
+
+        let classification = super::classify_for_merge("git-mcp", &candidates, None);
+        assert_eq!(classification, super::MergeClassification::NeedsDecision);
+    }
+
+    #[test]
+    fn test_compute_config_diff() {
+        use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+
+        let existing = McpService {
+            id: "test-id".to_string(),
+            name: "test-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["old-arg".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: None,
+            source_adapter_id: None,
+            source_scope: None,
+            enabled: true,
+            created_at: "2026-01-30T00:00:00Z".to_string(),
+            updated_at: "2026-01-30T00:00:00Z".to_string(),
+            default_tool_policy: None,
+        };
+
+        let detected = DetectedService {
+            name: "test-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "uvx".to_string(), // Different command
+            args: Some(vec!["new-arg".to_string()]), // Different args
+            env: None,
+            url: None,
+            headers: None,
+            source_file: PathBuf::from("/test/.mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        };
+
+        let diffs = super::compute_config_diff(&existing, &detected);
+        assert_eq!(diffs.len(), 2);
+
+        let command_diff = diffs.iter().find(|d| d.field == "command").unwrap();
+        assert_eq!(command_diff.existing_value, Some("npx".to_string()));
+        assert_eq!(command_diff.new_value, Some("uvx".to_string()));
+
+        let args_diff = diffs.iter().find(|d| d.field == "args").unwrap();
+        assert_eq!(args_diff.existing_value, Some("old-arg".to_string()));
+        assert_eq!(args_diff.new_value, Some("new-arg".to_string()));
+    }
+
+    #[test]
+    fn test_generate_smart_takeover_preview_auto_create() {
+        let db = Database::new_in_memory().unwrap();
+
+        let configs = vec![DetectedConfig {
+            adapter_id: "claude".to_string(),
+            path: PathBuf::from("/project/.mcp.json"),
+            scope: Some(ConfigScope::Project),
+            services: vec![DetectedService {
+                name: "new-service".to_string(),
+                transport_type: crate::models::mcp::McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source_file: PathBuf::from("/project/.mcp.json"),
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            }],
+            parse_errors: Vec::new(),
+        }];
+
+        let preview = super::generate_smart_takeover_preview(&configs, &db, "/project").unwrap();
+
+        assert_eq!(preview.auto_create.len(), 1);
+        assert_eq!(preview.auto_skip.len(), 0);
+        assert_eq!(preview.needs_decision.len(), 0);
+        assert_eq!(preview.auto_create[0].service_name, "new-service");
+        assert!(preview.can_auto_execute());
+    }
+
+    #[test]
+    fn test_generate_smart_takeover_preview_auto_skip() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        // Create existing service
+        db.create_mcp_service(&CreateMcpServiceRequest {
+            name: "existing-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "test-mcp".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some("/test/.mcp.json".to_string()),
+        })
+        .unwrap();
+
+        let configs = vec![DetectedConfig {
+            adapter_id: "claude".to_string(),
+            path: PathBuf::from("/project/.mcp.json"),
+            scope: Some(ConfigScope::Project),
+            services: vec![DetectedService {
+                name: "existing-service".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "test-mcp".to_string()]), // Same config
+                env: None,
+                url: None,
+                headers: None,
+                source_file: PathBuf::from("/project/.mcp.json"),
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            }],
+            parse_errors: Vec::new(),
+        }];
+
+        let preview = super::generate_smart_takeover_preview(&configs, &db, "/project").unwrap();
+
+        assert_eq!(preview.auto_create.len(), 0);
+        assert_eq!(preview.auto_skip.len(), 1);
+        assert_eq!(preview.needs_decision.len(), 0);
+        assert_eq!(preview.auto_skip[0].service_name, "existing-service");
+        assert!(preview.can_auto_execute());
+    }
+
+    #[test]
+    fn test_generate_smart_takeover_preview_needs_decision() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        // Create existing service with different config
+        db.create_mcp_service(&CreateMcpServiceRequest {
+            name: "conflict-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "old-package".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some("/test/.mcp.json".to_string()),
+        })
+        .unwrap();
+
+        let configs = vec![DetectedConfig {
+            adapter_id: "claude".to_string(),
+            path: PathBuf::from("/project/.mcp.json"),
+            scope: Some(ConfigScope::Project),
+            services: vec![DetectedService {
+                name: "conflict-service".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "new-package".to_string()]), // Different config
+                env: None,
+                url: None,
+                headers: None,
+                source_file: PathBuf::from("/project/.mcp.json"),
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            }],
+            parse_errors: Vec::new(),
+        }];
+
+        let preview = super::generate_smart_takeover_preview(&configs, &db, "/project").unwrap();
+
+        assert_eq!(preview.auto_create.len(), 0);
+        assert_eq!(preview.auto_skip.len(), 0);
+        assert_eq!(preview.needs_decision.len(), 1);
+        assert_eq!(preview.needs_decision[0].service_name, "conflict-service");
+        assert_eq!(
+            preview.needs_decision[0].conflict_type,
+            crate::models::mcp::ConflictType::ConfigDiff
+        );
+        assert!(!preview.needs_decision[0].diff_details.is_empty());
+        assert!(!preview.can_auto_execute());
+    }
+
+    #[test]
+    fn test_takeover_preview_stats() {
+        use crate::models::mcp::TakeoverPreview;
+
+        let preview = TakeoverPreview {
+            project_path: "/project".to_string(),
+            auto_create: vec![],
+            auto_skip: vec![],
+            needs_decision: vec![],
+            env_vars_needed: vec![],
+            total_services: 0,
+        };
+
+        assert_eq!(preview.get_stats(), (0, 0, 0));
+        assert!(preview.can_auto_execute());
+        assert!(!preview.has_conflicts());
+    }
+
+    // ===== Task 3: 合并执行引擎测试 =====
+
+    #[test]
+    fn test_smart_takeover_result_empty() {
+        let result = SmartTakeoverResult::empty();
+        assert_eq!(result.created_count, 0);
+        assert_eq!(result.skipped_count, 0);
+        assert_eq!(result.updated_count, 0);
+        assert_eq!(result.renamed_count, 0);
+        assert!(result.errors.is_empty());
+        assert!(result.created_service_ids.is_empty());
+        assert!(result.takeover_backup_ids.is_empty());
+        assert!(result.takeover_config_paths.is_empty());
+        assert!(!result.gateway_running);
+        assert!(result.is_success());
+    }
+
+    #[test]
+    fn test_smart_takeover_result_is_success() {
+        let mut result = SmartTakeoverResult::empty();
+        assert!(result.is_success());
+
+        result.errors.push("Some error".to_string());
+        assert!(!result.is_success());
+    }
+
+    #[test]
+    fn test_create_mcp_service_with_source() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        let request = CreateMcpServiceRequest {
+            name: "test-service".to_string(),
+            transport_type: McpTransportType::Stdio,
+            command: "npx".to_string(),
+            args: Some(vec!["-y".to_string(), "test-package".to_string()]),
+            env: None,
+            url: None,
+            headers: None,
+            source: McpServiceSource::Imported,
+            source_file: Some("/project/.mcp.json".to_string()),
+        };
+
+        let service = db
+            .create_mcp_service_with_source(&request, Some("claude"), Some("project"))
+            .unwrap();
+
+        assert_eq!(service.name, "test-service");
+        assert_eq!(service.command, "npx");
+        assert_eq!(service.source_adapter_id, Some("claude".to_string()));
+        assert_eq!(service.source_scope, Some("project".to_string()));
+    }
+
+    #[test]
+    fn test_link_service_to_project_with_detection() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a valid project first
+        let (project, _) = db.get_or_create_project("/test/project").unwrap();
+        let project_id = &project.id;
+
+        // Create a service
+        let service = db
+            .create_mcp_service(&CreateMcpServiceRequest {
+                name: "test-service".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            })
+            .unwrap();
+
+        // Link with detection info
+        let link = db
+            .link_service_to_project_with_detection(
+                project_id,
+                &service.id,
+                None,
+                Some("cursor"),
+                Some("/project/.cursor/mcp.json"),
+            )
+            .unwrap();
+
+        assert_eq!(link.project_id, *project_id);
+        assert_eq!(link.service_id, service.id);
+        assert_eq!(link.detected_adapter_id, Some("cursor".to_string()));
+        assert_eq!(
+            link.detected_config_path,
+            Some("/project/.cursor/mcp.json".to_string())
+        );
+
+        // Verify via get_project_service_link
+        let retrieved = db.get_project_service_link(project_id, &service.id).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.detected_adapter_id, Some("cursor".to_string()));
+    }
+
+    #[test]
+    fn test_get_project_service_links() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a valid project first
+        let (project, _) = db.get_or_create_project("/test/project").unwrap();
+        let project_id = &project.id;
+
+        // Create services
+        let service1 = db
+            .create_mcp_service(&CreateMcpServiceRequest {
+                name: "service-1".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            })
+            .unwrap();
+
+        let service2 = db
+            .create_mcp_service(&CreateMcpServiceRequest {
+                name: "service-2".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "uvx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            })
+            .unwrap();
+
+        // Link services
+        db.link_service_to_project(project_id, &service1.id, None)
+            .unwrap();
+        db.link_service_to_project_with_detection(
+            project_id,
+            &service2.id,
+            None,
+            Some("cursor"),
+            Some("/project/.cursor/mcp.json"),
+        )
+        .unwrap();
+
+        // Get all links
+        let links = db.get_project_service_links(project_id).unwrap();
+        assert_eq!(links.len(), 2);
+
+        // Verify detection info is preserved
+        let link2 = links.iter().find(|l| l.service_id == service2.id).unwrap();
+        assert_eq!(link2.detected_adapter_id, Some("cursor".to_string()));
+        assert_eq!(
+            link2.detected_config_path,
+            Some("/project/.cursor/mcp.json".to_string())
+        );
+    }
+
+    #[test]
+    fn test_is_service_linked() {
+        use crate::models::mcp::{CreateMcpServiceRequest, McpServiceSource, McpTransportType};
+
+        let db = Database::new_in_memory().unwrap();
+
+        // Create a valid project first
+        let (project, _) = db.get_or_create_project("/test/project").unwrap();
+        let project_id = &project.id;
+
+        // Create a service
+        let service = db
+            .create_mcp_service(&CreateMcpServiceRequest {
+                name: "test-service".to_string(),
+                transport_type: McpTransportType::Stdio,
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                source: McpServiceSource::Manual,
+                source_file: None,
+            })
+            .unwrap();
+
+        // Before linking
+        let is_linked = super::is_service_linked(&db, project_id, &service.id).unwrap();
+        assert!(!is_linked);
+
+        // After linking
+        db.link_service_to_project(project_id, &service.id, None)
+            .unwrap();
+        let is_linked = super::is_service_linked(&db, project_id, &service.id).unwrap();
+        assert!(is_linked);
+    }
+
+    #[test]
+    fn test_has_scope_conflict_true() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::McpTransportType;
+
+        let candidates = vec![
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "test".to_string()]),
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/mcp.json"), // project level (no /.)
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "test".to_string()]),
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("~/.claude.json"), // user level (starts with ~)
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::User),
+            },
+        ];
+
+        assert!(super::has_scope_conflict(&candidates));
+    }
+
+    #[test]
+    fn test_has_scope_conflict_false_same_scope() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::McpTransportType;
+
+        let candidates = vec![
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "test".to_string()]),
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/mcp.json"), // project level
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: Some(vec!["-y".to_string(), "test".to_string()]),
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/cursor-mcp.json"), // also project level
+                adapter_id: "cursor".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+        ];
+
+        assert!(!super::has_scope_conflict(&candidates));
+    }
+
+    #[test]
+    fn test_has_scope_conflict_false_single_candidate() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::McpTransportType;
+
+        let candidates = vec![DetectedService {
+            name: "test-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            transport_type: McpTransportType::Stdio,
+            source_file: PathBuf::from("/project/mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        }];
+
+        assert!(!super::has_scope_conflict(&candidates));
+    }
+
+    #[test]
+    fn test_determine_conflict_type_scope_conflict() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::{McpTransportType, ConflictType};
+
+        let candidates = vec![
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/mcp.json"), // project level
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("~/.claude.json"), // user level
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::User),
+            },
+        ];
+
+        let conflict_type = super::determine_conflict_type(&candidates, None);
+        assert_eq!(conflict_type, ConflictType::ScopeConflict);
+    }
+
+    #[test]
+    fn test_determine_conflict_type_multi_source() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::{McpTransportType, ConflictType};
+
+        let candidates = vec![
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/mcp.json"), // project level
+                adapter_id: "claude".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+            DetectedService {
+                name: "test-service".to_string(),
+                command: "npx".to_string(),
+                args: None,
+                env: None,
+                url: None,
+                headers: None,
+                transport_type: McpTransportType::Stdio,
+                source_file: PathBuf::from("/project/cursor-mcp.json"), // also project level, different adapter
+                adapter_id: "cursor".to_string(),
+                scope: Some(ConfigScope::Project),
+            },
+        ];
+
+        let conflict_type = super::determine_conflict_type(&candidates, None);
+        assert_eq!(conflict_type, ConflictType::MultiSource);
+    }
+
+    #[test]
+    fn test_determine_conflict_type_config_diff() {
+        use std::path::PathBuf;
+        use crate::services::mcp_config::DetectedService;
+        use crate::services::mcp_adapters::ConfigScope;
+        use crate::models::mcp::{McpTransportType, ConflictType};
+
+        let candidates = vec![DetectedService {
+            name: "test-service".to_string(),
+            command: "npx".to_string(),
+            args: None,
+            env: None,
+            url: None,
+            headers: None,
+            transport_type: McpTransportType::Stdio,
+            source_file: PathBuf::from("/project/mcp.json"),
+            adapter_id: "claude".to_string(),
+            scope: Some(ConfigScope::Project),
+        }];
+
+        let conflict_type = super::determine_conflict_type(&candidates, None);
+        assert_eq!(conflict_type, ConflictType::ConfigDiff);
     }
 }

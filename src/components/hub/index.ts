@@ -48,3 +48,6 @@ export {
 
 // Story 11.12: OAuth 配置 → Story 12.2 Sheet 改造
 export { OAuthConfigSheet, type OAuthServiceStatus, type OAuthConfig } from "./OAuthConfigSheet";
+
+// Story 11.19: 智能接管
+export { SmartTakeoverSheet, type SmartTakeoverSheetProps } from "./SmartTakeoverSheet";
