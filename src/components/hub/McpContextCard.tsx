@@ -35,7 +35,6 @@ import {
   Plus,
   Loader2,
   Shield,
-  ShieldOff,
   ShieldAlert,
 } from "lucide-react";
 import { McpServiceStatusDot, type ServiceStatus } from "./McpServiceStatusDot";
@@ -117,27 +116,18 @@ function getServiceStatus(service: McpServiceSummary): ServiceStatus {
 
 /**
  * 策略状态徽标
- * - allow_all: 绿色 ShieldCheck "All Allowed"
- * - deny_all: 红色 ShieldOff "All Denied"
+ * Story 11.18: 简化后只有 allow_all 和 custom 两种显示状态
+ * - allow_all/inherit: 不显示（默认状态）
  * - custom: 黄色 ShieldAlert "Custom N"
- * - null/undefined: 不显示
+ * 注: deny_all 模式已废弃，不关联服务 = 禁用
  */
 function PolicyBadge({ service, t }: { service: McpServiceSummary; t: (key: string, fallback: string, opts?: Record<string, unknown>) => string }) {
-  if (!service.tool_policy_mode || service.tool_policy_mode === "allow_all") {
+  // Story 11.18: 只有 custom 模式需要显示徽标
+  // allow_all, inherit, 或未设置都是默认状态，不显示
+  if (!service.tool_policy_mode ||
+      service.tool_policy_mode === "allow_all" ||
+      service.tool_policy_mode === "inherit") {
     return null;
-  }
-
-  if (service.tool_policy_mode === "deny_all") {
-    return (
-      <Badge
-        variant="destructive"
-        className="text-[10px] px-1.5 py-0 h-5 gap-1"
-        data-testid={`mcp-policy-badge-${service.id}`}
-      >
-        <ShieldOff className="h-3 w-3" />
-        {t("hub.mcpContext.policyDenyAll", "All Denied")}
-      </Badge>
-    );
   }
 
   if (service.tool_policy_mode === "custom") {

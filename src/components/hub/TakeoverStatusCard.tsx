@@ -52,7 +52,6 @@ import {
   FileText,
   Clock,
   Loader2,
-  RefreshCw,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -517,21 +516,9 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                 <CardDescription>{t("hub.takeover.description")}</CardDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
-                {t("hub.takeover.activeCount", { count: backups.length })}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={loadBackups}
-                disabled={isLoading}
-                className="h-8 w-8"
-                title={t("common.refresh")}
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
+            <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+              {t("hub.takeover.activeCount", { count: backups.length })}
+            </Badge>
           </div>
         </CardHeader>
 

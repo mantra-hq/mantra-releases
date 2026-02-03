@@ -85,7 +85,7 @@ const takenOverStatus = {
       adapter_id: "cursor",
       is_running: false,
       error_message: null,
-      tool_policy_mode: "deny_all",
+      tool_policy_mode: "inherit", // Story 11.18: deny_all 已废弃，改为 inherit
       custom_tools_count: null,
     },
     {
@@ -245,18 +245,18 @@ describe("McpContextCard", () => {
 
     // ===== Phase 2: PolicyBadge =====
 
-    it("deny_all 服务显示 PolicyBadge", async () => {
+    it("inherit 服务不显示 PolicyBadge", async () => {
+      // Story 11.18: inherit 是默认状态，不显示徽标
       renderWithProviders(<McpContextCard projectId="proj-1" />);
 
       await waitFor(() => {
-        expect(
-          screen.getByTestId("mcp-policy-badge-svc-2")
-        ).toBeInTheDocument();
+        expect(screen.getByTestId("mcp-context-card")).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId("mcp-policy-badge-svc-2")).toHaveTextContent(
-        "All Denied"
-      );
+      // svc-2 是 inherit 模式，不应显示 PolicyBadge
+      expect(
+        screen.queryByTestId("mcp-policy-badge-svc-2")
+      ).not.toBeInTheDocument();
     });
 
     it("custom 服务显示 PolicyBadge 含工具数量", async () => {

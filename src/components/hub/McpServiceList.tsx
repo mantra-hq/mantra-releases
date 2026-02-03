@@ -50,7 +50,6 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  RefreshCw,
   Server,
   Loader2,
   FileCode,
@@ -341,15 +340,6 @@ export const McpServiceList = forwardRef<McpServiceListRef>(function McpServiceL
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadServices}
-              disabled={isLoading}
-              title={t("common.refresh")}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            </Button>
             <Button
               variant="outline"
               size="sm"

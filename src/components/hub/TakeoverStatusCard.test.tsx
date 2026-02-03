@@ -581,29 +581,6 @@ describe("TakeoverStatusCard", () => {
     });
   });
 
-  describe("刷新功能", () => {
-    it("点击刷新按钮应该重新加载数据", async () => {
-      const user = userEvent.setup();
-
-      mockInvokeFn.mockResolvedValue(mockUserBackups);
-
-      render(<TakeoverStatusCard />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId("takeover-status-card")).toBeInTheDocument();
-      });
-
-      mockInvokeFn.mockClear();
-
-      const refreshButton = screen.getByTitle("common.refresh");
-      await user.click(refreshButton);
-
-      await waitFor(() => {
-        expect(mockInvokeFn).toHaveBeenCalledWith("list_active_takeovers");
-      });
-    });
-  });
-
   describe("错误处理", () => {
     it("加载失败时不应该崩溃", async () => {
       mockInvokeFn.mockRejectedValue(new Error("Network error"));

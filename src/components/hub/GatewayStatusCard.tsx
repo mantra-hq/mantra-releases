@@ -30,7 +30,6 @@ import {
   RotateCcw,
   Copy,
   Check,
-  RefreshCw,
   Link2,
   Key,
   Loader2,
@@ -223,27 +222,14 @@ export function GatewayStatusCard() {
               <CardDescription>{t("hub.gateway.description")}</CardDescription>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* 状态 Badge */}
-            <Badge
-              variant={status?.running ? "default" : "secondary"}
-              className={status?.running ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : ""}
-              data-testid="gateway-status-badge"
-            >
-              {status?.running ? t("hub.gateway.running") : t("hub.gateway.stopped")}
-            </Badge>
-            {/* 刷新按钮 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={loadStatus}
-              disabled={isLoading}
-              className="h-8 w-8"
-              title={t("common.refresh")}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
+          {/* 状态 Badge */}
+          <Badge
+            variant={status?.running ? "default" : "secondary"}
+            className={status?.running ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : ""}
+            data-testid="gateway-status-badge"
+          >
+            {status?.running ? t("hub.gateway.running") : t("hub.gateway.stopped")}
+          </Badge>
         </div>
       </CardHeader>
 

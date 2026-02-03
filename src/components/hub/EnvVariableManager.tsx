@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Key, Plus, RefreshCw, Loader2 } from "lucide-react";
+import { Key, Plus, Loader2 } from "lucide-react";
 import { EnvVariableList } from "./EnvVariableList";
 import { EnvVariableSheet } from "./EnvVariableSheet";
 import { EnvVariableDeleteDialog } from "./EnvVariableDeleteDialog";
@@ -81,25 +81,14 @@ export function EnvVariableManager() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadVariables}
-            disabled={isLoading}
-            title={t("common.refresh")}
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleAdd}
-            data-testid="env-variable-add-button"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            {t("hub.envVariables.add")}
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          onClick={handleAdd}
+          data-testid="env-variable-add-button"
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          {t("hub.envVariables.add")}
+        </Button>
       </div>
 
       {/* 变量列表 */}
