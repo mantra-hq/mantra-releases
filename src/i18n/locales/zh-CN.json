@@ -1200,7 +1200,12 @@
       "manageTools": "管理工具",
       "toolPermissions": "工具权限",
       "policyDenyAll": "全部禁用",
-      "policyCustom": "自定义 {{count}}"
+      "policyCustom": "自定义 {{count}}",
+      "linkMoreServices": "关联更多服务",
+      "linkSaveSuccess": "服务关联已更新",
+      "linkSaveError": "更新关联失败",
+      "noServicesAvailable": "暂无可用服务，请先导入 MCP 配置",
+      "saveLinks": "保存"
     },
     "takeover": {
       "title": "配置接管状态",
@@ -1252,7 +1257,8 @@
       "saveSuccess": "工具策略已保存",
       "saveError": "保存工具策略失败",
       "selectAll": "全选",
-      "deselectAll": "全不选",
+      "clearSelection": "清空",
+      "invertSelection": "反选",
       "selectedCount": "{{selected}}/{{total}}",
       "save": "保存",
       "globalEntry": "全局工具权限",

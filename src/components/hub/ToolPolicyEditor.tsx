@@ -374,6 +374,19 @@ export function ToolPolicyEditor({
     setSelectedTools(new Set());
   }, []);
 
+  // 反选
+  const handleInvertSelection = useCallback(() => {
+    setSelectedTools(prev => {
+      const next = new Set<string>();
+      for (const tool of tools) {
+        if (!prev.has(tool.name)) {
+          next.add(tool.name);
+        }
+      }
+      return next;
+    });
+  }, [tools]);
+
   // 计算当前状态
   const currentStatus = useMemo(() => {
     return deriveStatus(selectedTools, tools.length);
@@ -520,22 +533,31 @@ export function ToolPolicyEditor({
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleSelectAll}
+            onClick={selectedTools.size === tools.length ? handleDeselectAll : handleSelectAll}
             className="h-7 text-xs"
-            data-testid="select-all-button"
+            data-testid="toggle-all-button"
           >
-            <CheckSquare className="h-3 w-3 mr-1" />
-            {t('hub.toolPolicy.selectAll')}
+            {selectedTools.size === tools.length ? (
+              <>
+                <Square className="h-3 w-3 mr-1" />
+                {t('hub.toolPolicy.clearSelection')}
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-3 w-3 mr-1" />
+                {t('hub.toolPolicy.selectAll')}
+              </>
+            )}
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleDeselectAll}
+            onClick={handleInvertSelection}
+            disabled={tools.length === 0}
             className="h-7 text-xs"
-            data-testid="deselect-all-button"
+            data-testid="invert-selection-button"
           >
-            <Square className="h-3 w-3 mr-1" />
-            {t('hub.toolPolicy.deselectAll')}
+            {t('hub.toolPolicy.invertSelection')}
           </Button>
           <Button
             variant="ghost"
@@ -680,22 +702,31 @@ export function ToolPolicyEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleSelectAll}
+                onClick={selectedTools.size === tools.length ? handleDeselectAll : handleSelectAll}
                 className="h-7 text-xs"
-                data-testid="select-all-button"
+                data-testid="toggle-all-button"
               >
-                <CheckSquare className="h-3 w-3 mr-1" />
-                {t('hub.toolPolicy.selectAll')}
+                {selectedTools.size === tools.length ? (
+                  <>
+                    <Square className="h-3 w-3 mr-1" />
+                    {t('hub.toolPolicy.clearSelection')}
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare className="h-3 w-3 mr-1" />
+                    {t('hub.toolPolicy.selectAll')}
+                  </>
+                )}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleDeselectAll}
+                onClick={handleInvertSelection}
+                disabled={tools.length === 0}
                 className="h-7 text-xs"
-                data-testid="deselect-all-button"
+                data-testid="invert-selection-button"
               >
-                <Square className="h-3 w-3 mr-1" />
-                {t('hub.toolPolicy.deselectAll')}
+                {t('hub.toolPolicy.invertSelection')}
               </Button>
               <Button
                 variant="ghost"

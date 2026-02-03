@@ -13,7 +13,6 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
     ActionSheet,
@@ -49,8 +48,8 @@ import { useProjectPaths, addProjectPath, removeProjectPath, getProjectPaths, ge
 import { SourceIcon } from "@/components/import/SourceIcons";
 import type { ProjectPath } from "@/types/project";
 import { toast } from "sonner";
-// Story 11.9: MCP 上下文卡片
-import { McpContextCard } from "@/components/hub";
+// Story 11.9 → Story 11.18: MCP 上下文 Section
+import { McpContextSection } from "./McpContextSection";
 
 /**
  * ProjectInfoSheet Props
@@ -259,7 +258,6 @@ export function ProjectInfoSheet({
     onProjectUpdated,
 }: ProjectInfoSheetProps) {
     const { t, i18n } = useTranslation();
-    const navigate = useNavigate();
     const [sessions, setSessions] = React.useState<SessionSummary[]>([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [currentProject, setCurrentProject] = React.useState<Project | null>(project ?? null);
@@ -733,23 +731,20 @@ export function ProjectInfoSheet({
                         )}
                     </div>
 
-                    {/* Story 11.9: MCP 上下文卡片 */}
+                    {/* Story 11.9 → Story 11.18: MCP 上下文 Section */}
                     {!isPlaceholder && (currentProject || logicalProject) && (
                         <>
                             <Separator className="my-4" />
                             <div className="px-4">
-                                <McpContextCard
+                                <McpContextSection
                                     projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
+                                    projectName={currentProject?.name ?? logicalProject?.display_name}
                                     projectPath={
                                         paths.find((p) => p.is_primary)?.path ??
                                         paths[0]?.path ??
                                         logicalProject?.physical_path ??
                                         currentProject?.cwd
                                     }
-                                    onNavigateToHub={(projectId) => {
-                                        onOpenChange(false); // 关闭 Sheet
-                                        navigate(`/hub?project=${projectId}`);
-                                    }}
                                 />
                             </div>
                         </>

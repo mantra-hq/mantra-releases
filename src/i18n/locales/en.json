@@ -1194,7 +1194,12 @@
       "manageTools": "Manage Tools",
       "toolPermissions": "Tool Permissions",
       "policyDenyAll": "All Denied",
-      "policyCustom": "Custom {{count}}"
+      "policyCustom": "Custom {{count}}",
+      "linkMoreServices": "Link More Services",
+      "linkSaveSuccess": "Service links updated",
+      "linkSaveError": "Failed to update links",
+      "noServicesAvailable": "No services available. Import MCP configurations first.",
+      "saveLinks": "Save"
     },
     "takeover": {
       "title": "Takeover Status",
@@ -1246,7 +1251,8 @@
       "saveSuccess": "Tool policy saved",
       "saveError": "Failed to save tool policy",
       "selectAll": "Select All",
-      "deselectAll": "Deselect All",
+      "clearSelection": "Clear",
+      "invertSelection": "Invert",
       "selectedCount": "{{selected}}/{{total}}",
       "save": "Save",
       "globalEntry": "Global Tool Policy",
