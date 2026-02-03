@@ -8,6 +8,7 @@
  * - 连接数
  * - 启动/停止按钮
  * - 连接 URL 和 Token 复制
+ * - 自动启动开关
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -18,6 +19,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -55,10 +58,22 @@ interface GatewayStatus {
   total_requests: number;
 }
 
+/**
+ * Gateway 配置类型
+ */
+interface GatewayConfig {
+  id: number;
+  port: number | null;
+  auth_token: string;
+  enabled: boolean;
+  auto_start: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export function GatewayStatusCard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<GatewayStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -67,16 +82,21 @@ export function GatewayStatusCard() {
   const [portInput, setPortInput] = useState("");
   const [isPortPopoverOpen, setIsPortPopoverOpen] = useState(false);
   const [isUpdatingPort, setIsUpdatingPort] = useState(false);
+  // 自动启动配置状态
+  const [autoStart, setAutoStart] = useState(true);
+  const [isUpdatingAutoStart, setIsUpdatingAutoStart] = useState(false);
 
-  // 加载 Gateway 状态
+  // 加载 Gateway 状态和配置
   const loadStatus = useCallback(async () => {
     try {
-      const result = await invoke<GatewayStatus>("get_gateway_status");
-      setStatus(result);
+      const [statusResult, configResult] = await Promise.all([
+        invoke<GatewayStatus>("get_gateway_status"),
+        invoke<GatewayConfig>("get_gateway_config"),
+      ]);
+      setStatus(statusResult);
+      setAutoStart(configResult.auto_start);
     } catch (error) {
       console.error("[GatewayStatusCard] Failed to load status:", error);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -195,6 +215,27 @@ export function GatewayStatusCard() {
       feedback.error(t("common.copy"), (error as Error).message);
     }
   }, [status, t]);
+
+  // 切换自动启动
+  const handleToggleAutoStart = useCallback(async (checked: boolean) => {
+    setIsUpdatingAutoStart(true);
+    try {
+      await invoke("update_gateway_config", {
+        update: { auto_start: checked },
+      });
+      setAutoStart(checked);
+      feedback.success(
+        checked
+          ? t("hub.gateway.autoStartEnabled")
+          : t("hub.gateway.autoStartDisabled")
+      );
+    } catch (error) {
+      console.error("[GatewayStatusCard] Failed to update auto_start:", error);
+      feedback.error(t("hub.gateway.autoStart"), (error as Error).message);
+    } finally {
+      setIsUpdatingAutoStart(false);
+    }
+  }, [t]);
 
   // 初始加载 + 定时刷新
   useEffect(() => {
@@ -414,35 +455,54 @@ export function GatewayStatusCard() {
         <Separator />
 
         {/* 操作按钮 */}
-        <div className="flex justify-end gap-2">
-          {status?.running ? (
-            <Button
-              variant="destructive"
-              onClick={handleStop}
-              disabled={isStopping}
-              data-testid="gateway-stop-button"
+        <div className="flex items-center justify-between">
+          {/* 自动启动开关 */}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="auto-start"
+              checked={autoStart}
+              onCheckedChange={handleToggleAutoStart}
+              disabled={isUpdatingAutoStart}
+              data-testid="auto-start-switch"
+            />
+            <Label
+              htmlFor="auto-start"
+              className="text-sm text-muted-foreground cursor-pointer"
             >
-              {isStopping ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Square className="h-4 w-4 mr-2" />
-              )}
-              {t("hub.gateway.stop")}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleStart}
-              disabled={isStarting}
-              data-testid="gateway-start-button"
-            >
-              {isStarting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              {t("hub.gateway.start")}
-            </Button>
-          )}
+              {t("hub.gateway.autoStart")}
+            </Label>
+          </div>
+
+          <div className="flex gap-2">
+            {status?.running ? (
+              <Button
+                variant="destructive"
+                onClick={handleStop}
+                disabled={isStopping}
+                data-testid="gateway-stop-button"
+              >
+                {isStopping ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Square className="h-4 w-4 mr-2" />
+                )}
+                {t("hub.gateway.stop")}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStart}
+                disabled={isStarting}
+                data-testid="gateway-start-button"
+              >
+                {isStarting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
+                {t("hub.gateway.start")}
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -59,10 +59,10 @@ impl Database {
         match result {
             Ok(config) => Ok(config),
             Err(rusqlite::Error::QueryReturnedNoRows) => {
-                // 创建默认配置
+                // 创建默认配置（默认启用自动启动）
                 let auth_token = uuid::Uuid::new_v4().to_string();
                 self.connection().execute(
-                    "INSERT INTO gateway_config (id, auth_token) VALUES (1, ?1)",
+                    "INSERT INTO gateway_config (id, auth_token, enabled, auto_start) VALUES (1, ?1, 1, 1)",
                     [&auth_token],
                 )?;
                 self.get_gateway_config()
@@ -148,8 +148,9 @@ mod tests {
 
         assert_eq!(config.id, 1);
         assert!(!config.auth_token.is_empty());
-        assert!(!config.enabled);
-        assert!(!config.auto_start);
+        // 默认启用 Gateway 和自动启动
+        assert!(config.enabled);
+        assert!(config.auto_start);
     }
 
     #[test]

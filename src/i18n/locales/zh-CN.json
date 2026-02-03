@@ -976,7 +976,10 @@
       "copyUrl": "复制完整 URL",
       "copyToken": "复制 Token",
       "regenerateToken": "重新生成 Token",
-      "tokenRegenerateSuccess": "Token 已重新生成"
+      "tokenRegenerateSuccess": "Token 已重新生成",
+      "autoStart": "随应用启动",
+      "autoStartEnabled": "已开启自动启动",
+      "autoStartDisabled": "已关闭自动启动"
     },
     "services": {
       "title": "MCP 服务",

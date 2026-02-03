@@ -971,7 +971,10 @@
       "copyUrl": "Copy full URL",
       "copyToken": "Copy Token",
       "regenerateToken": "Regenerate Token",
-      "tokenRegenerateSuccess": "Token regenerated"
+      "tokenRegenerateSuccess": "Token regenerated",
+      "autoStart": "Start with app",
+      "autoStartEnabled": "Auto-start enabled",
+      "autoStartDisabled": "Auto-start disabled"
     },
     "services": {
       "title": "MCP Services",
