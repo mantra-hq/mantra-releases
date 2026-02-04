@@ -506,6 +506,44 @@ pub fn execute_smart_takeover(
                 executor.backup_manager.commit();
             }
         }
+
+        // 4.5 Story 11.25: 项目级配置清理
+        // 在用户级 Gateway 注入成功后，清理项目级配置文件中的 MCP 服务定义
+        // DD-018: 清理失败只记录警告，不回滚用户级配置的 Gateway 注入
+        if !result.takeover_backup_ids.is_empty() {
+            // 收集所有项目级配置
+            let project_configs: Vec<_> = scan_result
+                .configs
+                .iter()
+                .filter(|c| matches!(c.scope, Some(ConfigScope::Project)))
+                .collect();
+
+            for config in project_configs {
+                if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
+                    let project_root = ImportExecutor::get_project_root_from_config_path(&config.path);
+
+                    let mut cleanup_executor = ImportExecutor::new(db, env_manager);
+                    match cleanup_executor.apply_project_config_cleanup(
+                        &config.path,
+                        &config.adapter_id,
+                        &tool_type,
+                        project_root,
+                    ) {
+                        Ok(backup_id) => {
+                            result.takeover_backup_ids.push(backup_id);
+                        }
+                        Err(e) => {
+                            // DD-018: 清理失败只记录警告
+                            result.errors.push(format!(
+                                "[Warning] Failed to cleanup project config {:?}: {}",
+                                config.path, e
+                            ));
+                        }
+                    }
+                    cleanup_executor.backup_manager.commit();
+                }
+            }
+        }
     }
 
     Ok(result)
@@ -721,6 +759,42 @@ pub fn execute_full_tool_takeover(
             );
         }
         return result;
+    }
+
+    // Phase 2.5: 项目级配置清理 (Story 11.25)
+    // DD-018: 清理失败只记录警告，不影响整体成功
+    {
+        // 收集所有项目级配置
+        let project_configs: Vec<_> = scan_result
+            .configs
+            .iter()
+            .filter(|c| matches!(c.scope, Some(ConfigScope::Project)))
+            .collect();
+
+        for config in project_configs {
+            if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
+                let project_root = ImportExecutor::get_project_root_from_config_path(&config.path);
+
+                match executor.apply_project_config_cleanup(
+                    &config.path,
+                    &config.adapter_id,
+                    &tool_type,
+                    project_root,
+                ) {
+                    Ok(backup_id) => {
+                        transaction.record_backup_created(backup_id.clone(), config.path.clone());
+                        result.takeover_backup_ids.push(backup_id);
+                    }
+                    Err(e) => {
+                        // DD-018: 清理失败只记录警告，不影响 success 状态
+                        result.warnings.push(format!(
+                            "Failed to cleanup project config {:?}: {}",
+                            config.path, e
+                        ));
+                    }
+                }
+            }
+        }
     }
 
     // Phase 3: 处理 Claude Code Local Scope (Story 11.21 - Task 5)

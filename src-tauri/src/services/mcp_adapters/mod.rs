@@ -198,6 +198,21 @@ pub trait McpToolAdapter: Send + Sync {
     /// # Returns
     /// 注入后的配置文件内容（保留原有设置）
     fn inject_gateway(&self, original_content: &str, config: &GatewayInjectionConfig) -> Result<String, AdapterError>;
+
+    /// 清空 MCP 服务器配置 (Story 11.25)
+    ///
+    /// 清空配置文件中的 `mcpServers` / `mcp_servers` 为空对象，
+    /// 但保留配置文件中的其他非 MCP 设置。
+    ///
+    /// 用于项目级配置清理：接管后清空项目级 mcpServers，
+    /// 避免工具直连项目级配置中的 MCP 服务。
+    ///
+    /// # Arguments
+    /// * `original_content` - 原始配置文件内容
+    ///
+    /// # Returns
+    /// 清空 MCP 服务器后的配置文件内容（保留其他设置）
+    fn clear_mcp_servers(&self, original_content: &str) -> Result<String, AdapterError>;
 }
 
 /// 适配器错误类型

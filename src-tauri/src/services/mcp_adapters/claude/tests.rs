@@ -792,3 +792,98 @@ fn test_inject_gateway_with_local_scope_clear_handles_enable_disable_lists() {
     let enabled = &parsed["projects"]["/project"]["enabledMcpjsonServers"];
     assert!(enabled.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
 }
+
+// ===== Story 11.25: clear_mcp_servers 项目级配置清理测试 =====
+
+#[test]
+fn test_clear_mcp_servers_basic() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {
+            "service-1": {"command": "npx", "args": ["-y", "service-1"]},
+            "service-2": {"url": "http://localhost:8080/mcp"}
+        },
+        "autoApprove": ["read", "write"]
+    }"#;
+
+    let result = adapter.clear_mcp_servers(content).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // mcpServers 应该被清空为 {}
+    assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+
+    // 其他字段应该保留
+    assert_eq!(parsed["autoApprove"], serde_json::json!(["read", "write"]));
+}
+
+#[test]
+fn test_clear_mcp_servers_empty_original() {
+    let adapter = ClaudeAdapter;
+
+    let result = adapter.clear_mcp_servers("").unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // 空配置应该变成 {"mcpServers": {}}
+    assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+}
+
+#[test]
+fn test_clear_mcp_servers_preserves_all_other_fields() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {"old": {"command": "old"}},
+        "permissions": {"allowedPaths": ["/home/user"]},
+        "autoApprove": ["read"],
+        "customSetting": true,
+        "nestedObject": {
+            "key1": "value1",
+            "key2": 42
+        }
+    }"#;
+
+    let result = adapter.clear_mcp_servers(content).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // mcpServers 被清空
+    assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+
+    // 所有其他字段保留
+    assert_eq!(parsed["permissions"]["allowedPaths"], serde_json::json!(["/home/user"]));
+    assert_eq!(parsed["autoApprove"], serde_json::json!(["read"]));
+    assert_eq!(parsed["customSetting"], true);
+    assert_eq!(parsed["nestedObject"]["key1"], "value1");
+    assert_eq!(parsed["nestedObject"]["key2"], 42);
+}
+
+#[test]
+fn test_clear_mcp_servers_with_comments() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        // Project-level MCP config
+        "mcpServers": {
+            /* Git MCP */
+            "git-mcp": {"command": "npx", "args": ["-y", "@anthropic/git-mcp"]}
+        }
+    }"#;
+
+    let result = adapter.clear_mcp_servers(content).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // 即使有注释也能正确处理
+    assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+}
+
+#[test]
+fn test_clear_mcp_servers_no_existing_mcp_servers() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "autoApprove": ["read"]
+    }"#;
+
+    let result = adapter.clear_mcp_servers(content).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // 即使原本没有 mcpServers，也应该添加空对象
+    assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+    assert_eq!(parsed["autoApprove"], serde_json::json!(["read"]));
+}

@@ -90,6 +90,31 @@ Authorization = "{}"
 
         merge_toml_config(original_content, "mcp_servers", &gateway_toml)
     }
+
+    /// Story 11.25: 清空项目级配置中的 mcp_servers
+    fn clear_mcp_servers(&self, original_content: &str) -> Result<String, AdapterError> {
+        use toml_edit::{DocumentMut, Item, Table};
+
+        // 解析原始文档
+        let mut doc: DocumentMut = if original_content.trim().is_empty() {
+            DocumentMut::new()
+        } else {
+            original_content.parse().map_err(|e: toml_edit::TomlError| {
+                AdapterError::Toml(e.to_string())
+            })?
+        };
+
+        // 清空 [mcp_servers] 节
+        let mcp_table = doc
+            .entry("mcp_servers")
+            .or_insert(Item::Table(Table::new()));
+
+        if let Some(table) = mcp_table.as_table_mut() {
+            table.clear();
+        }
+
+        Ok(doc.to_string())
+    }
 }
 
 // ===== 配置文件结构定义 =====
@@ -329,5 +354,98 @@ command = "old-mcp"
         // Codex 使用 http_headers 而非 headers
         assert!(result.contains("http_headers"));
         assert!(result.contains("Authorization"));
+    }
+
+    // ===== Story 11.25: clear_mcp_servers 测试 =====
+
+    #[test]
+    fn test_codex_clear_mcp_servers_basic() {
+        let adapter = CodexAdapter;
+        let content = r#"
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@mcp/filesystem"]
+
+[mcp_servers.database]
+command = "uvx"
+args = ["mcp-postgres"]
+"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+
+        // mcp_servers 应该被清空
+        assert!(!result.contains("filesystem"));
+        assert!(!result.contains("database"));
+        // 清空后的表可能显示为 [mcp_servers] 或根本不显示（toml_edit 行为）
+    }
+
+    #[test]
+    fn test_codex_clear_mcp_servers_preserves_other_settings() {
+        let adapter = CodexAdapter;
+        let content = r#"
+# Codex config
+model = "gpt-4"
+temperature = 0.7
+
+[mcp_servers.old]
+command = "old-mcp"
+
+[other_section]
+key = "value"
+"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+
+        // 其他配置保留
+        assert!(result.contains("model = \"gpt-4\""));
+        assert!(result.contains("temperature = 0.7"));
+        assert!(result.contains("[other_section]"));
+        assert!(result.contains("key = \"value\""));
+
+        // 旧服务被清空
+        assert!(!result.contains("old-mcp"));
+    }
+
+    #[test]
+    fn test_codex_clear_mcp_servers_preserves_comments() {
+        let adapter = CodexAdapter;
+        let content = r#"
+# This is my Codex config
+model = "gpt-4"
+
+# MCP servers
+[mcp_servers.test]
+command = "test"
+"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+
+        // 注释保留
+        assert!(result.contains("# This is my Codex config"));
+    }
+
+    #[test]
+    fn test_codex_clear_mcp_servers_empty_content() {
+        let adapter = CodexAdapter;
+
+        let result = adapter.clear_mcp_servers("").unwrap();
+
+        // 空内容也能正确处理
+        assert!(result.contains("mcp_servers"));
+    }
+
+    #[test]
+    fn test_codex_clear_mcp_servers_no_existing_section() {
+        let adapter = CodexAdapter;
+        let content = r#"
+model = "gpt-4"
+temperature = 0.7
+"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+
+        // 应该添加空的 mcp_servers 节
+        assert!(result.contains("model = \"gpt-4\""));
+        assert!(result.contains("temperature = 0.7"));
     }
 }

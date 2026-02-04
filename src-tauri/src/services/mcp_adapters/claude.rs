@@ -98,8 +98,10 @@ impl McpToolAdapter for ClaudeAdapter {
         })?;
 
         // 1. 注入 Gateway 到 mcpServers
+        // 注意: Claude Code 要求 HTTP 类型的服务器显式指定 "type": "http"
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
+                "type": "http",
                 "url": config.url,
                 "headers": {
                     "Authorization": config.authorization_header()
@@ -115,6 +117,22 @@ impl McpToolAdapter for ClaudeAdapter {
                     Self::ensure_gateway_enabled_in_project(proj_obj);
                 }
             }
+        }
+
+        serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
+    }
+
+    /// Story 11.25: 清空项目级配置中的 mcpServers
+    fn clear_mcp_servers(&self, original_content: &str) -> Result<String, AdapterError> {
+        let stripped = strip_json_comments(original_content);
+        let mut root: serde_json::Value = if stripped.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&stripped)?
+        };
+
+        if let Some(obj) = root.as_object_mut() {
+            obj.insert("mcpServers".to_string(), serde_json::json!({}));
         }
 
         serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
@@ -419,8 +437,10 @@ impl ClaudeAdapter {
         })?;
 
         // 1. 注入 Gateway 到 user scope (mcpServers)
+        // 注意: Claude Code 要求 HTTP 类型的服务器显式指定 "type": "http"
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
+                "type": "http",
                 "url": config.url,
                 "headers": {
                     "Authorization": config.authorization_header()

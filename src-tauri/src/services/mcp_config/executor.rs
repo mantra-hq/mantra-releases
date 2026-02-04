@@ -187,6 +187,42 @@ impl<'a> ImportExecutor<'a> {
             }
         }
 
+        // 4.5 Story 11.25: 项目级配置清理
+        // 在用户级 Gateway 注入成功后，清理项目级配置文件中的 MCP 服务定义
+        // DD-018: 清理失败只记录警告，不回滚用户级配置的 Gateway 注入
+        if !takeover_backup_ids.is_empty() {
+            // 收集所有项目级配置
+            let project_configs: Vec<_> = preview
+                .configs
+                .iter()
+                .filter(|c| matches!(c.scope, Some(ConfigScope::Project)))
+                .collect();
+
+            for config in project_configs {
+                if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
+                    let project_root = Self::get_project_root_from_config_path(&config.path);
+
+                    match self.apply_project_config_cleanup(
+                        &config.path,
+                        &config.adapter_id,
+                        &tool_type,
+                        project_root,
+                    ) {
+                        Ok(backup_id) => {
+                            takeover_backup_ids.push(backup_id);
+                        }
+                        Err(e) => {
+                            // DD-018: 清理失败只记录警告
+                            errors.push(format!(
+                                "[Warning] Failed to cleanup project config {:?}: {}",
+                                config.path, e
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
         // 5. 提交备份（成功则不回滚）
         if errors.is_empty() {
             self.backup_manager.commit();
@@ -683,5 +719,139 @@ impl<'a> ImportExecutor<'a> {
     #[cfg(test)]
     pub fn generate_local_scope_backup_path_for_test(&self, project_path: &str) -> PathBuf {
         self.generate_local_scope_backup_path(project_path)
+    }
+
+    // ===== Story 11.25: 项目级配置清理 =====
+
+    /// 清理项目级配置文件 (Story 11.25)
+    ///
+    /// 清理项目级配置文件中的 MCP 服务定义，避免工具绕过 Gateway 直连 MCP 服务。
+    ///
+    /// # 流程
+    /// 1. 检查是否已有该配置的活跃清理备份记录
+    /// 2. 原子备份原始配置文件
+    /// 3. 使用适配器的 `clear_mcp_servers()` 生成清理后内容
+    /// 4. 原子写入清理后内容
+    /// 5. 创建 TakeoverBackup 记录 (scope=Project)
+    /// 6. 自动清理旧备份
+    ///
+    /// # Arguments
+    /// * `project_config_path` - 项目级配置文件路径（如 `.mcp.json`）
+    /// * `adapter_id` - 适配器 ID（用于选择正确的清理方法）
+    /// * `tool_type` - 工具类型
+    /// * `project_root` - 项目根目录（用于备份记录的 project_path 字段）
+    ///
+    /// # Returns
+    /// 创建的备份 ID
+    pub(super) fn apply_project_config_cleanup(
+        &mut self,
+        project_config_path: &Path,
+        adapter_id: &str,
+        tool_type: &ToolType,
+        project_root: Option<PathBuf>,
+    ) -> Result<String, StorageError> {
+        use crate::services::atomic_fs;
+
+        // 1. 检查文件是否存在
+        if !project_config_path.exists() {
+            return Err(StorageError::InvalidInput(format!(
+                "Project config file not found: {:?}",
+                project_config_path
+            )));
+        }
+
+        // 2. 检查是否已有该配置的活跃清理备份记录
+        let path_str = project_config_path.to_string_lossy().to_string();
+        if let Ok(Some(existing)) = self.db.get_active_takeover_by_original_path(&path_str) {
+            // 已经清理过，跳过
+            return Ok(existing.id);
+        }
+
+        // 3. 生成备份文件路径
+        let backup_path = self.generate_backup_path(project_config_path);
+
+        // 4. 原子备份原文件 (Story 11.22)
+        let backup_hash = atomic_fs::atomic_copy(project_config_path, &backup_path).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic backup project config: {}", e))
+        })?;
+
+        // 5. 读取原始内容
+        let original_content = fs::read_to_string(project_config_path).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to read project config: {}", e))
+        })?;
+
+        // 6. 使用适配器清理 MCP 服务配置
+        let registry = ToolAdapterRegistry::new();
+        let cleared_content = if let Some(adapter) = registry.get(adapter_id) {
+            adapter.clear_mcp_servers(&original_content).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to clear mcp servers: {}", e))
+            })?
+        } else {
+            // 回退：如果没有找到适配器，返回错误
+            return Err(StorageError::InvalidInput(format!(
+                "No adapter found for: {}",
+                adapter_id
+            )));
+        };
+
+        // 7. 原子写入清理后内容 (Story 11.22)
+        atomic_fs::atomic_write_str(project_config_path, &cleared_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic write cleared config: {}", e))
+        })?;
+
+        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
+        let project_path_str_for_cleanup = project_root.as_ref().map(|p| p.to_string_lossy().to_string());
+
+        // 8. 创建备份记录并存储到数据库 (scope=Project)
+        let backup = TakeoverBackup::new_with_hash(
+            tool_type.clone(),
+            project_config_path.to_path_buf(),
+            backup_path.clone(),
+            TakeoverScope::Project,
+            project_root,
+            backup_hash,
+        );
+        let backup_id = backup.id.clone();
+        self.db.create_takeover_backup(&backup)?;
+
+        // 9. 自动清理旧备份 (Story 11.23)
+        if let Err(e) = cleanup_old_backups(
+            self.db,
+            tool_type,
+            &TakeoverScope::Project,
+            project_path_str_for_cleanup.as_deref(),
+            5,
+        ) {
+            eprintln!("[Backup] Warning: Failed to cleanup old project config backups: {}", e);
+        }
+
+        // 10. 添加到备份管理器（用于可能的回滚）
+        self.backup_manager.add_backup_path(backup_path);
+
+        Ok(backup_id)
+    }
+
+    /// 获取项目根目录（从项目级配置文件路径推断）
+    ///
+    /// 例如：
+    /// - `.mcp.json` -> 所在目录
+    /// - `.cursor/mcp.json` -> 父目录的父目录
+    /// - `.codex/config.toml` -> 父目录的父目录
+    /// - `.gemini/settings.json` -> 父目录的父目录
+    pub(super) fn get_project_root_from_config_path(config_path: &Path) -> Option<PathBuf> {
+        let parent = config_path.parent()?;
+        let parent_name = parent.file_name()?.to_string_lossy();
+
+        // 如果父目录是 .cursor / .codex / .gemini，则取父目录的父目录
+        if parent_name.starts_with('.') && (
+            parent_name == ".cursor" ||
+            parent_name == ".codex" ||
+            parent_name == ".gemini"
+        ) {
+            parent.parent().map(|p| p.to_path_buf())
+        } else {
+            // 否则取父目录（如 .mcp.json 所在目录）
+            Some(parent.to_path_buf())
+        }
     }
 }

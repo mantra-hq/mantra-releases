@@ -70,8 +70,10 @@ impl McpToolAdapter for CursorAdapter {
         original_content: &str,
         config: &GatewayInjectionConfig,
     ) -> Result<String, AdapterError> {
+        // 注意: Cursor 可能也要求 HTTP 类型显式指定 "type": "http"
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
+                "type": "http",
                 "url": config.url,
                 "headers": {
                     "Authorization": config.authorization_header()
@@ -80,6 +82,22 @@ impl McpToolAdapter for CursorAdapter {
         });
 
         merge_json_config(original_content, "mcpServers", gateway_config)
+    }
+
+    /// Story 11.25: 清空项目级配置中的 mcpServers
+    fn clear_mcp_servers(&self, original_content: &str) -> Result<String, AdapterError> {
+        let stripped = strip_json_comments(original_content);
+        let mut root: serde_json::Value = if stripped.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&stripped)?
+        };
+
+        if let Some(obj) = root.as_object_mut() {
+            obj.insert("mcpServers".to_string(), serde_json::json!({}));
+        }
+
+        serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
     }
 }
 
@@ -285,5 +303,67 @@ mod tests {
 
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].name, "my-server");
+    }
+
+    // ===== Story 11.25: clear_mcp_servers 测试 =====
+
+    #[test]
+    fn test_cursor_clear_mcp_servers_basic() {
+        let adapter = CursorAdapter;
+        let content = r#"{
+            "mcpServers": {
+                "filesystem": {"command": "npx", "args": ["-y", "@mcp/filesystem"]},
+                "database": {"command": "uvx", "args": ["mcp-postgres"]}
+            }
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_cursor_clear_mcp_servers_preserves_other_fields() {
+        let adapter = CursorAdapter;
+        let content = r#"{
+            "mcpServers": {"old": {"command": "old"}},
+            "otherSetting": "value",
+            "nested": {"key": 123}
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+        assert_eq!(parsed["otherSetting"], "value");
+        assert_eq!(parsed["nested"]["key"], 123);
+    }
+
+    #[test]
+    fn test_cursor_clear_mcp_servers_empty_content() {
+        let adapter = CursorAdapter;
+
+        let result = adapter.clear_mcp_servers("").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_cursor_clear_mcp_servers_with_comments() {
+        let adapter = CursorAdapter;
+        let content = r#"{
+            // Cursor project config
+            "mcpServers": {
+                /* MCP server */
+                "test": {"command": "test-mcp"}
+            }
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
     }
 }

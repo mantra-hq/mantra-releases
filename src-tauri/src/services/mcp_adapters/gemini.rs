@@ -82,8 +82,10 @@ impl McpToolAdapter for GeminiAdapter {
         })?;
 
         // 1. 注入 Gateway 到 mcpServers
+        // 注意: 显式指定 "type": "http" 以兼容最新的 MCP 配置格式要求
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
+                "type": "http",
                 "url": config.url,
                 "headers": {
                     "Authorization": config.authorization_header()
@@ -94,6 +96,30 @@ impl McpToolAdapter for GeminiAdapter {
 
         // 2. 确保 Gateway 不被 mcp.allowed/mcp.excluded 屏蔽
         Self::ensure_gateway_enabled_in_mcp_settings(obj);
+
+        serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
+    }
+
+    /// Story 11.25: 清空项目级配置中的 mcpServers + 清理 mcp.allowed / mcp.excluded
+    fn clear_mcp_servers(&self, original_content: &str) -> Result<String, AdapterError> {
+        let stripped = strip_json_comments(original_content);
+        let mut root: serde_json::Value = if stripped.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&stripped)?
+        };
+
+        if let Some(obj) = root.as_object_mut() {
+            // 1. 清空 mcpServers
+            obj.insert("mcpServers".to_string(), serde_json::json!({}));
+
+            // 2. 清理 mcp.allowed / mcp.excluded（如存在）
+            // 根据 Story 11.25 设计决策，项目级配置清理时需要移除这些过滤字段
+            if let Some(mcp) = obj.get_mut("mcp").and_then(|m| m.as_object_mut()) {
+                mcp.remove("allowed");
+                mcp.remove("excluded");
+            }
+        }
 
         serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
     }
@@ -524,5 +550,156 @@ mod tests {
         assert!(parsed["mcpServers"]["mantra-gateway"].is_object());
         // mcp 字段可能不存在或为 null
         assert!(parsed.get("mcp").is_none() || parsed["mcp"].is_null());
+    }
+
+    // ===== Story 11.25: clear_mcp_servers 测试 =====
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_basic() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {
+                "filesystem": {"command": "npx", "args": ["-y", "@mcp/filesystem"]},
+                "database": {"command": "uvx", "args": ["mcp-postgres"]}
+            },
+            "model": "gemini-pro"
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // mcpServers 被清空
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+        // 其他设置保留
+        assert_eq!(parsed["model"], "gemini-pro");
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_removes_mcp_allowed_excluded() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {"test": {"command": "test"}},
+            "model": "gemini-pro",
+            "mcp": {
+                "allowed": ["server-a", "server-b"],
+                "excluded": ["bad-server"],
+                "otherSetting": "keep-this"
+            }
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // mcpServers 被清空
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+
+        // mcp.allowed 和 mcp.excluded 被移除
+        assert!(parsed["mcp"].get("allowed").is_none());
+        assert!(parsed["mcp"].get("excluded").is_none());
+
+        // mcp 中的其他设置保留
+        assert_eq!(parsed["mcp"]["otherSetting"], "keep-this");
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_preserves_other_fields() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {"old": {"command": "old"}},
+            "model": "gemini-pro",
+            "temperature": 0.7,
+            "maxOutputTokens": 8192,
+            "safetySettings": [{"category": "HARM", "threshold": "BLOCK"}]
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // mcpServers 被清空
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+
+        // 所有其他设置保留
+        assert_eq!(parsed["model"], "gemini-pro");
+        assert_eq!(parsed["temperature"], 0.7);
+        assert_eq!(parsed["maxOutputTokens"], 8192);
+        assert!(parsed["safetySettings"].is_array());
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_empty_content() {
+        let adapter = GeminiAdapter;
+
+        let result = adapter.clear_mcp_servers("").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_with_comments() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            // Gemini project settings
+            "mcpServers": {
+                /* MCP server */
+                "test": {"command": "test-mcp"}
+            },
+            "model": "gemini-pro"
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+        assert_eq!(parsed["model"], "gemini-pro");
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_no_mcp_object() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {"test": {"command": "test"}},
+            "model": "gemini-pro"
+        }"#;
+
+        // 没有 mcp 对象时也能正常清理
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_only_allowed() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {"test": {"command": "test"}},
+            "mcp": {
+                "allowed": ["server-a"]
+            }
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+        assert!(parsed["mcp"].get("allowed").is_none());
+    }
+
+    #[test]
+    fn test_gemini_clear_mcp_servers_only_excluded() {
+        let adapter = GeminiAdapter;
+        let content = r#"{
+            "mcpServers": {"test": {"command": "test"}},
+            "mcp": {
+                "excluded": ["bad-server"]
+            }
+        }"#;
+
+        let result = adapter.clear_mcp_servers(content).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        assert_eq!(parsed["mcpServers"], serde_json::json!({}));
+        assert!(parsed["mcp"].get("excluded").is_none());
     }
 }
