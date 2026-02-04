@@ -95,6 +95,9 @@ use commands::{
     scan_local_scopes, restore_local_scope_takeover_cmd, restore_all_local_scope_takeovers_cmd, get_active_local_scope_takeovers,
     // Story 11.22: Atomic Backup Integrity commands
     list_active_takeovers_with_integrity, delete_invalid_takeover_backups,
+    // Story 11.23: Backup Version Management commands
+    cleanup_old_takeover_backups, cleanup_all_old_takeover_backups,
+    get_backup_stats, list_takeover_backups_with_version, delete_single_takeover_backup,
     // Story 11.7: Tray commands
     get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
     // Story 11.12: OAuth commands
@@ -426,6 +429,12 @@ pub fn run() {
             // Story 11.22: Atomic Backup Integrity
             list_active_takeovers_with_integrity,
             delete_invalid_takeover_backups,
+            // Story 11.23: Backup Version Management
+            cleanup_old_takeover_backups,
+            cleanup_all_old_takeover_backups,
+            get_backup_stats,
+            list_takeover_backups_with_version,
+            delete_single_takeover_backup,
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,

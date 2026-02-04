@@ -458,8 +458,8 @@ export function ProjectInfoSheet({
     return (
         <TooltipProvider>
             <ActionSheet open={isOpen} onOpenChange={onOpenChange}>
-                <ActionSheetContent size="lg" className="overflow-y-auto" data-testid="project-info-sheet">
-                    <ActionSheetHeader>
+                <ActionSheetContent size="lg" className="flex flex-col" data-testid="project-info-sheet">
+                    <ActionSheetHeader className="shrink-0">
                         <ActionSheetTitle className="flex items-center gap-2">
                             <FolderOpen className="h-5 w-5 shrink-0" />
                             <TruncatedText
@@ -479,7 +479,9 @@ export function ProjectInfoSheet({
                         </ActionSheetDescription>
                     </ActionSheetHeader>
 
-                    <div className="divide-y divide-border px-4">
+                    {/* 可滚动内容区域 */}
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                        <div className="divide-y divide-border px-4">
                         {/* Story 1.12: 项目路径列表 - 多路径支持 */}
                         <div className="flex items-start gap-3 py-2">
                             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -729,46 +731,47 @@ export function ProjectInfoSheet({
                                 value={t("projectInfo.hasGitRepo", "已检测到 Git 仓库")}
                             />
                         )}
-                    </div>
+                        </div>
 
-                    {/* Story 11.9 → Story 11.18: MCP 上下文 Section */}
-                    {!isPlaceholder && (currentProject || logicalProject) && (
-                        <>
-                            <Separator className="my-4" />
-                            <div className="px-4">
-                                <McpContextSection
-                                    projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
-                                    projectName={currentProject?.name ?? logicalProject?.display_name}
-                                    projectPath={
-                                        paths.find((p) => p.is_primary)?.path ??
-                                        paths[0]?.path ??
-                                        logicalProject?.physical_path ??
-                                        currentProject?.cwd
-                                    }
-                                />
-                            </div>
-                        </>
-                    )}
+                        {/* Story 11.9 → Story 11.18: MCP 上下文 Section */}
+                        {!isPlaceholder && (currentProject || logicalProject) && (
+                            <>
+                                <Separator className="my-4" />
+                                <div className="px-4 pb-4">
+                                    <McpContextSection
+                                        projectId={currentProject?.id ?? logicalProject?.project_ids[0] ?? ""}
+                                        projectName={currentProject?.name ?? logicalProject?.display_name}
+                                        projectPath={
+                                            paths.find((p) => p.is_primary)?.path ??
+                                            paths[0]?.path ??
+                                            logicalProject?.physical_path ??
+                                            currentProject?.cwd
+                                        }
+                                    />
+                                </div>
+                            </>
+                        )}
 
-                    {/* 无效 CWD 提示 */}
-                    {isPlaceholder && (
-                        <div className="mx-4 mt-4 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
-                            <div className="flex items-start gap-2">
-                                <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                                <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                                    <p className="font-medium mb-1">
-                                        {t("projectInfo.invalidCwdTitle", "无法识别的路径")}
-                                    </p>
-                                    <p className="text-xs opacity-80">
-                                        {t(
-                                            "projectInfo.invalidCwdDescription",
-                                            "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。"
-                                        )}
-                                    </p>
+                        {/* 无效 CWD 提示 */}
+                        {isPlaceholder && (
+                            <div className="mx-4 mt-4 mb-4 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20">
+                                <div className="flex items-start gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                                    <div className="text-sm text-yellow-600 dark:text-yellow-400">
+                                        <p className="font-medium mb-1">
+                                            {t("projectInfo.invalidCwdTitle", "无法识别的路径")}
+                                        </p>
+                                        <p className="text-xs opacity-80">
+                                            {t(
+                                                "projectInfo.invalidCwdDescription",
+                                                "此项目的路径可能是占位符格式（如 Gemini CLI 生成）。请点击上方的编辑按钮设置正确的工作目录，以便系统正确识别项目位置并启用 Git 相关功能。"
+                                            )}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </ActionSheetContent>
             </ActionSheet>
         </TooltipProvider>

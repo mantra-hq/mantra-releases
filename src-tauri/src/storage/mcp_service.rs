@@ -1133,6 +1133,147 @@ impl Database {
         )?;
         Ok(())
     }
+
+    // ===== Story 11.23: 备份版本管理存储方法 =====
+
+    /// 按工具、作用域和项目路径查询备份记录 (Story 11.23 - Task 3.1)
+    ///
+    /// 返回按接管时间倒序排列的备份列表（最新在前）
+    ///
+    /// # Arguments
+    /// * `tool_type` - 工具类型
+    /// * `scope` - 作用域
+    /// * `project_path` - 项目路径 (project/local scope 需要)
+    ///
+    /// # Returns
+    /// 该组合的所有备份记录，按时间倒序排列
+    pub fn get_backups_by_tool_scope(
+        &self,
+        tool_type: &ToolType,
+        scope: &TakeoverScope,
+        project_path: Option<&str>,
+    ) -> Result<Vec<TakeoverBackup>, StorageError> {
+        let backups: Vec<TakeoverBackup> = match scope {
+            TakeoverScope::User => {
+                let mut stmt = self.connection().prepare(
+                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
+                       FROM mcp_takeover_backups
+                       WHERE tool_type = ?1 AND scope = 'user'
+                       ORDER BY taken_over_at DESC"#,
+                )?;
+                let rows = stmt.query_map([tool_type.as_str()], parse_takeover_backup_row)?;
+                rows.filter_map(|r| r.ok()).collect()
+            }
+            TakeoverScope::Project | TakeoverScope::Local => {
+                let mut stmt = self.connection().prepare(
+                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
+                       FROM mcp_takeover_backups
+                       WHERE tool_type = ?1 AND scope = ?2 AND project_path = ?3
+                       ORDER BY taken_over_at DESC"#,
+                )?;
+                let rows = stmt.query_map(
+                    params![tool_type.as_str(), scope.as_str(), project_path.unwrap_or("")],
+                    parse_takeover_backup_row,
+                )?;
+                rows.filter_map(|r| r.ok()).collect()
+            }
+        };
+
+        Ok(backups)
+    }
+
+    /// 获取所有唯一的备份分组 (Story 11.23 - Task 3.2)
+    ///
+    /// 返回所有 (tool, scope, project_path) 的唯一组合
+    ///
+    /// # Returns
+    /// 分组列表: Vec<(ToolType, TakeoverScope, Option<String>)>
+    pub fn get_backup_groups(
+        &self,
+    ) -> Result<Vec<(ToolType, TakeoverScope, Option<String>)>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            r#"SELECT DISTINCT tool_type, scope, project_path
+               FROM mcp_takeover_backups
+               ORDER BY tool_type, scope, project_path"#,
+        )?;
+
+        let groups = stmt
+            .query_map([], |row| {
+                let tool_type_str: String = row.get(0)?;
+                let scope_str: String = row.get(1)?;
+                let project_path: Option<String> = row.get(2)?;
+                Ok((tool_type_str, scope_str, project_path))
+            })?
+            .filter_map(|r| r.ok())
+            .filter_map(|(tool_str, scope_str, project_path)| {
+                let tool = ToolType::from_str(&tool_str)?;
+                let scope = TakeoverScope::from_str(&scope_str)?;
+                Some((tool, scope, project_path))
+            })
+            .collect();
+
+        Ok(groups)
+    }
+
+    /// 获取备份统计信息 (Story 11.23 - Task 3.3)
+    ///
+    /// 返回总备份数量、总大小和按分组的统计
+    ///
+    /// # Returns
+    /// BackupStats 包含总数量、总大小和分组统计
+    pub fn get_backup_stats(
+        &self,
+    ) -> Result<crate::models::mcp::BackupStats, StorageError> {
+        use crate::models::mcp::{BackupGroupStats, BackupStats};
+
+        // 获取所有备份
+        let all_backups = self.get_takeover_backups(None)?;
+
+        // 计算总数量
+        let total_count = all_backups.len();
+
+        // 计算总大小（通过读取文件）
+        let mut total_size = 0u64;
+        for backup in &all_backups {
+            if backup.backup_path.exists() {
+                if let Ok(metadata) = std::fs::metadata(&backup.backup_path) {
+                    total_size += metadata.len();
+                }
+            }
+        }
+
+        // 按分组统计
+        let groups = self.get_backup_groups()?;
+        let mut group_stats = Vec::new();
+
+        for (tool, scope, project_path) in groups {
+            let group_backups = self.get_backups_by_tool_scope(&tool, &scope, project_path.as_deref())?;
+            let count = group_backups.len();
+            let mut size = 0u64;
+
+            for backup in &group_backups {
+                if backup.backup_path.exists() {
+                    if let Ok(metadata) = std::fs::metadata(&backup.backup_path) {
+                        size += metadata.len();
+                    }
+                }
+            }
+
+            group_stats.push(BackupGroupStats {
+                tool,
+                scope,
+                project_path,
+                count,
+                size,
+            });
+        }
+
+        Ok(BackupStats {
+            total_count,
+            total_size,
+            groups: group_stats,
+        })
+    }
 }
 
 #[cfg(test)]

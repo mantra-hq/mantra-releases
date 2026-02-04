@@ -1252,3 +1252,186 @@ pub fn delete_invalid_backups(db: &Database) -> Result<usize, StorageError> {
 
     Ok(deleted_count)
 }
+
+// ===== Story 11.23: 备份版本管理 =====
+
+/// 清理旧备份，只保留最近 keep_count 个 (Story 11.23 - Task 1)
+///
+/// 每个 (工具 + Scope + 项目路径) 组合独立计算
+/// 按照 DD-015 清理优先级：先删除 DB 记录，再删除文件，文件删除失败只记录警告
+///
+/// # Arguments
+/// * `db` - 数据库
+/// * `tool_type` - 工具类型
+/// * `scope` - 作用域
+/// * `project_path` - 项目路径 (project/local scope 需要)
+/// * `keep_count` - 保留数量
+///
+/// # Returns
+/// 清理结果
+pub fn cleanup_old_backups(
+    db: &Database,
+    tool_type: &ToolType,
+    scope: &TakeoverScope,
+    project_path: Option<&str>,
+    keep_count: usize,
+) -> Result<crate::models::mcp::CleanupResult, StorageError> {
+    use crate::models::mcp::CleanupResult;
+
+    let mut result = CleanupResult::empty();
+
+    // 1. 查询该组合的所有备份，按时间倒序排列
+    let backups = db.get_backups_by_tool_scope(tool_type, scope, project_path)?;
+
+    // 2. 跳过要保留的，删除其余的
+    let to_delete = backups.into_iter().skip(keep_count);
+
+    for backup in to_delete {
+        // 3. 获取文件大小（在删除前）
+        let file_size = if backup.backup_path.exists() {
+            std::fs::metadata(&backup.backup_path)
+                .map(|m| m.len())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        // 4. 先删除 DB 记录 (DD-015)
+        if let Err(e) = db.delete_takeover_backup(&backup.id) {
+            result.warnings.push(format!(
+                "Failed to delete DB record for backup {}: {}",
+                backup.id, e
+            ));
+            continue; // 跳过此备份，继续处理下一个
+        }
+
+        // 5. 再删除文件（失败只警告）(DD-015)
+        if backup.backup_path.exists() {
+            match std::fs::remove_file(&backup.backup_path) {
+                Ok(_) => {
+                    result.deleted_size += file_size;
+                }
+                Err(e) => {
+                    result.warnings.push(format!(
+                        "Failed to delete backup file {:?}: {}",
+                        backup.backup_path, e
+                    ));
+                }
+            }
+        }
+
+        result.deleted_count += 1;
+    }
+
+    Ok(result)
+}
+
+/// 批量清理所有组合的旧备份 (Story 11.23 - AC 5)
+///
+/// 对每个 (工具 + Scope + 项目路径) 组合执行清理
+///
+/// # Arguments
+/// * `db` - 数据库
+/// * `keep_per_group` - 每组保留数量
+///
+/// # Returns
+/// 批量清理结果
+pub fn cleanup_all_old_backups(
+    db: &Database,
+    keep_per_group: usize,
+) -> Result<crate::models::mcp::BatchCleanupResult, StorageError> {
+    use crate::models::mcp::BatchCleanupResult;
+
+    let mut result = BatchCleanupResult::empty();
+
+    // 1. 获取所有唯一的 (tool, scope, project_path) 组合
+    let groups = db.get_backup_groups()?;
+    result.groups_processed = groups.len();
+
+    // 2. 对每个组合执行清理
+    for (tool, scope, project_path) in groups {
+        match cleanup_old_backups(db, &tool, &scope, project_path.as_deref(), keep_per_group) {
+            Ok(group_result) => {
+                result.total_deleted += group_result.deleted_count;
+                result.total_size += group_result.deleted_size;
+                result.warnings.extend(group_result.warnings);
+            }
+            Err(e) => {
+                result.warnings.push(format!(
+                    "Failed to cleanup backups for {:?}/{:?}/{:?}: {}",
+                    tool, scope, project_path, e
+                ));
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// 获取带版本序号的备份列表 (Story 11.23 - AC 3)
+///
+/// 为每个备份添加版本序号信息
+///
+/// # Arguments
+/// * `db` - 数据库
+///
+/// # Returns
+/// 带版本序号的备份列表
+pub fn list_backups_with_version(
+    db: &Database,
+) -> Result<Vec<crate::models::mcp::TakeoverBackupWithVersion>, StorageError> {
+    use crate::models::mcp::{TakeoverBackup, TakeoverBackupWithVersion, TakeoverStatus};
+    use std::collections::HashMap;
+
+    // 1. 只获取活跃的备份（排除已恢复的）
+    let all_backups = db.get_takeover_backups(Some(TakeoverStatus::Active))?;
+
+    // 2. 按 (tool, scope, project_path) 分组
+    let mut groups: HashMap<String, Vec<TakeoverBackup>> = HashMap::new();
+    for backup in &all_backups {
+        let key = format!(
+            "{}|{}|{}",
+            backup.tool_type.as_str(),
+            backup.scope.as_str(),
+            backup.project_path.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
+        );
+        groups.entry(key).or_default().push(backup.clone());
+    }
+
+    // 3. 对每组按时间倒序排序，计算版本序号并检查完整性
+    let mut result = Vec::new();
+    for (_, group) in &mut groups {
+        // 按时间倒序排序
+        group.sort_by(|a, b| b.taken_over_at.cmp(&a.taken_over_at));
+        let total_versions = group.len();
+
+        for (index, backup) in group.iter().enumerate() {
+            // 检查完整性
+            let backup_file_exists = backup.backup_path.exists();
+            let original_file_exists = backup.original_path.exists();
+            let hash_valid = if backup_file_exists {
+                backup.backup_hash.as_ref().map(|expected_hash| {
+                    atomic_fs::calculate_file_hash(&backup.backup_path)
+                        .map(|actual_hash| &actual_hash == expected_hash)
+                        .unwrap_or(false)
+                })
+            } else {
+                backup.backup_hash.as_ref().map(|_| false)
+            };
+
+            result.push(TakeoverBackupWithVersion {
+                backup: backup.clone(),
+                version_index: index + 1, // 1-based
+                total_versions,
+                backup_file_exists,
+                original_file_exists,
+                hash_valid,
+            });
+        }
+    }
+
+    // 4. 按时间倒序排列整个列表
+    result.sort_by(|a, b| b.backup.taken_over_at.cmp(&a.backup.taken_over_at));
+
+    Ok(result)
+}

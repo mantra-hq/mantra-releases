@@ -84,74 +84,85 @@ export function ConfigDiffView({
   ];
 
   const columnCount = (existing ? 1 : 0) + candidates.length;
+  // 计算数据列的最小宽度：单列时 300px，多列时 200px
+  const dataColMinWidth = columnCount === 1 ? "300px" : "200px";
 
   return (
-    <div className="border rounded-lg overflow-hidden" data-testid={`config-diff-${serviceName}`}>
-      {/* 表头 */}
-      <div className="grid gap-0 border-b bg-muted/50" style={{ gridTemplateColumns: `140px repeat(${columnCount}, 1fr)` }}>
-        <div className="p-2 text-xs font-medium text-muted-foreground border-r">
-          {t("hub.import.diffField")}
-        </div>
-        {existing && (
-          <div className="p-2 text-xs font-medium border-r">
-            <Badge variant="secondary" className="text-xs">
-              {t("hub.import.diffExisting")}
-            </Badge>
+    <div
+      className="border rounded-lg overflow-x-auto"
+      data-testid={`config-diff-${serviceName}`}
+    >
+      {/* 表格容器 - 使用 min-width 确保列不会过窄 */}
+      <div className="min-w-fit">
+        {/* 表头 */}
+        <div
+          className="grid gap-0 border-b bg-muted/50"
+          style={{ gridTemplateColumns: `minmax(80px, auto) repeat(${columnCount}, minmax(${dataColMinWidth}, 1fr))` }}
+        >
+          <div className="p-2 text-xs font-medium text-muted-foreground border-r whitespace-nowrap">
+            {t("hub.import.diffField")}
           </div>
-        )}
-        {candidates.map((candidate, idx) => (
-          <div key={idx} className="p-2 text-xs font-medium border-r last:border-r-0">
-            <Badge variant="outline" className="text-xs">
-              {t("hub.import.diffCandidate", { index: idx + 1 })} ({getSourceText(candidate.adapter_id)})
-            </Badge>
-          </div>
-        ))}
-      </div>
-
-      {/* 字段行 */}
-      {fields.map((field) => {
-        const existingValue = existing ? existing[field.key] : null;
-
-        return (
-          <div
-            key={field.key}
-            className="grid gap-0 border-b last:border-b-0"
-            style={{ gridTemplateColumns: `140px repeat(${columnCount}, 1fr)` }}
-          >
-            <div className="p-2 text-xs font-medium text-muted-foreground border-r bg-muted/30">
-              {field.label}
+          {existing && (
+            <div className="p-2 text-xs font-medium border-r">
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                {t("hub.import.diffExisting")}
+              </Badge>
             </div>
-            {existing && (
-              <div className="p-2 text-xs border-r">
-                <code className="break-all">{renderFieldValue(existingValue)}</code>
-              </div>
-            )}
-            {candidates.map((candidate, idx) => {
-              const candidateValue = candidate[field.key];
-              const isDifferent = existing ? !valuesEqual(existingValue, candidateValue) : false;
+          )}
+          {candidates.map((candidate, idx) => (
+            <div key={idx} className="p-2 text-xs font-medium border-r last:border-r-0">
+              <Badge variant="outline" className="text-xs whitespace-nowrap">
+                {t("hub.import.diffCandidate", { index: idx + 1 })} ({getSourceText(candidate.adapter_id)})
+              </Badge>
+            </div>
+          ))}
+        </div>
 
-              return (
-                <div
-                  key={idx}
-                  className={cn(
-                    "p-2 text-xs border-r last:border-r-0",
-                    isDifferent && "bg-amber-500/5"
-                  )}
-                >
-                  <code
+        {/* 字段行 */}
+        {fields.map((field) => {
+          const existingValue = existing ? existing[field.key] : null;
+
+          return (
+            <div
+              key={field.key}
+              className="grid gap-0 border-b last:border-b-0"
+              style={{ gridTemplateColumns: `minmax(80px, auto) repeat(${columnCount}, minmax(${dataColMinWidth}, 1fr))` }}
+            >
+              <div className="p-2 text-xs font-medium text-muted-foreground border-r bg-muted/30 whitespace-nowrap">
+                {field.label}
+              </div>
+              {existing && (
+                <div className="p-2 text-xs border-r min-w-0">
+                  <code className="break-all text-[11px] leading-relaxed block">{renderFieldValue(existingValue)}</code>
+                </div>
+              )}
+              {candidates.map((candidate, idx) => {
+                const candidateValue = candidate[field.key];
+                const isDifferent = existing ? !valuesEqual(existingValue, candidateValue) : false;
+
+                return (
+                  <div
+                    key={idx}
                     className={cn(
-                      "break-all",
-                      isDifferent && "text-amber-500 font-medium"
+                      "p-2 text-xs border-r last:border-r-0 min-w-0",
+                      isDifferent && "bg-amber-500/5"
                     )}
                   >
-                    {renderFieldValue(candidateValue)}
-                  </code>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
+                    <code
+                      className={cn(
+                        "break-all text-[11px] leading-relaxed block",
+                        isDifferent && "text-amber-500 font-medium"
+                      )}
+                    >
+                      {renderFieldValue(candidateValue)}
+                    </code>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

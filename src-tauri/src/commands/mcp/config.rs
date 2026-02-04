@@ -455,3 +455,141 @@ pub fn delete_invalid_takeover_backups(
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
     delete_invalid_backups(&db).map_err(AppError::from)
 }
+
+// ===== Story 11.23: 备份版本管理命令 =====
+
+/// 清理旧备份，只保留最近 keep_count 个
+///
+/// Story 11.23: 备份版本管理 - AC 1, 2
+///
+/// 每个 (工具 + Scope + 项目路径) 组合独立计算
+/// 按照 DD-015 清理优先级：先删除 DB 记录，再删除文件
+///
+/// # Arguments
+/// * `tool_type` - 工具类型
+/// * `scope` - 作用域 ("user" | "project" | "local")
+/// * `project_path` - 项目路径 (project/local scope 需要)
+/// * `keep_count` - 保留数量 (默认 5)
+///
+/// # Returns
+/// 清理结果
+#[tauri::command]
+pub fn cleanup_old_takeover_backups(
+    tool_type: String,
+    scope: String,
+    project_path: Option<String>,
+    keep_count: Option<usize>,
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::CleanupResult, AppError> {
+    use crate::models::mcp::TakeoverScope;
+    use crate::services::mcp_config::cleanup_old_backups;
+
+    let tool = ToolType::from_str(&tool_type)
+        .ok_or_else(|| AppError::InvalidInput(format!("Invalid tool type: {}", tool_type)))?;
+
+    let scope = TakeoverScope::from_str(&scope)
+        .ok_or_else(|| AppError::InvalidInput(format!("Invalid scope: {}", scope)))?;
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    cleanup_old_backups(&db, &tool, &scope, project_path.as_deref(), keep_count.unwrap_or(5))
+        .map_err(AppError::from)
+}
+
+/// 批量清理所有组合的旧备份
+///
+/// Story 11.23: 备份版本管理 - AC 5
+///
+/// 对每个 (工具 + Scope + 项目路径) 组合执行清理
+///
+/// # Arguments
+/// * `keep_per_group` - 每组保留数量 (默认 5)
+///
+/// # Returns
+/// 批量清理结果
+#[tauri::command]
+pub fn cleanup_all_old_takeover_backups(
+    keep_per_group: Option<usize>,
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::BatchCleanupResult, AppError> {
+    use crate::services::mcp_config::cleanup_all_old_backups;
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    cleanup_all_old_backups(&db, keep_per_group.unwrap_or(5)).map_err(AppError::from)
+}
+
+/// 获取备份统计信息
+///
+/// Story 11.23: 备份版本管理 - AC 5
+///
+/// # Returns
+/// 备份统计信息
+#[tauri::command]
+pub fn get_backup_stats(
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::BackupStats, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    db.get_backup_stats().map_err(AppError::from)
+}
+
+/// 获取带版本序号的备份列表
+///
+/// Story 11.23: 备份版本管理 - AC 3
+///
+/// 为每个备份添加版本序号信息
+///
+/// # Returns
+/// 带版本序号的备份列表
+#[tauri::command]
+pub fn list_takeover_backups_with_version(
+    state: State<'_, McpState>,
+) -> Result<Vec<crate::models::mcp::TakeoverBackupWithVersion>, AppError> {
+    use crate::services::mcp_config::list_backups_with_version;
+
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    list_backups_with_version(&db).map_err(AppError::from)
+}
+
+/// 删除单个备份记录
+///
+/// Story 11.23: 备份版本管理 - AC 3
+///
+/// 按照 DD-015 清理优先级：先删除 DB 记录，再删除文件
+///
+/// # Arguments
+/// * `backup_id` - 备份 ID
+///
+/// # Returns
+/// 删除的文件大小 (如果文件存在)
+#[tauri::command]
+pub fn delete_single_takeover_backup(
+    backup_id: String,
+    state: State<'_, McpState>,
+) -> Result<u64, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+
+    // 1. 获取备份记录
+    let backup = db
+        .get_takeover_backup_by_id(&backup_id)?
+        .ok_or_else(|| AppError::NotFound(format!("Backup not found: {}", backup_id)))?;
+
+    // 2. 获取文件大小
+    let file_size = if backup.backup_path.exists() {
+        std::fs::metadata(&backup.backup_path)
+            .map(|m| m.len())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    // 3. 先删除 DB 记录
+    db.delete_takeover_backup(&backup_id)?;
+
+    // 4. 再删除文件（失败只警告）
+    if backup.backup_path.exists() {
+        if let Err(e) = std::fs::remove_file(&backup.backup_path) {
+            eprintln!("[Backup] Warning: Failed to delete backup file {:?}: {}", backup.backup_path, e);
+        }
+    }
+
+    Ok(file_size)
+}

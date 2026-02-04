@@ -62,8 +62,9 @@ pub use executor::ImportExecutor;
 
 // Re-export 接管功能
 pub use takeover::{
-    delete_invalid_backups, execute_full_tool_takeover, execute_smart_takeover,
-    get_takeover_status, list_takeover_backups_with_integrity,
+    cleanup_all_old_backups, cleanup_old_backups, delete_invalid_backups,
+    execute_full_tool_takeover, execute_smart_takeover, get_takeover_status,
+    list_backups_with_version, list_takeover_backups_with_integrity,
     restore_all_local_scope_takeovers, restore_local_scope_takeover, restore_mcp_takeover,
     restore_mcp_takeover_by_tool, sync_active_takeovers,
 };

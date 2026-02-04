@@ -8,18 +8,21 @@ import {
   SheetHeader,
   SheetTitle,
 } from "./sheet";
+import { Button } from "./button";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * 尺寸映射
- * 基于 Epic 12 已完成改造中观察到的 Sheet 使用模式
+ * 尺寸映射 - 合理的默认宽度
  */
 const sizeClasses = {
-  sm: "max-w-sm", // 384px - 简单表单 (EnvVariableSheet)
-  md: "max-w-md", // 448px - 中等表单 (CompressGuideSheet, AddRuleSheet, BindSessionSheet)
-  lg: "max-w-lg", // 512px - 复杂表单 (OAuthConfigSheet, McpServiceSheet, ProjectInfoSheet)
-  xl: "max-w-xl", // 576px - 带预览的表单 (TakeoverStatusCard)
-  "2xl": "max-w-2xl", // 672px - 多步向导 (McpConfigImportSheet)
+  sm: "max-w-sm",   // 384px
+  md: "max-w-md",   // 448px
+  lg: "max-w-lg",   // 512px
+  xl: "max-w-xl",   // 576px
+  "2xl": "max-w-2xl", // 672px
+  "3xl": "max-w-3xl", // 768px
+  "4xl": "max-w-4xl", // 896px
 } as const;
 
 /**
@@ -42,6 +45,11 @@ interface ActionSheetContentProps
    * @default "md"
    */
   size?: ActionSheetSize;
+  /**
+   * 是否为全屏模式
+   * @default false
+   */
+  fullscreen?: boolean;
 }
 
 /**
@@ -72,11 +80,11 @@ function ActionSheet({ ...props }: ActionSheetProps) {
 /**
  * ActionSheetContent - 内容容器
  *
- * 固定从右侧滑出 (side="right")，支持预设尺寸。
- * 自动应用 w-full 确保在小屏幕上响应式。
+ * 固定从右侧滑出 (side="right")，支持预设尺寸和全屏模式。
  */
 function ActionSheetContent({
   size = "md",
+  fullscreen = false,
   className,
   children,
   ...props
@@ -84,7 +92,11 @@ function ActionSheetContent({
   return (
     <SheetContent
       side="right"
-      className={cn("w-full", sizeClasses[size], className)}
+      className={cn(
+        "w-full",
+        fullscreen ? "!max-w-none" : sizeClasses[size],
+        className
+      )}
       {...props}
     >
       {children}
@@ -122,6 +134,58 @@ const ActionSheetDescription = SheetDescription;
  */
 const ActionSheetClose = SheetClose;
 
+/**
+ * ActionSheetFullscreenToggle - 全屏切换按钮
+ *
+ * 放置在 Header 区域右侧，用于切换全屏/普通模式
+ *
+ * @example
+ * ```tsx
+ * const [isFullscreen, setIsFullscreen] = useState(false);
+ *
+ * <ActionSheetContent fullscreen={isFullscreen}>
+ *   <ActionSheetHeader>
+ *     <ActionSheetTitle>标题</ActionSheetTitle>
+ *     <ActionSheetFullscreenToggle
+ *       isFullscreen={isFullscreen}
+ *       onToggle={() => setIsFullscreen(!isFullscreen)}
+ *     />
+ *   </ActionSheetHeader>
+ * </ActionSheetContent>
+ * ```
+ */
+interface ActionSheetFullscreenToggleProps {
+  isFullscreen: boolean;
+  onToggle: () => void;
+  className?: string;
+  enterLabel?: string;
+  exitLabel?: string;
+}
+
+function ActionSheetFullscreenToggle({
+  isFullscreen,
+  onToggle,
+  className,
+  enterLabel = "进入全屏",
+  exitLabel = "退出全屏",
+}: ActionSheetFullscreenToggleProps) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("h-8 w-8 shrink-0", className)}
+      onClick={onToggle}
+      title={isFullscreen ? exitLabel : enterLabel}
+    >
+      {isFullscreen ? (
+        <Minimize2 className="h-4 w-4" />
+      ) : (
+        <Maximize2 className="h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
 export {
   ActionSheet,
   ActionSheetContent,
@@ -130,7 +194,9 @@ export {
   ActionSheetTitle,
   ActionSheetDescription,
   ActionSheetClose,
+  ActionSheetFullscreenToggle,
   type ActionSheetProps,
   type ActionSheetSize,
   type ActionSheetContentProps,
+  type ActionSheetFullscreenToggleProps,
 };

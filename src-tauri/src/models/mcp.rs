@@ -1396,5 +1396,129 @@ impl TakeoverPreview {
     }
 }
 
+// ===== Story 11.23: 备份版本管理 =====
+
+/// 备份保留配置 (Story 11.23 - Task 1.1)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupRetentionConfig {
+    /// 每个 (工具 + Scope + 项目路径) 组合保留的最大备份数量
+    pub keep_count: usize,
+}
+
+impl Default for BackupRetentionConfig {
+    fn default() -> Self {
+        Self { keep_count: 5 }
+    }
+}
+
+/// 清理结果 (Story 11.23 - AC 1, 2)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupResult {
+    /// 删除的备份数量
+    pub deleted_count: usize,
+    /// 释放的存储空间 (字节)
+    pub deleted_size: u64,
+    /// 警告信息 (如文件删除失败)
+    pub warnings: Vec<String>,
+}
+
+impl CleanupResult {
+    /// 创建空结果
+    pub fn empty() -> Self {
+        Self {
+            deleted_count: 0,
+            deleted_size: 0,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+/// 批量清理结果 (Story 11.23 - AC 5)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchCleanupResult {
+    /// 处理的分组数量
+    pub groups_processed: usize,
+    /// 总删除的备份数量
+    pub total_deleted: usize,
+    /// 总释放的存储空间 (字节)
+    pub total_size: u64,
+    /// 警告信息
+    pub warnings: Vec<String>,
+}
+
+impl BatchCleanupResult {
+    /// 创建空结果
+    pub fn empty() -> Self {
+        Self {
+            groups_processed: 0,
+            total_deleted: 0,
+            total_size: 0,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+/// 备份统计 (Story 11.23 - AC 5)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupStats {
+    /// 总备份数量
+    pub total_count: usize,
+    /// 总存储空间 (字节)
+    pub total_size: u64,
+    /// 分组统计
+    pub groups: Vec<BackupGroupStats>,
+}
+
+impl BackupStats {
+    /// 创建空统计
+    pub fn empty() -> Self {
+        Self {
+            total_count: 0,
+            total_size: 0,
+            groups: Vec::new(),
+        }
+    }
+}
+
+/// 分组统计 (Story 11.23 - AC 5)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupGroupStats {
+    /// 工具类型
+    pub tool: ToolType,
+    /// 作用域
+    pub scope: TakeoverScope,
+    /// 项目路径 (project/local scope 有值)
+    pub project_path: Option<String>,
+    /// 备份数量
+    pub count: usize,
+    /// 总大小 (字节)
+    pub size: u64,
+}
+
+/// 带版本序号的备份记录 (Story 11.23 - AC 3)
+///
+/// 同时包含版本信息和完整性信息，供前端统一使用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakeoverBackupWithVersion {
+    /// 备份记录
+    #[serde(flatten)]
+    pub backup: TakeoverBackup,
+    /// 版本序号 (1-based, 1 = 最新)
+    pub version_index: usize,
+    /// 该组合的总版本数
+    pub total_versions: usize,
+    /// 备份文件是否存在
+    pub backup_file_exists: bool,
+    /// 原始配置文件是否存在
+    pub original_file_exists: bool,
+    /// 备份文件 hash 是否验证通过（None = 无 hash 记录）
+    pub hash_valid: Option<bool>,
+}
+
 #[cfg(test)]
 mod tests;

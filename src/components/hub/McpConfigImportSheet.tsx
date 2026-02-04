@@ -24,6 +24,7 @@ import {
   ActionSheetFooter,
   ActionSheetHeader,
   ActionSheetTitle,
+  ActionSheetFullscreenToggle,
 } from "@/components/ui/action-sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -176,6 +177,9 @@ export function McpConfigImportSheet({
   projectId,
 }: McpConfigImportSheetProps) {
   const { t } = useTranslation();
+
+  // 全屏模式
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 步骤状态
   const [step, setStep] = useState<ImportStep>("scan");
@@ -767,57 +771,68 @@ export function McpConfigImportSheet({
                     getSourceText={getSourceText}
                   />
 
-                  <div className="space-y-2">
-                    <Label>{t("hub.import.resolution")}</Label>
-                    <Select
-                      value={getResolutionValue(conflict.name)}
-                      onValueChange={(v) =>
-                        handleConflictResolution(conflict.name, v)
-                      }
-                    >
-                      <SelectTrigger data-testid={`conflict-resolution-${conflict.name}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {conflict.existing && (
-                          <SelectItem value="keep">
-                            {t("hub.import.keepExisting")}
-                          </SelectItem>
-                        )}
-                        {conflict.candidates.map((candidate, index) => (
-                          <SelectItem key={index} value={`replace_${index}`}>
-                            {t("hub.import.useFrom", {
-                              source: getSourceText(candidate.adapter_id),
-                            })}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="rename">
-                          {t("hub.import.renameAndImport")}
-                        </SelectItem>
-                        <SelectItem value="skip">
-                          {t("hub.import.skip")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* 重命名输入 */}
-                  {"rename" in (conflictResolutions[conflict.name] || {}) && (
-                    <div className="space-y-2">
-                      <Label>{t("hub.import.newName")}</Label>
-                      <Input
-                        value={renameInputs[conflict.name] || ""}
-                        onChange={(e) =>
-                          setRenameInputs((prev) => ({
-                            ...prev,
-                            [conflict.name]: e.target.value,
-                          }))
+                  {/* 解决方式和重命名 - 紧凑内联布局 */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm shrink-0 text-muted-foreground">
+                        {t("hub.import.resolution")}
+                      </Label>
+                      <Select
+                        value={getResolutionValue(conflict.name)}
+                        onValueChange={(v) =>
+                          handleConflictResolution(conflict.name, v)
                         }
-                        placeholder={`${conflict.name}_imported`}
-                        data-testid={`conflict-rename-${conflict.name}`}
-                      />
+                      >
+                        <SelectTrigger
+                          className="w-[200px]"
+                          data-testid={`conflict-resolution-${conflict.name}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {conflict.existing && (
+                            <SelectItem value="keep">
+                              {t("hub.import.keepExisting")}
+                            </SelectItem>
+                          )}
+                          {conflict.candidates.map((candidate, index) => (
+                            <SelectItem key={index} value={`replace_${index}`}>
+                              {t("hub.import.useFrom", {
+                                source: getSourceText(candidate.adapter_id),
+                              })}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="rename">
+                            {t("hub.import.renameAndImport")}
+                          </SelectItem>
+                          <SelectItem value="skip">
+                            {t("hub.import.skip")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
+
+                    {/* 重命名输入 - 仅在选择重命名时显示 */}
+                    {"rename" in (conflictResolutions[conflict.name] || {}) && (
+                      <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                        <Label className="text-sm shrink-0 text-muted-foreground">
+                          {t("hub.import.newName")}
+                        </Label>
+                        <Input
+                          value={renameInputs[conflict.name] || ""}
+                          onChange={(e) =>
+                            setRenameInputs((prev) => ({
+                              ...prev,
+                              [conflict.name]: e.target.value,
+                            }))
+                          }
+                          placeholder={`${conflict.name}_imported`}
+                          className="flex-1"
+                          data-testid={`conflict-rename-${conflict.name}`}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>
@@ -1188,25 +1203,45 @@ export function McpConfigImportSheet({
 
   return (
     <ActionSheet open={open} onOpenChange={onOpenChange}>
-      <ActionSheetContent size="2xl" className="flex flex-col" data-testid="mcp-config-import-sheet">
-        <ActionSheetHeader>
-          <ActionSheetTitle className="flex items-center gap-2">
-            <FileCode className="h-5 w-5" />
-            {getStepTitle()}
-          </ActionSheetTitle>
+      <ActionSheetContent
+        size="2xl"
+        fullscreen={isFullscreen}
+        className={cn(
+          "flex flex-col",
+          // 参考 Inspector 的宽度设计：默认 85vw，最大 1200px
+          !isFullscreen && "!w-[85vw] !max-w-[1200px]"
+        )}
+        data-testid="mcp-config-import-sheet"
+      >
+        <ActionSheetHeader className="shrink-0">
+          <div className="flex items-center justify-between">
+            <ActionSheetTitle className="flex items-center gap-2">
+              <FileCode className="h-5 w-5" />
+              {getStepTitle()}
+            </ActionSheetTitle>
+            <ActionSheetFullscreenToggle
+              isFullscreen={isFullscreen}
+              onToggle={() => setIsFullscreen(!isFullscreen)}
+              enterLabel={t("common.enterFullscreen", "进入全屏")}
+              exitLabel={t("common.exitFullscreen", "退出全屏")}
+              className="mr-6"
+            />
+          </div>
           <ActionSheetDescription>{getStepDescription()}</ActionSheetDescription>
         </ActionSheetHeader>
 
         {/* 步骤指示器 */}
         {step !== "scan" && step !== "result" && (
-          <ImportStepper
-            currentStep={step}
-            hasConflicts={hasConflicts}
-            needsEnvVars={needsEnvVars}
-          />
+          <div className="shrink-0 px-4">
+            <ImportStepper
+              currentStep={step}
+              hasConflicts={hasConflicts}
+              needsEnvVars={needsEnvVars}
+            />
+          </div>
         )}
 
-        {/* 步骤内容 - 使用 flex-1 和 overflow-auto 确保可滚动 */}
+        {/* 步骤内容 - 自适应高度，填充剩余空间 */}
         <div className="flex-1 min-h-0 overflow-auto py-4 px-4">
           {step === "scan" && renderScanStep()}
           {step === "preview" && renderPreviewStep()}
@@ -1218,7 +1253,7 @@ export function McpConfigImportSheet({
         </div>
 
         {/* 底部按钮 */}
-        <ActionSheetFooter className="px-4">
+        <ActionSheetFooter className="px-4 shrink-0">
           {step === "result" ? (
             <Button onClick={() => onOpenChange(false)}>
               {t("common.close")}

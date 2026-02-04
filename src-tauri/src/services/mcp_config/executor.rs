@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use super::backup::BackupManager;
 use super::parsers::generate_shadow_config;
+use super::takeover::cleanup_old_backups;
 use super::types::*;
 use crate::models::mcp::{
     CreateMcpServiceRequest, McpServiceSource, TakeoverBackup, TakeoverScope, ToolType,
@@ -400,13 +401,16 @@ impl<'a> ImportExecutor<'a> {
             StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
+        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
+        let project_path_str_for_cleanup = project_path.as_ref().map(|p| p.to_string_lossy().to_string());
+
         // 7. 创建备份记录并存储到数据库 (Story 11.16, 11.22: 含 hash)
         let backup = if let Some(hash) = backup_hash {
             TakeoverBackup::new_with_hash(
                 tool_type.clone(),
                 path.to_path_buf(),
                 backup_path,
-                scope,
+                scope.clone(),
                 project_path,
                 hash,
             )
@@ -415,14 +419,19 @@ impl<'a> ImportExecutor<'a> {
                 tool_type.clone(),
                 path.to_path_buf(),
                 backup_path,
-                scope,
+                scope.clone(),
                 project_path,
             )
         };
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
 
-        // 8. 添加到备份管理器（用于可能的回滚）
+        // 8.5. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
+        if let Err(e) = cleanup_old_backups(self.db, &tool_type, &scope, project_path_str_for_cleanup.as_deref(), 5) {
+            eprintln!("[Backup] Warning: Failed to cleanup old backups: {}", e);
+        }
+
+        // 9. 添加到备份管理器（用于可能的回滚）
         self.backup_manager.add_backup_path(path.to_path_buf());
 
         Ok(backup_id)
@@ -592,6 +601,11 @@ impl<'a> ImportExecutor<'a> {
         );
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
+
+        // 8.5. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
+        if let Err(e) = cleanup_old_backups(self.db, &ToolType::ClaudeCode, &TakeoverScope::Local, Some(project_path), 5) {
+            eprintln!("[Backup] Warning: Failed to cleanup old backups for local scope: {}", e);
+        }
 
         // 9. 添加到备份管理器（用于可能的回滚）
         self.backup_manager.add_backup_path(backup_path);

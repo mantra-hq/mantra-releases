@@ -1,12 +1,16 @@
 /**
  * TakeoverStatusCard - MCP 接管状态卡片
  * Story 11.16: 接管状态模块系统性重构
+ * Story 11.23: 备份版本管理
  *
  * 功能：
  * - 按 scope 分组显示（用户级/项目级）
  * - 折叠/展开功能
  * - 文件内容预览抽屉
  * - 一键恢复功能
+ * - 版本序号显示 (Story 11.23)
+ * - 单个备份删除 (Story 11.23)
+ * - 批量清理旧备份 (Story 11.23)
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -62,6 +66,7 @@ import {
   Check,
   AlertTriangle,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { SourceIcon } from "@/components/import/SourceIcons";
@@ -94,6 +99,45 @@ interface TakeoverBackupIntegrity {
   backupFileExists: boolean;
   originalFileExists: boolean;
   hashValid: boolean | null;
+  // Story 11.23: 版本信息
+  versionIndex?: number;  // 1-based, 1 = 最新
+  totalVersions?: number;
+}
+
+/**
+ * 备份统计信息 (Story 11.23)
+ */
+interface BackupStats {
+  totalCount: number;
+  totalSize: number;
+  groups: {
+    tool: ToolType;
+    scope: TakeoverScope;
+    projectPath: string | null;
+    count: number;
+    size: number;
+  }[];
+}
+
+/**
+ * 批量清理结果 (Story 11.23)
+ */
+interface BatchCleanupResult {
+  groupsProcessed: number;
+  totalDeleted: number;
+  totalSize: number;
+  warnings: string[];
+}
+
+/**
+ * 格式化字节大小
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 /**
@@ -254,6 +298,11 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [isDeletingInvalid, setIsDeletingInvalid] = useState(false);
+  // Story 11.23: 批量清理和删除状态
+  const [deletingBackupId, setDeletingBackupId] = useState<string | null>(null);
+  const [isBatchCleaning, setIsBatchCleaning] = useState(false);
+  const [backupStats, setBackupStats] = useState<BackupStats | null>(null);
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
 
   // 分组展开状态
   const [userExpanded, setUserExpanded] = useState(true);
@@ -303,11 +352,15 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     };
   }, [backups]);
 
-  // 加载活跃的接管记录（带完整性信息）
+  // 加载活跃的接管记录（带完整性信息和版本序号）
   const loadBackups = useCallback(async () => {
     try {
-      const result = await invoke<TakeoverBackupIntegrity[]>("list_active_takeovers_with_integrity");
+      // Story 11.23: 使用带版本信息的 API
+      const result = await invoke<TakeoverBackupIntegrity[]>("list_takeover_backups_with_version");
       setBackups(result);
+      // 同时加载统计信息
+      const stats = await invoke<BackupStats>("get_backup_stats");
+      setBackupStats(stats);
     } catch (error) {
       console.error("[TakeoverStatusCard] Failed to load backups:", error);
     } finally {
@@ -319,6 +372,50 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   const invalidBackupCount = useMemo(() => {
     return backups.filter((b) => !b.backupFileExists || b.hashValid === false).length;
   }, [backups]);
+
+  // Story 11.23: 删除单个备份
+  const handleDeleteBackup = useCallback(async (backupId: string) => {
+    setDeletingBackupId(backupId);
+    try {
+      const deletedSize = await invoke<number>("delete_single_takeover_backup", { backupId });
+      feedback.success(t("hub.takeover.deleteBackupSuccess", {
+        size: formatBytes(deletedSize),
+        defaultValue: "Backup deleted, freed {{size}}",
+      }));
+      await loadBackups();
+    } catch (error) {
+      console.error("[TakeoverStatusCard] Failed to delete backup:", error);
+      feedback.error(t("hub.takeover.deleteBackupError"), (error as Error).message);
+    } finally {
+      setDeletingBackupId(null);
+    }
+  }, [t, loadBackups]);
+
+  // Story 11.23: 批量清理旧备份
+  const handleBatchCleanup = useCallback(async () => {
+    setIsBatchCleaning(true);
+    setCleanupDialogOpen(false);
+    try {
+      const result = await invoke<BatchCleanupResult>("cleanup_all_old_takeover_backups", {
+        keepPerGroup: 1, // 每组只保留最新的 1 个
+      });
+      if (result.totalDeleted > 0) {
+        feedback.success(t("hub.takeover.batchCleanupSuccess", {
+          count: result.totalDeleted,
+          size: formatBytes(result.totalSize),
+          defaultValue: "Cleaned up {{count}} old backups, freed {{size}}",
+        }));
+      } else {
+        feedback.success(t("hub.takeover.noOldBackups", { defaultValue: "No old backups to clean up" }));
+      }
+      await loadBackups();
+    } catch (error) {
+      console.error("[TakeoverStatusCard] Failed to batch cleanup:", error);
+      feedback.error(t("hub.takeover.batchCleanupError"), (error as Error).message);
+    } finally {
+      setIsBatchCleaning(false);
+    }
+  }, [t, loadBackups]);
 
   // 删除无效备份 (Story 11.22)
   const handleDeleteInvalidBackups = useCallback(async () => {
@@ -466,6 +563,34 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
       {/* 工具名称 */}
       <span className="font-medium w-24 shrink-0">{getToolLabel(backup.toolType)}</span>
 
+      {/* Story 11.23: 版本序号徽章 */}
+      {backup.versionIndex !== undefined && backup.totalVersions !== undefined && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className={`text-[10px] shrink-0 ${backup.versionIndex === 1 ? "text-emerald-500 border-emerald-500/30" : "text-muted-foreground"}`}
+              >
+                {backup.versionIndex}/{backup.totalVersions}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">
+                {backup.versionIndex === 1
+                  ? t("hub.takeover.latestVersion", { defaultValue: "Latest version" })
+                  : t("hub.takeover.olderVersion", {
+                      index: backup.versionIndex,
+                      total: backup.totalVersions,
+                      defaultValue: "Version {{index}} of {{total}}",
+                    })
+                }
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+
       {/* Local Scope 项目路径标签 (Story 11.21) */}
       {backup.scope === "local" && backup.projectPath && (
         <TooltipProvider>
@@ -612,6 +737,47 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Story 11.23: 删除按钮 */}
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+            disabled={deletingBackupId === backup.id}
+            data-testid={`delete-button-${backup.id}`}
+          >
+            {deletingBackupId === backup.id ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3" />
+            )}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("hub.takeover.deleteBackupTitle", { defaultValue: "Delete Backup?" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("hub.takeover.deleteBackupDescription", {
+                tool: getToolLabel(backup.toolType),
+                defaultValue: "This will permanently delete this {{tool}} backup. This action cannot be undone.",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleDeleteBackup(backup.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     );
   };
@@ -657,8 +823,53 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                   </Tooltip>
                 </TooltipProvider>
               )}
+
+              {/* Story 11.23: 批量清理按钮 */}
+              {backups.length > 1 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCleanupDialogOpen(true)}
+                        disabled={isBatchCleaning}
+                      >
+                        {isBatchCleaning ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <Sparkles className="h-3 w-3 mr-1" />
+                        )}
+                        <span className="text-xs">
+                          {t("hub.takeover.cleanupOld", { defaultValue: "Clean Up" })}
+                        </span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p className="text-xs">
+                        {t("hub.takeover.cleanupOldTooltip", {
+                          defaultValue: "Keep only latest version per group",
+                        })}
+                      </p>
+                      {backupStats && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {t("hub.takeover.statsInfo", {
+                            count: backupStats.totalCount,
+                            size: formatBytes(backupStats.totalSize),
+                            defaultValue: "{{count}} backups, {{size}} total",
+                          })}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+
               <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
                 {t("hub.takeover.activeCount", { count: backups.length })}
+                {backupStats && backupStats.totalSize > 0 && (
+                  <span className="ml-1 opacity-70">({formatBytes(backupStats.totalSize)})</span>
+                )}
               </Badge>
             </div>
           </div>
@@ -869,6 +1080,60 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
           </div>
         </ActionSheetContent>
       </ActionSheet>
+
+      {/* Story 11.23: 批量清理确认对话框 */}
+      <AlertDialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("hub.takeover.batchCleanupTitle", { defaultValue: "Clean Up Old Backups?" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("hub.takeover.batchCleanupDescription", {
+                defaultValue: "This will delete all old backups, keeping only the latest version for each tool/scope combination. This action cannot be undone.",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-2">
+            {backupStats && (
+              <div className="p-3 rounded-md bg-muted/50 space-y-1">
+                <p className="text-sm font-medium">
+                  {t("hub.takeover.currentStats", { defaultValue: "Current backup stats:" })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  • {t("hub.takeover.totalBackups", {
+                    count: backupStats.totalCount,
+                    defaultValue: "{{count}} total backups",
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  • {t("hub.takeover.totalSize", {
+                    size: formatBytes(backupStats.totalSize),
+                    defaultValue: "{{size}} total size",
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  • {t("hub.takeover.groupCount", {
+                    count: backupStats.groups.length,
+                    defaultValue: "{{count}} unique groups",
+                  })}
+                </p>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t("hub.takeover.cleanupNote", {
+                defaultValue: "After cleanup, each tool/scope combination will have only 1 backup.",
+              })}
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBatchCleanup}>
+              {t("hub.takeover.cleanupConfirm", { defaultValue: "Clean Up" })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

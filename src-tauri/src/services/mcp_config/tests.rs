@@ -2901,3 +2901,270 @@ use crate::storage::Database;
         assert_eq!(deleted, 0); // 没有无效备份
         assert!(db.get_takeover_backup_by_id(&backup_id).unwrap().is_some());
     }
+
+// ===== Story 11.23: 备份版本管理测试 =====
+
+    #[test]
+    fn test_cleanup_old_backups_keeps_recent() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建 7 个备份
+        for i in 0..7 {
+            let backup_path = temp_dir.path().join(format!("backup_{}.json", i));
+            let original_path = temp_dir.path().join("config.json");
+
+            fs::write(&backup_path, format!("backup content {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::ClaudeCode,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+
+            // 添加小延迟确保时间戳不同
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        // 验证有 7 个备份
+        let backups = db.get_takeover_backups(None).unwrap();
+        assert_eq!(backups.len(), 7);
+
+        // 清理，保留 5 个
+        let result = super::cleanup_old_backups(
+            &db,
+            &ToolType::ClaudeCode,
+            &TakeoverScope::User,
+            None,
+            5,
+        ).unwrap();
+
+        assert_eq!(result.deleted_count, 2);
+
+        // 验证只剩 5 个
+        let remaining = db.get_takeover_backups(None).unwrap();
+        assert_eq!(remaining.len(), 5);
+    }
+
+    #[test]
+    fn test_cleanup_old_backups_handles_different_groups() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 为 ClaudeCode User scope 创建 3 个备份
+        for i in 0..3 {
+            let backup_path = temp_dir.path().join(format!("claude_backup_{}.json", i));
+            let original_path = temp_dir.path().join("claude_config.json");
+
+            fs::write(&backup_path, format!("claude backup {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::ClaudeCode,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+        }
+
+        // 为 Cursor User scope 创建 3 个备份
+        for i in 0..3 {
+            let backup_path = temp_dir.path().join(format!("cursor_backup_{}.json", i));
+            let original_path = temp_dir.path().join("cursor_config.json");
+
+            fs::write(&backup_path, format!("cursor backup {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::Cursor,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+        }
+
+        // 清理 ClaudeCode，保留 1 个
+        let result = super::cleanup_old_backups(
+            &db,
+            &ToolType::ClaudeCode,
+            &TakeoverScope::User,
+            None,
+            1,
+        ).unwrap();
+
+        assert_eq!(result.deleted_count, 2);
+
+        // Cursor 应该不受影响
+        let cursor_backups = db.get_backups_by_tool_scope(
+            &ToolType::Cursor,
+            &TakeoverScope::User,
+            None,
+        ).unwrap();
+        assert_eq!(cursor_backups.len(), 3);
+    }
+
+    #[test]
+    fn test_cleanup_all_old_backups() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 为两个工具各创建 4 个备份
+        for tool in [ToolType::ClaudeCode, ToolType::Cursor] {
+            for i in 0..4 {
+                let backup_path = temp_dir.path().join(format!("{}_{}.json", tool.as_str(), i));
+                let original_path = temp_dir.path().join(format!("{}_config.json", tool.as_str()));
+
+                fs::write(&backup_path, format!("{} backup {}", tool.as_str(), i)).unwrap();
+                fs::write(&original_path, "original").unwrap();
+
+                let backup = TakeoverBackup::new(
+                    tool.clone(),
+                    original_path,
+                    backup_path,
+                );
+                db.create_takeover_backup(&backup).unwrap();
+            }
+        }
+
+        // 批量清理，每组保留 2 个
+        let result = super::cleanup_all_old_backups(&db, 2).unwrap();
+
+        assert_eq!(result.groups_processed, 2);
+        assert_eq!(result.total_deleted, 4); // 每组删除 2 个
+
+        // 验证每组只剩 2 个
+        for tool in [ToolType::ClaudeCode, ToolType::Cursor] {
+            let backups = db.get_backups_by_tool_scope(&tool, &TakeoverScope::User, None).unwrap();
+            assert_eq!(backups.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_list_backups_with_version() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建 3 个备份
+        for i in 0..3 {
+            let backup_path = temp_dir.path().join(format!("backup_{}.json", i));
+            let original_path = temp_dir.path().join("config.json");
+
+            fs::write(&backup_path, format!("backup content {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::ClaudeCode,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        let backups_with_version = super::list_backups_with_version(&db).unwrap();
+
+        assert_eq!(backups_with_version.len(), 3);
+
+        // 验证版本序号
+        for backup in &backups_with_version {
+            assert!(backup.version_index >= 1);
+            assert!(backup.version_index <= 3);
+            assert_eq!(backup.total_versions, 3);
+        }
+    }
+
+    #[test]
+    fn test_get_backup_stats() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建一些备份
+        for i in 0..3 {
+            let backup_path = temp_dir.path().join(format!("backup_{}.json", i));
+            let original_path = temp_dir.path().join("config.json");
+
+            fs::write(&backup_path, format!("backup content {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::ClaudeCode,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+        }
+
+        let stats = db.get_backup_stats().unwrap();
+
+        assert_eq!(stats.total_count, 3);
+        assert!(stats.total_size > 0);
+        assert_eq!(stats.groups.len(), 1);
+        assert_eq!(stats.groups[0].tool, ToolType::ClaudeCode);
+        assert_eq!(stats.groups[0].count, 3);
+    }
+
+    // Task 2.4: 自动清理集成测试
+    // 注意：完整的集成测试需要模拟 ImportExecutor，这里验证清理逻辑本身的正确性
+    #[test]
+    fn test_cleanup_preserves_newest_backups() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建 10 个备份，模拟多次接管操作
+        for i in 0..10 {
+            let backup_path = temp_dir.path().join(format!("backup_{}.json", i));
+            let original_path = temp_dir.path().join("config.json");
+
+            fs::write(&backup_path, format!("backup content {}", i)).unwrap();
+            fs::write(&original_path, "original").unwrap();
+
+            let backup = TakeoverBackup::new(
+                ToolType::ClaudeCode,
+                original_path,
+                backup_path,
+            );
+            db.create_takeover_backup(&backup).unwrap();
+
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        // 模拟自动清理（保留最新 5 个）
+        let result = super::cleanup_old_backups(
+            &db,
+            &ToolType::ClaudeCode,
+            &TakeoverScope::User,
+            None,
+            5,
+        ).unwrap();
+
+        // 验证清理结果
+        assert_eq!(result.deleted_count, 5);
+
+        // 验证只保留了 5 个最新的
+        let remaining = db.get_backups_by_tool_scope(
+            &ToolType::ClaudeCode,
+            &TakeoverScope::User,
+            None,
+        ).unwrap();
+        assert_eq!(remaining.len(), 5);
+
+        // 验证保留的是最新的（按时间倒序，第一个应该是最新的）
+        for i in 0..remaining.len() - 1 {
+            assert!(remaining[i].taken_over_at >= remaining[i + 1].taken_over_at);
+        }
+    }

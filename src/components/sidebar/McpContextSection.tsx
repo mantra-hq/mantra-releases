@@ -90,16 +90,6 @@ export interface McpContextSectionProps {
   onStatusChange?: () => void;
 }
 
-function getAdapterLabel(adapterId: string): string {
-  switch (adapterId) {
-    case "claude": return "Claude";
-    case "cursor": return "Cursor";
-    case "codex": return "Codex";
-    case "gemini": return "Gemini";
-    default: return adapterId;
-  }
-}
-
 function getServiceStatus(service: McpServiceSummary): ServiceStatus {
   if (service.error_message) return "error";
   if (service.is_running) return "running";
@@ -321,39 +311,37 @@ export function McpContextSection({
             {status!.associated_services.map((service) => (
               <div
                 key={service.id}
-                className="flex items-center gap-3 p-2 rounded-md bg-muted/50"
+                className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
                 data-testid={`mcp-service-${service.id}`}
               >
                 <McpServiceStatusDot
                   status={getServiceStatus(service)}
                   errorMessage={service.error_message}
                 />
-                <span className="text-sm font-medium flex-1 truncate">
+                <span className="text-sm font-medium flex-1 truncate min-w-0">
                   {service.name}
                 </span>
+                {/* 来源和策略信息 - 响应式布局 */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <SourceIcon source={service.adapter_id} className="h-4 w-4" />
-                  <span className="text-xs text-muted-foreground">
-                    {getAdapterLabel(service.adapter_id)}
-                  </span>
+                  <SourceIcon source={service.adapter_id} className="h-3.5 w-3.5" />
+                  <PolicyBadge service={service} t={t} />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setPolicyDialogService(service)}
+                        data-testid={`mcp-manage-tools-${service.id}`}
+                      >
+                        <Shield className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <PolicyBadge service={service} t={t} />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => setPolicyDialogService(service)}
-                      data-testid={`mcp-manage-tools-${service.id}`}
-                    >
-                      <Shield className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t("hub.toolPolicy.projectEntry", "Project Tool Policy")}
-                  </TooltipContent>
-                </Tooltip>
               </div>
             ))}
           </div>
@@ -411,7 +399,7 @@ export function McpContextSection({
               </div>
             ) : (
               <div className="space-y-3">
-                <ScrollArea className="h-[200px] border rounded-md p-2">
+                <ScrollArea className="max-h-[200px] border rounded-md p-2">
                   <div className="space-y-1">
                     {allServices.map((service) => {
                       const isSelected = selectedServiceIds.has(service.id);
