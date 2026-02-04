@@ -62,6 +62,9 @@ pub(super) fn run_all(conn: &Connection) -> Result<(), StorageError> {
     // Migration: Add smart takeover fields (Story 11.19)
     run_mcp_smart_takeover_migration(conn)?;
 
+    // Migration: Add backup_hash to takeover backups (Story 11.22)
+    run_mcp_backup_hash_migration(conn)?;
+
     Ok(())
 }
 
@@ -763,6 +766,25 @@ fn run_mcp_smart_takeover_migration(conn: &Connection) -> Result<(), StorageErro
             ALTER TABLE project_mcp_services ADD COLUMN detected_adapter_id TEXT;
             ALTER TABLE project_mcp_services ADD COLUMN detected_config_path TEXT;
             "#,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Migration for MCP backup hash (Story 11.22)
+fn run_mcp_backup_hash_migration(conn: &Connection) -> Result<(), StorageError> {
+    let has_backup_hash: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('mcp_takeover_backups') WHERE name = 'backup_hash'",
+            [],
+            |row| row.get::<_, i32>(0).map(|c| c > 0),
+        )
+        .unwrap_or(false);
+
+    if !has_backup_hash {
+        conn.execute_batch(
+            "ALTER TABLE mcp_takeover_backups ADD COLUMN backup_hash TEXT;",
         )?;
     }
 

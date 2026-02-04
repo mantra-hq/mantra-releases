@@ -6,6 +6,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::services::atomic_fs;
+
 /// 备份条目
 struct BackupEntry {
     original_path: PathBuf,
@@ -29,14 +31,14 @@ impl BackupManager {
         }
     }
 
-    /// 备份文件
+    /// 原子备份文件 (Story 11.22)
     ///
     /// # Arguments
     /// * `path` - 要备份的文件路径
     ///
     /// # Returns
-    /// 备份文件的路径
-    pub fn backup(&mut self, path: &Path) -> io::Result<PathBuf> {
+    /// (备份文件的路径, 备份文件的 SHA256 hash)
+    pub fn backup(&mut self, path: &Path) -> io::Result<(PathBuf, String)> {
         if !path.exists() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -64,15 +66,15 @@ impl BackupManager {
             backup_path = path.with_extension(timestamped_extension);
         }
 
-        // 复制文件
-        fs::copy(path, &backup_path)?;
+        // 原子复制文件 (Story 11.22)
+        let hash = atomic_fs::atomic_copy(path, &backup_path)?;
 
         self.backups.push(BackupEntry {
             original_path: path.to_path_buf(),
             backup_path: backup_path.clone(),
         });
 
-        Ok(backup_path)
+        Ok((backup_path, hash))
     }
 
     /// 标记备份成功，不再需要回滚
@@ -80,11 +82,11 @@ impl BackupManager {
         self.committed = true;
     }
 
-    /// 手动回滚所有备份
+    /// 手动回滚所有备份 (Story 11.22: 使用原子操作)
     pub fn rollback(&self) -> io::Result<()> {
         for entry in &self.backups {
             if entry.backup_path.exists() {
-                fs::copy(&entry.backup_path, &entry.original_path)?;
+                atomic_fs::atomic_copy(&entry.backup_path, &entry.original_path)?;
             }
         }
         Ok(())
@@ -133,7 +135,7 @@ impl Default for BackupManager {
     }
 }
 
-/// 从备份文件回滚
+/// 从备份文件回滚 (Story 11.22: 使用原子操作)
 ///
 /// # Arguments
 /// * `backup_files` - 备份文件路径列表
@@ -155,8 +157,8 @@ pub fn rollback_from_backups(backup_files: &[PathBuf]) -> io::Result<usize> {
                 .map(PathBuf::from);
 
             if let Some(original) = original_path {
-                // 恢复原始文件
-                fs::copy(backup_path, &original)?;
+                // 原子恢复原始文件 (Story 11.22)
+                atomic_fs::atomic_copy(backup_path, &original)?;
                 restored += 1;
             }
         }

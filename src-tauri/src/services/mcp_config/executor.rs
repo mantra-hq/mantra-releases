@@ -326,12 +326,12 @@ impl<'a> ImportExecutor<'a> {
         Ok(())
     }
 
-    /// 执行配置接管 (Story 11.15)
+    /// 执行配置接管 (Story 11.15, 11.22)
     ///
-    /// 接管配置文件：
-    /// 1. 备份原始文件
-    /// 2. 写入 Gateway 配置
-    /// 3. 将备份记录存储到数据库
+    /// 接管配置文件（使用原子操作 Story 11.22）：
+    /// 1. 原子备份原始文件（tempfile + hash verify + rename）
+    /// 2. 原子写入 Gateway 配置
+    /// 3. 将备份记录（含 hash）存储到数据库
     pub(super) fn apply_takeover(
         &mut self,
         path: &Path,
@@ -342,6 +342,8 @@ impl<'a> ImportExecutor<'a> {
         scope: TakeoverScope,
         project_path: Option<PathBuf>,
     ) -> Result<String, StorageError> {
+        use crate::services::atomic_fs;
+
         // 1. 检查该配置文件是否已有活跃的接管记录（按 original_path 判断）
         let path_str = path.to_string_lossy().to_string();
         if let Ok(Some(existing)) = self.db.get_active_takeover_by_original_path(&path_str) {
@@ -353,28 +355,24 @@ impl<'a> ImportExecutor<'a> {
         // 2. 生成备份文件路径
         let backup_path = self.generate_backup_path(path);
 
-        // 3. 备份原文件（仅当文件存在）
-        if path.exists() {
-            fs::copy(path, &backup_path).map_err(|e| {
-                StorageError::InvalidInput(format!("Failed to backup file: {}", e))
+        // 3. 原子备份原文件（仅当文件存在）(Story 11.22)
+        let backup_hash = if path.exists() {
+            let hash = atomic_fs::atomic_copy(path, &backup_path).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to atomic backup file: {}", e))
             })?;
-        }
+            Some(hash)
+        } else {
+            None
+        };
 
-        // 4. 确保父目录存在
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StorageError::InvalidInput(format!("Failed to create directory: {}", e))
-            })?;
-        }
-
-        // 5. 读取原始内容（如果存在）
+        // 4. 读取原始内容（如果存在）
         let original_content = if path.exists() {
             fs::read_to_string(path).unwrap_or_default()
         } else {
             String::new()
         };
 
-        // 6. 使用适配器生成新配置
+        // 5. 使用适配器生成新配置
         let registry = ToolAdapterRegistry::new();
         let token = gateway_token.unwrap_or("");
         let new_content = if let Some(adapter) = registry.get(adapter_id) {
@@ -397,29 +395,40 @@ impl<'a> ImportExecutor<'a> {
             .to_string()
         };
 
-        // 7. 写入新配置
-        fs::write(path, new_content).map_err(|e| {
-            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        // 6. 原子写入新配置 (Story 11.22)
+        atomic_fs::atomic_write_str(path, &new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
-        // 8. 创建备份记录并存储到数据库 (Story 11.16: 使用 new_with_scope)
-        let backup = TakeoverBackup::new_with_scope(
-            tool_type.clone(),
-            path.to_path_buf(),
-            backup_path,
-            scope,
-            project_path,
-        );
+        // 7. 创建备份记录并存储到数据库 (Story 11.16, 11.22: 含 hash)
+        let backup = if let Some(hash) = backup_hash {
+            TakeoverBackup::new_with_hash(
+                tool_type.clone(),
+                path.to_path_buf(),
+                backup_path,
+                scope,
+                project_path,
+                hash,
+            )
+        } else {
+            TakeoverBackup::new_with_scope(
+                tool_type.clone(),
+                path.to_path_buf(),
+                backup_path,
+                scope,
+                project_path,
+            )
+        };
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
 
-        // 9. 添加到备份管理器（用于可能的回滚）
+        // 8. 添加到备份管理器（用于可能的回滚）
         self.backup_manager.add_backup_path(path.to_path_buf());
 
         Ok(backup_id)
     }
 
-    /// 更新 Gateway 配置（不创建备份）
+    /// 更新 Gateway 配置（不创建备份）(Story 11.22)
     ///
     /// 用于已有活跃接管记录时更新配置文件内容
     fn update_gateway_config(
@@ -429,14 +438,8 @@ impl<'a> ImportExecutor<'a> {
         gateway_url: &str,
         gateway_token: Option<&str>,
     ) -> Result<(), StorageError> {
+        use crate::services::atomic_fs;
         use crate::services::mcp_adapters::GATEWAY_SERVICE_NAME;
-
-        // 确保父目录存在
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StorageError::InvalidInput(format!("Failed to create directory: {}", e))
-            })?;
-        }
 
         // 读取原始内容（如果存在）
         let original_content = if path.exists() {
@@ -468,9 +471,9 @@ impl<'a> ImportExecutor<'a> {
             .to_string()
         };
 
-        // 写入新配置
-        fs::write(path, new_content).map_err(|e| {
-            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        // 原子写入新配置 (Story 11.22)
+        atomic_fs::atomic_write_str(path, &new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
         Ok(())
@@ -512,6 +515,7 @@ impl<'a> ImportExecutor<'a> {
         user_config_path: &Path,
         project_path: &str,
     ) -> Result<String, StorageError> {
+        use crate::services::atomic_fs;
         use crate::services::mcp_adapters::ClaudeAdapter;
 
         let adapter = ClaudeAdapter;
@@ -557,45 +561,39 @@ impl<'a> ImportExecutor<'a> {
         //    格式: ~/.mantra/backups/local-scope/<project-hash>.json
         let backup_path = self.generate_local_scope_backup_path(project_path);
 
-        // 5. 确保备份目录存在
-        if let Some(parent) = backup_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                StorageError::InvalidInput(format!("Failed to create backup directory: {}", e))
-            })?;
-        }
-
-        // 6. 保存备份内容（JSON 片段）
+        // 5. 保存备份内容（JSON 片段）- 使用原子写入 (Story 11.22)
         let backup_content = serde_json::to_string_pretty(&backup_mcp_servers).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to serialize backup content: {}", e))
         })?;
-        fs::write(&backup_path, backup_content).map_err(|e| {
-            StorageError::InvalidInput(format!("Failed to write backup file: {}", e))
+        let backup_hash = atomic_fs::atomic_write_str(&backup_path, &backup_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic write backup file: {}", e))
         })?;
 
-        // 7. 清空该项目的 mcpServers
+        // 6. 清空该项目的 mcpServers
         let new_content = adapter
             .clear_local_scope_for_project(&config_content, project_path)
             .map_err(|e| {
                 StorageError::InvalidInput(format!("Failed to clear local scope: {}", e))
             })?;
 
-        // 8. 写回配置文件
-        fs::write(user_config_path, new_content).map_err(|e| {
-            StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+        // 7. 原子写回配置文件 (Story 11.22)
+        atomic_fs::atomic_write_str(user_config_path, &new_content).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
-        // 9. 创建备份记录并存储到数据库
-        let backup = TakeoverBackup::new_with_scope(
+        // 8. 创建备份记录并存储到数据库 (含 hash)
+        let backup = TakeoverBackup::new_with_hash(
             ToolType::ClaudeCode,
             user_config_path.to_path_buf(),
             backup_path.clone(),
             TakeoverScope::Local,
             Some(PathBuf::from(project_path)),
+            backup_hash,
         );
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
 
-        // 10. 添加到备份管理器（用于可能的回滚）
+        // 9. 添加到备份管理器（用于可能的回滚）
         self.backup_manager.add_backup_path(backup_path);
 
         Ok(backup_id)

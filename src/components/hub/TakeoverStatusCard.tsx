@@ -60,6 +60,8 @@ import {
   FolderOpen,
   Copy,
   Check,
+  AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { SourceIcon } from "@/components/import/SourceIcons";
@@ -75,19 +77,23 @@ type ToolType = "claude_code" | "cursor" | "codex" | "gemini_cli";
 type TakeoverScope = "user" | "project" | "local";
 
 /**
- * 接管备份记录
- * 注意：字段名使用 camelCase，与 Rust 后端 #[serde(rename_all = "camelCase")] 对应
+ * 带完整性信息的备份记录 (Story 11.22)
  */
-interface TakeoverBackup {
+interface TakeoverBackupIntegrity {
   id: string;
   toolType: ToolType;
   scope: TakeoverScope;
   projectPath: string | null;
   originalPath: string;
   backupPath: string;
+  backupHash: string | null;
   takenOverAt: string;
   restoredAt: string | null;
   status: "active" | "restored";
+  // 完整性字段
+  backupFileExists: boolean;
+  originalFileExists: boolean;
+  hashValid: boolean | null;
 }
 
 /**
@@ -244,9 +250,10 @@ export interface TakeoverStatusCardProps {
 
 export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   const { t, i18n } = useTranslation();
-  const [backups, setBackups] = useState<TakeoverBackup[]>([]);
+  const [backups, setBackups] = useState<TakeoverBackupIntegrity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [isDeletingInvalid, setIsDeletingInvalid] = useState(false);
 
   // 分组展开状态
   const [userExpanded, setUserExpanded] = useState(true);
@@ -272,7 +279,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     const localBackups = backups.filter((b) => b.scope === "local");
 
     // 项目级按 projectPath 子分组
-    const projectGroups = new Map<string, TakeoverBackup[]>();
+    const projectGroups = new Map<string, TakeoverBackupIntegrity[]>();
     for (const backup of projectBackups) {
       const path = backup.projectPath || "unknown";
       const existing = projectGroups.get(path) || [];
@@ -280,7 +287,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     }
 
     // Local Scope 按 projectPath 子分组 (Story 11.21)
-    const localGroups = new Map<string, TakeoverBackup[]>();
+    const localGroups = new Map<string, TakeoverBackupIntegrity[]>();
     for (const backup of localBackups) {
       const path = backup.projectPath || "unknown";
       const existing = localGroups.get(path) || [];
@@ -296,10 +303,10 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     };
   }, [backups]);
 
-  // 加载活跃的接管记录
+  // 加载活跃的接管记录（带完整性信息）
   const loadBackups = useCallback(async () => {
     try {
-      const result = await invoke<TakeoverBackup[]>("list_active_takeovers");
+      const result = await invoke<TakeoverBackupIntegrity[]>("list_active_takeovers_with_integrity");
       setBackups(result);
     } catch (error) {
       console.error("[TakeoverStatusCard] Failed to load backups:", error);
@@ -307,6 +314,30 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
       setIsLoading(false);
     }
   }, []);
+
+  // 计算无效备份数量 (Story 11.22)
+  const invalidBackupCount = useMemo(() => {
+    return backups.filter((b) => !b.backupFileExists || b.hashValid === false).length;
+  }, [backups]);
+
+  // 删除无效备份 (Story 11.22)
+  const handleDeleteInvalidBackups = useCallback(async () => {
+    setIsDeletingInvalid(true);
+    try {
+      const deletedCount = await invoke<number>("delete_invalid_takeover_backups");
+      if (deletedCount > 0) {
+        feedback.success(t("hub.takeover.deleteInvalidSuccess", { count: deletedCount }));
+        await loadBackups();
+      } else {
+        feedback.success(t("hub.takeover.noInvalidBackups"));
+      }
+    } catch (error) {
+      console.error("[TakeoverStatusCard] Failed to delete invalid backups:", error);
+      feedback.error(t("hub.takeover.deleteInvalidError"), (error as Error).message);
+    } finally {
+      setIsDeletingInvalid(false);
+    }
+  }, [t, loadBackups]);
 
   // 读取文件内容预览
   const handlePreview = useCallback(async (path: string) => {
@@ -400,12 +431,35 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   }
 
   // 渲染单个接管记录
-  const renderBackupItem = (backup: TakeoverBackup) => (
+  const renderBackupItem = (backup: TakeoverBackupIntegrity) => {
+    // 检查是否是无效备份 (Story 11.22)
+    const isInvalid = !backup.backupFileExists || backup.hashValid === false;
+    const canRestore = backup.backupFileExists && backup.hashValid !== false;
+
+    return (
     <div
       key={backup.id}
-      className="flex items-center gap-2 py-1.5 px-2 hover:bg-muted/50 rounded text-sm"
+      className={`flex items-center gap-2 py-1.5 px-2 hover:bg-muted/50 rounded text-sm ${isInvalid ? "bg-destructive/5" : ""}`}
       data-testid={`takeover-item-${backup.id}`}
     >
+      {/* 完整性状态图标 (Story 11.22) */}
+      {isInvalid && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">
+                {!backup.backupFileExists
+                  ? t("hub.takeover.backupFileMissing")
+                  : t("hub.takeover.hashMismatch")}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+
       {/* 工具图标 */}
       <SourceIcon source={toolTypeToAdapterId(backup.toolType)} className="h-4 w-4 shrink-0" />
 
@@ -497,7 +551,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
             variant="outline"
             size="sm"
             className="h-6 px-2"
-            disabled={restoringId === backup.id}
+            disabled={restoringId === backup.id || !canRestore}
             data-testid={`restore-button-${backup.id}`}
           >
             {restoringId === backup.id ? (
@@ -559,7 +613,8 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -575,9 +630,37 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                 <CardDescription>{t("hub.takeover.description")}</CardDescription>
               </div>
             </div>
-            <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
-              {t("hub.takeover.activeCount", { count: backups.length })}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {/* 删除无效记录按钮 (Story 11.22) */}
+              {invalidBackupCount > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={handleDeleteInvalidBackups}
+                        disabled={isDeletingInvalid}
+                      >
+                        {isDeletingInvalid ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <Trash2 className="h-3 w-3 mr-1" />
+                        )}
+                        <span className="text-xs">{t("hub.takeover.deleteInvalid", { count: invalidBackupCount })}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p className="text-xs">{t("hub.takeover.deleteInvalidTooltip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                {t("hub.takeover.activeCount", { count: backups.length })}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
 

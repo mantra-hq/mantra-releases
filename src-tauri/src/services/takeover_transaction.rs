@@ -1,14 +1,17 @@
 //! 接管事务管理模块
 //!
 //! Story 11.20: 全工具自动接管生成 - Task 4
+//! Story 11.22: 原子性备份恢复机制 - Task 5
 //!
 //! 提供事务性接管操作支持，确保多工具接管的原子性。
 //! 当任意工具接管失败时，可以回滚所有已执行的操作。
+//! 回滚使用原子文件操作确保配置文件不会损坏 (Story 11.22)。
 
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::services::atomic_fs;
 use crate::storage::StorageError;
 use crate::storage::Database;
 
@@ -252,15 +255,18 @@ impl TakeoverTransaction {
                     config_path,
                     temp_backup,
                 } => {
-                    // 从临时备份恢复原始配置
+                    // 从临时备份原子恢复原始配置 (Story 11.22)
                     if temp_backup.exists() {
-                        if let Err(e) = fs::rename(temp_backup, config_path) {
+                        // 使用原子复制确保回滚过程中配置文件不会损坏
+                        if let Err(e) = atomic_fs::atomic_copy(temp_backup, config_path) {
                             result.errors.push(format!(
-                                "Failed to restore config {}: {}",
+                                "Failed to atomically restore config {}: {}",
                                 config_path.display(),
                                 e
                             ));
                         } else {
+                            // 清理临时备份文件
+                            let _ = fs::remove_file(temp_backup);
                             result.success_count += 1;
                         }
                     } else {

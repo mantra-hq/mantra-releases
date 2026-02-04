@@ -2,6 +2,7 @@
 //!
 //! Provides business logic services for the application.
 
+pub mod atomic_fs;
 pub mod env_manager;
 pub mod mcp_adapters;
 pub mod mcp_config;

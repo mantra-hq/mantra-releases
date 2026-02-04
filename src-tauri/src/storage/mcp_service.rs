@@ -81,6 +81,7 @@ fn parse_takeover_backup_row(row: &Row) -> rusqlite::Result<TakeoverBackup> {
     let status_str: String = row.get(6)?;
     let scope_str: String = row.get(7)?;
     let project_path_str: Option<String> = row.get(8)?;
+    let backup_hash: Option<String> = row.get(9)?;
 
     Ok(TakeoverBackup {
         id: row.get(0)?,
@@ -89,6 +90,7 @@ fn parse_takeover_backup_row(row: &Row) -> rusqlite::Result<TakeoverBackup> {
         project_path: project_path_str.map(PathBuf::from),
         original_path: PathBuf::from(row.get::<_, String>(2)?),
         backup_path: PathBuf::from(row.get::<_, String>(3)?),
+        backup_hash,
         taken_over_at: row.get(4)?,
         restored_at: row.get(5)?,
         status: TakeoverStatus::from_str(&status_str).unwrap_or(TakeoverStatus::Active),
@@ -870,8 +872,8 @@ impl Database {
     pub fn create_takeover_backup(&self, backup: &TakeoverBackup) -> Result<(), StorageError> {
         let project_path_str = backup.project_path.as_ref().map(|p| p.to_string_lossy().to_string());
         self.connection().execute(
-            r#"INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"#,
+            r#"INSERT INTO mcp_takeover_backups (id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
             params![
                 &backup.id,
                 backup.tool_type.as_str(),
@@ -882,6 +884,7 @@ impl Database {
                 backup.status.as_str(),
                 backup.scope.as_str(),
                 &project_path_str,
+                &backup.backup_hash,
             ],
         )?;
         Ok(())
@@ -904,13 +907,13 @@ impl Database {
 
         let sql = match &status_str {
             Some(_) => {
-                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                    FROM mcp_takeover_backups
                    WHERE status = ?1
                    ORDER BY taken_over_at DESC"#
             }
             None => {
-                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+                r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                    FROM mcp_takeover_backups
                    ORDER BY taken_over_at DESC"#
             }
@@ -939,7 +942,7 @@ impl Database {
     /// * `id` - 备份 ID
     pub fn get_takeover_backup_by_id(&self, id: &str) -> Result<Option<TakeoverBackup>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                FROM mcp_takeover_backups
                WHERE id = ?1"#,
         )?;
@@ -965,7 +968,7 @@ impl Database {
         tool_type: &ToolType,
     ) -> Result<Option<TakeoverBackup>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                FROM mcp_takeover_backups
                WHERE tool_type = ?1 AND status = 'active'
                ORDER BY taken_over_at DESC
@@ -994,7 +997,7 @@ impl Database {
         let backup = match scope {
             TakeoverScope::User => {
                 let mut stmt = self.connection().prepare(
-                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                        FROM mcp_takeover_backups
                        WHERE tool_type = ?1 AND status = 'active' AND scope = 'user'
                        ORDER BY taken_over_at DESC
@@ -1006,7 +1009,7 @@ impl Database {
             TakeoverScope::Project | TakeoverScope::Local => {
                 // Project 和 Local scope 都需要按 project_path 查询
                 let mut stmt = self.connection().prepare(
-                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+                    r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                        FROM mcp_takeover_backups
                        WHERE tool_type = ?1 AND status = 'active' AND scope = ?2 AND project_path = ?3
                        ORDER BY taken_over_at DESC
@@ -1032,7 +1035,7 @@ impl Database {
         project_path: &str,
     ) -> Result<Vec<TakeoverBackup>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                FROM mcp_takeover_backups
                WHERE scope = 'project' AND project_path = ?1 AND status = 'active'
                ORDER BY taken_over_at DESC"#,
@@ -1053,7 +1056,7 @@ impl Database {
         &self,
     ) -> Result<Vec<TakeoverBackup>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                FROM mcp_takeover_backups
                WHERE scope = 'local' AND status = 'active'
                ORDER BY project_path ASC, taken_over_at DESC"#,
@@ -1078,7 +1081,7 @@ impl Database {
         original_path: &str,
     ) -> Result<Option<TakeoverBackup>, StorageError> {
         let mut stmt = self.connection().prepare(
-            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path
+            r#"SELECT id, tool_type, original_path, backup_path, taken_over_at, restored_at, status, scope, project_path, backup_hash
                FROM mcp_takeover_backups
                WHERE original_path = ?1 AND status = 'active'
                ORDER BY taken_over_at DESC

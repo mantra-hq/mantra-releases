@@ -1039,6 +1039,10 @@ pub struct TakeoverBackup {
     /// 备份文件路径
     /// - local scope: 备份的是该项目的 mcpServers JSON 片段
     pub backup_path: PathBuf,
+    /// 备份文件的 SHA256 hash (Story 11.22)
+    /// 用于验证备份文件完整性
+    #[serde(default)]
+    pub backup_hash: Option<String>,
     /// 接管时间 (ISO 8601)
     pub taken_over_at: String,
     /// 恢复时间 (ISO 8601)，如果未恢复则为 None
@@ -1057,6 +1061,7 @@ impl TakeoverBackup {
             project_path: None,
             original_path,
             backup_path,
+            backup_hash: None,
             taken_over_at: chrono::Utc::now().to_rfc3339(),
             restored_at: None,
             status: TakeoverStatus::Active,
@@ -1078,6 +1083,30 @@ impl TakeoverBackup {
             project_path,
             original_path,
             backup_path,
+            backup_hash: None,
+            taken_over_at: chrono::Utc::now().to_rfc3339(),
+            restored_at: None,
+            status: TakeoverStatus::Active,
+        }
+    }
+
+    /// 创建带 hash 验证的备份记录 (Story 11.22)
+    pub fn new_with_hash(
+        tool_type: ToolType,
+        original_path: PathBuf,
+        backup_path: PathBuf,
+        scope: TakeoverScope,
+        project_path: Option<PathBuf>,
+        backup_hash: String,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            tool_type,
+            scope,
+            project_path,
+            original_path,
+            backup_path,
+            backup_hash: Some(backup_hash),
             taken_over_at: chrono::Utc::now().to_rfc3339(),
             restored_at: None,
             status: TakeoverStatus::Active,
@@ -1111,6 +1140,22 @@ impl TakeoverBackup {
     pub fn is_local_level(&self) -> bool {
         self.scope == TakeoverScope::Local
     }
+}
+
+/// 带完整性信息的备份记录 (Story 11.22 - AC4)
+///
+/// 包含备份记录的完整信息 + 运行时文件状态检查结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeoverBackupIntegrity {
+    /// 原始备份记录
+    #[serde(flatten)]
+    pub backup: TakeoverBackup,
+    /// 备份文件是否存在
+    pub backup_file_exists: bool,
+    /// 原始配置文件是否存在
+    pub original_file_exists: bool,
+    /// 备份文件 hash 是否验证通过（None = 无 hash 记录）
+    pub hash_valid: Option<bool>,
 }
 
 // ===== Story 11.19: 智能接管合并引擎 =====

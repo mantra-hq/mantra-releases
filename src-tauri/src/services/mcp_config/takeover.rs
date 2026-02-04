@@ -3,10 +3,13 @@
 //! Story 11.15: MCP 接管流程重构
 //! Story 11.19: 智能接管执行引擎
 //! Story 11.20: 全工具自动接管生成
+//! Story 11.22: 原子性备份恢复机制
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use crate::services::atomic_fs;
 
 use super::executor::ImportExecutor;
 use super::scanner::scan_mcp_configs;
@@ -23,11 +26,15 @@ use crate::storage::{Database, StorageError};
 
 // ===== Story 11.15: 接管恢复功能 =====
 
-/// 恢复 MCP 配置接管
+/// 恢复 MCP 配置接管 (Story 11.22: 原子性恢复)
 ///
 /// Story 11.15: MCP 接管流程重构 - AC 5
+/// Story 11.22: 原子性备份恢复机制 - AC 2
 ///
-/// 从备份文件恢复原始配置，并更新数据库记录状态
+/// 从备份文件恢复原始配置，使用原子操作确保：
+/// 1. 恢复前验证备份文件 hash 完整性
+/// 2. 使用临时文件 + 原子重命名
+/// 3. 失败时保持原文件不变
 pub fn restore_mcp_takeover(
     db: &Database,
     backup_id: &str,
@@ -53,15 +60,31 @@ pub fn restore_mcp_takeover(
         )));
     }
 
-    // 4. 恢复原始文件
-    fs::copy(&backup.backup_path, &backup.original_path).map_err(|e| {
-        StorageError::InvalidInput(format!("Failed to restore file: {}", e))
+    // 4. 验证备份文件完整性 (Story 11.22 - AC2 step 1)
+    if let Some(expected_hash) = &backup.backup_hash {
+        let actual_hash = atomic_fs::calculate_file_hash(&backup.backup_path).map_err(|e| {
+            StorageError::InvalidInput(format!(
+                "Failed to calculate backup file hash: {}", e
+            ))
+        })?;
+        if &actual_hash != expected_hash {
+            return Err(StorageError::InvalidInput(format!(
+                "Backup file integrity check failed: expected hash {}, got {}",
+                expected_hash, actual_hash
+            )));
+        }
+    }
+
+    // 5. 原子恢复: 使用 atomic_copy 确保临时文件 + hash 验证 + 原子重命名
+    //    如果失败，原文件保持不变 (Story 11.22 - AC2 steps 2-4)
+    atomic_fs::atomic_copy(&backup.backup_path, &backup.original_path).map_err(|e| {
+        StorageError::InvalidInput(format!("Failed to atomically restore file: {}", e))
     })?;
 
-    // 5. 更新数据库记录状态
+    // 6. 更新数据库记录状态
     db.update_backup_status_restored(backup_id)?;
 
-    // 6. 返回更新后的备份记录
+    // 7. 返回更新后的备份记录
     db.get_takeover_backup_by_id(backup_id)?
         .ok_or_else(|| StorageError::NotFound(format!("Backup not found after update: {}", backup_id)))
 }
@@ -157,11 +180,11 @@ pub fn sync_active_takeovers(
             }
         };
 
-        // 写回配置文件
-        if let Err(e) = fs::write(&backup.original_path, new_content) {
+        // 写回配置文件 (Story 11.22: 使用原子写入)
+        if let Err(e) = atomic_fs::atomic_write_str(&backup.original_path, &new_content) {
             result.failed_count += 1;
             result.errors.push(format!(
-                "Failed to write {}: {}",
+                "Failed to atomic write {}: {}",
                 backup.original_path.display(),
                 e
             ));
@@ -1038,9 +1061,10 @@ fn determine_takeover_scope(config: &DetectedConfig) -> (TakeoverScope, Option<P
 
 // ===== Story 11.21: Local Scope 恢复 =====
 
-/// 恢复 Local Scope 接管 (Story 11.21 - Task 7)
+/// 恢复 Local Scope 接管 (Story 11.21 - Task 7, Story 11.22)
 ///
 /// 从备份文件恢复指定项目的 mcpServers 配置到 ~/.claude.json
+/// 使用原子操作和 hash 验证 (Story 11.22)
 ///
 /// # Arguments
 /// * `db` - 数据库
@@ -1052,6 +1076,7 @@ pub fn restore_local_scope_takeover(
     db: &Database,
     backup_id: &str,
 ) -> Result<TakeoverBackup, StorageError> {
+    use crate::services::atomic_fs;
     use crate::services::mcp_adapters::ClaudeAdapter;
 
     // 1. 获取备份记录
@@ -1083,7 +1108,20 @@ pub fn restore_local_scope_takeover(
         .to_string_lossy()
         .to_string();
 
-    // 5. 读取备份文件内容（mcpServers JSON 片段）
+    // 5. 验证备份文件完整性 (Story 11.22)
+    if let Some(expected_hash) = &backup.backup_hash {
+        let actual_hash = atomic_fs::calculate_file_hash(&backup.backup_path).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to calculate backup file hash: {}", e))
+        })?;
+        if &actual_hash != expected_hash {
+            return Err(StorageError::InvalidInput(format!(
+                "Backup file integrity check failed: expected hash {}, got {}",
+                expected_hash, actual_hash
+            )));
+        }
+    }
+
+    // 6. 读取备份文件内容（mcpServers JSON 片段）
     let backup_content = fs::read_to_string(&backup.backup_path).map_err(|e| {
         StorageError::InvalidInput(format!("Failed to read backup file: {}", e))
     })?;
@@ -1092,7 +1130,7 @@ pub fn restore_local_scope_takeover(
             StorageError::InvalidInput(format!("Failed to parse backup content: {}", e))
         })?;
 
-    // 6. 读取当前配置文件
+    // 7. 读取当前配置文件
     let current_content = if backup.original_path.exists() {
         fs::read_to_string(&backup.original_path).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to read config file: {}", e))
@@ -1104,7 +1142,7 @@ pub fn restore_local_scope_takeover(
         )));
     };
 
-    // 7. 使用 ClaudeAdapter 恢复 mcpServers
+    // 8. 使用 ClaudeAdapter 恢复 mcpServers
     let adapter = ClaudeAdapter;
     let restored_content = adapter
         .restore_local_scope_mcp_servers(&current_content, &project_path, &backup_mcp_servers)
@@ -1112,15 +1150,15 @@ pub fn restore_local_scope_takeover(
             StorageError::InvalidInput(format!("Failed to restore local scope: {}", e))
         })?;
 
-    // 8. 写回配置文件
-    fs::write(&backup.original_path, restored_content).map_err(|e| {
-        StorageError::InvalidInput(format!("Failed to write config file: {}", e))
+    // 9. 原子写回配置文件 (Story 11.22)
+    atomic_fs::atomic_write_str(&backup.original_path, &restored_content).map_err(|e| {
+        StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
     })?;
 
-    // 9. 更新数据库记录状态
+    // 10. 更新数据库记录状态
     db.update_backup_status_restored(backup_id)?;
 
-    // 10. 返回更新后的备份记录
+    // 11. 返回更新后的备份记录
     db.get_takeover_backup_by_id(backup_id)?
         .ok_or_else(|| StorageError::NotFound(format!("Backup not found after update: {}", backup_id)))
 }
@@ -1148,4 +1186,69 @@ pub fn restore_all_local_scope_takeovers(
     }
 
     Ok((restored_count, errors))
+}
+
+// ===== Story 11.22: 备份完整性检查 =====
+
+/// 获取带完整性信息的活跃备份列表 (Story 11.22 - AC4)
+///
+/// 检查每个备份记录的文件存在状态和 hash 完整性
+pub fn list_takeover_backups_with_integrity(
+    db: &Database,
+) -> Result<Vec<crate::models::mcp::TakeoverBackupIntegrity>, StorageError> {
+    use crate::models::mcp::TakeoverBackupIntegrity;
+
+    let backups = db.get_takeover_backups(Some(TakeoverStatus::Active))?;
+
+    let results = backups
+        .into_iter()
+        .map(|backup| {
+            let backup_file_exists = backup.backup_path.exists();
+            let original_file_exists = backup.original_path.exists();
+
+            // 验证 hash（如果有记录）
+            let hash_valid = if backup_file_exists {
+                backup.backup_hash.as_ref().map(|expected_hash| {
+                    atomic_fs::calculate_file_hash(&backup.backup_path)
+                        .map(|actual_hash| &actual_hash == expected_hash)
+                        .unwrap_or(false)
+                })
+            } else {
+                backup.backup_hash.as_ref().map(|_| false) // 文件不存在，hash 验证失败
+            };
+
+            TakeoverBackupIntegrity {
+                backup,
+                backup_file_exists,
+                original_file_exists,
+                hash_valid,
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// 删除无效的备份记录 (Story 11.22 - AC4)
+///
+/// 无效备份定义为：备份文件不存在或 hash 验证失败的记录
+///
+/// # Returns
+/// 删除的记录数量
+pub fn delete_invalid_backups(db: &Database) -> Result<usize, StorageError> {
+    let backups_with_integrity = list_takeover_backups_with_integrity(db)?;
+
+    let mut deleted_count = 0;
+
+    for item in backups_with_integrity {
+        let is_invalid = !item.backup_file_exists
+            || item.hash_valid == Some(false);
+
+        if is_invalid {
+            db.delete_takeover_backup(&item.backup.id)?;
+            deleted_count += 1;
+        }
+    }
+
+    Ok(deleted_count)
 }

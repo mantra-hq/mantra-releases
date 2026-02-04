@@ -380,3 +380,174 @@ fn create_test_project(db: &Database, id: &str, name: &str) {
         )
         .unwrap();
 }
+
+// ===== Story 11.22 Task 5: 原子回滚测试 =====
+
+#[test]
+fn test_atomic_rollback_config_modified() {
+    use crate::services::atomic_fs;
+
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+    let temp_backup = temp_dir.path().join("config.json.temp-backup");
+
+    // 模拟已修改的配置：临时备份包含原始内容
+    let original_content = r#"{"original": true, "important": "data"}"#;
+    let modified_content = r#"{"modified": true, "gateway": "injected"}"#;
+    fs::write(&temp_backup, original_content).unwrap();
+    fs::write(&config_path, modified_content).unwrap();
+
+    // 计算原始内容的 hash（用于验证原子操作正确性）
+    let original_hash = atomic_fs::calculate_content_hash(original_content.as_bytes());
+
+    let db = Database::new_in_memory().unwrap();
+    let mut tx = TakeoverTransaction::begin();
+    tx.record_config_modified(config_path.clone(), temp_backup.clone());
+
+    // 原子回滚
+    let result = tx.rollback(&db);
+
+    assert_eq!(result.success_count, 1);
+    assert!(result.errors.is_empty());
+
+    // 配置应该恢复到原始内容
+    let restored_content = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(restored_content, original_content);
+
+    // 验证恢复后文件的 hash 正确
+    let restored_hash = atomic_fs::calculate_file_hash(&config_path).unwrap();
+    assert_eq!(restored_hash, original_hash);
+
+    // 临时备份应该被清理
+    assert!(!temp_backup.exists());
+}
+
+#[test]
+fn test_atomic_rollback_preserves_config_on_partial_failure() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("config.json");
+
+    // 配置文件存在但没有临时备份
+    let current_content = r#"{"current": "content"}"#;
+    fs::write(&config_path, current_content).unwrap();
+
+    // 临时备份不存在（模拟备份过程失败的场景）
+    let nonexistent_backup = temp_dir.path().join("nonexistent.backup");
+
+    let db = Database::new_in_memory().unwrap();
+    let mut tx = TakeoverTransaction::begin();
+    tx.record_config_modified(config_path.clone(), nonexistent_backup);
+
+    // 回滚
+    let result = tx.rollback(&db);
+
+    // 应该成功处理（删除新创建的配置）
+    assert!(result.errors.is_empty());
+
+    // 如果临时备份不存在，则删除配置文件
+    assert!(!config_path.exists());
+}
+
+#[test]
+fn test_atomic_rollback_large_config_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("large-config.json");
+    let temp_backup = temp_dir.path().join("large-config.json.temp-backup");
+
+    // 创建较大的配置文件（1MB）
+    let large_content: String = (0..100000)
+        .map(|i| format!(r#"{{"service_{}":{{"command":"test"}}}}"#, i))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let original_content = format!(r#"{{"mcpServers": {{{}}}}}"#, large_content);
+
+    fs::write(&temp_backup, &original_content).unwrap();
+    fs::write(&config_path, r#"{"modified": true}"#).unwrap();
+
+    let db = Database::new_in_memory().unwrap();
+    let mut tx = TakeoverTransaction::begin();
+    tx.record_config_modified(config_path.clone(), temp_backup.clone());
+
+    // 原子回滚大文件
+    let result = tx.rollback(&db);
+
+    assert!(result.errors.is_empty());
+
+    // 验证大文件正确恢复
+    let restored = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(restored, original_content);
+}
+
+#[test]
+fn test_atomic_rollback_multiple_configs() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // 创建多个配置文件
+    let configs: Vec<(PathBuf, PathBuf, &str)> = vec![
+        (
+            temp_dir.path().join("claude.json"),
+            temp_dir.path().join("claude.json.backup"),
+            r#"{"claude": "original"}"#,
+        ),
+        (
+            temp_dir.path().join("cursor.json"),
+            temp_dir.path().join("cursor.json.backup"),
+            r#"{"cursor": "original"}"#,
+        ),
+        (
+            temp_dir.path().join("codex.json"),
+            temp_dir.path().join("codex.json.backup"),
+            r#"{"codex": "original"}"#,
+        ),
+    ];
+
+    // 写入备份和修改后的配置
+    for (config, backup, original) in &configs {
+        fs::write(backup, original).unwrap();
+        fs::write(config, r#"{"modified": true}"#).unwrap();
+    }
+
+    let db = Database::new_in_memory().unwrap();
+    let mut tx = TakeoverTransaction::begin();
+
+    for (config, backup, _) in &configs {
+        tx.record_config_modified(config.clone(), backup.clone());
+    }
+
+    // 回滚所有配置
+    let result = tx.rollback(&db);
+
+    assert_eq!(result.success_count, 3);
+    assert!(result.errors.is_empty());
+
+    // 验证所有配置都正确恢复
+    for (config, _, original) in &configs {
+        let restored = fs::read_to_string(config).unwrap();
+        assert_eq!(&restored, original);
+    }
+}
+
+#[test]
+fn test_atomic_rollback_binary_config() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("binary.config");
+    let temp_backup = temp_dir.path().join("binary.config.backup");
+
+    // 创建包含所有字节值的二进制配置
+    let binary_content: Vec<u8> = (0..=255).collect();
+    fs::write(&temp_backup, &binary_content).unwrap();
+    fs::write(&config_path, b"modified binary").unwrap();
+
+    let db = Database::new_in_memory().unwrap();
+    let mut tx = TakeoverTransaction::begin();
+    tx.record_config_modified(config_path.clone(), temp_backup.clone());
+
+    // 原子回滚
+    let result = tx.rollback(&db);
+
+    assert!(result.errors.is_empty());
+
+    // 验证二进制内容正确恢复
+    let restored = fs::read(&config_path).unwrap();
+    assert_eq!(restored, binary_content);
+}

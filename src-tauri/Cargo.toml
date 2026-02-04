@@ -53,12 +53,12 @@ toml = "0.8"
 toml_edit = "0.22"
 async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json"] }
+tempfile = "3"
 
 [features]
 default = []
 keyring = ["dep:keyring"]
 
 [dev-dependencies]
-tempfile = "3"
 proptest = "1.4"
 wiremock = "0.6"

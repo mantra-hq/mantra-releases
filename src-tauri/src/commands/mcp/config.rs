@@ -8,9 +8,10 @@ use crate::error::AppError;
 use crate::models::mcp::{TakeoverBackup, ToolType};
 use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
 use crate::services::mcp_config::{
-    generate_import_preview, get_takeover_status, restore_mcp_takeover,
-    restore_mcp_takeover_by_tool, rollback_from_backups, scan_mcp_configs, ImportExecutor,
-    ImportPreview, ImportRequest, ImportResult, ScanResult,
+    delete_invalid_backups, generate_import_preview, get_takeover_status,
+    list_takeover_backups_with_integrity, restore_mcp_takeover, restore_mcp_takeover_by_tool,
+    rollback_from_backups, scan_mcp_configs, ImportExecutor, ImportPreview, ImportRequest,
+    ImportResult, ScanResult,
 };
 use crate::GatewayServerState;
 
@@ -419,4 +420,38 @@ fn scan_detectable_configs(project_path: &str) -> Vec<DetectableConfig> {
     }
 
     detectable_configs
+}
+
+// ===== Story 11.22: 备份完整性检查命令 =====
+
+/// 获取带完整性信息的活跃备份列表
+///
+/// Story 11.22: 原子性备份恢复机制 - AC 4
+///
+/// 检查每个备份记录的文件存在状态和 hash 完整性
+///
+/// # Returns
+/// 带完整性信息的备份记录列表
+#[tauri::command]
+pub fn list_active_takeovers_with_integrity(
+    state: State<'_, McpState>,
+) -> Result<Vec<crate::models::mcp::TakeoverBackupIntegrity>, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    list_takeover_backups_with_integrity(&db).map_err(AppError::from)
+}
+
+/// 删除无效的备份记录
+///
+/// Story 11.22: 原子性备份恢复机制 - AC 4
+///
+/// 无效备份定义为：备份文件不存在或 hash 验证失败的记录
+///
+/// # Returns
+/// 删除的记录数量
+#[tauri::command]
+pub fn delete_invalid_takeover_backups(
+    state: State<'_, McpState>,
+) -> Result<usize, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    delete_invalid_backups(&db).map_err(AppError::from)
 }

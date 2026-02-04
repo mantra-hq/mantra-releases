@@ -1227,11 +1227,21 @@
       "restore": "恢复",
       "userLevel": "用户级配置",
       "projectLevel": "项目级配置",
+      "localLevel": "Local Scope",
       "currentConfig": "当前配置",
       "originalBackup": "原始备份",
       "preview": "预览",
       "filePreview": "文件预览",
-      "previewError": "无法读取文件"
+      "previewError": "无法读取文件",
+      "restoreLocalScopeDescription": "恢复 {{tool}} 项目 \"{{project}}\" 的 Local Scope 配置。仅恢复该项目的 MCP 服务，不影响其他项目和用户级配置。",
+      "restoreLocalScopeHint": "作用域：仅 {{project}} 的 Local MCP 配置",
+      "backupFileMissing": "备份文件不存在",
+      "hashMismatch": "备份文件校验失败",
+      "deleteInvalid": "清理无效 ({{count}})",
+      "deleteInvalidTooltip": "删除文件缺失或校验失败的备份记录",
+      "deleteInvalidSuccess": "已删除 {{count}} 条无效备份记录",
+      "noInvalidBackups": "没有需要清理的无效备份",
+      "deleteInvalidError": "清理失败"
     },
     "smartTakeover": {
       "title": "智能接管",

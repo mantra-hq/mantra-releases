@@ -1221,11 +1221,21 @@
       "restore": "Restore",
       "userLevel": "User Level",
       "projectLevel": "Project Level",
+      "localLevel": "Local Scope",
       "currentConfig": "Current Config",
       "originalBackup": "Original Backup",
       "preview": "Preview",
       "filePreview": "File Preview",
-      "previewError": "Unable to read file"
+      "previewError": "Unable to read file",
+      "restoreLocalScopeDescription": "Restore {{tool}} local scope configuration for project \"{{project}}\". Only this project's MCP services will be restored, other projects and user scope will not be affected.",
+      "restoreLocalScopeHint": "Scope: only {{project}} local MCP configuration",
+      "backupFileMissing": "Backup file not found",
+      "hashMismatch": "Backup file integrity check failed",
+      "deleteInvalid": "Clean Invalid ({{count}})",
+      "deleteInvalidTooltip": "Delete backup records with missing files or failed integrity checks",
+      "deleteInvalidSuccess": "Deleted {{count}} invalid backup records",
+      "noInvalidBackups": "No invalid backups to clean",
+      "deleteInvalidError": "Cleanup failed"
     },
     "smartTakeover": {
       "title": "Smart Takeover",

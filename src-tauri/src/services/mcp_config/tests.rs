@@ -369,7 +369,7 @@ use crate::storage::Database;
         fs::write(&test_file, "original content").unwrap();
 
         let mut manager = BackupManager::new();
-        let backup_path = manager.backup(&test_file).unwrap();
+        let (backup_path, _hash) = manager.backup(&test_file).unwrap();
 
         assert!(backup_path.exists());
         assert!(backup_path
@@ -388,7 +388,7 @@ use crate::storage::Database;
         fs::write(&test_file, "original content").unwrap();
 
         let mut manager = BackupManager::new();
-        manager.backup(&test_file).unwrap();
+        let _ = manager.backup(&test_file).unwrap();
 
         // 修改原文件
         fs::write(&test_file, "modified content").unwrap();
@@ -408,7 +408,7 @@ use crate::storage::Database;
 
         {
             let mut manager = BackupManager::new();
-            manager.backup(&test_file).unwrap();
+            let _ = manager.backup(&test_file).unwrap();
 
             // 修改原文件
             fs::write(&test_file, "modified content").unwrap();
@@ -429,7 +429,7 @@ use crate::storage::Database;
 
         {
             let mut manager = BackupManager::new();
-            manager.backup(&test_file).unwrap();
+            let _ = manager.backup(&test_file).unwrap();
 
             // 修改原文件
             fs::write(&test_file, "modified content").unwrap();
@@ -453,7 +453,7 @@ use crate::storage::Database;
         fs::write(&existing_backup, "old backup").unwrap();
 
         let mut manager = BackupManager::new();
-        let backup_path = manager.backup(&test_file).unwrap();
+        let (backup_path, _hash) = manager.backup(&test_file).unwrap();
 
         // 应该创建带时间戳的备份
         assert!(backup_path.exists());
@@ -2392,4 +2392,512 @@ use crate::storage::Database;
         // 验证所有备份都已恢复
         let active_backups_after = db.get_active_local_scope_takeovers().unwrap();
         assert!(active_backups_after.is_empty());
+    }
+
+    // ===== Story 11.22 Task 4: 原子恢复重构测试 =====
+
+    #[test]
+    fn test_atomic_restore_success() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, TakeoverStatus, ToolType};
+        use crate::services::atomic_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建原始配置文件（被接管后的内容）
+        let original_path = temp_dir.path().join("config.json");
+        let takeover_content = r#"{"mcpServers": {"gateway": {"url": "http://localhost:3000"}}}"#;
+        fs::write(&original_path, takeover_content).unwrap();
+
+        // 创建备份文件（接管前的原始内容）
+        let backup_content = r#"{"mcpServers": {"my-tool": {"command": "npx", "args": ["my-tool"]}}}"#;
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        fs::write(&backup_path, backup_content).unwrap();
+
+        // 计算备份文件 hash
+        let backup_hash = atomic_fs::calculate_file_hash(&backup_path).unwrap();
+
+        // 创建备份记录（带 hash）
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            backup_hash.clone(),
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 执行恢复
+        let restored = super::restore_mcp_takeover(&db, &backup_id).unwrap();
+
+        // 验证恢复状态
+        assert_eq!(restored.status, TakeoverStatus::Restored);
+
+        // 验证原始文件内容已恢复
+        let restored_content = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(restored_content, backup_content);
+    }
+
+    #[test]
+    fn test_atomic_restore_hash_verification_failure() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建配置和备份文件
+        let original_path = temp_dir.path().join("config.json");
+        fs::write(&original_path, "takeover content").unwrap();
+
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        fs::write(&backup_path, "backup content").unwrap();
+
+        // 创建备份记录，使用错误的 hash
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            "wrong_hash_value".to_string(),
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 恢复应失败（hash 不匹配）
+        let result = super::restore_mcp_takeover(&db, &backup_id);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("integrity check failed"));
+
+        // 验证原始文件未被修改
+        let content = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(content, "takeover content");
+    }
+
+    #[test]
+    fn test_atomic_restore_backup_file_missing() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        fs::write(&original_path, "current content").unwrap();
+
+        // 备份文件不存在
+        let backup_path = temp_dir.path().join("nonexistent.mantra-backup");
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path,
+            TakeoverScope::User,
+            None,
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 恢复应失败
+        let result = super::restore_mcp_takeover(&db, &backup_id);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Backup file not found"));
+
+        // 原始文件未被修改
+        let content = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(content, "current content");
+    }
+
+    #[test]
+    fn test_atomic_restore_already_restored() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        fs::write(&original_path, "current").unwrap();
+        fs::write(&backup_path, "backup").unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 第一次恢复成功
+        super::restore_mcp_takeover(&db, &backup_id).unwrap();
+
+        // 第二次恢复应失败（已恢复）
+        let result = super::restore_mcp_takeover(&db, &backup_id);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already restored"));
+    }
+
+    #[test]
+    fn test_atomic_restore_without_hash() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, TakeoverStatus, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 旧备份记录没有 hash（兼容性测试）
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        let backup_content = "original backup content";
+        fs::write(&original_path, "takeover content").unwrap();
+        fs::write(&backup_path, backup_content).unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+        );
+        // backup_hash 默认为 None
+        assert!(backup.backup_hash.is_none());
+
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 恢复应该成功（跳过 hash 验证）
+        let restored = super::restore_mcp_takeover(&db, &backup_id).unwrap();
+        assert_eq!(restored.status, TakeoverStatus::Restored);
+
+        // 验证内容已恢复
+        let restored_content = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(restored_content, backup_content);
+    }
+
+    #[test]
+    fn test_atomic_restore_preserves_original_on_failure() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_content = "important config that must not be corrupted";
+        let original_path = temp_dir.path().join("config.json");
+        fs::write(&original_path, original_content).unwrap();
+
+        // 备份文件存在但 hash 不匹配
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        fs::write(&backup_path, "backup content").unwrap();
+
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::Cursor,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            "definitely_wrong_hash".to_string(),
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 恢复失败
+        let result = super::restore_mcp_takeover(&db, &backup_id);
+        assert!(result.is_err());
+
+        // 原始文件内容必须完全不变
+        let content_after = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(content_after, original_content);
+
+        // 备份记录状态仍然是 Active（未被标记为 restored）
+        let backup_after = db.get_takeover_backup_by_id(&backup_id).unwrap().unwrap();
+        assert_eq!(backup_after.status, crate::models::mcp::TakeoverStatus::Active);
+    }
+
+    #[test]
+    fn test_atomic_restore_by_tool_type() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, TakeoverStatus, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("settings.json");
+        let backup_path = temp_dir.path().join("settings.json.mantra-backup");
+        let backup_content = "original cursor config";
+        fs::write(&original_path, "takeover content").unwrap();
+        fs::write(&backup_path, backup_content).unwrap();
+
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::Cursor,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 按工具类型恢复
+        let result = super::restore_mcp_takeover_by_tool(&db, &ToolType::Cursor).unwrap();
+        assert!(result.is_some());
+        let restored = result.unwrap();
+        assert_eq!(restored.status, TakeoverStatus::Restored);
+
+        // 验证文件内容
+        let content = fs::read_to_string(&original_path).unwrap();
+        assert_eq!(content, backup_content);
+    }
+
+    // ===== Story 11.22 Task 7: 备份完整性检查测试 =====
+
+    #[test]
+    fn test_list_takeover_backups_with_integrity_all_valid() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+        use crate::services::atomic_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建有效的备份
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        let backup_content = "original content";
+
+        fs::write(&original_path, "current content").unwrap();
+        fs::write(&backup_path, backup_content).unwrap();
+
+        let backup_hash = atomic_fs::calculate_file_hash(&backup_path).unwrap();
+
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            backup_hash.clone(),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 获取完整性列表
+        let results = super::list_takeover_backups_with_integrity(&db).unwrap();
+
+        assert_eq!(results.len(), 1);
+        let item = &results[0];
+        assert!(item.backup_file_exists);
+        assert!(item.original_file_exists);
+        assert_eq!(item.hash_valid, Some(true));
+    }
+
+    #[test]
+    fn test_list_takeover_backups_with_integrity_missing_backup() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("missing.mantra-backup");
+
+        fs::write(&original_path, "content").unwrap();
+        // 备份文件不创建
+
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            "some_hash".to_string(),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        let results = super::list_takeover_backups_with_integrity(&db).unwrap();
+
+        assert_eq!(results.len(), 1);
+        let item = &results[0];
+        assert!(!item.backup_file_exists);
+        assert!(item.original_file_exists);
+        assert_eq!(item.hash_valid, Some(false)); // 文件不存在，hash 验证失败
+    }
+
+    #[test]
+    fn test_list_takeover_backups_with_integrity_hash_mismatch() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+
+        fs::write(&original_path, "current").unwrap();
+        fs::write(&backup_path, "backup content").unwrap();
+
+        // 使用错误的 hash
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+            "wrong_hash".to_string(),
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        let results = super::list_takeover_backups_with_integrity(&db).unwrap();
+
+        assert_eq!(results.len(), 1);
+        let item = &results[0];
+        assert!(item.backup_file_exists);
+        assert_eq!(item.hash_valid, Some(false)); // hash 不匹配
+    }
+
+    #[test]
+    fn test_list_takeover_backups_with_integrity_no_hash() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+
+        fs::write(&original_path, "current").unwrap();
+        fs::write(&backup_path, "backup").unwrap();
+
+        // 不设置 hash（旧备份兼容）
+        let backup = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            original_path.clone(),
+            backup_path.clone(),
+            TakeoverScope::User,
+            None,
+        );
+        db.create_takeover_backup(&backup).unwrap();
+
+        let results = super::list_takeover_backups_with_integrity(&db).unwrap();
+
+        assert_eq!(results.len(), 1);
+        let item = &results[0];
+        assert!(item.backup_file_exists);
+        assert!(item.hash_valid.is_none()); // 无 hash 记录
+    }
+
+    #[test]
+    fn test_delete_invalid_backups_removes_missing_files() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        // 创建一个有效备份和一个无效备份
+        let valid_original = temp_dir.path().join("valid.json");
+        let valid_backup = temp_dir.path().join("valid.json.mantra-backup");
+        fs::write(&valid_original, "current").unwrap();
+        fs::write(&valid_backup, "backup").unwrap();
+
+        let valid = TakeoverBackup::new_with_scope(
+            ToolType::ClaudeCode,
+            valid_original,
+            valid_backup,
+            TakeoverScope::User,
+            None,
+        );
+        db.create_takeover_backup(&valid).unwrap();
+
+        // 无效备份（文件不存在）
+        let invalid_original = temp_dir.path().join("invalid.json");
+        let invalid_backup = temp_dir.path().join("missing.mantra-backup");
+        fs::write(&invalid_original, "current").unwrap();
+        // 不创建 invalid_backup 文件
+
+        let invalid = TakeoverBackup::new_with_scope(
+            ToolType::Cursor,
+            invalid_original,
+            invalid_backup,
+            TakeoverScope::User,
+            None,
+        );
+        let invalid_id = invalid.id.clone();
+        db.create_takeover_backup(&invalid).unwrap();
+
+        // 删除无效备份
+        let deleted = super::delete_invalid_backups(&db).unwrap();
+
+        assert_eq!(deleted, 1);
+
+        // 验证无效记录已删除
+        assert!(db.get_takeover_backup_by_id(&invalid_id).unwrap().is_none());
+
+        // 验证有效记录仍存在
+        let remaining = super::list_takeover_backups_with_integrity(&db).unwrap();
+        assert_eq!(remaining.len(), 1);
+    }
+
+    #[test]
+    fn test_delete_invalid_backups_removes_hash_mismatch() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+
+        fs::write(&original_path, "current").unwrap();
+        fs::write(&backup_path, "backup content").unwrap();
+
+        // hash 不匹配的备份
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path,
+            backup_path,
+            TakeoverScope::User,
+            None,
+            "wrong_hash".to_string(),
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 删除无效备份
+        let deleted = super::delete_invalid_backups(&db).unwrap();
+
+        assert_eq!(deleted, 1);
+        assert!(db.get_takeover_backup_by_id(&backup_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_delete_invalid_backups_keeps_valid_with_hash() {
+        use crate::models::mcp::{TakeoverBackup, TakeoverScope, ToolType};
+        use crate::services::atomic_fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
+
+        let original_path = temp_dir.path().join("config.json");
+        let backup_path = temp_dir.path().join("config.json.mantra-backup");
+        let backup_content = "backup content";
+
+        fs::write(&original_path, "current").unwrap();
+        fs::write(&backup_path, backup_content).unwrap();
+
+        let backup_hash = atomic_fs::calculate_file_hash(&backup_path).unwrap();
+
+        let backup = TakeoverBackup::new_with_hash(
+            ToolType::ClaudeCode,
+            original_path,
+            backup_path,
+            TakeoverScope::User,
+            None,
+            backup_hash,
+        );
+        let backup_id = backup.id.clone();
+        db.create_takeover_backup(&backup).unwrap();
+
+        // 删除无效备份
+        let deleted = super::delete_invalid_backups(&db).unwrap();
+
+        assert_eq!(deleted, 0); // 没有无效备份
+        assert!(db.get_takeover_backup_by_id(&backup_id).unwrap().is_some());
     }
