@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use super::{
-    common::{merge_json_config, strip_json_comments},
+    common::strip_json_comments,
     AdapterError, ConfigScope, DetectedService, GatewayInjectionConfig, McpToolAdapter,
 };
 
@@ -86,6 +86,18 @@ impl McpToolAdapter for ClaudeAdapter {
         original_content: &str,
         config: &GatewayInjectionConfig,
     ) -> Result<String, AdapterError> {
+        let stripped = strip_json_comments(original_content);
+        let mut root: serde_json::Value = if stripped.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&stripped)?
+        };
+
+        let obj = root.as_object_mut().ok_or_else(|| {
+            AdapterError::InvalidFormat("Root must be a JSON object".to_string())
+        })?;
+
+        // 1. 注入 Gateway 到 mcpServers
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
                 "url": config.url,
@@ -94,8 +106,18 @@ impl McpToolAdapter for ClaudeAdapter {
                 }
             }
         });
+        obj.insert("mcpServers".to_string(), gateway_config);
 
-        merge_json_config(original_content, "mcpServers", gateway_config)
+        // 2. 处理所有项目的 MCP 启用/禁用列表，确保 Gateway 不被屏蔽
+        if let Some(projects) = obj.get_mut("projects").and_then(|p| p.as_object_mut()) {
+            for (_path, project_config) in projects.iter_mut() {
+                if let Some(proj_obj) = project_config.as_object_mut() {
+                    Self::ensure_gateway_enabled_in_project(proj_obj);
+                }
+            }
+        }
+
+        serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
     }
 }
 
@@ -266,6 +288,39 @@ pub struct LocalScopeProject {
 // ===== Story 11.21: Local Scope 接管（备份/清空/恢复）=====
 
 impl ClaudeAdapter {
+    /// 确保 mantra-gateway 不被 disabledMcpjsonServers/enabledMcpjsonServers 屏蔽
+    ///
+    /// Claude Code 的 `~/.claude.json` 中每个项目可以有：
+    /// - `disabledMcpjsonServers`: 被禁用的服务器名称列表
+    /// - `enabledMcpjsonServers`: 被启用的服务器名称列表（如果非空，只有在列表中的才启用）
+    ///
+    /// 此方法确保 Gateway 不会被这些配置屏蔽：
+    /// 1. 从 `disabledMcpjsonServers` 中移除 `mantra-gateway`
+    /// 2. 如果 `enabledMcpjsonServers` 非空，将 `mantra-gateway` 添加进去
+    fn ensure_gateway_enabled_in_project(project_config: &mut serde_json::Map<String, serde_json::Value>) {
+        const GATEWAY_NAME: &str = "mantra-gateway";
+
+        // 1. 从 disabledMcpjsonServers 中移除 mantra-gateway
+        if let Some(disabled) = project_config.get_mut("disabledMcpjsonServers") {
+            if let Some(arr) = disabled.as_array_mut() {
+                arr.retain(|v| v.as_str() != Some(GATEWAY_NAME));
+            }
+        }
+
+        // 2. 如果 enabledMcpjsonServers 非空，确保 mantra-gateway 在列表中
+        if let Some(enabled) = project_config.get_mut("enabledMcpjsonServers") {
+            if let Some(arr) = enabled.as_array_mut() {
+                if !arr.is_empty() {
+                    // 列表非空，检查是否已包含 Gateway
+                    let contains_gateway = arr.iter().any(|v| v.as_str() == Some(GATEWAY_NAME));
+                    if !contains_gateway {
+                        arr.push(serde_json::Value::String(GATEWAY_NAME.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
     /// 清空所有 local scope 的 mcpServers (Story 11.21 - AC3)
     ///
     /// 将 `~/.claude.json` 中每个 `projects.{path}.mcpServers` 清空为 `{}`，
@@ -339,6 +394,7 @@ impl ClaudeAdapter {
     /// 同时执行以下操作：
     /// 1. 将 user scope 的 `mcpServers` 替换为 Gateway 配置
     /// 2. 清空所有 `projects.{path}.mcpServers`
+    /// 3. 确保 Gateway 不被 disabledMcpjsonServers/enabledMcpjsonServers 屏蔽
     ///
     /// # Arguments
     /// * `original_content` - 原始 ~/.claude.json 内容
@@ -373,11 +429,13 @@ impl ClaudeAdapter {
         });
         obj.insert("mcpServers".to_string(), gateway_config);
 
-        // 2. 清空所有 local scope 的 mcpServers
+        // 2. 清空所有 local scope 的 mcpServers，并确保 Gateway 不被屏蔽
         if let Some(projects) = obj.get_mut("projects").and_then(|p| p.as_object_mut()) {
             for (_path, project_config) in projects.iter_mut() {
                 if let Some(proj_obj) = project_config.as_object_mut() {
                     proj_obj.insert("mcpServers".to_string(), serde_json::json!({}));
+                    // 确保 Gateway 不被 disabledMcpjsonServers/enabledMcpjsonServers 屏蔽
+                    Self::ensure_gateway_enabled_in_project(proj_obj);
                 }
             }
         }

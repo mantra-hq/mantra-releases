@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use super::{
-    common::{merge_json_config, strip_json_comments},
-    AdapterError, ConfigScope, DetectedService, GatewayInjectionConfig, McpToolAdapter,
+    common::strip_json_comments, AdapterError, ConfigScope, DetectedService,
+    GatewayInjectionConfig, McpToolAdapter,
 };
 
 /// Gemini CLI 适配器
@@ -70,6 +70,18 @@ impl McpToolAdapter for GeminiAdapter {
         original_content: &str,
         config: &GatewayInjectionConfig,
     ) -> Result<String, AdapterError> {
+        let stripped = strip_json_comments(original_content);
+        let mut root: serde_json::Value = if stripped.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::from_str(&stripped)?
+        };
+
+        let obj = root.as_object_mut().ok_or_else(|| {
+            AdapterError::InvalidFormat("Root must be a JSON object".to_string())
+        })?;
+
+        // 1. 注入 Gateway 到 mcpServers
         let gateway_config = serde_json::json!({
             "mantra-gateway": {
                 "url": config.url,
@@ -78,8 +90,53 @@ impl McpToolAdapter for GeminiAdapter {
                 }
             }
         });
+        obj.insert("mcpServers".to_string(), gateway_config);
 
-        merge_json_config(original_content, "mcpServers", gateway_config)
+        // 2. 确保 Gateway 不被 mcp.allowed/mcp.excluded 屏蔽
+        Self::ensure_gateway_enabled_in_mcp_settings(obj);
+
+        serde_json::to_string_pretty(&root).map_err(AdapterError::Json)
+    }
+}
+
+impl GeminiAdapter {
+    /// 确保 mantra-gateway 不被 mcp.allowed/mcp.excluded 屏蔽
+    ///
+    /// Gemini CLI 的 `settings.json` 中可以有：
+    /// - `mcp.allowed`: MCP 服务器允许列表（如果非空，只有在列表中的才启用）
+    /// - `mcp.excluded`: MCP 服务器排除列表
+    ///
+    /// 此方法确保 Gateway 不会被这些配置屏蔽：
+    /// 1. 从 `mcp.excluded` 中移除 `mantra-gateway`
+    /// 2. 如果 `mcp.allowed` 非空，将 `mantra-gateway` 添加进去
+    fn ensure_gateway_enabled_in_mcp_settings(
+        root: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        const GATEWAY_NAME: &str = "mantra-gateway";
+
+        // 检查是否存在 mcp 配置对象
+        if let Some(mcp) = root.get_mut("mcp").and_then(|m| m.as_object_mut()) {
+            // 1. 从 mcp.excluded 中移除 mantra-gateway
+            if let Some(excluded) = mcp.get_mut("excluded") {
+                if let Some(arr) = excluded.as_array_mut() {
+                    arr.retain(|v| v.as_str() != Some(GATEWAY_NAME));
+                }
+            }
+
+            // 2. 如果 mcp.allowed 非空，确保 mantra-gateway 在列表中
+            if let Some(allowed) = mcp.get_mut("allowed") {
+                if let Some(arr) = allowed.as_array_mut() {
+                    if !arr.is_empty() {
+                        // 列表非空，检查是否已包含 Gateway
+                        let contains_gateway =
+                            arr.iter().any(|v| v.as_str() == Some(GATEWAY_NAME));
+                        if !contains_gateway {
+                            arr.push(serde_json::Value::String(GATEWAY_NAME.to_string()));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -322,5 +379,150 @@ mod tests {
 
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].name, "test");
+    }
+
+    // ===== mcp.allowed / mcp.excluded 处理测试 =====
+
+    #[test]
+    fn test_gemini_inject_gateway_removes_from_excluded() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "model": "gemini-pro",
+            "mcp": {
+                "excluded": ["some-server", "mantra-gateway", "another-server"]
+            },
+            "mcpServers": {
+                "old": {"command": "old-mcp"}
+            }
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 验证 mcp.excluded 中移除了 mantra-gateway
+        let excluded = parsed["mcp"]["excluded"].as_array().unwrap();
+        assert_eq!(excluded.len(), 2);
+        assert!(excluded.iter().any(|v| v == "some-server"));
+        assert!(excluded.iter().any(|v| v == "another-server"));
+        assert!(!excluded.iter().any(|v| v == "mantra-gateway"));
+
+        // 验证 gateway 注入
+        assert!(parsed["mcpServers"]["mantra-gateway"].is_object());
+    }
+
+    #[test]
+    fn test_gemini_inject_gateway_adds_to_allowed_if_nonempty() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "model": "gemini-pro",
+            "mcp": {
+                "allowed": ["trusted-server", "another-trusted"]
+            },
+            "mcpServers": {}
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 验证 mcp.allowed 中添加了 mantra-gateway
+        let allowed = parsed["mcp"]["allowed"].as_array().unwrap();
+        assert_eq!(allowed.len(), 3);
+        assert!(allowed.iter().any(|v| v == "trusted-server"));
+        assert!(allowed.iter().any(|v| v == "another-trusted"));
+        assert!(allowed.iter().any(|v| v == "mantra-gateway"));
+    }
+
+    #[test]
+    fn test_gemini_inject_gateway_skips_empty_allowed() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "model": "gemini-pro",
+            "mcp": {
+                "allowed": []
+            },
+            "mcpServers": {}
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 空的 allowed 数组应该保持为空（表示允许所有）
+        let allowed = parsed["mcp"]["allowed"].as_array().unwrap();
+        assert!(allowed.is_empty());
+    }
+
+    #[test]
+    fn test_gemini_inject_gateway_handles_both_allowed_and_excluded() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "model": "gemini-pro",
+            "mcp": {
+                "allowed": ["server-a", "server-b"],
+                "excluded": ["bad-server", "mantra-gateway"]
+            },
+            "mcpServers": {}
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 验证从 excluded 中移除
+        let excluded = parsed["mcp"]["excluded"].as_array().unwrap();
+        assert_eq!(excluded.len(), 1);
+        assert!(!excluded.iter().any(|v| v == "mantra-gateway"));
+
+        // 验证添加到 allowed
+        let allowed = parsed["mcp"]["allowed"].as_array().unwrap();
+        assert_eq!(allowed.len(), 3);
+        assert!(allowed.iter().any(|v| v == "mantra-gateway"));
+    }
+
+    #[test]
+    fn test_gemini_inject_gateway_already_in_allowed() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "mcp": {
+                "allowed": ["mantra-gateway", "other-server"]
+            },
+            "mcpServers": {}
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 不应该重复添加
+        let allowed = parsed["mcp"]["allowed"].as_array().unwrap();
+        assert_eq!(allowed.len(), 2);
+        let gateway_count = allowed.iter().filter(|v| v.as_str() == Some("mantra-gateway")).count();
+        assert_eq!(gateway_count, 1);
+    }
+
+    #[test]
+    fn test_gemini_inject_gateway_no_mcp_settings() {
+        let adapter = GeminiAdapter;
+        let original = r#"{
+            "model": "gemini-pro",
+            "mcpServers": {}
+        }"#;
+
+        let config = GatewayInjectionConfig::new("http://127.0.0.1:8080/mcp", "token");
+
+        let result = adapter.inject_gateway(original, &config).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // 没有 mcp 配置时不应该出错
+        assert!(parsed["mcpServers"]["mantra-gateway"].is_object());
+        // mcp 字段可能不存在或为 null
+        assert!(parsed.get("mcp").is_none() || parsed["mcp"].is_null());
     }
 }

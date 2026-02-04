@@ -639,3 +639,156 @@ fn test_clear_local_scope_empty_projects() {
     // user scope 保持不变
     assert!(parsed["mcpServers"]["user"].is_object());
 }
+
+// ===== 测试 Gateway 启用/禁用列表处理 =====
+
+#[test]
+fn test_inject_gateway_removes_from_disabled_list() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {},
+        "projects": {
+            "/home/user/project": {
+                "disabledMcpjsonServers": ["mantra-gateway", "other-server"],
+                "mcpServers": {}
+            }
+        }
+    }"#;
+
+    let config = GatewayInjectionConfig {
+        url: "http://127.0.0.1:39600/mcp".to_string(),
+        token: "test-token".to_string(),
+    };
+
+    let result = adapter.inject_gateway(content, &config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // mantra-gateway 应该从 disabledMcpjsonServers 中移除
+    let disabled = &parsed["projects"]["/home/user/project"]["disabledMcpjsonServers"];
+    assert!(!disabled.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+    // other-server 应该保留
+    assert!(disabled.as_array().unwrap().iter().any(|v| v == "other-server"));
+}
+
+#[test]
+fn test_inject_gateway_adds_to_enabled_list_if_nonempty() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {},
+        "projects": {
+            "/home/user/project": {
+                "enabledMcpjsonServers": ["specific-server"],
+                "mcpServers": {}
+            }
+        }
+    }"#;
+
+    let config = GatewayInjectionConfig {
+        url: "http://127.0.0.1:39600/mcp".to_string(),
+        token: "test-token".to_string(),
+    };
+
+    let result = adapter.inject_gateway(content, &config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // 当 enabledMcpjsonServers 非空时，mantra-gateway 应该被添加进去
+    let enabled = &parsed["projects"]["/home/user/project"]["enabledMcpjsonServers"];
+    assert!(enabled.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+    assert!(enabled.as_array().unwrap().iter().any(|v| v == "specific-server"));
+}
+
+#[test]
+fn test_inject_gateway_skips_empty_enabled_list() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {},
+        "projects": {
+            "/home/user/project": {
+                "enabledMcpjsonServers": [],
+                "mcpServers": {}
+            }
+        }
+    }"#;
+
+    let config = GatewayInjectionConfig {
+        url: "http://127.0.0.1:39600/mcp".to_string(),
+        token: "test-token".to_string(),
+    };
+
+    let result = adapter.inject_gateway(content, &config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // 当 enabledMcpjsonServers 为空时，不应该添加 mantra-gateway
+    let enabled = &parsed["projects"]["/home/user/project"]["enabledMcpjsonServers"];
+    assert!(enabled.as_array().unwrap().is_empty());
+}
+
+#[test]
+fn test_inject_gateway_handles_multiple_projects() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {},
+        "projects": {
+            "/project-a": {
+                "disabledMcpjsonServers": ["mantra-gateway"],
+                "enabledMcpjsonServers": [],
+                "mcpServers": {}
+            },
+            "/project-b": {
+                "disabledMcpjsonServers": [],
+                "enabledMcpjsonServers": ["server-1"],
+                "mcpServers": {}
+            }
+        }
+    }"#;
+
+    let config = GatewayInjectionConfig {
+        url: "http://127.0.0.1:39600/mcp".to_string(),
+        token: "test-token".to_string(),
+    };
+
+    let result = adapter.inject_gateway(content, &config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // project-a: mantra-gateway 应该从 disabled 中移除
+    let disabled_a = &parsed["projects"]["/project-a"]["disabledMcpjsonServers"];
+    assert!(!disabled_a.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+
+    // project-b: mantra-gateway 应该添加到 enabled 中
+    let enabled_b = &parsed["projects"]["/project-b"]["enabledMcpjsonServers"];
+    assert!(enabled_b.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+}
+
+#[test]
+fn test_inject_gateway_with_local_scope_clear_handles_enable_disable_lists() {
+    let adapter = ClaudeAdapter;
+    let content = r#"{
+        "mcpServers": {"old": {"command": "old"}},
+        "projects": {
+            "/project": {
+                "disabledMcpjsonServers": ["mantra-gateway"],
+                "enabledMcpjsonServers": ["specific-server"],
+                "mcpServers": {"local-service": {"command": "local"}}
+            }
+        }
+    }"#;
+
+    let config = GatewayInjectionConfig {
+        url: "http://127.0.0.1:39600/mcp".to_string(),
+        token: "test-token".to_string(),
+    };
+
+    let result = adapter.inject_gateway_with_local_scope_clear(content, &config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    // mcpServers 应该被清空
+    assert!(parsed["projects"]["/project"]["mcpServers"].as_object().unwrap().is_empty());
+
+    // mantra-gateway 应该从 disabled 中移除
+    let disabled = &parsed["projects"]["/project"]["disabledMcpjsonServers"];
+    assert!(!disabled.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+
+    // mantra-gateway 应该添加到 enabled 中
+    let enabled = &parsed["projects"]["/project"]["enabledMcpjsonServers"];
+    assert!(enabled.as_array().unwrap().iter().any(|v| v == "mantra-gateway"));
+}
