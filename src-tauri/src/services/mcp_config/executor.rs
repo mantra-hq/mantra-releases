@@ -108,6 +108,7 @@ impl<'a> ImportExecutor<'a> {
         }
 
         // 4. 强制接管所有检测到的工具配置 (Story 11.15, 11.16)
+        // Story 11.15 PD-001: 统一写入用户级配置
         let mut takeover_backup_ids = Vec::new();
 
         // 只有当有需要接管的配置时才需要 gateway_url
@@ -116,14 +117,28 @@ impl<'a> ImportExecutor<'a> {
             if let Some(gateway_url) = &request.gateway_url {
                 let gateway_token = request.gateway_token.as_deref();
 
-                // Story 11.16: 遍历每个配置文件，根据其 scope 进行接管
+                // 收集需要接管的用户级配置（去重）
+                // Story 11.15 PD-001: 无论扫描到的是项目级还是用户级配置，都统一写入用户级配置
+                let mut processed_user_configs: std::collections::HashSet<PathBuf> =
+                    std::collections::HashSet::new();
+
                 for config in &preview.configs {
                     if config.services.is_empty() {
                         continue;
                     }
 
                     if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
-                        // 确定 scope 和 project_path
+                        // Story 11.15 PD-001: 统一写入用户级配置
+                        // 无论扫描到的是 Project 还是 User scope，都写入用户级配置文件
+                        let user_config_path = tool_type.get_user_config_path();
+
+                        // 避免重复接管同一个用户级配置
+                        if processed_user_configs.contains(&user_config_path) {
+                            continue;
+                        }
+                        processed_user_configs.insert(user_config_path.clone());
+
+                        // 记录来源信息：如果是从项目配置扫描到的，记录项目路径
                         let (scope, project_path) = match &config.scope {
                             Some(ConfigScope::Project) => {
                                 let proj_path = config.path.parent().and_then(|p| {
@@ -137,16 +152,14 @@ impl<'a> ImportExecutor<'a> {
                                         Some(p.to_path_buf())
                                     }
                                 });
-                                (TakeoverScope::Project, proj_path)
+                                // 虽然来源是项目配置，但实际写入用户级配置，所以 scope 记录为 User
+                                (TakeoverScope::User, proj_path)
                             }
                             _ => (TakeoverScope::User, None),
                         };
 
-                        // 使用实际检测到的配置文件路径
-                        let config_path = &config.path;
-
                         match self.apply_takeover(
-                            config_path,
+                            &user_config_path,
                             &config.adapter_id,
                             gateway_url,
                             gateway_token,
@@ -155,14 +168,14 @@ impl<'a> ImportExecutor<'a> {
                             project_path,
                         ) {
                             Ok(backup_id) => {
-                                shadow_configs.push(config_path.clone());
+                                shadow_configs.push(user_config_path.clone());
                                 takeover_backup_ids.push(backup_id);
                             }
                             Err(e) => {
                                 errors.push(format!(
                                     "Failed to takeover {} config at {:?}: {}",
                                     tool_type.display_name(),
-                                    config_path,
+                                    user_config_path,
                                     e
                                 ));
                             }

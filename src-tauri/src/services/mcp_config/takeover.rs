@@ -453,8 +453,13 @@ pub fn execute_smart_takeover(
     }
 
     // 4. 执行配置文件接管（如果提供了 gateway_url）
+    // Story 11.15 PD-001: 统一写入用户级配置
     if let Some(url) = gateway_url {
         let scan_result = scan_mcp_configs(Some(Path::new(&preview.project_path)));
+
+        // 收集需要接管的用户级配置（去重）
+        let mut processed_user_configs: std::collections::HashSet<PathBuf> =
+            std::collections::HashSet::new();
 
         for config in &scan_result.configs {
             if config.services.is_empty() {
@@ -462,12 +467,21 @@ pub fn execute_smart_takeover(
             }
 
             if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
-                let (scope, project_path) = determine_takeover_scope(&config);
+                // Story 11.15 PD-001: 统一写入用户级配置
+                let user_config_path = tool_type.get_user_config_path();
+
+                // 避免重复接管同一个用户级配置
+                if processed_user_configs.contains(&user_config_path) {
+                    continue;
+                }
+                processed_user_configs.insert(user_config_path.clone());
+
+                let (scope, project_path) = determine_takeover_scope(config);
 
                 let mut executor = ImportExecutor::new(db, env_manager);
 
                 match executor.apply_takeover(
-                    &config.path,
+                    &user_config_path,
                     &config.adapter_id,
                     url,
                     gateway_token,
@@ -476,14 +490,14 @@ pub fn execute_smart_takeover(
                     project_path,
                 ) {
                     Ok(backup_id) => {
-                        result.takeover_config_paths.push(config.path.clone());
+                        result.takeover_config_paths.push(user_config_path.clone());
                         result.takeover_backup_ids.push(backup_id);
                     }
                     Err(e) => {
                         result.errors.push(format!(
                             "Failed to takeover {} config at {:?}: {}",
                             tool_type.display_name(),
-                            config.path,
+                            user_config_path,
                             e
                         ));
                     }
@@ -643,26 +657,29 @@ pub fn execute_full_tool_takeover(
     }
 
     // Phase 2: 执行配置文件接管
+    // Story 11.15 PD-001: 统一写入用户级配置
     let mut executor = ImportExecutor::new(db, env_manager);
-    let mut processed_configs = std::collections::HashSet::new();
+    let mut processed_user_configs = std::collections::HashSet::new();
 
     for config in &scan_result.configs {
         if config.services.is_empty() {
             continue;
         }
 
-        // 避免重复处理同一配置文件
-        let config_key = config.path.to_string_lossy().to_string();
-        if processed_configs.contains(&config_key) {
-            continue;
-        }
-        processed_configs.insert(config_key);
-
         if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
-            let (scope, project_path) = determine_takeover_scope(&config);
+            // Story 11.15 PD-001: 统一写入用户级配置
+            let user_config_path = tool_type.get_user_config_path();
+
+            // 避免重复接管同一个用户级配置
+            if processed_user_configs.contains(&user_config_path) {
+                continue;
+            }
+            processed_user_configs.insert(user_config_path.clone());
+
+            let (scope, project_path) = determine_takeover_scope(config);
 
             match executor.apply_takeover(
-                &config.path,
+                &user_config_path,
                 &config.adapter_id,
                 gateway_url,
                 gateway_token,
@@ -671,8 +688,8 @@ pub fn execute_full_tool_takeover(
                 project_path.clone(),
             ) {
                 Ok(backup_id) => {
-                    transaction.record_backup_created(backup_id.clone(), config.path.clone());
-                    result.takeover_config_paths.push(config.path.clone());
+                    transaction.record_backup_created(backup_id.clone(), user_config_path.clone());
+                    result.takeover_config_paths.push(user_config_path.clone());
                     result.takeover_backup_ids.push(backup_id);
                     result.stats.takeover_count += 1;
                     result.stats.tool_count += 1;
@@ -681,7 +698,7 @@ pub fn execute_full_tool_takeover(
                     let error_msg = format!(
                         "Failed to takeover {} config at {:?}: {}",
                         tool_type.display_name(),
-                        config.path,
+                        user_config_path,
                         e
                     );
                     result.errors.push(error_msg);
@@ -1034,9 +1051,12 @@ fn process_decision_transactional(
 }
 
 /// 确定接管作用域 (Story 11.20, 11.21)
+/// Story 11.15 PD-001: 统一写入用户级配置
+/// 无论来源是 Project 还是 User scope，实际写入的都是用户级配置
 fn determine_takeover_scope(config: &DetectedConfig) -> (TakeoverScope, Option<PathBuf>) {
     match &config.scope {
         Some(ConfigScope::Project) => {
+            // 记录来源项目路径（用于上下文路由），但 scope 为 User（因为写入用户级配置）
             let proj_path = config.path.parent().and_then(|p| {
                 let path_str = p.to_string_lossy();
                 if path_str.contains(".cursor")
@@ -1048,7 +1068,8 @@ fn determine_takeover_scope(config: &DetectedConfig) -> (TakeoverScope, Option<P
                     Some(p.to_path_buf())
                 }
             });
-            (TakeoverScope::Project, proj_path)
+            // Story 11.15 PD-001: 虽然来源是项目配置，但实际写入用户级配置
+            (TakeoverScope::User, proj_path)
         }
         Some(ConfigScope::Local) => {
             // Story 11.21: Local scope 不在此函数处理
