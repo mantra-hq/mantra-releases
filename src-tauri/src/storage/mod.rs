@@ -8,6 +8,7 @@ mod error;
 mod gateway;
 mod interception;
 mod mcp_service;
+mod migrations;
 mod repository;
 
 pub use database::Database;
