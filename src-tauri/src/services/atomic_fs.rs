@@ -36,6 +36,19 @@ pub fn calculate_content_hash(content: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// 计算字符串内容的 SHA256 hash (Story 11.22 - Task 9)
+///
+/// 便捷函数，用于直接计算字符串的 hash 而无需先写入文件
+///
+/// # Arguments
+/// * `content` - 字符串内容
+///
+/// # Returns
+/// 十六进制编码的 SHA256 hash 字符串
+pub fn calculate_string_hash(content: &str) -> String {
+    calculate_content_hash(content.as_bytes())
+}
+
 /// 验证文件完整性
 ///
 /// # Arguments

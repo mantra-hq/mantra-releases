@@ -379,7 +379,7 @@ impl<'a> ImportExecutor<'a> {
     /// 执行配置接管 (Story 11.15, 11.22)
     ///
     /// 接管配置文件（使用原子操作 Story 11.22）：
-    /// 1. 原子备份原始文件（tempfile + hash verify + rename）
+    /// 1. 原子备份原始文件到集中目录（~/.mantra/backups/）
     /// 2. 原子写入 Gateway 配置
     /// 3. 将备份记录（含 hash）存储到数据库
     pub(super) fn apply_takeover(
@@ -393,6 +393,7 @@ impl<'a> ImportExecutor<'a> {
         project_path: Option<PathBuf>,
     ) -> Result<String, StorageError> {
         use crate::services::atomic_fs;
+        use super::backup::{get_backup_dir, generate_backup_filename};
 
         // 1. 检查该配置文件是否已有活跃的接管记录（按 original_path 判断）
         let path_str = path.to_string_lossy().to_string();
@@ -402,27 +403,58 @@ impl<'a> ImportExecutor<'a> {
             return Ok(existing.id);
         }
 
-        // 2. 生成备份文件路径
-        let backup_path = self.generate_backup_path(path);
+        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
+        let project_path_str_for_cleanup = project_path.as_ref().map(|p| p.to_string_lossy().to_string());
 
-        // 3. 原子备份原文件（仅当文件存在）(Story 11.22)
-        let backup_hash = if path.exists() {
-            let hash = atomic_fs::atomic_copy(path, &backup_path).map_err(|e| {
+        // 2. 原子备份原文件到集中目录（仅当文件存在）(Story 11.22 - Task 9)
+        let (backup_path, backup_hash) = if path.exists() {
+            // 计算源文件 hash
+            let hash = atomic_fs::calculate_file_hash(path).map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to calculate file hash: {}", e))
+            })?;
+
+            // 获取集中备份目录
+            let backup_dir = get_backup_dir().map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to get backup directory: {}", e))
+            })?;
+
+            // 生成备份文件名 (Story 11.22 - Task 9.4)
+            let backup_filename = generate_backup_filename(
+                tool_type,
+                &scope,
+                &hash,
+                project_path_str_for_cleanup.as_deref(),
+            );
+            let backup_path = backup_dir.join(backup_filename);
+
+            // 原子复制文件
+            atomic_fs::atomic_copy(path, &backup_path).map_err(|e| {
                 StorageError::InvalidInput(format!("Failed to atomic backup file: {}", e))
             })?;
-            Some(hash)
+
+            (backup_path, Some(hash))
         } else {
-            None
+            // 文件不存在，生成一个空备份路径用于记录
+            let backup_dir = get_backup_dir().map_err(|e| {
+                StorageError::InvalidInput(format!("Failed to get backup directory: {}", e))
+            })?;
+            let backup_filename = generate_backup_filename(
+                tool_type,
+                &scope,
+                "new",
+                project_path_str_for_cleanup.as_deref(),
+            );
+            (backup_dir.join(backup_filename), None)
         };
 
-        // 4. 读取原始内容（如果存在）
+        // 3. 读取原始内容（如果存在）
         let original_content = if path.exists() {
             fs::read_to_string(path).unwrap_or_default()
         } else {
             String::new()
         };
 
-        // 5. 使用适配器生成新配置
+        // 4. 使用适配器生成新配置
         let registry = ToolAdapterRegistry::new();
         let token = gateway_token.unwrap_or("");
         let new_content = if let Some(adapter) = registry.get(adapter_id) {
@@ -445,20 +477,17 @@ impl<'a> ImportExecutor<'a> {
             .to_string()
         };
 
-        // 6. 原子写入新配置 (Story 11.22)
+        // 5. 原子写入新配置 (Story 11.22)
         atomic_fs::atomic_write_str(path, &new_content).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
-        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
-        let project_path_str_for_cleanup = project_path.as_ref().map(|p| p.to_string_lossy().to_string());
-
-        // 7. 创建备份记录并存储到数据库 (Story 11.16, 11.22: 含 hash)
+        // 6. 创建备份记录并存储到数据库 (Story 11.16, 11.22: 含 hash)
         let backup = if let Some(hash) = backup_hash {
             TakeoverBackup::new_with_hash(
                 tool_type.clone(),
                 path.to_path_buf(),
-                backup_path,
+                backup_path.clone(),
                 scope.clone(),
                 project_path,
                 hash,
@@ -467,7 +496,7 @@ impl<'a> ImportExecutor<'a> {
             TakeoverBackup::new_with_scope(
                 tool_type.clone(),
                 path.to_path_buf(),
-                backup_path,
+                backup_path.clone(),
                 scope.clone(),
                 project_path,
             )
@@ -475,13 +504,13 @@ impl<'a> ImportExecutor<'a> {
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
 
-        // 8.5. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
-        if let Err(e) = cleanup_old_backups(self.db, &tool_type, &scope, project_path_str_for_cleanup.as_deref(), 5) {
+        // 7. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
+        if let Err(e) = cleanup_old_backups(self.db, tool_type, &scope, project_path_str_for_cleanup.as_deref(), 5) {
             eprintln!("[Backup] Warning: Failed to cleanup old backups: {}", e);
         }
 
-        // 9. 添加到备份管理器（用于可能的回滚）
-        self.backup_manager.add_backup_path(path.to_path_buf());
+        // 8. 添加到备份管理器（用于可能的回滚）
+        self.backup_manager.add_backup_path(backup_path);
 
         Ok(backup_id)
     }
@@ -537,9 +566,12 @@ impl<'a> ImportExecutor<'a> {
         Ok(())
     }
 
-    /// 生成备份文件路径
+    /// 生成备份文件路径（已弃用）
     ///
-    /// 格式: <原路径>.mantra-backup.<时间戳>
+    /// 旧格式: <原路径>.mantra-backup.<时间戳>
+    /// 新代码应使用 backup::generate_backup_filename() 和 get_backup_dir()
+    #[deprecated(note = "Use backup::generate_backup_filename() for centralized backup directory")]
+    #[allow(dead_code)]
     fn generate_backup_path(&self, path: &Path) -> PathBuf {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let backup_name = format!(
@@ -552,13 +584,13 @@ impl<'a> ImportExecutor<'a> {
 
     // ===== Story 11.21: Local Scope 备份接管 =====
 
-    /// 执行 Local Scope 配置接管 (Story 11.21 - Task 4)
+    /// 执行 Local Scope 配置接管 (Story 11.21 - Task 4, Story 11.22 - Task 9)
     ///
     /// Local Scope 是 Claude Code 特有的功能，配置存储在 ~/.claude.json 的
     /// `projects.{path}.mcpServers` 中。接管流程：
     ///
     /// 1. 提取指定项目的 mcpServers JSON 片段
-    /// 2. 保存到独立的备份文件
+    /// 2. 保存到集中备份目录 ~/.mantra/backups/
     /// 3. 创建 TakeoverBackup 记录（scope=Local）
     /// 4. 清空该项目的 mcpServers（保留项目配置的其他字段）
     ///
@@ -575,6 +607,7 @@ impl<'a> ImportExecutor<'a> {
     ) -> Result<String, StorageError> {
         use crate::services::atomic_fs;
         use crate::services::mcp_adapters::ClaudeAdapter;
+        use super::backup::{get_backup_dir, generate_backup_filename};
 
         let adapter = ClaudeAdapter;
 
@@ -615,31 +648,42 @@ impl<'a> ImportExecutor<'a> {
             )));
         }
 
-        // 4. 生成备份文件路径
-        //    格式: ~/.mantra/backups/local-scope/<project-hash>.json
-        let backup_path = self.generate_local_scope_backup_path(project_path);
-
-        // 5. 保存备份内容（JSON 片段）- 使用原子写入 (Story 11.22)
+        // 4. 保存备份内容（JSON 片段）- 使用原子写入 (Story 11.22)
         let backup_content = serde_json::to_string_pretty(&backup_mcp_servers).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to serialize backup content: {}", e))
         })?;
-        let backup_hash = atomic_fs::atomic_write_str(&backup_path, &backup_content).map_err(|e| {
+
+        // 5. 生成备份文件路径到集中目录 (Story 11.22 - Task 9)
+        let backup_dir = get_backup_dir().map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to get backup directory: {}", e))
+        })?;
+        let backup_hash = atomic_fs::calculate_string_hash(&backup_content);
+        let backup_filename = generate_backup_filename(
+            &ToolType::ClaudeCode,
+            &TakeoverScope::Local,
+            &backup_hash,
+            Some(project_path),
+        );
+        let backup_path = backup_dir.join(backup_filename);
+
+        // 6. 原子写入备份文件
+        atomic_fs::atomic_write_str(&backup_path, &backup_content).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to atomic write backup file: {}", e))
         })?;
 
-        // 6. 清空该项目的 mcpServers
+        // 7. 清空该项目的 mcpServers
         let new_content = adapter
             .clear_local_scope_for_project(&config_content, project_path)
             .map_err(|e| {
                 StorageError::InvalidInput(format!("Failed to clear local scope: {}", e))
             })?;
 
-        // 7. 原子写回配置文件 (Story 11.22)
+        // 8. 原子写回配置文件 (Story 11.22)
         atomic_fs::atomic_write_str(user_config_path, &new_content).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to atomic write config file: {}", e))
         })?;
 
-        // 8. 创建备份记录并存储到数据库 (含 hash)
+        // 9. 创建备份记录并存储到数据库 (含 hash)
         let backup = TakeoverBackup::new_with_hash(
             ToolType::ClaudeCode,
             user_config_path.to_path_buf(),
@@ -651,12 +695,12 @@ impl<'a> ImportExecutor<'a> {
         let backup_id = backup.id.clone();
         self.db.create_takeover_backup(&backup)?;
 
-        // 8.5. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
+        // 10. Story 11.23: 自动清理旧备份（清理失败不影响备份结果）
         if let Err(e) = cleanup_old_backups(self.db, &ToolType::ClaudeCode, &TakeoverScope::Local, Some(project_path), 5) {
             eprintln!("[Backup] Warning: Failed to cleanup old backups for local scope: {}", e);
         }
 
-        // 9. 添加到备份管理器（用于可能的回滚）
+        // 11. 添加到备份管理器（用于可能的回滚）
         self.backup_manager.add_backup_path(backup_path);
 
         Ok(backup_id)
@@ -690,9 +734,12 @@ impl<'a> ImportExecutor<'a> {
         (backup_ids, errors)
     }
 
-    /// 生成 Local Scope 备份文件路径
+    /// 生成 Local Scope 备份文件路径（已弃用）
     ///
-    /// 格式: ~/.mantra/backups/local-scope/<project-hash>-<timestamp>.json
+    /// 旧格式: ~/.mantra/backups/local-scope/<project-hash>-<timestamp>.json
+    /// 新代码使用 backup::generate_backup_filename() + get_backup_dir() 生成
+    #[deprecated(note = "Use backup::generate_backup_filename() for centralized backup directory")]
+    #[allow(dead_code)]
     fn generate_local_scope_backup_path(&self, project_path: &str) -> PathBuf {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -717,19 +764,20 @@ impl<'a> ImportExecutor<'a> {
 
     /// 测试辅助方法：暴露 generate_local_scope_backup_path 用于测试
     #[cfg(test)]
+    #[allow(deprecated)]
     pub fn generate_local_scope_backup_path_for_test(&self, project_path: &str) -> PathBuf {
         self.generate_local_scope_backup_path(project_path)
     }
 
     // ===== Story 11.25: 项目级配置清理 =====
 
-    /// 清理项目级配置文件 (Story 11.25)
+    /// 清理项目级配置文件 (Story 11.25, Story 11.22 - Task 9)
     ///
     /// 清理项目级配置文件中的 MCP 服务定义，避免工具绕过 Gateway 直连 MCP 服务。
     ///
     /// # 流程
     /// 1. 检查是否已有该配置的活跃清理备份记录
-    /// 2. 原子备份原始配置文件
+    /// 2. 原子备份原始配置文件到集中目录（~/.mantra/backups/）
     /// 3. 使用适配器的 `clear_mcp_servers()` 生成清理后内容
     /// 4. 原子写入清理后内容
     /// 5. 创建 TakeoverBackup 记录 (scope=Project)
@@ -751,6 +799,7 @@ impl<'a> ImportExecutor<'a> {
         project_root: Option<PathBuf>,
     ) -> Result<String, StorageError> {
         use crate::services::atomic_fs;
+        use super::backup::{get_backup_dir, generate_backup_filename};
 
         // 1. 检查文件是否存在
         if !project_config_path.exists() {
@@ -767,11 +816,28 @@ impl<'a> ImportExecutor<'a> {
             return Ok(existing.id);
         }
 
-        // 3. 生成备份文件路径
-        let backup_path = self.generate_backup_path(project_config_path);
+        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
+        let project_path_str_for_cleanup = project_root.as_ref().map(|p| p.to_string_lossy().to_string());
+
+        // 3. 计算源文件 hash 并生成备份路径到集中目录 (Story 11.22 - Task 9)
+        let backup_hash = atomic_fs::calculate_file_hash(project_config_path).map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to calculate file hash: {}", e))
+        })?;
+
+        let backup_dir = get_backup_dir().map_err(|e| {
+            StorageError::InvalidInput(format!("Failed to get backup directory: {}", e))
+        })?;
+
+        let backup_filename = generate_backup_filename(
+            tool_type,
+            &TakeoverScope::Project,
+            &backup_hash,
+            project_path_str_for_cleanup.as_deref(),
+        );
+        let backup_path = backup_dir.join(backup_filename);
 
         // 4. 原子备份原文件 (Story 11.22)
-        let backup_hash = atomic_fs::atomic_copy(project_config_path, &backup_path).map_err(|e| {
+        atomic_fs::atomic_copy(project_config_path, &backup_path).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to atomic backup project config: {}", e))
         })?;
 
@@ -798,9 +864,6 @@ impl<'a> ImportExecutor<'a> {
         atomic_fs::atomic_write_str(project_config_path, &cleared_content).map_err(|e| {
             StorageError::InvalidInput(format!("Failed to atomic write cleared config: {}", e))
         })?;
-
-        // Story 11.23: 保存清理用的 project_path 字符串（在所有权转移前）
-        let project_path_str_for_cleanup = project_root.as_ref().map(|p| p.to_string_lossy().to_string());
 
         // 8. 创建备份记录并存储到数据库 (scope=Project)
         let backup = TakeoverBackup::new_with_hash(

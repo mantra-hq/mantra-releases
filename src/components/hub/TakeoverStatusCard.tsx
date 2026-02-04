@@ -174,6 +174,10 @@ function toolTypeToAdapterId(toolType: ToolType): string {
 
 /**
  * 缩短路径显示（显示 ~ 替代 home 目录）
+ *
+ * Story 11.22 - Task 9.8: 支持集中备份目录的友好显示
+ * ~/.mantra/backups/xxx.backup -> ~/.mantra/backups/xxx.backup
+ * /home/user/.mantra/backups/xxx.backup -> ~/.mantra/backups/xxx.backup
  */
 function shortenPath(path: string): string {
   const homeDir = path.match(/^\/(?:home\/[^/]+|Users\/[^/]+)/)?.[0];
@@ -181,6 +185,20 @@ function shortenPath(path: string): string {
     return path.replace(homeDir, "~");
   }
   return path;
+}
+
+/**
+ * 提取备份文件的简短标识（用于新格式的集中备份目录）
+ *
+ * Story 11.22 - Task 9.8: 解析新格式备份文件名
+ * 格式: {timestamp}_{tool}_{scope}_{hash[0:8]}.backup
+ * 例如: 20240215123456_claude_code_user_abcd1234.backup -> abcd1234
+ */
+function extractBackupShortId(path: string): string | null {
+  const filename = path.split("/").pop() || "";
+  // 匹配新格式: timestamp_tool_scope_hash.backup
+  const match = filename.match(/_([a-f0-9]{8})\.backup$/);
+  return match ? match[1] : null;
 }
 
 /**
@@ -211,9 +229,15 @@ function formatDateTime(isoString: string | undefined | null, locale: string): s
 
 /**
  * 检测文件类型用于语法高亮
- * 支持 .mantra-backup.* 后缀的备份文件
+ * 支持 .mantra-backup.* 后缀的备份文件和集中目录 .backup 文件
+ * Story 11.22 Task 9.8: 集中备份目录文件统一视为 JSON 类型
  */
 function detectFileType(path: string): "json" | "toml" | "text" {
+  // 新格式: ~/.mantra/backups/*.backup -> 默认 JSON
+  if (path.endsWith(".backup") && path.includes(".mantra/backups")) {
+    return "json";
+  }
+  // 旧格式: 原地备份文件
   const basePath = path.replace(/\.mantra-backup\.\d+$/, "");
   if (basePath.endsWith(".json")) return "json";
   if (basePath.endsWith(".toml")) return "toml";
@@ -643,12 +667,20 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
               <div className="flex items-center gap-1 min-w-0">
                 <Archive className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                 <code className="text-xs text-muted-foreground truncate">
-                  {shortenPath(backup.backupPath)}
+                  {/* Story 11.22 Task 9.8: 对集中目录备份只显示文件名 */}
+                  {backup.backupPath.includes(".mantra/backups")
+                    ? backup.backupPath.split("/").pop() || shortenPath(backup.backupPath)
+                    : shortenPath(backup.backupPath)}
                 </code>
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-md">
               <p className="text-xs">{t("hub.takeover.originalBackup")}: {backup.backupPath}</p>
+              {extractBackupShortId(backup.backupPath) && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Hash: {extractBackupShortId(backup.backupPath)}
+                </p>
+              )}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

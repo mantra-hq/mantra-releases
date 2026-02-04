@@ -37,7 +37,12 @@ pub use types::{
 };
 
 // Re-export 备份管理
-pub use backup::{rollback_from_backups, BackupManager};
+#[allow(deprecated)]
+pub use backup::rollback_from_backups;
+pub use backup::{
+    generate_backup_filename, get_backup_dir, is_central_backup, restore_from_backup,
+    BackupManager, MANTRA_BACKUP_DIR,
+};
 
 // Re-export 配置解析器（向后兼容）
 #[allow(deprecated)]
