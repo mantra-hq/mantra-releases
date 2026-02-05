@@ -184,7 +184,7 @@ async fn test_aggregator_new() {
 #[tokio::test]
 async fn test_aggregator_list_tools_empty() {
     let aggregator = McpAggregator::new(vec![]);
-    let tools = aggregator.list_tools(None).await;
+    let tools = aggregator.list_tools(None, None).await;
     assert!(tools.is_empty());
 }
 
@@ -269,7 +269,7 @@ async fn test_aggregator_list_tools_with_service_policies() {
     }
 
     // 测试 1: 无 Policy，返回所有工具
-    let all_tools = aggregator.list_tools(None).await;
+    let all_tools = aggregator.list_tools(None, None).await;
     assert_eq!(all_tools.len(), 4);
 
     // 测试 2: 服务 1 使用不可能匹配的 custom policy 模拟 "deny all" 行为
@@ -280,7 +280,7 @@ async fn test_aggregator_list_tools_with_service_policies() {
         ToolPolicy::custom(vec!["__none__".to_string()]),
     );
 
-    let tools_with_policy = aggregator.list_tools(Some(&policies)).await;
+    let tools_with_policy = aggregator.list_tools(Some(&policies), None).await;
     assert_eq!(tools_with_policy.len(), 2); // 只有服务 2 的工具
     assert!(tools_with_policy.iter().all(|t| t.service_id == "svc-2"));
 
@@ -290,7 +290,7 @@ async fn test_aggregator_list_tools_with_service_policies() {
         ToolPolicy::custom(vec!["read_file".to_string()]),
     );
 
-    let tools_custom = aggregator.list_tools(Some(&policies)).await;
+    let tools_custom = aggregator.list_tools(Some(&policies), None).await;
     assert_eq!(tools_custom.len(), 3); // 服务 1 的 read_file + 服务 2 的两个工具
     assert!(tools_custom.iter().any(|t| t.original_name == "read_file" && t.service_id == "svc-1"));
     assert!(tools_custom.iter().all(|t| t.original_name != "write_file" || t.service_id != "svc-1"));
@@ -301,7 +301,7 @@ async fn test_aggregator_list_tools_with_service_policies() {
         ToolPolicy::custom(vec!["list_dir".to_string()]),
     );
 
-    let tools_both = aggregator.list_tools(Some(&policies)).await;
+    let tools_both = aggregator.list_tools(Some(&policies), None).await;
     assert_eq!(tools_both.len(), 2); // 服务 1 的 read_file + 服务 2 的 list_dir
 }
 
@@ -346,7 +346,7 @@ async fn test_aggregator_list_tools_custom_partial_select() {
         ]),
     );
 
-    let tools = aggregator.list_tools(Some(&policies)).await;
+    let tools = aggregator.list_tools(Some(&policies), None).await;
     assert_eq!(tools.len(), 2);
     assert!(tools.iter().all(|t| t.original_name != "delete_file"));
 }
@@ -380,7 +380,7 @@ async fn test_aggregator_list_tools_empty_policies_map() {
 
     // 空 policies map（有 map 但 service 不在其中）
     let policies: HashMap<String, ToolPolicy> = HashMap::new();
-    let tools = aggregator.list_tools(Some(&policies)).await;
+    let tools = aggregator.list_tools(Some(&policies), None).await;
     assert_eq!(tools.len(), 1); // 无匹配 policy，返回所有工具
 }
 
@@ -427,7 +427,289 @@ async fn test_aggregator_list_tools_uninitialised_service_excluded() {
         );
     }
 
-    let tools = aggregator.list_tools(None).await;
+    let tools = aggregator.list_tools(None, None).await;
     assert_eq!(tools.len(), 1);
     assert_eq!(tools[0].service_id, "svc-1");
+}
+
+// ============================================================
+// Story 11.28: MCP 严格模式服务过滤测试
+// ============================================================
+
+/// Story 11.28 Task 5.1: 测试有项目上下文时严格模式服务过滤
+///
+/// 当提供 filter_service_ids 时，只返回属于指定服务的工具
+#[tokio::test]
+async fn test_list_tools_with_strict_mode_filtering() {
+    use crate::models::mcp::ToolPolicy;
+
+    let aggregator = McpAggregator::new(vec![]);
+
+    // 设置三个服务的缓存
+    {
+        let mut cache = aggregator.cache.write().await;
+
+        // 服务 1: 项目关联
+        cache.insert(
+            "svc-1".to_string(),
+            ServiceCache {
+                service_id: "svc-1".to_string(),
+                service_name: "linked-service".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-1", "linked-service", "read_file", None, None, None, None),
+                    McpTool::new("svc-1", "linked-service", "write_file", None, None, None, None),
+                ],
+                resources: vec![
+                    McpResource::new("svc-1", "linked-service", "file:///test", None, None, None),
+                ],
+                prompts: vec![
+                    McpPrompt::new("svc-1", "linked-service", "code_review", None, None),
+                ],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+
+        // 服务 2: 全局启用但项目未关联
+        cache.insert(
+            "svc-2".to_string(),
+            ServiceCache {
+                service_id: "svc-2".to_string(),
+                service_name: "global-service".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-2", "global-service", "list_dir", None, None, None, None),
+                ],
+                resources: vec![
+                    McpResource::new("svc-2", "global-service", "dir:///", None, None, None),
+                ],
+                prompts: vec![
+                    McpPrompt::new("svc-2", "global-service", "explain_code", None, None),
+                ],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+
+        // 服务 3: 另一个项目关联
+        cache.insert(
+            "svc-3".to_string(),
+            ServiceCache {
+                service_id: "svc-3".to_string(),
+                service_name: "another-linked".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-3", "another-linked", "git_commit", None, None, None, None),
+                ],
+                resources: vec![],
+                prompts: vec![],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+    }
+
+    // 严格模式过滤：只包含 svc-1 和 svc-3
+    let mut filter = std::collections::HashSet::new();
+    filter.insert("svc-1".to_string());
+    filter.insert("svc-3".to_string());
+
+    // 测试 tools 过滤
+    let tools = aggregator.list_tools(None, Some(&filter)).await;
+    assert_eq!(tools.len(), 3); // svc-1 有 2 个工具 + svc-3 有 1 个工具
+    assert!(tools.iter().all(|t| t.service_id == "svc-1" || t.service_id == "svc-3"));
+    assert!(tools.iter().all(|t| t.service_id != "svc-2"));
+
+    // 测试 resources 过滤
+    let resources = aggregator.list_resources(Some(&filter)).await;
+    assert_eq!(resources.len(), 1); // 只有 svc-1 有资源
+    assert!(resources.iter().all(|r| r.service_id == "svc-1"));
+
+    // 测试 prompts 过滤
+    let prompts = aggregator.list_prompts(Some(&filter)).await;
+    assert_eq!(prompts.len(), 1); // 只有 svc-1 有提示
+    assert!(prompts.iter().all(|p| p.service_id == "svc-1"));
+}
+
+/// Story 11.28 Task 5.2: 测试无 filter_service_ids 时返回全局列表
+///
+/// 当不提供 filter_service_ids 时，返回所有已初始化服务的资源
+#[tokio::test]
+async fn test_list_tools_without_strict_mode() {
+    let aggregator = McpAggregator::new(vec![]);
+
+    {
+        let mut cache = aggregator.cache.write().await;
+
+        cache.insert(
+            "svc-1".to_string(),
+            ServiceCache {
+                service_id: "svc-1".to_string(),
+                service_name: "service-a".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-1", "service-a", "tool_a", None, None, None, None),
+                ],
+                resources: vec![
+                    McpResource::new("svc-1", "service-a", "res://a", None, None, None),
+                ],
+                prompts: vec![
+                    McpPrompt::new("svc-1", "service-a", "prompt_a", None, None),
+                ],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+
+        cache.insert(
+            "svc-2".to_string(),
+            ServiceCache {
+                service_id: "svc-2".to_string(),
+                service_name: "service-b".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-2", "service-b", "tool_b", None, None, None, None),
+                ],
+                resources: vec![
+                    McpResource::new("svc-2", "service-b", "res://b", None, None, None),
+                ],
+                prompts: vec![
+                    McpPrompt::new("svc-2", "service-b", "prompt_b", None, None),
+                ],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+    }
+
+    // 无 filter_service_ids，返回所有
+    let tools = aggregator.list_tools(None, None).await;
+    assert_eq!(tools.len(), 2);
+
+    let resources = aggregator.list_resources(None).await;
+    assert_eq!(resources.len(), 2);
+
+    let prompts = aggregator.list_prompts(None).await;
+    assert_eq!(prompts.len(), 2);
+}
+
+/// Story 11.28 Task 5.3: 测试 Tool Policy 与严格模式叠加
+///
+/// 当同时提供 policies 和 filter_service_ids 时，两种过滤条件叠加
+#[tokio::test]
+async fn test_list_tools_policy_and_strict_mode_combined() {
+    use crate::models::mcp::ToolPolicy;
+
+    let aggregator = McpAggregator::new(vec![]);
+
+    {
+        let mut cache = aggregator.cache.write().await;
+
+        // 服务 1: 有 3 个工具
+        cache.insert(
+            "svc-1".to_string(),
+            ServiceCache {
+                service_id: "svc-1".to_string(),
+                service_name: "service-a".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-1", "service-a", "read_file", None, None, None, None),
+                    McpTool::new("svc-1", "service-a", "write_file", None, None, None, None),
+                    McpTool::new("svc-1", "service-a", "delete_file", None, None, None, None),
+                ],
+                resources: vec![],
+                prompts: vec![],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+
+        // 服务 2: 不在严格模式过滤中
+        cache.insert(
+            "svc-2".to_string(),
+            ServiceCache {
+                service_id: "svc-2".to_string(),
+                service_name: "service-b".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-2", "service-b", "git_commit", None, None, None, None),
+                ],
+                resources: vec![],
+                prompts: vec![],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+    }
+
+    // 严格模式: 只包含 svc-1
+    let mut filter = std::collections::HashSet::new();
+    filter.insert("svc-1".to_string());
+
+    // Tool Policy: svc-1 只允许 read_file 和 write_file
+    let mut policies = HashMap::new();
+    policies.insert(
+        "svc-1".to_string(),
+        ToolPolicy::custom(vec!["read_file".to_string(), "write_file".to_string()]),
+    );
+
+    // 叠加结果: 只有 svc-1 的 read_file 和 write_file (delete_file 被 policy 过滤, svc-2 被严格模式过滤)
+    let tools = aggregator.list_tools(Some(&policies), Some(&filter)).await;
+    assert_eq!(tools.len(), 2);
+    assert!(tools.iter().all(|t| t.service_id == "svc-1"));
+    assert!(tools.iter().any(|t| t.original_name == "read_file"));
+    assert!(tools.iter().any(|t| t.original_name == "write_file"));
+    assert!(tools.iter().all(|t| t.original_name != "delete_file"));
+}
+
+/// Story 11.28 Task 5.4: 测试空 filter_service_ids 集合
+///
+/// 当 filter_service_ids 为空集合时，应返回空列表（项目没有关联任何服务）
+#[tokio::test]
+async fn test_list_tools_empty_filter_returns_empty() {
+    let aggregator = McpAggregator::new(vec![]);
+
+    {
+        let mut cache = aggregator.cache.write().await;
+        cache.insert(
+            "svc-1".to_string(),
+            ServiceCache {
+                service_id: "svc-1".to_string(),
+                service_name: "service-a".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-1", "service-a", "tool_a", None, None, None, None),
+                ],
+                resources: vec![
+                    McpResource::new("svc-1", "service-a", "res://a", None, None, None),
+                ],
+                prompts: vec![
+                    McpPrompt::new("svc-1", "service-a", "prompt_a", None, None),
+                ],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+    }
+
+    // 空过滤集合 = 项目没有关联任何服务
+    let empty_filter = std::collections::HashSet::new();
+
+    let tools = aggregator.list_tools(None, Some(&empty_filter)).await;
+    assert!(tools.is_empty());
+
+    let resources = aggregator.list_resources(Some(&empty_filter)).await;
+    assert!(resources.is_empty());
+
+    let prompts = aggregator.list_prompts(Some(&empty_filter)).await;
+    assert!(prompts.is_empty());
 }

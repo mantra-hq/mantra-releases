@@ -5,6 +5,7 @@
 //! Story 11.12: Remote MCP OAuth Support - Task 6 (OAuth IPC 命令)
 //! Story 11.17: MCP 协议聚合器 - Task 8 (缓存刷新 IPC 命令)
 //! Story 11.27: MCP Roots LPM 集成 - Task 1.3 (LPM 查询服务)
+//! Story 11.28: MCP 严格模式服务过滤 - Task 2 (项目服务查询服务)
 //!
 //! 提供 Gateway Server 的 Tauri IPC 命令
 
@@ -19,6 +20,7 @@ use crate::commands::{AppState, McpState};
 use crate::error::AppError;
 use crate::gateway::{
     GatewayServerManager, LpmQueryClient, LpmQueryService, McpAggregator,
+    ProjectServicesQueryClient, ProjectServicesQueryService,
     SessionProjectContext, StoragePolicyResolver, WarmupResult,
 };
 use crate::services::mcp_config::sync_active_takeovers;
@@ -199,6 +201,27 @@ pub async fn start_gateway(
         eprintln!("[Gateway] Story 11.27: Starting LPM query service");
         tokio::spawn(async move {
             lpm_service.run_with_db_path(db_path).await;
+        });
+    }
+
+    // Story 11.28: 创建并注入项目服务查询服务
+    {
+        // 1. 创建项目服务查询客户端和服务
+        let (ps_client, ps_query_rx) = ProjectServicesQueryClient::new(64);
+        let ps_service = ProjectServicesQueryService::new(ps_query_rx);
+
+        // 2. 注入客户端到 manager
+        manager.set_project_services_client(Arc::new(ps_client));
+
+        // 3. 获取数据库路径用于创建新连接
+        let app_data_dir = app_handle.path().app_data_dir()
+            .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+        let db_path = app_data_dir.join(crate::DATABASE_FILENAME);
+
+        // 4. 启动项目服务查询服务（后台任务）
+        eprintln!("[Gateway] Story 11.28: Starting project services query service");
+        tokio::spawn(async move {
+            ps_service.run_with_db_path(db_path).await;
         });
     }
 

@@ -164,14 +164,15 @@ pub async fn message_handler(
         "tools/call" => {
             handle_tools_call(&app_state, &session_id, &request).await
         }
+        // Story 11.28: 传递 session_id 用于严格模式过滤
         "resources/list" => {
-            handle_resources_list(&app_state, &request).await
+            handle_resources_list(&app_state, &session_id, &request).await
         }
         "resources/read" => {
             handle_resources_read(&app_state, &request).await
         }
         "prompts/list" => {
-            handle_prompts_list(&app_state, &request).await
+            handle_prompts_list(&app_state, &session_id, &request).await
         }
         "prompts/get" => {
             handle_prompts_get(&app_state, &request).await

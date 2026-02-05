@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::lpm_query::SharedLpmQueryClient;
+use super::project_services_query::SharedProjectServicesQueryClient;
 use super::session::{McpSessionStore, SharedMcpSessionStore, SharedServerToClientManager, ServerToClientManager};
 use super::state::{GatewayState, GatewayStats};
 
@@ -119,6 +120,7 @@ impl JsonRpcResponse {
 /// Story 11.9 Phase 2: 添加 PolicyResolver
 /// Story 11.26: 添加 Server-to-Client Manager
 /// Story 11.27: 添加 LPM Query Client
+/// Story 11.28: 添加 Project Services Query Client
 #[derive(Clone)]
 pub struct GatewayAppState {
     pub state: Arc<RwLock<GatewayState>>,
@@ -133,6 +135,8 @@ pub struct GatewayAppState {
     pub s2c_manager: SharedServerToClientManager,
     /// LPM 查询客户端 (Story 11.27)
     pub lpm_client: Option<SharedLpmQueryClient>,
+    /// 项目服务查询客户端 (Story 11.28)
+    pub project_services_client: Option<SharedProjectServicesQueryClient>,
 }
 
 impl GatewayAppState {
@@ -147,6 +151,7 @@ impl GatewayAppState {
             policy_resolver: None,
             s2c_manager: Arc::new(ServerToClientManager::new()),
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -165,6 +170,7 @@ impl GatewayAppState {
             policy_resolver: None,
             s2c_manager: Arc::new(ServerToClientManager::new()),
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -184,18 +190,20 @@ impl GatewayAppState {
             policy_resolver: Some(policy_resolver),
             s2c_manager: Arc::new(ServerToClientManager::new()),
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
-    /// 创建完整的应用状态 (Story 11.27)
+    /// 创建完整的应用状态 (Story 11.27, 11.28)
     ///
-    /// 包含所有可选组件：Aggregator、PolicyResolver、LpmClient
+    /// 包含所有可选组件：Aggregator、PolicyResolver、LpmClient、ProjectServicesClient
     pub fn with_all(
         state: Arc<RwLock<GatewayState>>,
         stats: Arc<GatewayStats>,
         aggregator: Option<super::aggregator::SharedMcpAggregator>,
         policy_resolver: Option<super::policy::SharedPolicyResolver>,
         lpm_client: Option<SharedLpmQueryClient>,
+        project_services_client: Option<SharedProjectServicesQueryClient>,
     ) -> Self {
         Self {
             state,
@@ -205,6 +213,7 @@ impl GatewayAppState {
             policy_resolver,
             s2c_manager: Arc::new(ServerToClientManager::new()),
             lpm_client,
+            project_services_client,
         }
     }
 }

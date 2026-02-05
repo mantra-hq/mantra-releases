@@ -202,9 +202,10 @@ async fn handle_mcp_request(
         "ping" => JsonRpcResponse::success(id, serde_json::json!({})),
         "tools/list" => handle_tools_list(app_state, &session_id, &request).await,
         "tools/call" => handle_tools_call(app_state, &session_id, &request).await,
-        "resources/list" => handle_resources_list(app_state, &request).await,
+        // Story 11.28: 传递 session_id 用于严格模式过滤
+        "resources/list" => handle_resources_list(app_state, &session_id, &request).await,
         "resources/read" => handle_resources_read(app_state, &request).await,
-        "prompts/list" => handle_prompts_list(app_state, &request).await,
+        "prompts/list" => handle_prompts_list(app_state, &session_id, &request).await,
         "prompts/get" => handle_prompts_get(app_state, &request).await,
         _ => JsonRpcResponse::method_not_found(id),
     };
@@ -331,9 +332,10 @@ async fn handle_legacy_request(
         "ping" => JsonRpcResponse::success(id, serde_json::json!({})),
         "tools/list" => handle_tools_list(app_state, &session_id, &request).await,
         "tools/call" => handle_tools_call(app_state, &session_id, &request).await,
-        "resources/list" => handle_resources_list(app_state, &request).await,
+        // Story 11.28: 传递 session_id 用于严格模式过滤
+        "resources/list" => handle_resources_list(app_state, &session_id, &request).await,
         "resources/read" => handle_resources_read(app_state, &request).await,
-        "prompts/list" => handle_prompts_list(app_state, &request).await,
+        "prompts/list" => handle_prompts_list(app_state, &session_id, &request).await,
         "prompts/get" => handle_prompts_get(app_state, &request).await,
         _ => JsonRpcResponse::method_not_found(id),
     };

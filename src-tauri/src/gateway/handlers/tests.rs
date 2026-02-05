@@ -326,3 +326,184 @@ fn test_tool_blocked_error_response() {
     assert!(error.message.contains("Tool not found"));
     assert!(error.message.contains("git-mcp/write_file"));
 }
+
+// ===== Story 11.28: MCP 严格模式服务过滤测试 =====
+
+use crate::gateway::aggregator::{McpAggregator, McpTool, ServiceCache, ServiceCapabilities};
+use crate::gateway::project_services_query::ProjectServicesQueryClient;
+use crate::models::mcp::{McpService, McpServiceSource, McpTransportType};
+use std::path::PathBuf;
+
+/// 创建带有项目上下文和项目服务客户端的测试 GatewayAppState
+///
+/// Story 11.28 Task 5: AC5 测试辅助函数
+async fn create_test_app_state_with_project_context_and_services(
+    project_id: &str,
+) -> (GatewayAppState, String, tokio::sync::mpsc::Receiver<crate::gateway::project_services_query::PendingProjectServicesQuery>) {
+    // 1. 创建 Gateway State 和 Session
+    let mut gateway_state = GatewayState::with_defaults();
+    let session = gateway_state.register_session();
+    let session_id = session.session_id.clone();
+
+    // 2. 设置项目上下文
+    if let Some(s) = gateway_state.get_session_mut(&session_id) {
+        s.set_auto_context(
+            project_id.to_string(),
+            "Test Project".to_string(),
+            PathBuf::from("/test/path"),
+        );
+    }
+
+    let state = Arc::new(RwLock::new(gateway_state));
+    let stats = Arc::new(GatewayStats::new());
+
+    // 3. 创建项目服务查询客户端
+    let (ps_client, ps_rx) = ProjectServicesQueryClient::new(16);
+
+    // 4. 创建 MCP 服务配置
+    let test_service = McpService {
+        id: "svc-test".to_string(),
+        name: "test-service".to_string(),
+        transport_type: McpTransportType::Stdio,
+        command: "echo".to_string(),
+        args: None,
+        env: None,
+        url: None,
+        headers: None,
+        source: McpServiceSource::Manual,
+        source_file: None,
+        source_adapter_id: None,
+        source_scope: None,
+        enabled: true,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+        default_tool_policy: None,
+    };
+
+    // 5. 创建 Aggregator（传入服务配置）
+    let aggregator = Arc::new(McpAggregator::new(vec![test_service]));
+
+    // 6. 手动填充缓存（模拟初始化后的状态）
+    {
+        let mut cache_guard = aggregator.cache.write().await;
+        cache_guard.insert(
+            "svc-test".to_string(),
+            ServiceCache {
+                service_id: "svc-test".to_string(),
+                service_name: "test-service".to_string(),
+                capabilities: ServiceCapabilities::default(),
+                tools: vec![
+                    McpTool::new("svc-test", "test-service", "my_tool", None, Some("Test tool".to_string()), None, None),
+                ],
+                resources: vec![],
+                prompts: vec![],
+                initialized: true,
+                last_updated: Some(chrono::Utc::now()),
+                error: None,
+            },
+        );
+    }
+
+    // 7. 创建 AppState
+    let mut app_state = GatewayAppState::new(state, stats);
+    app_state.aggregator = Some(aggregator);
+    app_state.project_services_client = Some(Arc::new(ps_client));
+
+    (app_state, session_id, ps_rx)
+}
+
+/// Story 11.28 AC5: 测试 tools/call 严格模式阻断
+///
+/// 当 session 有项目上下文时，调用未关联服务的工具应被阻断
+#[tokio::test]
+async fn test_handle_tools_call_blocked_by_strict_mode() {
+    use crate::gateway::project_services_query::ProjectServicesQueryResponse;
+
+    let (app_state, session_id, mut ps_rx) = create_test_app_state_with_project_context_and_services(
+        "proj-123",
+    ).await;
+
+    // 启动模拟的项目服务查询服务 - 返回空服务列表（项目未关联任何服务）
+    tokio::spawn(async move {
+        while let Some(pending) = ps_rx.recv().await {
+            let response = ProjectServicesQueryResponse {
+                request_id: pending.request.request_id,
+                service_ids: vec![], // 空列表 - 项目没有关联任何服务
+            };
+            let _ = pending.response_tx.send(response);
+        }
+    });
+
+    // 构造 tools/call 请求
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: Some(serde_json::json!(1)),
+        method: "tools/call".to_string(),
+        params: Some(serde_json::json!({
+            "name": "test-service/my_tool",
+            "arguments": {}
+        })),
+    };
+
+    // 调用 handle_tools_call
+    let response = handle_tools_call(&app_state, &session_id, &request).await;
+
+    // 验证返回错误
+    assert!(response.error.is_some(), "应该返回错误");
+    let error = response.error.unwrap();
+    assert_eq!(error.code, -32601, "错误码应为 -32601");
+    assert!(
+        error.message.contains("not available in current project context"),
+        "错误消息应包含 'not available in current project context'，实际: {}",
+        error.message
+    );
+}
+
+/// Story 11.28 AC5: 测试 tools/call 严格模式允许关联服务
+///
+/// 当服务在项目关联列表中时，调用应被放行（到 aggregator，此测试验证不被严格模式阻断）
+#[tokio::test]
+async fn test_handle_tools_call_allowed_by_strict_mode() {
+    use crate::gateway::project_services_query::ProjectServicesQueryResponse;
+
+    let (app_state, session_id, mut ps_rx) = create_test_app_state_with_project_context_and_services(
+        "proj-123",
+    ).await;
+
+    // 启动模拟的项目服务查询服务 - 返回包含 svc-test 的服务列表
+    tokio::spawn(async move {
+        while let Some(pending) = ps_rx.recv().await {
+            let response = ProjectServicesQueryResponse {
+                request_id: pending.request.request_id,
+                service_ids: vec!["svc-test".to_string()], // 包含目标服务
+            };
+            let _ = pending.response_tx.send(response);
+        }
+    });
+
+    // 构造 tools/call 请求
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: Some(serde_json::json!(1)),
+        method: "tools/call".to_string(),
+        params: Some(serde_json::json!({
+            "name": "test-service/my_tool",
+            "arguments": {}
+        })),
+    };
+
+    // 调用 handle_tools_call
+    let response = handle_tools_call(&app_state, &session_id, &request).await;
+
+    // 验证没有严格模式阻断错误
+    // 注意：由于没有真正的 MCP 服务运行，会返回其他错误（如连接失败）
+    // 但不应该是 "not available in current project context" 错误
+    if let Some(error) = &response.error {
+        assert!(
+            !error.message.contains("not available in current project context"),
+            "不应该被严格模式阻断，实际错误: {}",
+            error.message
+        );
+    }
+    // 如果没有错误（不太可能因为没有真正的服务），测试也通过
+}

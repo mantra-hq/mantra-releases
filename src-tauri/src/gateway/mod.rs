@@ -10,6 +10,7 @@
 //! Story 11.17: MCP 协议聚合器
 //! Story 11.26: MCP Roots 机制
 //! Story 11.27: MCP Roots LPM 集成
+//! Story 11.28: MCP 严格模式服务过滤
 //!
 //! 提供本地 SSE Server 用于 MCP 协议通信。
 //! 监听 127.0.0.1:{port}，仅接受本地请求。
@@ -26,6 +27,7 @@ pub mod lpm_query;
 mod origin;
 pub mod policy;
 pub mod process_manager;
+pub mod project_services_query;
 pub mod router;
 mod server;
 mod session;
@@ -95,6 +97,11 @@ pub use policy::{PolicyResolver, SharedPolicyResolver, StoragePolicyResolver};
 pub use lpm_query::{
     LpmProjectContext, LpmQueryClient, LpmQueryRequest, LpmQueryResponse, LpmQueryService,
     SharedLpmQueryClient,
+};
+// Story 11.28: 项目服务查询
+pub use project_services_query::{
+    ProjectServicesQueryClient, ProjectServicesQueryRequest, ProjectServicesQueryResponse,
+    ProjectServicesQueryService, SharedProjectServicesQueryClient,
 };
 
 #[cfg(test)]

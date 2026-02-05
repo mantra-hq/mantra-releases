@@ -28,6 +28,7 @@ use super::handlers::{
 };
 use super::lpm_query::SharedLpmQueryClient;
 use super::policy::SharedPolicyResolver;
+use super::project_services_query::SharedProjectServicesQueryClient;
 use super::session::MCP_SESSION_ID_HEADER;
 use super::state::{GatewayConfig, GatewayState, GatewayStats};
 
@@ -95,6 +96,8 @@ pub struct GatewayServer {
     policy_resolver: Option<SharedPolicyResolver>,
     /// LPM 查询客户端 (Story 11.27)
     lpm_client: Option<SharedLpmQueryClient>,
+    /// 项目服务查询客户端 (Story 11.28)
+    project_services_client: Option<SharedProjectServicesQueryClient>,
 }
 
 impl GatewayServer {
@@ -105,6 +108,7 @@ impl GatewayServer {
             aggregator: None,
             policy_resolver: None,
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -134,6 +138,13 @@ impl GatewayServer {
         self.lpm_client = Some(lpm_client);
     }
 
+    /// 设置项目服务查询客户端
+    ///
+    /// Story 11.28: MCP 严格模式服务过滤
+    pub fn set_project_services_client(&mut self, client: SharedProjectServicesQueryClient) {
+        self.project_services_client = Some(client);
+    }
+
     /// 创建带聚合器的 Server 实例
     pub fn with_aggregator(config: GatewayConfig, aggregator: SharedMcpAggregator) -> Self {
         Self {
@@ -141,6 +152,7 @@ impl GatewayServer {
             aggregator: Some(aggregator),
             policy_resolver: None,
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -157,6 +169,7 @@ impl GatewayServer {
             aggregator: Some(aggregator),
             policy_resolver: Some(policy_resolver),
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -199,12 +212,14 @@ impl GatewayServer {
 
         // 创建应用状态
         // Story 11.27: 使用 with_all 统一创建，支持所有可选组件
+        // Story 11.28: 添加 project_services_client
         let app_state = GatewayAppState::with_all(
             state.clone(),
             stats.clone(),
             self.aggregator.clone(),
             self.policy_resolver.clone(),
             self.lpm_client.clone(),
+            self.project_services_client.clone(),
         );
 
         // 创建受保护路由（需要认证）
@@ -313,6 +328,8 @@ pub struct GatewayServerManager {
     policy_resolver: Option<SharedPolicyResolver>,
     /// LPM 查询客户端 (Story 11.27)
     lpm_client: Option<SharedLpmQueryClient>,
+    /// 项目服务查询客户端 (Story 11.28)
+    project_services_client: Option<SharedProjectServicesQueryClient>,
 }
 
 impl GatewayServerManager {
@@ -333,6 +350,7 @@ impl GatewayServerManager {
             aggregator: None,
             policy_resolver: None,
             lpm_client: None,
+            project_services_client: None,
         }
     }
 
@@ -383,6 +401,20 @@ impl GatewayServerManager {
         self.lpm_client.as_ref()
     }
 
+    /// 设置项目服务查询客户端
+    ///
+    /// Story 11.28: MCP 严格模式服务过滤
+    pub fn set_project_services_client(&mut self, client: SharedProjectServicesQueryClient) {
+        self.project_services_client = Some(client);
+    }
+
+    /// 获取项目服务查询客户端引用
+    ///
+    /// Story 11.28: MCP 严格模式服务过滤
+    pub fn project_services_client(&self) -> Option<&SharedProjectServicesQueryClient> {
+        self.project_services_client.as_ref()
+    }
+
     /// 启动 Server
     pub async fn start(&mut self) -> Result<(), String> {
         if self.handle.is_some() {
@@ -405,6 +437,11 @@ impl GatewayServerManager {
         // Story 11.27: 注入 LpmClient
         if let Some(lpm_client) = &self.lpm_client {
             server.set_lpm_client(lpm_client.clone());
+        }
+
+        // Story 11.28: 注入 ProjectServicesClient
+        if let Some(client) = &self.project_services_client {
+            server.set_project_services_client(client.clone());
         }
 
         let handle = server.start(None).await?;
@@ -447,6 +484,11 @@ impl GatewayServerManager {
         // Story 11.27: 注入 LpmClient
         if let Some(lpm_client) = &self.lpm_client {
             server.set_lpm_client(lpm_client.clone());
+        }
+
+        // Story 11.28: 注入 ProjectServicesClient
+        if let Some(client) = &self.project_services_client {
+            server.set_project_services_client(client.clone());
         }
 
         let handle = server.start(new_port).await?;

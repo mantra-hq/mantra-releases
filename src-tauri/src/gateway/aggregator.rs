@@ -1,11 +1,12 @@
 //! MCP 协议聚合器
 //!
 //! Story 11.17: MCP 协议聚合器
+//! Story 11.28: MCP 严格模式服务过滤
 //!
 //! 负责聚合所有启用 MCP 服务的 tools/resources/prompts，
 //! 并统一暴露给客户端。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -910,15 +911,28 @@ impl McpAggregator {
     ///
     /// # Arguments
     /// * `policies` - 可选的服务级 Tool Policy 映射，key 为 service_id
+    /// * `filter_service_ids` - 可选的服务 ID 过滤集合（严格模式）
     ///
     /// Story 11.9 Phase 2: 支持服务级独立 Tool Policy
-    pub async fn list_tools(&self, policies: Option<&HashMap<String, ToolPolicy>>) -> Vec<McpTool> {
+    /// Story 11.28: 支持严格模式服务 ID 过滤
+    pub async fn list_tools(
+        &self,
+        policies: Option<&HashMap<String, ToolPolicy>>,
+        filter_service_ids: Option<&HashSet<String>>,
+    ) -> Vec<McpTool> {
         let cache = self.cache.read().await;
         let mut all_tools: Vec<McpTool> = Vec::new();
 
         for service_cache in cache.values() {
             if !service_cache.initialized {
                 continue;
+            }
+
+            // Story 11.28: 严格模式过滤 - 只保留关联服务的工具
+            if let Some(filter_ids) = filter_service_ids {
+                if !filter_ids.contains(&service_cache.service_id) {
+                    continue;
+                }
             }
 
             // 获取该服务的 Policy（如果有）
@@ -942,21 +956,47 @@ impl McpAggregator {
     }
 
     /// 获取聚合的资源列表
-    pub async fn list_resources(&self) -> Vec<McpResource> {
+    ///
+    /// # Arguments
+    /// * `filter_service_ids` - 可选的服务 ID 过滤集合（严格模式）
+    ///
+    /// Story 11.28: 支持严格模式服务 ID 过滤
+    pub async fn list_resources(&self, filter_service_ids: Option<&HashSet<String>>) -> Vec<McpResource> {
         let cache = self.cache.read().await;
         cache
             .values()
             .filter(|c| c.initialized)
+            .filter(|c| {
+                // Story 11.28: 严格模式过滤
+                if let Some(filter_ids) = filter_service_ids {
+                    filter_ids.contains(&c.service_id)
+                } else {
+                    true
+                }
+            })
             .flat_map(|c| c.resources.clone())
             .collect()
     }
 
     /// 获取聚合的提示列表
-    pub async fn list_prompts(&self) -> Vec<McpPrompt> {
+    ///
+    /// # Arguments
+    /// * `filter_service_ids` - 可选的服务 ID 过滤集合（严格模式）
+    ///
+    /// Story 11.28: 支持严格模式服务 ID 过滤
+    pub async fn list_prompts(&self, filter_service_ids: Option<&HashSet<String>>) -> Vec<McpPrompt> {
         let cache = self.cache.read().await;
         cache
             .values()
             .filter(|c| c.initialized)
+            .filter(|c| {
+                // Story 11.28: 严格模式过滤
+                if let Some(filter_ids) = filter_service_ids {
+                    filter_ids.contains(&c.service_id)
+                } else {
+                    true
+                }
+            })
             .flat_map(|c| c.prompts.clone())
             .collect()
     }

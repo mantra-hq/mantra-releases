@@ -4,12 +4,44 @@
 //! Story 11.10: Project-Level Tool Management
 //! Story 11.17: MCP 协议聚合器
 //! Story 11.26: MCP Roots 机制
+//! Story 11.28: MCP 严格模式服务过滤
 
+use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::timeout;
 
 use super::mcp_streamable::parse_roots_capability_from_params;
 use super::{GatewayAppState, JsonRpcRequest, JsonRpcResponse};
+use crate::gateway::state::SessionProjectContext;
+
+/// 从会话中获取项目上下文
+///
+/// Story 11.28: MCP 严格模式服务过滤
+///
+/// 同时从 MCP Streamable HTTP 会话 (mcp_sessions) 和 legacy SSE 会话 (state) 中查找。
+/// MCP Streamable HTTP 会话优先。
+async fn get_session_project_context(
+    app_state: &GatewayAppState,
+    session_id: &str,
+) -> Option<SessionProjectContext> {
+    // 1. 首先尝试从 MCP Streamable HTTP 会话中获取 (mcp_sessions)
+    let mcp_ctx = {
+        let mcp_store = app_state.mcp_sessions.read().await;
+        mcp_store
+            .get_session(session_id)
+            .and_then(|s| s.get_effective_project().cloned())
+    };
+
+    if mcp_ctx.is_some() {
+        return mcp_ctx;
+    }
+
+    // 2. 如果没有找到，回退到 legacy SSE 会话 (state)
+    let state = app_state.state.read().await;
+    state
+        .get_session(session_id)
+        .and_then(|s| s.get_effective_project().cloned())
+}
 
 /// 处理 initialize 请求
 ///
@@ -77,8 +109,13 @@ pub(super) async fn handle_initialize(
 /// Story 11.10: Project-Level Tool Management - AC 4 (Gateway 拦截 - tools/list 响应过滤)
 /// Story 11.17: MCP 协议聚合器 - AC 1 (工具聚合)
 /// Story 11.9 Phase 2: 工具策略完整实现 - AC 9 (Gateway 工具策略集成)
+/// Story 11.28: MCP 严格模式服务过滤 - AC 1, AC 2, AC 4
 ///
 /// 返回聚合的工具列表。根据项目的 Tool Policy 过滤返回的工具。
+///
+/// ## 严格模式过滤规则 (AC 1, AC 2)
+/// - 有项目上下文: 仅返回关联服务的工具
+/// - 无项目上下文: 返回全局启用服务的工具（回退）
 ///
 /// ## Tool Policy 过滤规则 (AC 4)
 /// - `mode = "allow_all"`: 返回所有工具（除了 deniedTools 中的）
@@ -90,11 +127,40 @@ pub(super) async fn handle_tools_list(
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
     // 获取会话的项目上下文
-    let project_context = {
-        let state = app_state.state.read().await;
-        state
-            .get_session(session_id)
-            .and_then(|s| s.get_effective_project().cloned())
+    // Story 11.28: 同时从 MCP Streamable HTTP 会话和 legacy SSE 会话中查找
+    let project_context = get_session_project_context(app_state, session_id).await;
+
+    // Story 11.28: 严格模式 - 查询项目关联的服务 ID 列表
+    let filter_service_ids: Option<HashSet<String>> = match (&project_context, &app_state.project_services_client) {
+        (Some(ctx), Some(client)) => {
+            let service_ids = client.query_project_services(&ctx.project_id).await;
+            if service_ids.is_empty() {
+                eprintln!(
+                    "[Gateway] No services linked to project {}, returning empty tools list",
+                    ctx.project_id
+                );
+            } else {
+                eprintln!(
+                    "[Gateway] Strict mode: filtering tools to {} services for project {}",
+                    service_ids.len(),
+                    ctx.project_id
+                );
+            }
+            Some(service_ids)
+        }
+        (Some(ctx), None) => {
+            // 有项目上下文但没有查询客户端，使用全局服务（回退）
+            eprintln!(
+                "[Gateway] No project services client, using global services for project {}",
+                ctx.project_id
+            );
+            None
+        }
+        (None, _) => {
+            // 无项目上下文，使用全局服务（AC2 回退）
+            eprintln!("[Gateway] No project context, using global services");
+            None
+        }
     };
 
     // Story 11.17: 从 Aggregator 获取聚合的工具列表
@@ -116,7 +182,8 @@ pub(super) async fn handle_tools_list(
                 None => None,
             };
 
-            let mcp_tools = aggregator.list_tools(policies.as_ref()).await;
+            // Story 11.28: 传递严格模式过滤参数
+            let mcp_tools = aggregator.list_tools(policies.as_ref(), filter_service_ids.as_ref()).await;
             mcp_tools.iter().map(|t| t.to_mcp_format()).collect()
         }
         None => {
@@ -136,16 +203,31 @@ pub(super) async fn handle_tools_list(
 /// 处理 resources/list 请求
 ///
 /// Story 11.17: MCP 协议聚合器 - AC 4 (资源聚合)
+/// Story 11.28: MCP 严格模式服务过滤 - AC 6
 ///
 /// 返回聚合的资源列表。
 pub(super) async fn handle_resources_list(
     app_state: &GatewayAppState,
+    session_id: &str,
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
+    // Story 11.28: 获取会话的项目上下文
+    // 同时从 MCP Streamable HTTP 会话和 legacy SSE 会话中查找
+    let project_context = get_session_project_context(app_state, session_id).await;
+
+    // Story 11.28: 严格模式 - 查询项目关联的服务 ID 列表
+    let filter_service_ids: Option<HashSet<String>> = match (&project_context, &app_state.project_services_client) {
+        (Some(ctx), Some(client)) => {
+            Some(client.query_project_services(&ctx.project_id).await)
+        }
+        _ => None,
+    };
+
     // 从 Aggregator 获取聚合的资源列表
     let resources: Vec<serde_json::Value> = match &app_state.aggregator {
         Some(aggregator) => {
-            let mcp_resources = aggregator.list_resources().await;
+            // Story 11.28: 传递严格模式过滤参数
+            let mcp_resources = aggregator.list_resources(filter_service_ids.as_ref()).await;
             mcp_resources.iter().map(|r| r.to_mcp_format()).collect()
         }
         None => {
@@ -302,16 +384,31 @@ pub(super) async fn handle_resources_read(
 /// 处理 prompts/list 请求
 ///
 /// Story 11.17: MCP 协议聚合器 - AC 6 (提示聚合)
+/// Story 11.28: MCP 严格模式服务过滤 - AC 6
 ///
 /// 返回聚合的提示列表。
 pub(super) async fn handle_prompts_list(
     app_state: &GatewayAppState,
+    session_id: &str,
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
+    // Story 11.28: 获取会话的项目上下文
+    // 同时从 MCP Streamable HTTP 会话和 legacy SSE 会话中查找
+    let project_context = get_session_project_context(app_state, session_id).await;
+
+    // Story 11.28: 严格模式 - 查询项目关联的服务 ID 列表
+    let filter_service_ids: Option<HashSet<String>> = match (&project_context, &app_state.project_services_client) {
+        (Some(ctx), Some(client)) => {
+            Some(client.query_project_services(&ctx.project_id).await)
+        }
+        _ => None,
+    };
+
     // 从 Aggregator 获取聚合的提示列表
     let prompts: Vec<serde_json::Value> = match &app_state.aggregator {
         Some(aggregator) => {
-            let mcp_prompts = aggregator.list_prompts().await;
+            // Story 11.28: 传递严格模式过滤参数
+            let mcp_prompts = aggregator.list_prompts(filter_service_ids.as_ref()).await;
             mcp_prompts.iter().map(|p| p.to_mcp_format()).collect()
         }
         None => {
@@ -481,13 +578,19 @@ pub(super) async fn handle_prompts_get(
 /// Story 11.5: 上下文路由 - Task 7
 /// Story 11.10: Project-Level Tool Management - AC 5 (Gateway 拦截 - tools/call 请求拦截)
 /// Story 11.17: MCP 协议聚合器 - AC 2 (工具调用路由)
+/// Story 11.28: MCP 严格模式服务过滤 - AC 5 (tools/call 路由一致性)
 ///
 /// 1. 解析工具名称 (格式: service_name/tool_name)
-/// 2. 检查 Tool Policy 是否允许该工具
-/// 3. 路由到对应的 MCP 服务
-/// 4. 转发请求并透传响应
+/// 2. Story 11.28: 检查工具所属服务是否在当前项目上下文中可用
+/// 3. 检查 Tool Policy 是否允许该工具
+/// 4. 路由到对应的 MCP 服务
+/// 5. 转发请求并透传响应
 ///
-/// ## Tool Policy 拦截规则 (AC 5)
+/// ## 严格模式验证 (AC 5)
+/// 当 session 有项目上下文时，验证工具所属服务是否关联到该项目
+/// 如果服务未关联，返回错误："Tool '{tool_name}' not available in current project context"
+///
+/// ## Tool Policy 拦截规则
 /// 当工具被 Tool Policy 禁止时：
 /// - 不转发请求到上游 MCP 服务
 /// - 返回 JSON-RPC Error: `{"code": -32601, "message": "Tool not found: {tool_name}"}`
@@ -536,13 +639,9 @@ pub(super) async fn handle_tools_call(
         }
     };
 
-    // 3. 获取会话的项目上下文（用于 Tool Policy）
-    let _project_context = {
-        let state = app_state.state.read().await;
-        state
-            .get_session(session_id)
-            .and_then(|s| s.get_effective_project().cloned())
-    };
+    // 3. 获取会话的项目上下文（用于 Tool Policy 和严格模式验证）
+    // Story 11.28: 同时从 MCP Streamable HTTP 会话和 legacy SSE 会话中查找
+    let project_context = get_session_project_context(app_state, session_id).await;
 
     // 4. 检查是否有 Aggregator
     let aggregator = match &app_state.aggregator {
@@ -567,6 +666,22 @@ pub(super) async fn handle_tools_call(
             );
         }
     };
+
+    // Story 11.28 AC5: 严格模式验证 - 检查服务是否关联到当前项目
+    if let (Some(ctx), Some(client)) = (&project_context, &app_state.project_services_client) {
+        let allowed_service_ids = client.query_project_services(&ctx.project_id).await;
+        if !allowed_service_ids.contains(&service_id) {
+            eprintln!(
+                "[Gateway] Tool '{}' blocked: service '{}' not linked to project {}",
+                tool_name, service_name, ctx.project_id
+            );
+            return JsonRpcResponse::error(
+                request.id.clone(),
+                -32601,
+                format!("Tool '{}' not available in current project context", tool_name),
+            );
+        }
+    }
 
     // 6. 获取服务配置
     let service = match aggregator.get_service(&service_id).await {

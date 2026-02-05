@@ -610,21 +610,21 @@ mod aggregator_integration_tests {
     #[tokio::test]
     async fn test_aggregator_list_tools_empty() {
         let aggregator = McpAggregator::new(vec![]);
-        let tools = aggregator.list_tools(None).await;
+        let tools = aggregator.list_tools(None, None).await;
         assert!(tools.is_empty());
     }
 
     #[tokio::test]
     async fn test_aggregator_list_resources_empty() {
         let aggregator = McpAggregator::new(vec![]);
-        let resources = aggregator.list_resources().await;
+        let resources = aggregator.list_resources(None).await;
         assert!(resources.is_empty());
     }
 
     #[tokio::test]
     async fn test_aggregator_list_prompts_empty() {
         let aggregator = McpAggregator::new(vec![]);
-        let prompts = aggregator.list_prompts().await;
+        let prompts = aggregator.list_prompts(None).await;
         assert!(prompts.is_empty());
     }
 
