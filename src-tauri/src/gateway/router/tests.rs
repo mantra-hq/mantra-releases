@@ -260,40 +260,32 @@ fn test_parse_work_dir_no_params() {
 
 #[test]
 fn test_uri_to_path_unix() {
-    let db = create_test_db();
-    let router = ContextRouter::new(db);
-
-    let result = router.uri_to_path("file:///home/user/projects");
+    use crate::gateway::uri_to_local_path;
+    let result = uri_to_local_path("file:///home/user/projects");
     assert!(result.is_some());
     assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects"));
 }
 
 #[test]
 fn test_uri_to_path_with_spaces() {
-    let db = create_test_db();
-    let router = ContextRouter::new(db);
-
-    let result = router.uri_to_path("file:///home/user/my%20projects");
+    use crate::gateway::uri_to_local_path;
+    let result = uri_to_local_path("file:///home/user/my%20projects");
     assert!(result.is_some());
     assert_eq!(result.unwrap(), PathBuf::from("/home/user/my projects"));
 }
 
 #[test]
 fn test_uri_to_path_invalid() {
-    let db = create_test_db();
-    let router = ContextRouter::new(db);
-
-    let result = router.uri_to_path("http://example.com");
+    use crate::gateway::uri_to_local_path;
+    let result = uri_to_local_path("http://example.com");
     assert!(result.is_none());
 }
 
 #[cfg(target_os = "windows")]
 #[test]
 fn test_uri_to_path_windows() {
-    let db = create_test_db();
-    let router = ContextRouter::new(db);
-
-    let result = router.uri_to_path("file:///C:/Users/user/projects");
+    use crate::gateway::uri_to_local_path;
+    let result = uri_to_local_path("file:///C:/Users/user/projects");
     assert!(result.is_some());
     assert_eq!(result.unwrap(), PathBuf::from("C:/Users/user/projects"));
 }

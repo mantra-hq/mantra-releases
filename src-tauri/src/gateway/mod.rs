@@ -8,9 +8,12 @@
 //! Story 11.12: Remote MCP OAuth Support
 //! Story 11.14: MCP Streamable HTTP 规范合规
 //! Story 11.17: MCP 协议聚合器
+//! Story 11.26: MCP Roots 机制
 //!
 //! 提供本地 SSE Server 用于 MCP 协议通信。
 //! 监听 127.0.0.1:{port}，仅接受本地请求。
+
+use std::path::PathBuf;
 
 pub mod aggregator;
 mod auth;
@@ -25,6 +28,37 @@ pub mod router;
 mod server;
 mod session;
 mod state;
+
+/// 将 file:// URI 转换为本地路径
+///
+/// Story 11.26: MCP Roots 机制 - 共享 utility 函数
+///
+/// 支持:
+/// - Unix: `file:///home/user/projects` -> `/home/user/projects`
+/// - Windows: `file:///C:/Users/user/projects` -> `C:/Users/user/projects`
+/// - URL 编码: `file:///home/user/my%20projects` -> `/home/user/my projects`
+pub fn uri_to_local_path(uri: &str) -> Option<PathBuf> {
+    if !uri.starts_with("file://") {
+        return None;
+    }
+
+    let path = &uri[7..];
+
+    // Windows: file:///C:/path -> C:/path
+    #[cfg(target_os = "windows")]
+    {
+        if path.starts_with('/') && path.len() > 2 && path.chars().nth(2) == Some(':') {
+            return Some(PathBuf::from(&path[1..]));
+        }
+    }
+
+    // Unix: file:///path -> /path
+    // URL 解码
+    if let Ok(decoded) = urlencoding::decode(path) {
+        return Some(PathBuf::from(decoded.as_ref()));
+    }
+    Some(PathBuf::from(path))
+}
 
 pub use auth::AuthLayer;
 pub use error::GatewayError;

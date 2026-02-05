@@ -3,44 +3,56 @@
 //! Story 11.5: 上下文路由 - Task 4 & Task 5
 //! Story 11.10: Project-Level Tool Management
 //! Story 11.17: MCP 协议聚合器
+//! Story 11.26: MCP Roots 机制
 
 use std::time::Duration;
 use tokio::time::timeout;
 
-use super::{parse_work_dir_from_params, GatewayAppState, JsonRpcRequest, JsonRpcResponse};
+use super::mcp_streamable::parse_roots_capability_from_params;
+use super::{GatewayAppState, JsonRpcRequest, JsonRpcResponse};
 
 /// 处理 initialize 请求
 ///
 /// Story 11.5: 上下文路由 - Task 4
+/// Story 11.26: MCP Roots 机制 - Task 2
 ///
-/// 1. 解析 rootUri/workspaceFolders 获取工作目录
-/// 2. 保存工作目录到会话状态
+/// 1. 解析 capabilities.roots 检测 Client 是否支持 roots
+/// 2. 保存 roots capability 到会话状态
 /// 3. 返回 MCP 初始化响应
-///
-/// 注意：由于 rusqlite 线程安全限制，LPM 路由查找将通过
-/// Tauri IPC 命令在外部执行，而不是在 HTTP handler 中直接调用。
 pub(super) async fn handle_initialize(
     app_state: &GatewayAppState,
     session_id: &str,
     request: &JsonRpcRequest,
 ) -> JsonRpcResponse {
-    // 1. 解析 rootUri/workspaceFolders
-    let work_dir = request
+    // 1. 解析 roots capability (Story 11.26 AC1)
+    let (supports_roots, roots_list_changed) = request
         .params
         .as_ref()
-        .and_then(|p| parse_work_dir_from_params(p));
+        .map(|p| parse_roots_capability_from_params(p))
+        .unwrap_or((false, false));
 
-    // 2. 保存工作目录到会话状态
+    // 2. 保存 roots capability 到会话状态
     {
         let mut state = app_state.state.write().await;
         if let Some(session) = state.get_session_mut(session_id) {
-            if let Some(ref dir) = work_dir {
-                session.set_work_dir(dir.clone());
-            }
+            session.set_roots_capability(supports_roots, roots_list_changed);
         }
     }
 
-    // 3. 返回 MCP 初始化响应
+    // 3. 记录日志 (Story 11.26 AC5)
+    if supports_roots {
+        eprintln!(
+            "[Gateway] Session {} supports roots capability (listChanged: {})",
+            session_id, roots_list_changed
+        );
+    } else {
+        eprintln!(
+            "[Gateway] Session {} does not support roots capability, using global services",
+            session_id
+        );
+    }
+
+    // 4. 返回 MCP 初始化响应
     // Story 11.17: 声明完整的 tools/resources/prompts capabilities
     JsonRpcResponse::success(
         request.id.clone(),

@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::session::{McpSessionStore, SharedMcpSessionStore};
+use super::session::{McpSessionStore, SharedMcpSessionStore, SharedServerToClientManager, ServerToClientManager};
 use super::state::{GatewayState, GatewayStats};
 
 /// Message 端点查询参数
@@ -116,10 +116,7 @@ impl JsonRpcResponse {
 /// Story 11.14: 添加 MCP Session Store
 /// Story 11.17: 添加 MCP Aggregator
 /// Story 11.9 Phase 2: 添加 PolicyResolver
-///
-/// 注意：由于 rusqlite::Connection 不是 Send + Sync，
-/// router 和 registry 需要通过 Tauri 状态管理在外部提供，
-/// 而不是直接存储在这里。
+/// Story 11.26: 添加 Server-to-Client Manager
 #[derive(Clone)]
 pub struct GatewayAppState {
     pub state: Arc<RwLock<GatewayState>>,
@@ -130,6 +127,8 @@ pub struct GatewayAppState {
     pub aggregator: Option<super::aggregator::SharedMcpAggregator>,
     /// Tool Policy 解析器 (Story 11.9 Phase 2)
     pub policy_resolver: Option<super::policy::SharedPolicyResolver>,
+    /// Server-to-Client 通信管理器 (Story 11.26)
+    pub s2c_manager: SharedServerToClientManager,
 }
 
 impl GatewayAppState {
@@ -141,6 +140,7 @@ impl GatewayAppState {
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
             aggregator: None,
             policy_resolver: None,
+            s2c_manager: Arc::new(ServerToClientManager::new()),
         }
     }
 
@@ -156,6 +156,7 @@ impl GatewayAppState {
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
             aggregator: Some(aggregator),
             policy_resolver: None,
+            s2c_manager: Arc::new(ServerToClientManager::new()),
         }
     }
 
@@ -172,6 +173,7 @@ impl GatewayAppState {
             mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
             aggregator: Some(aggregator),
             policy_resolver: Some(policy_resolver),
+            s2c_manager: Arc::new(ServerToClientManager::new()),
         }
     }
 }
@@ -216,58 +218,6 @@ impl Drop for McpSessionCleanupGuard {
             });
         }
     }
-}
-
-/// 解析 MCP initialize 请求中的工作目录
-///
-/// 支持多种格式：
-/// - `rootUri`: string (file URI)
-/// - `workspaceFolders`: [{ uri: string, name: string }]
-/// - `rootPath`: string (deprecated but still used)
-pub(super) fn parse_work_dir_from_params(params: &serde_json::Value) -> Option<std::path::PathBuf> {
-    // 优先使用 workspaceFolders
-    if let Some(folders) = params.get("workspaceFolders").and_then(|v| v.as_array()) {
-        if let Some(first) = folders.first() {
-            if let Some(uri) = first.get("uri").and_then(|v| v.as_str()) {
-                return uri_to_path(uri);
-            }
-        }
-    }
-
-    // 回退到 rootUri
-    if let Some(root_uri) = params.get("rootUri").and_then(|v| v.as_str()) {
-        return uri_to_path(root_uri);
-    }
-
-    // 再回退到 rootPath (deprecated but still used)
-    if let Some(root_path) = params.get("rootPath").and_then(|v| v.as_str()) {
-        return Some(std::path::PathBuf::from(root_path));
-    }
-
-    None
-}
-
-/// 将 file:// URI 转换为本地路径
-pub(super) fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
-    if uri.starts_with("file://") {
-        let path = &uri[7..];
-
-        // Windows: file:///C:/path -> C:/path
-        #[cfg(target_os = "windows")]
-        {
-            if path.starts_with('/') && path.len() > 2 && path.chars().nth(2) == Some(':') {
-                return Some(std::path::PathBuf::from(&path[1..]));
-            }
-        }
-
-        // Unix: file:///path -> /path
-        // URL 解码
-        if let Ok(decoded) = urlencoding::decode(path) {
-            return Some(std::path::PathBuf::from(decoded.as_ref()));
-        }
-        return Some(std::path::PathBuf::from(path));
-    }
-    None
 }
 
 /// 检查工具是否被 Tool Policy 阻止

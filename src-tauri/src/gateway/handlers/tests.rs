@@ -1,6 +1,5 @@
 use super::*;
 use super::methods::{handle_initialize, handle_tools_call, handle_tools_list};
-use std::path::PathBuf;
 use crate::models::mcp::ToolPolicy;
 use crate::gateway::state::{GatewayState, GatewayStats};
 
@@ -35,92 +34,6 @@ fn test_json_rpc_parse_error() {
     assert!(response.id.is_none());
     let error = response.error.unwrap();
     assert_eq!(error.code, -32700);
-}
-
-// ===== Story 11.5: 上下文路由测试 =====
-
-#[test]
-fn test_parse_work_dir_from_root_uri() {
-    let params = serde_json::json!({
-        "rootUri": "file:///home/user/projects/mantra"
-    });
-
-    let result = parse_work_dir_from_params(&params);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects/mantra"));
-}
-
-#[test]
-fn test_parse_work_dir_from_workspace_folders() {
-    let params = serde_json::json!({
-        "workspaceFolders": [
-            {
-                "uri": "file:///home/user/projects/mantra",
-                "name": "mantra"
-            }
-        ]
-    });
-
-    let result = parse_work_dir_from_params(&params);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects/mantra"));
-}
-
-#[test]
-fn test_parse_work_dir_workspace_folders_priority() {
-    // workspaceFolders 应该优先于 rootUri
-    let params = serde_json::json!({
-        "rootUri": "file:///other/path",
-        "workspaceFolders": [
-            {
-                "uri": "file:///home/user/projects/mantra",
-                "name": "mantra"
-            }
-        ]
-    });
-
-    let result = parse_work_dir_from_params(&params);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects/mantra"));
-}
-
-#[test]
-fn test_parse_work_dir_from_root_path() {
-    let params = serde_json::json!({
-        "rootPath": "/home/user/projects/mantra"
-    });
-
-    let result = parse_work_dir_from_params(&params);
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects/mantra"));
-}
-
-#[test]
-fn test_parse_work_dir_no_params() {
-    let params = serde_json::json!({});
-
-    let result = parse_work_dir_from_params(&params);
-    assert!(result.is_none());
-}
-
-#[test]
-fn test_uri_to_path_unix() {
-    let result = uri_to_path("file:///home/user/projects");
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/projects"));
-}
-
-#[test]
-fn test_uri_to_path_with_spaces() {
-    let result = uri_to_path("file:///home/user/my%20projects");
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), PathBuf::from("/home/user/my projects"));
-}
-
-#[test]
-fn test_uri_to_path_invalid() {
-    let result = uri_to_path("http://example.com");
-    assert!(result.is_none());
 }
 
 // ===== Story 11.5: tools/call 参数验证测试 =====
@@ -248,36 +161,103 @@ async fn test_handle_tools_list_returns_empty_list() {
     assert!(tools.is_empty());
 }
 
-// ===== Story 11.5: initialize 测试 =====
+// ===== Story 11.26: MCP Roots Capability 测试 =====
 
 #[tokio::test]
-async fn test_handle_initialize_stores_work_dir() {
+async fn test_handle_initialize_detects_roots_capability() {
     let (app_state, session_id) = create_test_app_state_with_session();
 
+    // MCP 标准 initialize 请求，声明 roots capability
     let request = JsonRpcRequest {
         jsonrpc: "2.0".to_string(),
         id: Some(serde_json::json!(1)),
         method: "initialize".to_string(),
         params: Some(serde_json::json!({
-            "rootUri": "file:///home/user/projects/test"
+            "protocolVersion": "2025-03-26",
+            "capabilities": {
+                "roots": {
+                    "listChanged": true
+                }
+            },
+            "clientInfo": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
         })),
     };
 
     let response = handle_initialize(&app_state, &session_id, &request).await;
     assert!(response.error.is_none());
 
-    // 验证 work_dir 已存储
+    // 验证 roots capability 已记录
     let state_guard = app_state.state.read().await;
     let session = state_guard.get_session(&session_id).unwrap();
-    assert!(session.work_dir.is_some());
-    assert_eq!(
-        session.work_dir.as_ref().unwrap(),
-        &PathBuf::from("/home/user/projects/test")
-    );
+    assert!(session.supports_roots);
+    assert!(session.roots_list_changed);
 }
 
 #[tokio::test]
-async fn test_handle_initialize_no_work_dir() {
+async fn test_handle_initialize_no_roots_capability() {
+    let (app_state, session_id) = create_test_app_state_with_session();
+
+    // MCP initialize 请求，没有 roots capability
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: Some(serde_json::json!(1)),
+        method: "initialize".to_string(),
+        params: Some(serde_json::json!({
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
+        })),
+    };
+
+    let response = handle_initialize(&app_state, &session_id, &request).await;
+    assert!(response.error.is_none());
+
+    // 验证 roots capability 未设置
+    let state_guard = app_state.state.read().await;
+    let session = state_guard.get_session(&session_id).unwrap();
+    assert!(!session.supports_roots);
+    assert!(!session.roots_list_changed);
+}
+
+#[tokio::test]
+async fn test_handle_initialize_roots_without_list_changed() {
+    let (app_state, session_id) = create_test_app_state_with_session();
+
+    // MCP initialize 请求，有 roots capability 但没有 listChanged
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: Some(serde_json::json!(1)),
+        method: "initialize".to_string(),
+        params: Some(serde_json::json!({
+            "protocolVersion": "2025-03-26",
+            "capabilities": {
+                "roots": {}
+            },
+            "clientInfo": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
+        })),
+    };
+
+    let response = handle_initialize(&app_state, &session_id, &request).await;
+    assert!(response.error.is_none());
+
+    // 验证 roots capability 已设置，但 listChanged 为 false
+    let state_guard = app_state.state.read().await;
+    let session = state_guard.get_session(&session_id).unwrap();
+    assert!(session.supports_roots);
+    assert!(!session.roots_list_changed);
+}
+
+#[tokio::test]
+async fn test_handle_initialize_response_format() {
     let (app_state, session_id) = create_test_app_state_with_session();
 
     let request = JsonRpcRequest {
@@ -285,52 +265,27 @@ async fn test_handle_initialize_no_work_dir() {
         id: Some(serde_json::json!(1)),
         method: "initialize".to_string(),
         params: Some(serde_json::json!({
+            "protocolVersion": "2025-03-26",
             "capabilities": {}
         })),
     };
 
     let response = handle_initialize(&app_state, &session_id, &request).await;
     assert!(response.error.is_none());
+    assert!(response.result.is_some());
 
-    // 验证 work_dir 为 None
-    let state_guard = app_state.state.read().await;
-    let session = state_guard.get_session(&session_id).unwrap();
-    assert!(session.work_dir.is_none());
-}
+    let result = response.result.unwrap();
 
-#[tokio::test]
-async fn test_handle_initialize_with_workspace_folders() {
-    let (app_state, session_id) = create_test_app_state_with_session();
+    // 验证响应格式
+    assert_eq!(result.get("protocolVersion").unwrap().as_str().unwrap(), "2025-03-26");
+    assert!(result.get("capabilities").is_some());
+    assert!(result.get("serverInfo").is_some());
 
-    let request = JsonRpcRequest {
-        jsonrpc: "2.0".to_string(),
-        id: Some(serde_json::json!(1)),
-        method: "initialize".to_string(),
-        params: Some(serde_json::json!({
-            "workspaceFolders": [
-                {
-                    "uri": "file:///home/user/workspace/project1",
-                    "name": "project1"
-                },
-                {
-                    "uri": "file:///home/user/workspace/project2",
-                    "name": "project2"
-                }
-            ]
-        })),
-    };
-
-    let response = handle_initialize(&app_state, &session_id, &request).await;
-    assert!(response.error.is_none());
-
-    // 验证 work_dir 使用第一个 workspace folder
-    let state_guard = app_state.state.read().await;
-    let session = state_guard.get_session(&session_id).unwrap();
-    assert!(session.work_dir.is_some());
-    assert_eq!(
-        session.work_dir.as_ref().unwrap(),
-        &PathBuf::from("/home/user/workspace/project1")
-    );
+    // 验证 server capabilities
+    let caps = result.get("capabilities").unwrap();
+    assert!(caps.get("tools").is_some());
+    assert!(caps.get("resources").is_some());
+    assert!(caps.get("prompts").is_some());
 }
 
 // ===== Story 11.18: 简化 Tool Policy 拦截测试 =====

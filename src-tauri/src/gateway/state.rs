@@ -2,6 +2,7 @@
 //!
 //! Story 11.1: SSE Server 核心
 //! Story 11.5: 上下文路由 - Task 3 (会话状态扩展)
+//! Story 11.26: MCP Roots 机制 - Task 1 (roots capability 支持)
 //!
 //! 使用 Arc<RwLock<>> 进行共享状态管理
 
@@ -30,6 +31,8 @@ pub struct SessionProjectContext {
 }
 
 /// SSE 客户端会话信息
+///
+/// Story 11.26: 添加 roots capability 支持
 #[derive(Debug, Clone)]
 pub struct ClientSession {
     /// 会话 ID
@@ -44,6 +47,16 @@ pub struct ClientSession {
     pub work_dir: Option<PathBuf>,
     /// 项目上下文（自动路由或手动覆盖）(Story 11.5)
     pub project_context: Option<SessionProjectContext>,
+    /// Client 是否支持 roots capability (Story 11.26)
+    pub supports_roots: bool,
+    /// Client 是否支持 roots.listChanged 通知 (Story 11.26)
+    pub roots_list_changed: bool,
+    /// 待响应的 roots/list 请求 ID (Story 11.26)
+    pub pending_roots_request_id: Option<String>,
+    /// 已解析的 roots 路径列表 (Story 11.26)
+    pub roots_paths: Vec<PathBuf>,
+    /// roots 请求是否超时 (Story 11.26)
+    pub roots_request_timed_out: bool,
 }
 
 impl ClientSession {
@@ -60,6 +73,11 @@ impl ClientSession {
             last_active: now,
             work_dir: None,
             project_context: None,
+            supports_roots: false,
+            roots_list_changed: false,
+            pending_roots_request_id: None,
+            roots_paths: Vec::new(),
+            roots_request_timed_out: false,
         }
     }
 
@@ -73,6 +91,21 @@ impl ClientSession {
     /// Story 11.5: 上下文路由 - Task 3.1
     pub fn set_work_dir(&mut self, work_dir: PathBuf) {
         self.work_dir = Some(work_dir);
+    }
+
+    /// 设置 roots capability 信息
+    ///
+    /// Story 11.26: MCP Roots 机制 - Task 1.2
+    pub fn set_roots_capability(&mut self, supports_roots: bool, list_changed: bool) {
+        self.supports_roots = supports_roots;
+        self.roots_list_changed = list_changed;
+    }
+
+    /// 设置已解析的 roots 路径列表
+    ///
+    /// Story 11.26: MCP Roots 机制 - Task 1.3
+    pub fn set_roots_paths(&mut self, paths: Vec<PathBuf>) {
+        self.roots_paths = paths;
     }
 
     /// 设置项目上下文（自动路由）

@@ -1,6 +1,7 @@
 //! MCP Session 管理模块
 //!
 //! Story 11.14: MCP Streamable HTTP 规范合规 - Task 2
+//! Story 11.26: MCP Roots 机制 - roots capability 支持
 //!
 //! 实现 MCP Streamable HTTP 规范要求的 MCP-Session-Id Header 会话管理。
 //!
@@ -38,6 +39,7 @@ pub const DEFAULT_SESSION_TIMEOUT_MINUTES: i64 = 30;
 /// MCP 会话信息
 ///
 /// 扩展自原有的 ClientSession，添加 MCP Streamable HTTP 规范要求的字段
+/// Story 11.26: 添加 roots capability 支持
 #[derive(Debug, Clone)]
 pub struct McpSession {
     /// MCP-Session-Id Header 值（UUID v4 格式）
@@ -58,6 +60,16 @@ pub struct McpSession {
     pub initialized: bool,
     /// 会话过期时间（分钟）
     pub timeout_minutes: i64,
+    /// Client 是否支持 roots capability (Story 11.26)
+    pub supports_roots: bool,
+    /// Client 是否支持 roots.listChanged 通知 (Story 11.26)
+    pub roots_list_changed: bool,
+    /// 待响应的 roots/list 请求 ID (Story 11.26)
+    pub pending_roots_request_id: Option<String>,
+    /// 已解析的 roots 路径列表 (Story 11.26)
+    pub roots_paths: Vec<PathBuf>,
+    /// roots 请求是否超时 (Story 11.26)
+    pub roots_request_timed_out: bool,
 }
 
 impl McpSession {
@@ -74,6 +86,11 @@ impl McpSession {
             project_context: None,
             initialized: false,
             timeout_minutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
+            supports_roots: false,
+            roots_list_changed: false,
+            pending_roots_request_id: None,
+            roots_paths: Vec::new(),
+            roots_request_timed_out: false,
         }
     }
 
@@ -108,6 +125,21 @@ impl McpSession {
     /// 设置项目上下文
     pub fn set_project_context(&mut self, context: SessionProjectContext) {
         self.project_context = Some(context);
+    }
+
+    /// 设置 roots capability 信息
+    ///
+    /// Story 11.26: MCP Roots 机制
+    pub fn set_roots_capability(&mut self, supports_roots: bool, list_changed: bool) {
+        self.supports_roots = supports_roots;
+        self.roots_list_changed = list_changed;
+    }
+
+    /// 设置已解析的 roots 路径列表
+    ///
+    /// Story 11.26: MCP Roots 机制
+    pub fn set_roots_paths(&mut self, paths: Vec<PathBuf>) {
+        self.roots_paths = paths;
     }
 
     /// 检查会话是否已过期
@@ -352,3 +384,170 @@ fn not_found_response(session_id: &str) -> Response {
 
 #[cfg(test)]
 mod tests;
+
+// ============================================================
+// Story 11.26: Server-to-Client 通信机制
+// ============================================================
+
+use tokio::sync::{mpsc, oneshot, Mutex};
+
+/// 待处理的服务端请求
+///
+/// Story 11.26: Task 3.4
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct PendingServerRequest {
+    /// 请求 ID
+    pub request_id: String,
+    /// 方法名称
+    pub method: String,
+    /// 创建时间
+    pub created_at: DateTime<Utc>,
+}
+
+/// Server-to-Client 通信通道
+///
+/// Story 11.26: Task 3
+/// 每个 MCP 会话对应一个通道实例
+#[allow(dead_code)]
+pub struct SessionChannel {
+    /// SSE 事件发送器 (Server → Client via SSE)
+    pub sse_tx: mpsc::Sender<String>,
+    /// 会话 ID
+    pub session_id: String,
+}
+
+/// Server-to-Client 通信管理器
+///
+/// Story 11.26: Task 3
+/// 管理所有会话的 SSE 事件通道和待处理请求
+pub struct ServerToClientManager {
+    /// 会话的 SSE 事件发送器映射 (session_id -> Sender)
+    channels: Mutex<HashMap<String, mpsc::Sender<String>>>,
+    /// 待处理的服务端请求映射 (request_id -> oneshot::Sender)
+    pending_requests: Mutex<HashMap<String, (String, oneshot::Sender<serde_json::Value>)>>,
+}
+
+impl ServerToClientManager {
+    /// 创建新的管理器
+    pub fn new() -> Self {
+        Self {
+            channels: Mutex::new(HashMap::new()),
+            pending_requests: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// 注册会话的 SSE 通道
+    ///
+    /// 返回接收器供 SSE 流使用
+    pub async fn register_channel(&self, session_id: &str, buffer_size: usize) -> mpsc::Receiver<String> {
+        let (tx, rx) = mpsc::channel(buffer_size);
+        let mut channels = self.channels.lock().await;
+        channels.insert(session_id.to_string(), tx);
+        rx
+    }
+
+    /// 注销会话的 SSE 通道
+    pub async fn unregister_channel(&self, session_id: &str) {
+        let mut channels = self.channels.lock().await;
+        channels.remove(session_id);
+    }
+
+    /// 向会话发送 SSE 事件
+    ///
+    /// Story 11.26: AC6 - 通过 SSE 流发送 JSON-RPC 请求
+    pub async fn send_to_client(&self, session_id: &str, message: String) -> Result<(), String> {
+        let channels = self.channels.lock().await;
+        if let Some(tx) = channels.get(session_id) {
+            tx.send(message).await.map_err(|e| format!("Failed to send SSE event: {}", e))
+        } else {
+            Err(format!("No SSE channel for session: {}", session_id))
+        }
+    }
+
+    /// 发送 JSON-RPC 请求并等待响应
+    ///
+    /// Story 11.26: Task 3.3 - 管理待处理请求 ID 和响应 channel 映射
+    /// Story 11.26: AC7 - 超时处理
+    pub async fn send_request_and_wait(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        request_json: String,
+        timeout_secs: u64,
+    ) -> Result<serde_json::Value, String> {
+        // 1. 创建 oneshot channel 用于接收响应
+        let (tx, rx) = oneshot::channel();
+
+        // 2. 注册 pending request
+        {
+            let mut pending = self.pending_requests.lock().await;
+            pending.insert(request_id.to_string(), (session_id.to_string(), tx));
+        }
+
+        // 3. 发送请求到 SSE 流
+        if let Err(e) = self.send_to_client(session_id, request_json).await {
+            // 发送失败，清理 pending request
+            let mut pending = self.pending_requests.lock().await;
+            pending.remove(request_id);
+            return Err(e);
+        }
+
+        // 4. 等待响应（带超时）
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            rx,
+        ).await;
+
+        // 5. 清理 pending request（无论成功与否）
+        {
+            let mut pending = self.pending_requests.lock().await;
+            pending.remove(request_id);
+        }
+
+        match result {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err("Response channel closed".to_string()),
+            Err(_) => Err(format!("Request timed out after {}s", timeout_secs)),
+        }
+    }
+
+    /// 处理来自 Client 的响应
+    ///
+    /// Story 11.26: Task 3.5 - 修改 POST handler 处理 Client 的响应
+    ///
+    /// 返回 true 如果成功匹配了 pending request
+    pub async fn handle_client_response(&self, request_id: &str, response: serde_json::Value) -> bool {
+        let mut pending = self.pending_requests.lock().await;
+        if let Some((_, tx)) = pending.remove(request_id) {
+            // 发送响应到等待的 future
+            let _ = tx.send(response);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 检查是否有待处理的请求
+    #[allow(dead_code)]
+    pub async fn has_pending_request(&self, request_id: &str) -> bool {
+        let pending = self.pending_requests.lock().await;
+        pending.contains_key(request_id)
+    }
+
+    /// 获取待处理请求数量（调试用）
+    #[allow(dead_code)]
+    pub async fn pending_count(&self) -> usize {
+        let pending = self.pending_requests.lock().await;
+        pending.len()
+    }
+}
+
+impl Default for ServerToClientManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 线程安全的 Server-to-Client 管理器包装
+pub type SharedServerToClientManager = Arc<ServerToClientManager>;

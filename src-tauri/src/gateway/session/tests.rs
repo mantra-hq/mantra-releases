@@ -206,3 +206,150 @@ fn test_extract_session_id_missing() {
     let session_id = extract_session_id(&request);
     assert!(session_id.is_none());
 }
+
+// ===== Story 11.26: Roots Capability 测试 =====
+
+#[test]
+fn test_mcp_session_roots_capability_defaults() {
+    let session = McpSession::new();
+    assert!(!session.supports_roots);
+    assert!(!session.roots_list_changed);
+    assert!(session.pending_roots_request_id.is_none());
+    assert!(session.roots_paths.is_empty());
+    assert!(!session.roots_request_timed_out);
+}
+
+#[test]
+fn test_mcp_session_set_roots_capability() {
+    let mut session = McpSession::new();
+    session.set_roots_capability(true, true);
+    assert!(session.supports_roots);
+    assert!(session.roots_list_changed);
+}
+
+#[test]
+fn test_mcp_session_set_roots_capability_without_list_changed() {
+    let mut session = McpSession::new();
+    session.set_roots_capability(true, false);
+    assert!(session.supports_roots);
+    assert!(!session.roots_list_changed);
+}
+
+#[test]
+fn test_mcp_session_set_roots_paths() {
+    let mut session = McpSession::new();
+    let paths = vec![
+        std::path::PathBuf::from("/home/user/project1"),
+        std::path::PathBuf::from("/home/user/project2"),
+    ];
+    session.set_roots_paths(paths.clone());
+    assert_eq!(session.roots_paths.len(), 2);
+    assert_eq!(session.roots_paths[0], std::path::PathBuf::from("/home/user/project1"));
+    assert_eq!(session.roots_paths[1], std::path::PathBuf::from("/home/user/project2"));
+}
+
+// ===== Story 11.26: ServerToClientManager 测试 =====
+
+#[tokio::test]
+async fn test_s2c_manager_register_channel() {
+    let manager = ServerToClientManager::new();
+    let mut rx = manager.register_channel("session-1", 16).await;
+
+    // 发送消息应该成功
+    let result = manager.send_to_client("session-1", "hello".to_string()).await;
+    assert!(result.is_ok());
+
+    // 接收消息
+    let msg = rx.recv().await;
+    assert_eq!(msg, Some("hello".to_string()));
+}
+
+#[tokio::test]
+async fn test_s2c_manager_send_to_nonexistent_session() {
+    let manager = ServerToClientManager::new();
+
+    // 发送到不存在的会话应该失败
+    let result = manager.send_to_client("nonexistent", "hello".to_string()).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("No SSE channel"));
+}
+
+#[tokio::test]
+async fn test_s2c_manager_unregister_channel() {
+    let manager = ServerToClientManager::new();
+    let _rx = manager.register_channel("session-1", 16).await;
+
+    // 注销后应该无法发送
+    manager.unregister_channel("session-1").await;
+    let result = manager.send_to_client("session-1", "hello".to_string()).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_s2c_manager_handle_client_response() {
+    let manager = ServerToClientManager::new();
+    let _rx = manager.register_channel("session-1", 16).await;
+
+    // 先创建一个 pending request
+    let manager_clone = std::sync::Arc::new(manager);
+    let manager_for_spawn = manager_clone.clone();
+
+    // 在后台发送请求
+    let handle = tokio::spawn(async move {
+        manager_for_spawn.send_request_and_wait(
+            "session-1",
+            "req-1",
+            r#"{"jsonrpc":"2.0","id":"req-1","method":"roots/list"}"#.to_string(),
+            5,
+        ).await
+    });
+
+    // 等待一小段时间让请求注册
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // 发送响应
+    let response = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "req-1",
+        "result": {
+            "roots": [
+                {"uri": "file:///home/user/project", "name": "project"}
+            ]
+        }
+    });
+    let matched = manager_clone.handle_client_response("req-1", response).await;
+    assert!(matched);
+
+    // 验证请求收到了响应
+    let result = handle.await.unwrap();
+    assert!(result.is_ok());
+    let value = result.unwrap();
+    assert!(value.get("result").is_some());
+}
+
+#[tokio::test]
+async fn test_s2c_manager_request_timeout() {
+    let manager = ServerToClientManager::new();
+    let _rx = manager.register_channel("session-1", 16).await;
+
+    // 发送请求但不响应，应该超时
+    let result = manager.send_request_and_wait(
+        "session-1",
+        "req-timeout",
+        r#"{"jsonrpc":"2.0","id":"req-timeout","method":"roots/list"}"#.to_string(),
+        1, // 1秒超时
+    ).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("timed out"));
+}
+
+#[tokio::test]
+async fn test_s2c_manager_handle_unmatched_response() {
+    let manager = ServerToClientManager::new();
+
+    // 没有 pending request 时，handle_client_response 应返回 false
+    let response = serde_json::json!({"jsonrpc": "2.0", "id": "unknown", "result": {}});
+    let matched = manager.handle_client_response("unknown", response).await;
+    assert!(!matched);
+}

@@ -182,14 +182,14 @@ impl ContextRouter {
         if let Some(folders) = params.get("workspaceFolders").and_then(|v| v.as_array()) {
             if let Some(first) = folders.first() {
                 if let Some(uri) = first.get("uri").and_then(|v| v.as_str()) {
-                    return self.uri_to_path(uri);
+                    return super::uri_to_local_path(uri);
                 }
             }
         }
 
         // 回退到 rootUri
         if let Some(root_uri) = params.get("rootUri").and_then(|v| v.as_str()) {
-            return self.uri_to_path(root_uri);
+            return super::uri_to_local_path(root_uri);
         }
 
         // 再回退到 rootPath (deprecated but still used)
@@ -197,29 +197,6 @@ impl ContextRouter {
             return Some(PathBuf::from(root_path));
         }
 
-        None
-    }
-
-    /// 将 file:// URI 转换为本地路径
-    fn uri_to_path(&self, uri: &str) -> Option<PathBuf> {
-        if uri.starts_with("file://") {
-            let path = &uri[7..];
-
-            // Windows: file:///C:/path -> C:/path
-            #[cfg(target_os = "windows")]
-            {
-                if path.starts_with('/') && path.len() > 2 && path.chars().nth(2) == Some(':') {
-                    return Some(PathBuf::from(&path[1..]));
-                }
-            }
-
-            // Unix: file:///path -> /path
-            // URL 解码
-            if let Ok(decoded) = urlencoding::decode(path) {
-                return Some(PathBuf::from(decoded.as_ref()));
-            }
-            return Some(PathBuf::from(path));
-        }
         None
     }
 
