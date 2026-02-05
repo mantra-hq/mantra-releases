@@ -7,6 +7,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::models::mcp::{TakeoverBackup, ToolType};
 use crate::services::mcp_adapters::{ConfigScope, ToolAdapterRegistry};
+#[allow(deprecated)]
 use crate::services::mcp_config::{
     delete_invalid_backups, generate_import_preview, get_takeover_status,
     list_takeover_backups_with_integrity, restore_mcp_takeover, restore_mcp_takeover_by_tool,
@@ -79,11 +80,14 @@ pub fn execute_mcp_import(
 ///
 /// 从备份文件恢复原始配置
 ///
+/// **注意**: 此命令已弃用，请使用 `restore_takeover` 基于 DB 记录恢复
+///
 /// # Arguments
 /// * `backup_files` - 备份文件路径列表
 ///
 /// # Returns
 /// 成功恢复的文件数量
+#[allow(deprecated)]
 #[tauri::command]
 pub fn rollback_mcp_import(backup_files: Vec<String>) -> Result<usize, AppError> {
     let paths: Vec<PathBuf> = backup_files.iter().map(PathBuf::from).collect();

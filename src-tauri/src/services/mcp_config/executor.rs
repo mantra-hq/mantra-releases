@@ -332,7 +332,7 @@ impl<'a> ImportExecutor<'a> {
     /// Story 11.8: 使用 HTTP Transport + Authorization Header
     ///
     /// Note: Story 11.15 后使用 apply_takeover() 替代
-    #[allow(dead_code)]
+    #[allow(dead_code, deprecated)]
     fn apply_shadow_mode_v2(
         &mut self,
         path: &Path,

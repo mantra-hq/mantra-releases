@@ -30,6 +30,7 @@ mod takeover;
 mod types;
 
 // Re-export 数据类型
+#[allow(deprecated)]
 pub use types::{
     ConfigSource, ConflictResolution, DetectedConfig, DetectedService, FullTakeoverResult,
     ImportPreview, ImportRequest, ImportResult, McpConfigFile, McpServerConfig, ParseError,
