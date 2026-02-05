@@ -668,6 +668,8 @@ pub(super) async fn handle_tools_call(
     };
 
     // Story 11.28 AC5: 严格模式验证 - 检查服务是否关联到当前项目
+    // TODO (Code Review M2): 考虑在 session 级别缓存 allowed_service_ids (短 TTL)，
+    // 避免 tools/call 每次调用都查询 DB。当前实现保证实时性但可能成为性能瓶颈。
     if let (Some(ctx), Some(client)) = (&project_context, &app_state.project_services_client) {
         let allowed_service_ids = client.query_project_services(&ctx.project_id).await;
         if !allowed_service_ids.contains(&service_id) {

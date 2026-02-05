@@ -278,8 +278,10 @@ pub async fn stop_gateway(
 /// 重启 Gateway Server
 ///
 /// Story 11.17: 重启时重新初始化 McpAggregator
+/// Story 11.28 (Code Review Fix): 重启时重建 LPM 和项目服务查询服务 (AC7)
 #[tauri::command]
 pub async fn restart_gateway(
+    app_handle: tauri::AppHandle,
     gateway_state: State<'_, GatewayServerState>,
     app_state: State<'_, AppState>,
     mcp_state: State<'_, McpState>,
@@ -336,6 +338,40 @@ pub async fn restart_gateway(
     {
         let policy_resolver = Arc::new(StoragePolicyResolver::new(mcp_state.db.clone()));
         manager.set_policy_resolver(policy_resolver);
+    }
+
+    // Story 11.27 (Code Review Fix): 重新创建 LPM 查询服务
+    {
+        let (lpm_client, lpm_query_rx) = LpmQueryClient::new(64);
+        let lpm_service = LpmQueryService::new(lpm_query_rx);
+
+        manager.set_lpm_client(Arc::new(lpm_client));
+
+        let app_data_dir = app_handle.path().app_data_dir()
+            .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+        let db_path = app_data_dir.join(crate::DATABASE_FILENAME);
+
+        eprintln!("[Gateway] Restart: Re-creating LPM query service");
+        tokio::spawn(async move {
+            lpm_service.run_with_db_path(db_path).await;
+        });
+    }
+
+    // Story 11.28 (Code Review Fix): 重新创建项目服务查询服务 (AC7)
+    {
+        let (ps_client, ps_query_rx) = ProjectServicesQueryClient::new(64);
+        let ps_service = ProjectServicesQueryService::new(ps_query_rx);
+
+        manager.set_project_services_client(Arc::new(ps_client));
+
+        let app_data_dir = app_handle.path().app_data_dir()
+            .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+        let db_path = app_data_dir.join(crate::DATABASE_FILENAME);
+
+        eprintln!("[Gateway] Restart: Re-creating project services query service");
+        tokio::spawn(async move {
+            ps_service.run_with_db_path(db_path).await;
+        });
     }
 
     manager
