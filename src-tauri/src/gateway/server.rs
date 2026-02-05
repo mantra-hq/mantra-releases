@@ -199,7 +199,7 @@ impl GatewayServer {
 
         // 创建应用状态
         // Story 11.27: 使用 with_all 统一创建，支持所有可选组件
-        let mut app_state = GatewayAppState::with_all(
+        let app_state = GatewayAppState::with_all(
             state.clone(),
             stats.clone(),
             self.aggregator.clone(),

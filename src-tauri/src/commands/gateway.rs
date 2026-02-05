@@ -18,7 +18,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::commands::{AppState, McpState};
 use crate::error::AppError;
 use crate::gateway::{
-    ContextRouter, GatewayServerManager, LpmQueryClient, LpmQueryService, McpAggregator,
+    GatewayServerManager, LpmQueryClient, LpmQueryService, McpAggregator,
     SessionProjectContext, StoragePolicyResolver, WarmupResult,
 };
 use crate::services::mcp_config::sync_active_takeovers;
@@ -108,8 +108,6 @@ pub async fn start_gateway(
     app_state: State<'_, AppState>,
     mcp_state: State<'_, McpState>,
 ) -> Result<GatewayStatusResponse, AppError> {
-    use crate::storage::Database;
-
     let mut manager = gateway_state.manager.lock().await;
 
     if manager.is_running() {

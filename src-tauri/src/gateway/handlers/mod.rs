@@ -136,7 +136,8 @@ pub struct GatewayAppState {
 }
 
 impl GatewayAppState {
-    /// 创建应用状态
+    /// 创建应用状态 (用于测试)
+    #[allow(dead_code)]
     pub fn new(state: Arc<RwLock<GatewayState>>, stats: Arc<GatewayStats>) -> Self {
         Self {
             state,
@@ -149,7 +150,8 @@ impl GatewayAppState {
         }
     }
 
-    /// 创建带 Aggregator 的应用状态
+    /// 创建带 Aggregator 的应用状态 (用于测试)
+    #[allow(dead_code)]
     pub fn with_aggregator(
         state: Arc<RwLock<GatewayState>>,
         stats: Arc<GatewayStats>,
@@ -166,7 +168,8 @@ impl GatewayAppState {
         }
     }
 
-    /// 创建带 Aggregator 和 PolicyResolver 的应用状态 (Story 11.9 Phase 2)
+    /// 创建带 Aggregator 和 PolicyResolver 的应用状态 (Story 11.9 Phase 2, 用于测试)
+    #[allow(dead_code)]
     pub fn with_aggregator_and_policy(
         state: Arc<RwLock<GatewayState>>,
         stats: Arc<GatewayStats>,
