@@ -9,6 +9,7 @@
 //! Story 11.14: MCP Streamable HTTP 规范合规
 //! Story 11.17: MCP 协议聚合器
 //! Story 11.26: MCP Roots 机制
+//! Story 11.27: MCP Roots LPM 集成
 //!
 //! 提供本地 SSE Server 用于 MCP 协议通信。
 //! 监听 127.0.0.1:{port}，仅接受本地请求。
@@ -21,6 +22,7 @@ mod error;
 mod handlers;
 pub mod http_forwarder;
 pub mod http_transport;
+pub mod lpm_query;
 mod origin;
 pub mod policy;
 pub mod process_manager;
@@ -89,6 +91,11 @@ pub use aggregator::{
 };
 // Story 11.9 Phase 2: PolicyResolver
 pub use policy::{PolicyResolver, SharedPolicyResolver, StoragePolicyResolver};
+// Story 11.27: LPM 查询
+pub use lpm_query::{
+    LpmProjectContext, LpmQueryClient, LpmQueryRequest, LpmQueryResponse, LpmQueryService,
+    SharedLpmQueryClient,
+};
 
 #[cfg(test)]
 mod tests;

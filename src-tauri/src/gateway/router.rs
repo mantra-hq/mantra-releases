@@ -210,6 +210,23 @@ impl ContextRouter {
     pub fn database(&self) -> &Database {
         &self.db
     }
+
+    /// 同步查询项目（无缓存）
+    ///
+    /// Story 11.27: Task 3 - 为 LPM 查询服务提供同步版本
+    ///
+    /// 注意：此方法不使用缓存，每次都直接查询数据库
+    ///
+    /// # Arguments
+    /// * `work_dir` - 工作目录路径字符串
+    ///
+    /// # Returns
+    /// 匹配的项目上下文，如果没有匹配则返回 None
+    pub fn find_project_by_path_sync(&self, work_dir: &str) -> Option<ProjectContext> {
+        let path = Path::new(work_dir);
+        let normalized = self.normalize_path(path);
+        self.perform_lpm(&normalized)
+    }
 }
 
 #[cfg(test)]

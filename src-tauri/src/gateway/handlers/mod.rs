@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use super::lpm_query::SharedLpmQueryClient;
 use super::session::{McpSessionStore, SharedMcpSessionStore, SharedServerToClientManager, ServerToClientManager};
 use super::state::{GatewayState, GatewayStats};
 
@@ -117,6 +118,7 @@ impl JsonRpcResponse {
 /// Story 11.17: 添加 MCP Aggregator
 /// Story 11.9 Phase 2: 添加 PolicyResolver
 /// Story 11.26: 添加 Server-to-Client Manager
+/// Story 11.27: 添加 LPM Query Client
 #[derive(Clone)]
 pub struct GatewayAppState {
     pub state: Arc<RwLock<GatewayState>>,
@@ -129,6 +131,8 @@ pub struct GatewayAppState {
     pub policy_resolver: Option<super::policy::SharedPolicyResolver>,
     /// Server-to-Client 通信管理器 (Story 11.26)
     pub s2c_manager: SharedServerToClientManager,
+    /// LPM 查询客户端 (Story 11.27)
+    pub lpm_client: Option<SharedLpmQueryClient>,
 }
 
 impl GatewayAppState {
@@ -141,6 +145,7 @@ impl GatewayAppState {
             aggregator: None,
             policy_resolver: None,
             s2c_manager: Arc::new(ServerToClientManager::new()),
+            lpm_client: None,
         }
     }
 
@@ -157,6 +162,7 @@ impl GatewayAppState {
             aggregator: Some(aggregator),
             policy_resolver: None,
             s2c_manager: Arc::new(ServerToClientManager::new()),
+            lpm_client: None,
         }
     }
 
@@ -174,6 +180,28 @@ impl GatewayAppState {
             aggregator: Some(aggregator),
             policy_resolver: Some(policy_resolver),
             s2c_manager: Arc::new(ServerToClientManager::new()),
+            lpm_client: None,
+        }
+    }
+
+    /// 创建完整的应用状态 (Story 11.27)
+    ///
+    /// 包含所有可选组件：Aggregator、PolicyResolver、LpmClient
+    pub fn with_all(
+        state: Arc<RwLock<GatewayState>>,
+        stats: Arc<GatewayStats>,
+        aggregator: Option<super::aggregator::SharedMcpAggregator>,
+        policy_resolver: Option<super::policy::SharedPolicyResolver>,
+        lpm_client: Option<SharedLpmQueryClient>,
+    ) -> Self {
+        Self {
+            state,
+            stats,
+            mcp_sessions: Arc::new(RwLock::new(McpSessionStore::new())),
+            aggregator,
+            policy_resolver,
+            s2c_manager: Arc::new(ServerToClientManager::new()),
+            lpm_client,
         }
     }
 }

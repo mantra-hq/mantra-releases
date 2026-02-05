@@ -250,7 +250,8 @@ pub fn run() {
                     let app_state: tauri::State<'_, AppState> = app_handle.state();
                     let mcp_state: tauri::State<'_, McpState> = app_handle.state();
 
-                    match start_gateway(gateway_state, app_state, mcp_state).await {
+                    // Story 11.27: 传入 app_handle 用于 LPM 查询服务
+                    match start_gateway(app_handle.clone(), gateway_state, app_state, mcp_state).await {
                         Ok(status) => {
                             println!("[Mantra] Gateway Server started on port {}", status.port.unwrap_or(0));
                         }

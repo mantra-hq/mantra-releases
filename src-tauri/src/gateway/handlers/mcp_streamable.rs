@@ -491,15 +491,19 @@ async fn handle_roots_list_request(
 /// 处理 roots/list 响应
 ///
 /// Story 11.26: Task 5
+/// Story 11.27: Task 3 - LPM 集成
 ///
 /// 1. 解析 roots 数组中的 URI 和 name
 /// 2. 将 file:// URI 转换为本地路径
 /// 3. 保存 roots_paths 到 session
+/// 4. (Story 11.27) 调用 LPM 查询匹配项目
 async fn handle_roots_list_response(
     app_state: &GatewayAppState,
     session_id: &str,
     response: &serde_json::Value,
 ) {
+    use crate::gateway::state::SessionProjectContext;
+
     // 检查是否有错误
     if let Some(error) = response.get("error") {
         eprintln!("[Gateway] roots/list returned error for session {}: {:?}", session_id, error);
@@ -551,9 +555,63 @@ async fn handle_roots_list_response(
         }
     }
 
-    // TODO: Story 11.26 Task 5.4 - 调用 LPM 路由器匹配项目
-    // 这需要通过 Tauri IPC 调用，因为 ContextRouter 需要数据库连接
-    // 当前先记录日志，后续实现 IPC 集成
+    // Story 11.27: 调用 LPM 查询匹配项目
+    // AC4: 按顺序遍历每个 root 路径，使用第一个成功匹配的项目
+    if let Some(ref lpm_client) = app_state.lpm_client {
+        let mut matched = false;
+        for path in &paths {
+            let path_str = path.to_string_lossy().to_string();
+            eprintln!("[Gateway] Story 11.27 AC4: Querying LPM for root path: {}", path_str);
+
+            // 执行 LPM 查询 (5 秒超时)
+            if let Some(project_ctx) = lpm_client.query_project_by_path(&path_str).await {
+                // Story 11.27 AC2: 匹配成功，设置项目上下文
+                eprintln!(
+                    "[Gateway] Story 11.27 AC2: Matched project '{}' from root: {} (session: {})",
+                    project_ctx.project_name, path_str, session_id
+                );
+
+                // 设置 session 的 project_context
+                let ctx = SessionProjectContext {
+                    project_id: project_ctx.project_id,
+                    project_name: project_ctx.project_name,
+                    matched_path: project_ctx.matched_path,
+                    is_manual_override: false, // roots 自动匹配
+                };
+
+                let mut store = app_state.mcp_sessions.write().await;
+                if let Some(session) = store.get_session_mut(session_id) {
+                    session.set_project_context(ctx);
+                    eprintln!("[Gateway] Session {} project_context set", session_id);
+                }
+                matched = true;
+                break; // AC4: 使用第一个成功匹配的项目
+            } else {
+                // 当前 root 未匹配，继续遍历下一个
+                eprintln!(
+                    "[Gateway] Story 11.27: No match for root path: {}, trying next...",
+                    path_str
+                );
+            }
+        }
+
+        if !matched {
+            // Story 11.27 AC3 + AC5: 无匹配项目，清除旧的项目上下文
+            eprintln!(
+                "[Gateway] Story 11.27 AC3: No Mantra project found for any roots path (session: {})",
+                session_id
+            );
+            let mut store = app_state.mcp_sessions.write().await;
+            if let Some(session) = store.get_session_mut(session_id) {
+                // AC5: roots 变更时允许从有项目变为无项目
+                session.project_context = None;
+            }
+        }
+    } else {
+        // LPM 客户端未配置，跳过项目匹配
+        eprintln!("[Gateway] LPM client not configured, skipping project matching for session {}", session_id);
+    }
+
     eprintln!("[Gateway] roots/list completed for session {}, {} paths parsed", session_id, paths.len());
 }
 
@@ -1050,5 +1108,214 @@ mod tests {
         let session = store.get_session(&session_id).unwrap();
         assert_eq!(session.roots_paths.len(), 1);
         assert_eq!(session.roots_paths[0], std::path::PathBuf::from("/home/user/valid"));
+    }
+
+    // ===== Story 11.27: LPM 集成测试 =====
+
+    use crate::gateway::lpm_query::{LpmQueryClient, LpmQueryResponse, SharedLpmQueryClient};
+
+    /// 创建带 LPM 客户端的测试用 GatewayAppState
+    fn create_test_app_state_with_lpm(
+        lpm_client: SharedLpmQueryClient,
+    ) -> (GatewayAppState, String) {
+        let state = Arc::new(RwLock::new(GatewayState::with_defaults()));
+        let stats = Arc::new(GatewayStats::new());
+        let mut mcp_store = McpSessionStore::new();
+        let session = mcp_store.create_session();
+        let session_id = session.session_id.clone();
+
+        if let Some(s) = mcp_store.get_session_mut(&session_id) {
+            s.set_roots_capability(true, true);
+        }
+
+        let mut app_state = GatewayAppState::new(state, stats);
+        app_state.mcp_sessions = Arc::new(RwLock::new(mcp_store));
+        app_state.lpm_client = Some(lpm_client);
+        (app_state, session_id)
+    }
+
+    /// Story 11.27 Task 5.3: 测试多 roots 遍历 - 第一个无匹配，第二个匹配
+    #[tokio::test]
+    async fn test_handle_roots_list_response_multi_roots_traversal() {
+        use std::path::PathBuf;
+
+        let (lpm_client, mut lpm_rx) = LpmQueryClient::new(16);
+        let lpm_client = Arc::new(lpm_client);
+        let (app_state, session_id) = create_test_app_state_with_lpm(lpm_client);
+
+        // 启动模拟 LPM 服务 - 第一个路径无匹配，第二个路径匹配
+        tokio::spawn(async move {
+            let mut count = 0;
+            while let Some(pending) = lpm_rx.recv().await {
+                count += 1;
+                let response = if count == 1 {
+                    // 第一个 root 无匹配
+                    LpmQueryResponse {
+                        request_id: pending.request.request_id,
+                        project_id: None,
+                        project_name: None,
+                        matched_path: None,
+                    }
+                } else {
+                    // 第二个 root 匹配
+                    LpmQueryResponse {
+                        request_id: pending.request.request_id,
+                        project_id: Some("proj-multi-root".to_string()),
+                        project_name: Some("Multi Root Project".to_string()),
+                        matched_path: Some(PathBuf::from("/home/user/project2")),
+                    }
+                };
+                let _ = pending.response_tx.send(response);
+            }
+        });
+
+        // 发送包含两个 root 的响应
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "req-1",
+            "result": {
+                "roots": [
+                    {"uri": "file:///home/user/project1", "name": "project1"},
+                    {"uri": "file:///home/user/project2", "name": "project2"}
+                ]
+            }
+        });
+
+        super::handle_roots_list_response(&app_state, &session_id, &response).await;
+
+        // 验证：应该使用第二个 root 的匹配结果
+        let store = app_state.mcp_sessions.read().await;
+        let session = store.get_session(&session_id).unwrap();
+        assert!(session.project_context.is_some(), "应该设置 project_context");
+        let ctx = session.project_context.as_ref().unwrap();
+        assert_eq!(ctx.project_id, "proj-multi-root");
+        assert_eq!(ctx.project_name, "Multi Root Project");
+        assert!(!ctx.is_manual_override, "应该是自动匹配");
+    }
+
+    /// Story 11.27 Task 5.3: 测试单个 root 成功匹配
+    #[tokio::test]
+    async fn test_handle_roots_list_response_single_root_match() {
+        use std::path::PathBuf;
+
+        let (lpm_client, mut lpm_rx) = LpmQueryClient::new(16);
+        let lpm_client = Arc::new(lpm_client);
+        let (app_state, session_id) = create_test_app_state_with_lpm(lpm_client);
+
+        // 启动模拟 LPM 服务 - 返回成功匹配
+        tokio::spawn(async move {
+            if let Some(pending) = lpm_rx.recv().await {
+                let response = LpmQueryResponse {
+                    request_id: pending.request.request_id,
+                    project_id: Some("proj-single".to_string()),
+                    project_name: Some("Single Root Project".to_string()),
+                    matched_path: Some(PathBuf::from("/home/user/myproject")),
+                };
+                let _ = pending.response_tx.send(response);
+            }
+        });
+
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "req-1",
+            "result": {
+                "roots": [
+                    {"uri": "file:///home/user/myproject", "name": "myproject"}
+                ]
+            }
+        });
+
+        super::handle_roots_list_response(&app_state, &session_id, &response).await;
+
+        // 验证 project_context 已设置
+        let store = app_state.mcp_sessions.read().await;
+        let session = store.get_session(&session_id).unwrap();
+        assert!(session.project_context.is_some());
+        let ctx = session.project_context.as_ref().unwrap();
+        assert_eq!(ctx.project_id, "proj-single");
+        assert_eq!(ctx.project_name, "Single Root Project");
+    }
+
+    /// Story 11.27 Task 5.5: 测试 roots 变更后无匹配清除旧上下文
+    #[tokio::test]
+    async fn test_handle_roots_list_response_clears_context_on_no_match() {
+        use crate::gateway::state::SessionProjectContext;
+        use std::path::PathBuf;
+
+        let (lpm_client, mut lpm_rx) = LpmQueryClient::new(16);
+        let lpm_client = Arc::new(lpm_client);
+        let (app_state, session_id) = create_test_app_state_with_lpm(lpm_client);
+
+        // 先设置一个旧的 project_context
+        {
+            let mut store = app_state.mcp_sessions.write().await;
+            if let Some(session) = store.get_session_mut(&session_id) {
+                session.set_project_context(SessionProjectContext {
+                    project_id: "old-project".to_string(),
+                    project_name: "Old Project".to_string(),
+                    matched_path: PathBuf::from("/old/path"),
+                    is_manual_override: false,
+                });
+            }
+        }
+
+        // 启动模拟 LPM 服务 - 返回无匹配
+        tokio::spawn(async move {
+            if let Some(pending) = lpm_rx.recv().await {
+                let response = LpmQueryResponse {
+                    request_id: pending.request.request_id,
+                    project_id: None,
+                    project_name: None,
+                    matched_path: None,
+                };
+                let _ = pending.response_tx.send(response);
+            }
+        });
+
+        // 发送新的 roots 响应 - 不匹配任何项目
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "req-1",
+            "result": {
+                "roots": [
+                    {"uri": "file:///some/unknown/path", "name": "unknown"}
+                ]
+            }
+        });
+
+        super::handle_roots_list_response(&app_state, &session_id, &response).await;
+
+        // 验证：旧的 project_context 应被清除
+        let store = app_state.mcp_sessions.read().await;
+        let session = store.get_session(&session_id).unwrap();
+        assert!(
+            session.project_context.is_none(),
+            "AC5: roots 变更无匹配时应清除旧的 project_context"
+        );
+    }
+
+    /// Story 11.27: 测试无 LPM 客户端时跳过项目匹配
+    #[tokio::test]
+    async fn test_handle_roots_list_response_no_lpm_client() {
+        let (app_state, session_id) = create_test_app_state_with_mcp_session();
+        // 默认创建的 app_state 没有 lpm_client
+
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "req-1",
+            "result": {
+                "roots": [
+                    {"uri": "file:///home/user/project", "name": "project"}
+                ]
+            }
+        });
+
+        super::handle_roots_list_response(&app_state, &session_id, &response).await;
+
+        // 验证：roots_paths 设置了，但 project_context 未设置（没有 LPM 客户端）
+        let store = app_state.mcp_sessions.read().await;
+        let session = store.get_session(&session_id).unwrap();
+        assert_eq!(session.roots_paths.len(), 1);
+        assert!(session.project_context.is_none(), "没有 LPM 客户端时不应设置 project_context");
     }
 }

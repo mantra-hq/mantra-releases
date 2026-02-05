@@ -26,6 +26,7 @@ use super::handlers::{
     health_handler, mcp_delete_handler, mcp_get_handler, mcp_post_handler, message_handler,
     sse_handler, GatewayAppState,
 };
+use super::lpm_query::SharedLpmQueryClient;
 use super::policy::SharedPolicyResolver;
 use super::session::MCP_SESSION_ID_HEADER;
 use super::state::{GatewayConfig, GatewayState, GatewayStats};
@@ -92,6 +93,8 @@ pub struct GatewayServer {
     aggregator: Option<SharedMcpAggregator>,
     /// Tool Policy 解析器 (Story 11.9 Phase 2)
     policy_resolver: Option<SharedPolicyResolver>,
+    /// LPM 查询客户端 (Story 11.27)
+    lpm_client: Option<SharedLpmQueryClient>,
 }
 
 impl GatewayServer {
@@ -101,6 +104,7 @@ impl GatewayServer {
             config,
             aggregator: None,
             policy_resolver: None,
+            lpm_client: None,
         }
     }
 
@@ -123,12 +127,20 @@ impl GatewayServer {
         self.policy_resolver = Some(policy_resolver);
     }
 
+    /// 设置 LPM 查询客户端
+    ///
+    /// Story 11.27: MCP Roots LPM 集成
+    pub fn set_lpm_client(&mut self, lpm_client: SharedLpmQueryClient) {
+        self.lpm_client = Some(lpm_client);
+    }
+
     /// 创建带聚合器的 Server 实例
     pub fn with_aggregator(config: GatewayConfig, aggregator: SharedMcpAggregator) -> Self {
         Self {
             config,
             aggregator: Some(aggregator),
             policy_resolver: None,
+            lpm_client: None,
         }
     }
 
@@ -144,6 +156,7 @@ impl GatewayServer {
             config,
             aggregator: Some(aggregator),
             policy_resolver: Some(policy_resolver),
+            lpm_client: None,
         }
     }
 
@@ -185,22 +198,14 @@ impl GatewayServer {
         let stats = Arc::new(GatewayStats::new());
 
         // 创建应用状态
-        // Story 11.17: 如果有聚合器，则使用 with_aggregator
-        // Story 11.9 Phase 2: 如果有 PolicyResolver，则使用 with_aggregator_and_policy
-        let app_state = match (&self.aggregator, &self.policy_resolver) {
-            (Some(aggregator), Some(policy_resolver)) => {
-                GatewayAppState::with_aggregator_and_policy(
-                    state.clone(),
-                    stats.clone(),
-                    aggregator.clone(),
-                    policy_resolver.clone(),
-                )
-            }
-            (Some(aggregator), None) => {
-                GatewayAppState::with_aggregator(state.clone(), stats.clone(), aggregator.clone())
-            }
-            _ => GatewayAppState::new(state.clone(), stats.clone()),
-        };
+        // Story 11.27: 使用 with_all 统一创建，支持所有可选组件
+        let mut app_state = GatewayAppState::with_all(
+            state.clone(),
+            stats.clone(),
+            self.aggregator.clone(),
+            self.policy_resolver.clone(),
+            self.lpm_client.clone(),
+        );
 
         // 创建受保护路由（需要认证）
         // 旧版端点（向后兼容 Story 11.1 的 SSE Transport）
@@ -306,6 +311,8 @@ pub struct GatewayServerManager {
     aggregator: Option<SharedMcpAggregator>,
     /// Tool Policy 解析器 (Story 11.9 Phase 2)
     policy_resolver: Option<SharedPolicyResolver>,
+    /// LPM 查询客户端 (Story 11.27)
+    lpm_client: Option<SharedLpmQueryClient>,
 }
 
 impl GatewayServerManager {
@@ -325,6 +332,7 @@ impl GatewayServerManager {
             port_rx,
             aggregator: None,
             policy_resolver: None,
+            lpm_client: None,
         }
     }
 
@@ -361,6 +369,20 @@ impl GatewayServerManager {
         self.policy_resolver.as_ref()
     }
 
+    /// 设置 LPM 查询客户端
+    ///
+    /// Story 11.27: MCP Roots LPM 集成
+    pub fn set_lpm_client(&mut self, lpm_client: SharedLpmQueryClient) {
+        self.lpm_client = Some(lpm_client);
+    }
+
+    /// 获取 LPM 查询客户端引用
+    ///
+    /// Story 11.27: MCP Roots LPM 集成
+    pub fn lpm_client(&self) -> Option<&SharedLpmQueryClient> {
+        self.lpm_client.as_ref()
+    }
+
     /// 启动 Server
     pub async fn start(&mut self) -> Result<(), String> {
         if self.handle.is_some() {
@@ -369,6 +391,7 @@ impl GatewayServerManager {
 
         // Story 11.17: 使用聚合器创建 Server
         // Story 11.9 Phase 2: 同时注入 PolicyResolver
+        // Story 11.27: 同时注入 LpmClient
         let mut server = match &self.aggregator {
             Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
             None => GatewayServer::new(self.config.clone()),
@@ -377,6 +400,11 @@ impl GatewayServerManager {
         // 注入 PolicyResolver
         if let Some(policy_resolver) = &self.policy_resolver {
             server.set_policy_resolver(policy_resolver.clone());
+        }
+
+        // Story 11.27: 注入 LpmClient
+        if let Some(lpm_client) = &self.lpm_client {
+            server.set_lpm_client(lpm_client.clone());
         }
 
         let handle = server.start(None).await?;
@@ -405,6 +433,7 @@ impl GatewayServerManager {
 
         // Story 11.17: 重新启动时使用聚合器
         // Story 11.9 Phase 2: 同时注入 PolicyResolver
+        // Story 11.27: 同时注入 LpmClient
         let mut server = match &self.aggregator {
             Some(aggregator) => GatewayServer::with_aggregator(self.config.clone(), aggregator.clone()),
             None => GatewayServer::new(self.config.clone()),
@@ -413,6 +442,11 @@ impl GatewayServerManager {
         // 注入 PolicyResolver
         if let Some(policy_resolver) = &self.policy_resolver {
             server.set_policy_resolver(policy_resolver.clone());
+        }
+
+        // Story 11.27: 注入 LpmClient
+        if let Some(lpm_client) = &self.lpm_client {
+            server.set_lpm_client(lpm_client.clone());
         }
 
         let handle = server.start(new_port).await?;

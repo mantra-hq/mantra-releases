@@ -4,6 +4,7 @@
 //! Story 11.5: 上下文路由 - Task 8 (Tauri IPC 命令支持)
 //! Story 11.12: Remote MCP OAuth Support - Task 6 (OAuth IPC 命令)
 //! Story 11.17: MCP 协议聚合器 - Task 8 (缓存刷新 IPC 命令)
+//! Story 11.27: MCP Roots LPM 集成 - Task 1.3 (LPM 查询服务)
 //!
 //! 提供 Gateway Server 的 Tauri IPC 命令
 
@@ -11,12 +12,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::{AppState, McpState};
 use crate::error::AppError;
-use crate::gateway::{GatewayServerManager, McpAggregator, SessionProjectContext, StoragePolicyResolver, WarmupResult};
+use crate::gateway::{
+    ContextRouter, GatewayServerManager, LpmQueryClient, LpmQueryService, McpAggregator,
+    SessionProjectContext, StoragePolicyResolver, WarmupResult,
+};
 use crate::services::mcp_config::sync_active_takeovers;
 use crate::services::oauth::{
     CallbackResult, InMemoryTokenStore, OAuthConfig, OAuthManager, OAuthServiceStatus,
@@ -96,12 +100,16 @@ pub async fn update_gateway_config(
 /// 启动 Gateway Server
 ///
 /// Story 11.17: 启动时创建 McpAggregator 并执行 warmup
+/// Story 11.27: 启动时创建 LPM 查询服务
 #[tauri::command]
 pub async fn start_gateway(
+    app_handle: tauri::AppHandle,
     gateway_state: State<'_, GatewayServerState>,
     app_state: State<'_, AppState>,
     mcp_state: State<'_, McpState>,
 ) -> Result<GatewayStatusResponse, AppError> {
+    use crate::storage::Database;
+
     let mut manager = gateway_state.manager.lock().await;
 
     if manager.is_running() {
@@ -171,6 +179,29 @@ pub async fn start_gateway(
     {
         let policy_resolver = Arc::new(StoragePolicyResolver::new(mcp_state.db.clone()));
         manager.set_policy_resolver(policy_resolver);
+    }
+
+    // Story 11.27: 创建并注入 LPM 查询服务
+    {
+        // 1. 创建 LPM 查询客户端和服务
+        let (lpm_client, lpm_query_rx) = LpmQueryClient::new(64);
+        let lpm_service = LpmQueryService::new(lpm_query_rx);
+
+        // 2. 注入 LPM 客户端到 manager
+        manager.set_lpm_client(Arc::new(lpm_client));
+
+        // 3. 获取数据库路径用于创建新连接
+        // 注意：由于 rusqlite 的 Connection 不是 Send/Sync，
+        // LPM 服务需要自己的数据库连接，在 spawn_blocking 线程中创建和使用
+        let app_data_dir = app_handle.path().app_data_dir()
+            .map_err(|e| AppError::internal(format!("Failed to get app data dir: {}", e)))?;
+        let db_path = app_data_dir.join(crate::DATABASE_FILENAME);
+
+        // 4. 启动 LPM 查询服务（后台任务）
+        eprintln!("[Gateway] Story 11.27: Starting LPM query service");
+        tokio::spawn(async move {
+            lpm_service.run_with_db_path(db_path).await;
+        });
     }
 
     // 启动 Server
