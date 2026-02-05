@@ -236,6 +236,9 @@ async fn handle_mcp_initialize(
 
     // 2. 解析 roots capability (Story 11.26 AC1)
     if let Some(ref p) = params {
+        // DEBUG: 打印 initialize 参数，用于分析 Claude Code 发送的内容
+        eprintln!("[Gateway] DEBUG initialize params for session {}: {}", session_id, serde_json::to_string_pretty(p).unwrap_or_default());
+
         let (supports_roots, roots_list_changed) = parse_roots_capability_from_params(p);
         let mut store = app_state.mcp_sessions.write().await;
         if let Some(session) = store.get_session_mut(&session_id) {
