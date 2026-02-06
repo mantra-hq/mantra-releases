@@ -11,6 +11,7 @@ use axum::{
     },
     Json,
 };
+use async_stream::stream;
 use futures::stream::{self};
 use std::convert::Infallible;
 use std::time::Duration;
@@ -217,6 +218,7 @@ async fn handle_mcp_request(
 ///
 /// 创建新的 MCP 会话，返回 MCP-Session-Id Header
 /// Story 11.26: 解析 roots capability
+/// Story 11.26 Fix: 若支持 roots，返回 SSE 流以发送 roots/list 请求
 async fn handle_mcp_initialize(
     app_state: &GatewayAppState,
     id: Option<serde_json::Value>,
@@ -235,21 +237,21 @@ async fn handle_mcp_initialize(
     };
 
     // 2. 解析 roots capability (Story 11.26 AC1)
-    if let Some(ref p) = params {
+    let (supports_roots, roots_list_changed) = if let Some(ref p) = params {
         // DEBUG: 打印 initialize 参数，用于分析 Claude Code 发送的内容
         eprintln!("[Gateway] DEBUG initialize params for session {}: {}", session_id, serde_json::to_string_pretty(p).unwrap_or_default());
 
-        let (supports_roots, roots_list_changed) = parse_roots_capability_from_params(p);
+        let (supports, list_changed) = parse_roots_capability_from_params(p);
         let mut store = app_state.mcp_sessions.write().await;
         if let Some(session) = store.get_session_mut(&session_id) {
-            session.set_roots_capability(supports_roots, roots_list_changed);
+            session.set_roots_capability(supports, list_changed);
         }
 
         // 记录日志 (Story 11.26 AC5)
-        if supports_roots {
+        if supports {
             eprintln!(
                 "[Gateway] MCP Session {} supports roots capability (listChanged: {})",
-                session_id, roots_list_changed
+                session_id, list_changed
             );
         } else {
             eprintln!(
@@ -257,7 +259,10 @@ async fn handle_mcp_initialize(
                 session_id
             );
         }
-    }
+        (supports, list_changed)
+    } else {
+        (false, false)
+    };
 
     // 3. 同时注册到旧的 session 系统（向后兼容）
     {
@@ -265,7 +270,23 @@ async fn handle_mcp_initialize(
         let _old_session = state.register_session();
     }
 
-    // 4. 构建初始化响应
+    // 4. 根据 roots capability 决定响应类型
+    // Story 11.26 Fix: 如果支持 roots，使用 SSE 流响应以便发送 roots/list 请求
+    if supports_roots {
+        sse_initialize_response(app_state, &session_id, id, roots_list_changed).await
+    } else {
+        json_initialize_response(&session_id, id).await
+    }
+}
+
+/// 返回普通 JSON 的 initialize 响应（不支持 roots 时使用）
+///
+/// Story 11.26 Fix: 抽取为独立函数，向后兼容不支持 roots 的 Client
+async fn json_initialize_response(
+    session_id: &str,
+    id: Option<serde_json::Value>,
+) -> Response {
+    // 构建初始化响应
     // Story 11.17: 声明完整的 tools/resources/prompts capabilities
     let result = serde_json::json!({
         "protocolVersion": "2025-03-26",
@@ -282,10 +303,140 @@ async fn handle_mcp_initialize(
 
     let json_response = JsonRpcResponse::success(id, result);
 
-    // 5. 返回带 MCP-Session-Id Header 的响应
-    let (header_name, header_value) = create_session_id_header(&session_id);
+    // 返回带 MCP-Session-Id Header 的响应
+    let (header_name, header_value) = create_session_id_header(session_id);
     let mut response = (StatusCode::OK, Json(json_response)).into_response();
     response.headers_mut().insert(header_name, header_value);
+    response
+}
+
+/// 返回 SSE 流的 initialize 响应（支持 roots 时使用）
+///
+/// Story 11.26 Fix: 在 SSE 流中发送 roots/list 请求
+///
+/// 流程:
+/// 1. 发送 priming event
+/// 2. 发送 roots/list 请求
+/// 3. 等待 Client POST 响应（带超时）
+/// 4. 处理 roots 响应
+/// 5. 发送 InitializeResult
+async fn sse_initialize_response(
+    app_state: &GatewayAppState,
+    session_id: &str,
+    request_id: Option<serde_json::Value>,
+    _roots_list_changed: bool,
+) -> Response {
+    let session_id = session_id.to_string();
+    let session_id_for_header = session_id.clone();
+    let app_state = app_state.clone();
+
+    // 生成 roots/list 请求 ID
+    let roots_request_id = format!("gateway-roots-{}", uuid::Uuid::new_v4());
+
+    // 预先注册 pending request
+    let roots_rx = app_state
+        .s2c_manager
+        .register_pending_request(&session_id, &roots_request_id)
+        .await;
+
+    // 保存 pending 请求 ID 到 session
+    {
+        let mut store = app_state.mcp_sessions.write().await;
+        if let Some(session) = store.get_session_mut(&session_id) {
+            session.pending_roots_request_id = Some(roots_request_id.clone());
+        }
+    }
+
+    // 构建 SSE 流
+    let stream = stream! {
+        // 1. Priming event
+        let priming_id = uuid::Uuid::new_v4().to_string();
+        eprintln!("[Gateway] SSE initialize: sending priming event for session {}", session_id);
+        yield Ok::<_, Infallible>(Event::default().id(priming_id).data(""));
+
+        // 2. 发送 roots/list 请求
+        let roots_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": roots_request_id,
+            "method": "roots/list"
+        }).to_string();
+
+        eprintln!("[Gateway] SSE initialize: sending roots/list request {} for session {}", roots_request_id, session_id);
+        yield Ok(Event::default().data(roots_request));
+
+        // 3. 等待 Client POST 响应（10秒超时）
+        const ROOTS_REQUEST_TIMEOUT_SECS: u64 = 10;
+        let roots_result = tokio::time::timeout(
+            Duration::from_secs(ROOTS_REQUEST_TIMEOUT_SECS),
+            roots_rx,
+        ).await;
+
+        // 4. 清理 pending 请求 ID
+        {
+            let mut store = app_state.mcp_sessions.write().await;
+            if let Some(session) = store.get_session_mut(&session_id) {
+                session.pending_roots_request_id = None;
+            }
+        }
+
+        // 5. 处理 roots 响应
+        match roots_result {
+            Ok(Ok(response)) => {
+                eprintln!("[Gateway] SSE initialize: received roots/list response for session {}", session_id);
+                handle_roots_list_response(&app_state, &session_id, &response).await;
+            }
+            Ok(Err(_)) => {
+                eprintln!("[Gateway] SSE initialize: roots/list response channel closed for session {}", session_id);
+                // 清理 pending request
+                app_state.s2c_manager.cancel_pending_request(&roots_request_id).await;
+            }
+            Err(_) => {
+                eprintln!("[Gateway] SSE initialize: roots/list request timed out for session {}", session_id);
+                // Story 11.26 AC7: 超时处理
+                {
+                    let mut store = app_state.mcp_sessions.write().await;
+                    if let Some(session) = store.get_session_mut(&session_id) {
+                        session.roots_request_timed_out = true;
+                        eprintln!("[Gateway] Session {} marked as roots request timed out, using global services", session_id);
+                    }
+                }
+                // 清理 pending request
+                app_state.s2c_manager.cancel_pending_request(&roots_request_id).await;
+            }
+        }
+
+        // 6. 发送 InitializeResult
+        let init_result = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {
+                    "tools": { "listChanged": true },
+                    "resources": { "subscribe": true, "listChanged": true },
+                    "prompts": { "listChanged": true }
+                },
+                "serverInfo": {
+                    "name": "mantra-gateway",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        }).to_string();
+
+        eprintln!("[Gateway] SSE initialize: sending InitializeResult for session {}", session_id);
+        yield Ok(Event::default().data(init_result));
+
+        eprintln!("[Gateway] SSE initialize: stream complete for session {}", session_id);
+    };
+
+    // 构建 SSE 响应
+    let sse = Sse::new(stream);
+    let mut response = sse.into_response();
+
+    // 添加 MCP-Session-Id Header
+    let (header_name, header_value) = create_session_id_header(&session_id_for_header);
+    response.headers_mut().insert(header_name, header_value);
+
     response
 }
 

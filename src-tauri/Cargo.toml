@@ -33,6 +33,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }
 tokio-stream = "0.1"
 futures = "0.3"
+async-stream = "0.3"
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }
 git2 = { version = "0.19", default-features = false, features = ["vendored-libgit2"] }

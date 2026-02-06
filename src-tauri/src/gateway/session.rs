@@ -541,6 +541,29 @@ impl ServerToClientManager {
         let pending = self.pending_requests.lock().await;
         pending.len()
     }
+
+    /// 注册待处理请求（用于 SSE 流内同步发送）
+    ///
+    /// Story 11.26 Fix: 在 SSE 流创建过程中注册 pending request
+    /// 返回 oneshot::Receiver 供流内等待响应
+    pub async fn register_pending_request(
+        &self,
+        session_id: &str,
+        request_id: &str,
+    ) -> oneshot::Receiver<serde_json::Value> {
+        let (tx, rx) = oneshot::channel();
+        let mut pending = self.pending_requests.lock().await;
+        pending.insert(request_id.to_string(), (session_id.to_string(), tx));
+        rx
+    }
+
+    /// 取消待处理请求（超时或错误时清理）
+    ///
+    /// Story 11.26 Fix: 清理未完成的 pending request
+    pub async fn cancel_pending_request(&self, request_id: &str) {
+        let mut pending = self.pending_requests.lock().await;
+        pending.remove(request_id);
+    }
 }
 
 impl Default for ServerToClientManager {
