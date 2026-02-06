@@ -37,6 +37,29 @@ impl Database {
         Ok(Self { conn })
     }
 
+    /// Open an existing database for queries (lightweight version)
+    ///
+    /// This is a lightweight connection method that does NOT run schema or migrations.
+    /// Use this for background services that only need to query existing data.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the SQLite database file
+    ///
+    /// # Returns
+    /// A new Database instance for querying
+    ///
+    /// # Note
+    /// This method assumes the database already exists and has the correct schema.
+    /// Using it on an uninitialized database may cause query errors.
+    pub fn open_for_query(path: &Path) -> Result<Self, StorageError> {
+        let conn = Connection::open(path)?;
+
+        // Enable foreign key support for query consistency
+        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+
+        Ok(Self { conn })
+    }
+
     /// Create an in-memory database for testing
     #[cfg(test)]
     pub fn new_in_memory() -> Result<Self, StorageError> {

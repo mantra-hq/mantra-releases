@@ -197,8 +197,8 @@ impl ProjectServicesQueryService {
             // 使用 spawn_blocking 在同步线程中执行数据库查询
             let project_id = request.project_id.clone();
             let result = tokio::task::spawn_blocking(move || {
-                // 在阻塞线程中创建数据库连接和执行查询
-                let db = match Database::new(&db_path_clone) {
+                // 在阻塞线程中创建轻量级数据库连接（不运行 schema/migrations）
+                let db = match Database::open_for_query(&db_path_clone) {
                     Ok(db) => db,
                     Err(e) => {
                         eprintln!(
