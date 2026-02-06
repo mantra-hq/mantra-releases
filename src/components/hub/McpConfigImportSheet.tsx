@@ -255,29 +255,12 @@ export function McpConfigImportSheet({
 
   // 扫描配置文件
   const handleScan = useCallback(async () => {
-    // DEBUG: 打印扫描参数
-    console.log("[McpConfigImportSheet] handleScan called with:", {
-      projectPath,
-      projectId,
-    });
-
     setIsLoading(true);
     setError(null);
 
     try {
       const result = await invoke<ScanResult>("scan_mcp_configs_cmd", {
         projectPath: projectPath || null,
-      });
-
-      // DEBUG: 打印扫描结果
-      console.log("[McpConfigImportSheet] scan_mcp_configs_cmd result:", {
-        configs_count: result.configs.length,
-        configs: result.configs.map(c => ({
-          adapter_id: c.adapter_id,
-          path: c.path,
-          services_count: c.services.length,
-          services: c.services.map(s => s.name),
-        })),
       });
 
       setScanResult(result);
@@ -418,34 +401,34 @@ export function McpConfigImportSheet({
   ]);
 
   // Story 11.29: 准备关联步骤 - 获取服务关联状态
-  const prepareLinkStep = useCallback(async (_result: ImportResult) => {
-    if (!preview || !projectId) return;
+  const prepareLinkStep = useCallback(async (result: ImportResult) => {
+    if (!projectId) return;
 
     try {
-      // 1. 构建 name → adapterId 映射（从 preview 数据）
-      const nameToAdapterId = new Map<string, string>();
-      preview.new_services.forEach((s) => nameToAdapterId.set(s.name, s.adapter_id));
-      preview.conflicts.forEach((c) => {
-        if (c.candidates.length > 0) {
-          nameToAdapterId.set(c.name, c.candidates[0].adapter_id);
-        }
-      });
-
-      // 2. 获取 Hub 中所有服务（匹配导入涉及的服务）
+      // 1. 获取 Hub 中所有服务
       interface HubService { id: string; name: string; source_file: string | null; }
       const allHubServices = await invoke<HubService[]>("list_mcp_services");
 
-      // 收集导入涉及的所有服务名称
-      const involvedNames = new Set<string>();
-      preview.new_services.forEach((s) => {
-        if (selectedServices.has(s.name)) involvedNames.add(s.name);
-      });
-      preview.conflicts.forEach((c) => {
-        if (selectedServices.has(c.name)) involvedNames.add(c.name);
-      });
+      // 2. 使用 imported_service_ids 精确匹配（优先），回退到名称匹配
+      const importedIdSet = new Set(result.imported_service_ids);
+      let matchedServices: HubService[];
 
-      // 按名称匹配 Hub 服务
-      const matchedServices = allHubServices.filter((s) => involvedNames.has(s.name));
+      if (importedIdSet.size > 0) {
+        // 通过 ID 精确匹配（处理 rename 等情况）
+        matchedServices = allHubServices.filter((s) => importedIdSet.has(s.id));
+      } else if (preview) {
+        // 回退：通过名称匹配（兼容旧版后端未返回 imported_service_ids）
+        const involvedNames = new Set<string>();
+        preview.new_services.forEach((s) => {
+          if (selectedServices.has(s.name)) involvedNames.add(s.name);
+        });
+        preview.conflicts.forEach((c) => {
+          if (selectedServices.has(c.name)) involvedNames.add(c.name);
+        });
+        matchedServices = allHubServices.filter((s) => involvedNames.has(s.name));
+      } else {
+        matchedServices = [];
+      }
 
       // 3. 获取当前项目已关联的服务
       interface LinkedService { id: string; name: string; }
@@ -456,7 +439,7 @@ export function McpConfigImportSheet({
       const services: LinkableService[] = matchedServices.map((s) => ({
         id: s.id,
         name: s.name,
-        adapterId: nameToAdapterId.get(s.name) || inferAdapterId(s.source_file),
+        adapterId: inferAdapterId(s.source_file),
         alreadyLinked: linkedIds.has(s.id),
       }));
 
@@ -479,16 +462,17 @@ export function McpConfigImportSheet({
       // 准备关联步骤失败，回退到结果页
       setStep("result");
     }
-  }, [preview, projectId, selectedServices]);
+  }, [projectId, preview, selectedServices]);
 
   // Story 11.29: 从 source_file 路径推断 adapterId
   const inferAdapterId = (sourceFile: string | null): string => {
-    if (!sourceFile) return "claude";
+    if (!sourceFile) return "unknown";
     const path = sourceFile.toLowerCase();
+    if (path.includes(".claude") || path.includes("mcp.json")) return "claude";
     if (path.includes(".cursor")) return "cursor";
     if (path.includes(".codex")) return "codex";
     if (path.includes(".gemini")) return "gemini";
-    return "claude";
+    return "unknown";
   };
 
   // Story 11.29: 执行关联操作 (AC3)
@@ -497,15 +481,31 @@ export function McpConfigImportSheet({
 
     setIsLinking(true);
     try {
-      for (const serviceId of linkSelectedIds) {
-        await invoke("link_mcp_service_to_project", {
-          projectId,
-          serviceId,
-          configOverride: null,
-        });
+      const results = await Promise.allSettled(
+        Array.from(linkSelectedIds).map((serviceId) =>
+          invoke("link_mcp_service_to_project", {
+            projectId,
+            serviceId,
+            configOverride: null,
+          })
+        )
+      );
+
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+
+      if (failed === 0) {
+        feedback.success(t("hub.import.linkSuccess", { count: succeeded }));
+      } else if (succeeded > 0) {
+        feedback.success(t("hub.import.linkPartialSuccess", { succeeded, failed }));
+      } else {
+        const firstError = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        feedback.error(t("hub.import.linkError"), firstError.reason?.message || "Unknown error");
       }
-      feedback.success(t("hub.import.linkSuccess", { count: linkSelectedIds.size }));
-      onSuccess();
+
+      if (succeeded > 0) {
+        onSuccess();
+      }
       onOpenChange(false);
     } catch (err) {
       console.error("[McpConfigImportSheet] Failed to link services:", err);
@@ -1357,7 +1357,7 @@ export function McpConfigImportSheet({
       case "result":
         return t("hub.import.resultDescription");
       case "link":
-        return t("hub.import.resultDescription");
+        return t("hub.import.linkStepDescription");
       default:
         return "";
     }
@@ -1393,23 +1393,13 @@ export function McpConfigImportSheet({
         </ActionSheetHeader>
 
         {/* 步骤指示器 - Story 11.29: link 步骤也显示 */}
-        {step !== "scan" && step !== "result" && step !== "link" && (
+        {step !== "scan" && step !== "result" && (
           <div className="shrink-0 px-4">
             <ImportStepper
               currentStep={step}
               hasConflicts={hasConflicts}
               needsEnvVars={needsEnvVars}
               hasLinkStep={!!projectId}
-            />
-          </div>
-        )}
-        {step === "link" && (
-          <div className="shrink-0 px-4">
-            <ImportStepper
-              currentStep={step}
-              hasConflicts={hasConflicts}
-              needsEnvVars={needsEnvVars}
-              hasLinkStep
             />
           </div>
         )}

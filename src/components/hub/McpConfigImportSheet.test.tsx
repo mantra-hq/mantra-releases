@@ -60,6 +60,7 @@ vi.mock("react-i18next", () => ({
         "hub.import.linkToProject": "关联到项目",
         "hub.import.linkDone": "完成",
         "hub.import.linkSuccess": `已关联 ${params?.count || 0} 个服务到项目`,
+        "hub.import.linkPartialSuccess": `已关联 ${params?.succeeded || 0} 个服务，${params?.failed || 0} 个失败`,
         "hub.import.linkError": "关联服务失败",
         "hub.import.servicesInHub": `${params?.count || 0} 个服务已在 Hub 中`,
         "hub.import.skip": "跳过",

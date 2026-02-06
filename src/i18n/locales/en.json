@@ -1188,11 +1188,13 @@
       "linkToProject": "Link to Project",
       "linkSuccess": "{{count}} services linked to project",
       "linkError": "Failed to link services",
+      "linkPartialSuccess": "{{succeeded}} services linked, {{failed}} failed",
       "allLinkedTitle": "All services already linked to project",
       "alreadyLinked": "Linked",
       "stepLink": "Link",
       "servicesInHub": "{{count}} services already in Hub",
-      "linkDone": "Done"
+      "linkDone": "Done",
+      "linkStepDescription": "Link imported services to the current project"
     },
     "mcpContext": {
       "title": "MCP Context",

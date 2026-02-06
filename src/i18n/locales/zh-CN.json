@@ -1194,11 +1194,13 @@
       "linkToProject": "关联到项目",
       "linkSuccess": "已关联 {{count}} 个服务到项目",
       "linkError": "关联服务失败",
+      "linkPartialSuccess": "已关联 {{succeeded}} 个服务，{{failed}} 个失败",
       "allLinkedTitle": "所有服务已关联到当前项目",
       "alreadyLinked": "已关联",
       "stepLink": "关联",
       "servicesInHub": "{{count}} 个服务已在 Hub 中",
-      "linkDone": "完成"
+      "linkDone": "完成",
+      "linkStepDescription": "将导入的服务关联到当前项目"
     },
     "mcpContext": {
       "title": "MCP 上下文",
