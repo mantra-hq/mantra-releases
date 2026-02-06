@@ -466,6 +466,7 @@ mod debug_sync_test {
     use crate::parsers::{ClaudeParser, LogParser};
 
     #[test]
+    #[ignore] // 依赖本地真实会话数据，仅用于手动调试
     fn test_sync_scanning_logic() {
         let target_cwd = "/mnt/disk0/project/newx/nextalk/voice_capsule";
         let home = std::env::var("HOME").unwrap();
@@ -552,6 +553,7 @@ mod debug_full_sync_test {
     use std::collections::HashMap;
 
     #[test]
+    #[ignore] // 依赖本地真实会话数据，仅用于手动调试
     fn test_full_sync_flow() {
         // 模拟完整的 sync_project 流程
         let target_cwd = "/mnt/disk0/project/newx/nextalk/voice_capsule";

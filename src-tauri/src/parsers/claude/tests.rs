@@ -180,6 +180,7 @@ fn test_parse_jsonl_with_summary() {
 }
 
 #[test]
+#[ignore] // 依赖本地真实会话文件，仅用于手动调试
 fn test_parse_real_problematic_file() {
     let file_path = "/home/decker/.claude/projects/-mnt-disk0-project-newx-nextalk-voice-capsule/4fe9325e-4c69-4633-ac6f-d879ca16d6c5.jsonl";
 

@@ -381,7 +381,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
     try {
       // Story 11.23: 使用带版本信息的 API
       const result = await invoke<TakeoverBackupIntegrity[]>("list_takeover_backups_with_version");
-      setBackups(result);
+      setBackups(result ?? []);
       // 同时加载统计信息
       const stats = await invoke<BackupStats>("get_backup_stats");
       setBackupStats(stats);
@@ -1140,7 +1140,7 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
                 </p>
                 <p className="text-xs text-muted-foreground">
                   • {t("hub.takeover.groupCount", {
-                    count: backupStats.groups.length,
+                    count: backupStats.groups?.length ?? 0,
                     defaultValue: "{{count}} unique groups",
                   })}
                 </p>

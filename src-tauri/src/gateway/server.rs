@@ -183,6 +183,7 @@ impl GatewayServer {
     pub async fn start(&self, port: Option<u16>) -> Result<GatewayServerHandle, String> {
         // 确定要使用的端口并绑定 (原子操作，避免 TOCTOU 竞争)
         // 确定目标端口：优先使用显式传入的端口，其次使用配置端口，最后使用默认端口
+        let explicit_port = port.is_some() || self.config.port > 0;
         let target_port = port
             .or(if self.config.port > 0 { Some(self.config.port) } else { None })
             .unwrap_or(DEFAULT_PORT_RANGE_START);
@@ -197,10 +198,30 @@ impl GatewayServer {
                 (listener, actual)
             }
             Err(e) => {
-                return Err(format!(
-                    "无法绑定端口 {}：{}。请检查该端口是否被其他程序占用，或在设置中修改 Gateway 端口。",
-                    target_port, e
-                ));
+                // 如果是默认端口（非用户显式配置）且被占用，自动尝试 OS 分配
+                if !explicit_port {
+                    let fallback_addr = SocketAddr::from(([127, 0, 0, 1], 0u16));
+                    match tokio::net::TcpListener::bind(fallback_addr).await {
+                        Ok(listener) => {
+                            let actual = listener.local_addr()
+                                .map(|addr| addr.port())
+                                .unwrap_or(0);
+                            eprintln!("[Gateway] 默认端口 {} 被占用，自动分配端口 {}", target_port, actual);
+                            (listener, actual)
+                        }
+                        Err(e2) => {
+                            return Err(format!(
+                                "无法绑定端口 {}：{}。自动分配也失败：{}。",
+                                target_port, e, e2
+                            ));
+                        }
+                    }
+                } else {
+                    return Err(format!(
+                        "无法绑定端口 {}：{}。请检查该端口是否被其他程序占用，或在设置中修改 Gateway 端口。",
+                        target_port, e
+                    ));
+                }
             }
         };
 

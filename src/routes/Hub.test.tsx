@@ -65,8 +65,10 @@ describe("Hub Page", () => {
           });
         case "list_mcp_services":
           return Promise.resolve([]);
-        case "list_active_takeovers":
+        case "list_takeover_backups_with_version":
           return Promise.resolve([]);
+        case "get_backup_stats":
+          return Promise.resolve({ totalCount: 0, totalSize: 0, groups: [] });
         default:
           return Promise.resolve(null);
       }

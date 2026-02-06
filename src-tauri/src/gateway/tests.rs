@@ -281,10 +281,10 @@ mod integration_tests {
 
         // Start
         manager.start().await.expect("Start should succeed");
-        let original_port = manager.current_port();
+        assert!(manager.is_running());
 
-        // Restart with same port
-        manager.restart(Some(original_port)).await.expect("Restart should succeed");
+        // Restart (let OS assign new port to avoid timing issues with port release)
+        manager.restart(None).await.expect("Restart should succeed");
         assert!(manager.is_running());
 
         // Cleanup
