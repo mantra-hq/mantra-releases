@@ -318,6 +318,70 @@ export function McpConfigImportSheet({
     }
   }, [projectPath, t]);
 
+  // Story 11.29: 准备关联步骤 - 获取服务关联状态
+  const prepareLinkStep = useCallback(async (result: ImportResult) => {
+    if (!projectId) return;
+
+    try {
+      // 1. 获取 Hub 中所有服务
+      interface HubService { id: string; name: string; source_file: string | null; }
+      const allHubServices = await invoke<HubService[]>("list_mcp_services");
+
+      // 2. 使用 imported_service_ids 精确匹配（优先），回退到名称匹配
+      const importedIdSet = new Set(result.imported_service_ids);
+      let matchedServices: HubService[];
+
+      if (importedIdSet.size > 0) {
+        // 通过 ID 精确匹配（处理 rename 等情况）
+        matchedServices = allHubServices.filter((s) => importedIdSet.has(s.id));
+      } else if (preview) {
+        // 回退：通过名称匹配（兼容旧版后端未返回 imported_service_ids）
+        const involvedNames = new Set<string>();
+        preview.new_services.forEach((s) => {
+          if (selectedServices.has(s.name)) involvedNames.add(s.name);
+        });
+        preview.conflicts.forEach((c) => {
+          if (selectedServices.has(c.name)) involvedNames.add(c.name);
+        });
+        matchedServices = allHubServices.filter((s) => involvedNames.has(s.name));
+      } else {
+        matchedServices = [];
+      }
+
+      // 3. 获取当前项目已关联的服务
+      interface LinkedService { id: string; name: string; }
+      const projectServices = await invoke<LinkedService[]>("get_project_mcp_services", { projectId });
+      const linkedIds = new Set(projectServices.map((s) => s.id));
+
+      // 4. 构建可关联服务列表
+      const services: LinkableService[] = matchedServices.map((s) => ({
+        id: s.id,
+        name: s.name,
+        adapterId: inferAdapterId(s.source_file),
+        alreadyLinked: linkedIds.has(s.id),
+      }));
+
+      setLinkableServices(services);
+
+      // 5. 检查是否全部已关联 (AC6)
+      const unlinkable = services.filter((s) => !s.alreadyLinked);
+      if (unlinkable.length === 0) {
+        setAllServicesLinked(true);
+        setLinkSelectedIds(new Set());
+      } else {
+        setAllServicesLinked(false);
+        // AC1: 默认全选
+        setLinkSelectedIds(new Set(unlinkable.map((s) => s.id)));
+      }
+
+      setStep("link");
+    } catch (err) {
+      console.error("[McpConfigImportSheet] Failed to prepare link step:", err);
+      // 准备关联步骤失败，回退到结果页
+      setStep("result");
+    }
+  }, [projectId, preview, selectedServices]);
+
   // 执行导入
   const handleImport = useCallback(async () => {
     if (!preview) return;
@@ -397,72 +461,9 @@ export function McpConfigImportSheet({
     envVarValues,
     onSuccess,
     projectId,
+    prepareLinkStep,
     t,
   ]);
-
-  // Story 11.29: 准备关联步骤 - 获取服务关联状态
-  const prepareLinkStep = useCallback(async (result: ImportResult) => {
-    if (!projectId) return;
-
-    try {
-      // 1. 获取 Hub 中所有服务
-      interface HubService { id: string; name: string; source_file: string | null; }
-      const allHubServices = await invoke<HubService[]>("list_mcp_services");
-
-      // 2. 使用 imported_service_ids 精确匹配（优先），回退到名称匹配
-      const importedIdSet = new Set(result.imported_service_ids);
-      let matchedServices: HubService[];
-
-      if (importedIdSet.size > 0) {
-        // 通过 ID 精确匹配（处理 rename 等情况）
-        matchedServices = allHubServices.filter((s) => importedIdSet.has(s.id));
-      } else if (preview) {
-        // 回退：通过名称匹配（兼容旧版后端未返回 imported_service_ids）
-        const involvedNames = new Set<string>();
-        preview.new_services.forEach((s) => {
-          if (selectedServices.has(s.name)) involvedNames.add(s.name);
-        });
-        preview.conflicts.forEach((c) => {
-          if (selectedServices.has(c.name)) involvedNames.add(c.name);
-        });
-        matchedServices = allHubServices.filter((s) => involvedNames.has(s.name));
-      } else {
-        matchedServices = [];
-      }
-
-      // 3. 获取当前项目已关联的服务
-      interface LinkedService { id: string; name: string; }
-      const projectServices = await invoke<LinkedService[]>("get_project_mcp_services", { projectId });
-      const linkedIds = new Set(projectServices.map((s) => s.id));
-
-      // 4. 构建可关联服务列表
-      const services: LinkableService[] = matchedServices.map((s) => ({
-        id: s.id,
-        name: s.name,
-        adapterId: inferAdapterId(s.source_file),
-        alreadyLinked: linkedIds.has(s.id),
-      }));
-
-      setLinkableServices(services);
-
-      // 5. 检查是否全部已关联 (AC6)
-      const unlinkable = services.filter((s) => !s.alreadyLinked);
-      if (unlinkable.length === 0) {
-        setAllServicesLinked(true);
-        setLinkSelectedIds(new Set());
-      } else {
-        setAllServicesLinked(false);
-        // AC1: 默认全选
-        setLinkSelectedIds(new Set(unlinkable.map((s) => s.id)));
-      }
-
-      setStep("link");
-    } catch (err) {
-      console.error("[McpConfigImportSheet] Failed to prepare link step:", err);
-      // 准备关联步骤失败，回退到结果页
-      setStep("result");
-    }
-  }, [projectId, preview, selectedServices]);
 
   // Story 11.29: 从 source_file 路径推断 adapterId
   const inferAdapterId = (sourceFile: string | null): string => {
