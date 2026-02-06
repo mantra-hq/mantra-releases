@@ -492,18 +492,12 @@ export function TakeoverStatusCard({ onRestore }: TakeoverStatusCardProps) {
   }, [previewContent]);
 
   // 恢复配置
+  // 注意：恢复接管只是还原外部工具的配置文件，不需要重启 Gateway
+  // Gateway 本身的 MCP 服务配置没有变化
   const handleRestore = useCallback(async (backupId: string) => {
     setRestoringId(backupId);
     try {
       await invoke("restore_takeover", { backupId });
-      try {
-        const status = await invoke<{ running: boolean }>("get_gateway_status");
-        if (status.running) {
-          await invoke("restart_gateway", {});
-        }
-      } catch {
-        // Gateway 操作失败不阻断恢复流程
-      }
       feedback.success(t("hub.takeover.restoreSuccess"));
       await loadBackups();
       onRestore?.();

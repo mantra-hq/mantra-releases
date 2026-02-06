@@ -48,8 +48,9 @@ impl McpToolAdapter for CodexAdapter {
         let mut services = Vec::new();
         if let Some(mcp_servers) = config.mcp_servers {
             for (name, server) in mcp_servers {
-                // Codex 使用 stdio 传输模式
+                // Codex 支持 stdio 和 HTTP 两种传输模式
                 if let Some(command) = server.command {
+                    // stdio 模式
                     services.push(DetectedService {
                         name,
                         transport_type: crate::models::mcp::McpTransportType::Stdio,
@@ -63,8 +64,22 @@ impl McpToolAdapter for CodexAdapter {
                         scope,
                         local_project_path: None,
                     });
+                } else if let Some(url) = server.url {
+                    // HTTP 模式
+                    services.push(DetectedService {
+                        name,
+                        transport_type: crate::models::mcp::McpTransportType::Http,
+                        command: String::new(),
+                        args: None,
+                        env: None,
+                        url: Some(url),
+                        headers: server.http_headers,
+                        source_file: path.to_path_buf(),
+                        adapter_id: self.id().to_string(),
+                        scope,
+                        local_project_path: None,
+                    });
                 }
-                // 跳过 URL 模式的服务（如已配置的 gateway）
             }
         }
 
@@ -139,11 +154,9 @@ struct CodexMcpServerConfig {
     #[serde(default)]
     env: Option<HashMap<String, String>>,
     /// URL（HTTP 模式）
-    #[allow(dead_code)]
     #[serde(default)]
     url: Option<String>,
     /// HTTP 头（Codex 使用 http_headers 而非 headers）
-    #[allow(dead_code)]
     #[serde(default)]
     http_headers: Option<HashMap<String, String>>,
 }
@@ -235,7 +248,7 @@ args = ["--flag"]
     }
 
     #[test]
-    fn test_codex_parse_skip_url_servers() {
+    fn test_codex_parse_http_servers() {
         let adapter = CodexAdapter;
         let content = r#"
 [mcp_servers.local]
@@ -246,14 +259,30 @@ url = "http://remote.example.com/mcp"
 
 [mcp_servers.remote.http_headers]
 Authorization = "Bearer xxx"
+
+[mcp_servers.deepwiki]
+url = "https://mcp.deepwiki.com/mcp"
 "#;
 
         let path = Path::new("/project/.codex/config.toml");
         let services = adapter.parse(path, content, ConfigScope::Project).unwrap();
 
-        // URL 服务应该被跳过（没有 command）
-        assert_eq!(services.len(), 1);
-        assert_eq!(services[0].name, "local");
+        assert_eq!(services.len(), 3);
+
+        // 验证 stdio 服务
+        let local = services.iter().find(|s| s.name == "local").unwrap();
+        assert_eq!(local.transport_type, crate::models::mcp::McpTransportType::Stdio);
+        assert_eq!(local.command, "local-mcp");
+
+        // 验证 HTTP 服务
+        let remote = services.iter().find(|s| s.name == "remote").unwrap();
+        assert_eq!(remote.transport_type, crate::models::mcp::McpTransportType::Http);
+        assert_eq!(remote.url, Some("http://remote.example.com/mcp".to_string()));
+        assert!(remote.headers.is_some());
+
+        let deepwiki = services.iter().find(|s| s.name == "deepwiki").unwrap();
+        assert_eq!(deepwiki.transport_type, crate::models::mcp::McpTransportType::Http);
+        assert_eq!(deepwiki.url, Some("https://mcp.deepwiki.com/mcp".to_string()));
     }
 
     #[test]

@@ -104,8 +104,26 @@ pub fn generate_import_preview(
         }
     }
 
+    // 过滤 configs 中的 mantra-gateway 服务，确保前端渲染时不显示
+    let filtered_configs: Vec<DetectedConfig> = configs
+        .iter()
+        .map(|config| DetectedConfig {
+            adapter_id: config.adapter_id.clone(),
+            path: config.path.clone(),
+            scope: config.scope.clone(),
+            services: config
+                .services
+                .iter()
+                .filter(|s| s.name != GATEWAY_SERVICE_NAME)
+                .cloned()
+                .collect(),
+            parse_errors: config.parse_errors.clone(),
+        })
+        .filter(|config| !config.services.is_empty()) // 移除空配置
+        .collect();
+
     Ok(ImportPreview {
-        configs: configs.to_vec(),
+        configs: filtered_configs,
         conflicts,
         new_services,
         env_vars_needed: missing_env_vars,

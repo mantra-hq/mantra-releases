@@ -43,22 +43,38 @@ impl McpToolAdapter for GeminiAdapter {
         let mut services = Vec::new();
         if let Some(mcp_servers) = config.mcp_servers {
             for (name, server) in mcp_servers {
-                if let McpServerConfig::Stdio { command, args, env } = server {
-                    services.push(DetectedService {
-                        name,
-                        transport_type: crate::models::mcp::McpTransportType::Stdio,
-                        command,
-                        args,
-                        env,
-                        url: None,
-                        headers: None,
-                        source_file: path.to_path_buf(),
-                        adapter_id: self.id().to_string(),
-                        scope,
-                        local_project_path: None,
-                    });
+                match server {
+                    McpServerConfig::Stdio { command, args, env } => {
+                        services.push(DetectedService {
+                            name,
+                            transport_type: crate::models::mcp::McpTransportType::Stdio,
+                            command,
+                            args,
+                            env,
+                            url: None,
+                            headers: None,
+                            source_file: path.to_path_buf(),
+                            adapter_id: self.id().to_string(),
+                            scope,
+                            local_project_path: None,
+                        });
+                    }
+                    McpServerConfig::Http { url, headers, .. } => {
+                        services.push(DetectedService {
+                            name,
+                            transport_type: crate::models::mcp::McpTransportType::Http,
+                            command: String::new(),
+                            args: None,
+                            env: None,
+                            url: Some(url),
+                            headers,
+                            source_file: path.to_path_buf(),
+                            adapter_id: self.id().to_string(),
+                            scope,
+                            local_project_path: None,
+                        });
+                    }
                 }
-                // 跳过 URL 模式的服务
             }
         }
 
@@ -187,10 +203,11 @@ enum McpServerConfig {
         #[serde(default)]
         env: Option<HashMap<String, String>>,
     },
-    /// URL 传输模式
-    #[allow(dead_code)]
-    Url {
+    /// HTTP 传输模式（URL 连接，支持 Streamable HTTP / SSE）
+    Http {
         url: String,
+        #[serde(default, rename = "type")]
+        transport_type: Option<String>,
         #[serde(default)]
         headers: Option<HashMap<String, String>>,
     },
@@ -264,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gemini_parse_skip_url_servers() {
+    fn test_gemini_parse_http_servers() {
         let adapter = GeminiAdapter;
         let content = r#"{
             "mcpServers": {
@@ -273,6 +290,10 @@ mod tests {
                 },
                 "remote": {
                     "url": "http://remote.example.com/mcp"
+                },
+                "http-typed": {
+                    "type": "http",
+                    "url": "https://mcp.deepwiki.com/mcp"
                 }
             }
         }"#;
@@ -280,8 +301,21 @@ mod tests {
         let path = Path::new("/project/.gemini/settings.json");
         let services = adapter.parse(path, content, ConfigScope::Project).unwrap();
 
-        assert_eq!(services.len(), 1);
-        assert_eq!(services[0].name, "local");
+        assert_eq!(services.len(), 3);
+
+        // 验证 stdio 服务
+        let local = services.iter().find(|s| s.name == "local").unwrap();
+        assert_eq!(local.transport_type, crate::models::mcp::McpTransportType::Stdio);
+        assert_eq!(local.command, "local-mcp");
+
+        // 验证 HTTP 服务
+        let remote = services.iter().find(|s| s.name == "remote").unwrap();
+        assert_eq!(remote.transport_type, crate::models::mcp::McpTransportType::Http);
+        assert_eq!(remote.url, Some("http://remote.example.com/mcp".to_string()));
+
+        let http_typed = services.iter().find(|s| s.name == "http-typed").unwrap();
+        assert_eq!(http_typed.transport_type, crate::models::mcp::McpTransportType::Http);
+        assert_eq!(http_typed.url, Some("https://mcp.deepwiki.com/mcp".to_string()));
     }
 
     #[test]

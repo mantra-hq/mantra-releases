@@ -214,6 +214,8 @@ export function TakeoverToolManager({
   }, []);
 
   // 取消单个工具的接管（恢复所有该工具的接管）
+  // 注意：恢复接管只是还原外部工具的配置文件，不需要重启 Gateway
+  // Gateway 本身的 MCP 服务配置没有变化
   const handleCancelTakeover = useCallback(async (toolType: ToolType) => {
     setActionInProgress(toolType);
 
@@ -221,16 +223,6 @@ export function TakeoverToolManager({
       const toolBackups = backups.filter((b) => b.toolType === toolType);
       for (const backup of toolBackups) {
         await invoke("restore_takeover", { backupId: backup.id });
-      }
-
-      // 重启 Gateway 如果运行中
-      try {
-        const status = await invoke<{ running: boolean }>("get_gateway_status");
-        if (status.running) {
-          await invoke("restart_gateway", {});
-        }
-      } catch {
-        // Gateway 操作失败不阻断
       }
 
       feedback.success(

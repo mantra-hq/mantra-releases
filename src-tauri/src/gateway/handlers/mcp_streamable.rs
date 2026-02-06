@@ -518,31 +518,13 @@ async fn handle_mcp_notification(
         .map(|s| s.to_string());
 
     // initialized notification 是特殊的 - 标记会话初始化完成
+    // 注意：roots/list 请求已在 sse_initialize_response 中处理，此处不再重复发送
     if method == "notifications/initialized" || method == "initialized" {
         if let Some(ref sid) = session_id {
             // 标记会话为已初始化
-            {
-                let mut store = app_state.mcp_sessions.write().await;
-                if let Some(session) = store.get_session_mut(sid) {
-                    session.mark_initialized();
-                }
-            }
-
-            // Story 11.26 AC2: 如果支持 roots capability，发送 roots/list 请求
-            let supports_roots = {
-                let store = app_state.mcp_sessions.read().await;
-                store.get_session(sid)
-                    .map(|s| s.supports_roots)
-                    .unwrap_or(false)
-            };
-
-            if supports_roots {
-                // 在后台触发 roots/list 请求
-                let app_state_clone = app_state.clone();
-                let sid_clone = sid.clone();
-                tokio::spawn(async move {
-                    handle_roots_list_request(&app_state_clone, &sid_clone).await;
-                });
+            let mut store = app_state.mcp_sessions.write().await;
+            if let Some(session) = store.get_session_mut(sid) {
+                session.mark_initialized();
             }
         }
     }
