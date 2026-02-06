@@ -307,7 +307,12 @@ export function ToolPolicyEditor({
       }
 
       setOriginalPolicy(loadedPolicy);
-      initializeSelection(loadedPolicy, result.tools);
+      // Story 12.6: 当项目策略是继承模式时，使用全局策略初始化选中状态
+      // 这样显示的是真正生效的工具选择，与 check_project_mcp_status 的逻辑一致
+      const effectivePolicy = (loadedPolicy.allowedTools === null && globalPolicy)
+        ? globalPolicy
+        : loadedPolicy;
+      initializeSelection(effectivePolicy, result.tools);
       // Story 12.5 AC3: 继承状态现在通过 currentIsInherited useMemo 自动计算
     } catch (error) {
       console.error('[ToolPolicyEditor] Failed to load data:', error);
@@ -339,7 +344,11 @@ export function ToolPolicyEditor({
 
       // 如果有原始策略，重新初始化选中状态
       if (originalPolicy) {
-        initializeSelection(originalPolicy, result.tools);
+        // Story 12.6: 当项目策略是继承模式时，使用全局策略初始化选中状态
+        const effectivePolicy = (originalPolicy.allowedTools === null && globalDefaultPolicy)
+          ? globalDefaultPolicy
+          : originalPolicy;
+        initializeSelection(effectivePolicy, result.tools);
       }
 
       feedback.success(t('hub.toolPolicy.refreshSuccess'));
@@ -349,7 +358,7 @@ export function ToolPolicyEditor({
     } finally {
       setIsRefreshing(false);
     }
-  }, [serviceId, originalPolicy, t, initializeSelection]);
+  }, [serviceId, originalPolicy, globalDefaultPolicy, t, initializeSelection]);
 
   // 切换单个工具
   const handleToggleTool = useCallback((toolName: string, checked: boolean) => {
