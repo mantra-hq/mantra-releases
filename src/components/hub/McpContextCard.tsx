@@ -403,6 +403,7 @@ export function McpContextCard({
           onSuccess={handleImportSuccess}
           projectPath={projectPath}
           projectId={projectId}
+          projectName={projectName}
         />
       </>
     );

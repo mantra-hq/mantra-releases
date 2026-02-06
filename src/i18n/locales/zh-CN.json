@@ -1185,7 +1185,20 @@
       "diffArgs": "参数",
       "diffEnv": "环境变量",
       "diffUrl": "URL",
-      "diffHeaders": "请求头"
+      "diffHeaders": "请求头",
+      "linkTitle": "关联到项目",
+      "linkDescription": "选择要关联到「{{project}}」的服务：",
+      "linkDescriptionGeneric": "选择要关联到当前项目的服务：",
+      "linkHint": "关联后，这些服务的工具将对该项目的 AI 会话可用",
+      "linkSelectedCount": "已选择 {{count}} 个服务",
+      "linkToProject": "关联到项目",
+      "linkSuccess": "已关联 {{count}} 个服务到项目",
+      "linkError": "关联服务失败",
+      "allLinkedTitle": "所有服务已关联到当前项目",
+      "alreadyLinked": "已关联",
+      "stepLink": "关联",
+      "servicesInHub": "{{count}} 个服务已在 Hub 中",
+      "linkDone": "完成"
     },
     "mcpContext": {
       "title": "MCP 上下文",

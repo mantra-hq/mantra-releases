@@ -58,11 +58,13 @@ import {
   Play,
   Archive,
   Info,
+  Link,
 } from "lucide-react";
 import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { ConfigDiffView } from "./ConfigDiffView";
 import { ImportStepper } from "./ImportStepper";
+import { LinkToProjectStep, type LinkableService } from "./LinkToProjectStep";
 import { SourceIcon } from "@/components/import/SourceIcons";
 
 // ===== 类型定义 =====
@@ -168,7 +170,7 @@ interface ImportResult {
 }
 
 // ===== 步骤枚举 =====
-type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result";
+type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result" | "link";
 
 // ===== 组件属性 =====
 /** Story 12.1: 重命名 Props 接口 */
@@ -179,6 +181,8 @@ interface McpConfigImportSheetProps {
   projectPath?: string;
   /** 项目 ID - 如果提供，导入成功后自动建立服务与项目的关联 */
   projectId?: string;
+  /** 项目名称 - Story 11.29: 关联步骤显示用 */
+  projectName?: string;
 }
 
 export function McpConfigImportSheet({
@@ -187,6 +191,7 @@ export function McpConfigImportSheet({
   onSuccess,
   projectPath,
   projectId,
+  projectName,
 }: McpConfigImportSheetProps) {
   const { t } = useTranslation();
 
@@ -215,6 +220,12 @@ export function McpConfigImportSheet({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [gatewayRunning, setGatewayRunning] = useState(true);
 
+  // Story 11.29: 关联步骤状态
+  const [linkableServices, setLinkableServices] = useState<LinkableService[]>([]);
+  const [linkSelectedIds, setLinkSelectedIds] = useState<Set<string>>(new Set());
+  const [allServicesLinked, setAllServicesLinked] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
+
   // 重置状态
   const resetState = useCallback(() => {
     setStep("scan");
@@ -229,6 +240,10 @@ export function McpConfigImportSheet({
     setRenameInputs({});
     setImportResult(null);
     setGatewayRunning(true);
+    setLinkableServices([]);
+    setLinkSelectedIds(new Set());
+    setAllServicesLinked(false);
+    setIsLinking(false);
   }, []);
 
   // Sheet 打开时重置
@@ -373,50 +388,16 @@ export function McpConfigImportSheet({
       });
 
       setImportResult(result);
-      setStep("result");
 
-      // DEBUG: 打印导入结果
-      console.log("[McpConfigImportSheet] Import result:", {
-        imported_count: result.imported_count,
-        skipped_count: result.skipped_count,
-        imported_service_ids: result.imported_service_ids,
-        errors: result.errors,
-        projectId,
-      });
-
-      // 如果有成功导入且提供了项目 ID，自动建立项目关联
-      if (result.imported_count > 0 && projectId && result.imported_service_ids?.length > 0) {
-        console.log("[McpConfigImportSheet] Attempting to link services to project:", {
-          projectId,
-          serviceIds: result.imported_service_ids,
-        });
-        try {
-          // 为每个导入的服务建立项目关联
-          for (const serviceId of result.imported_service_ids) {
-            console.log(`[McpConfigImportSheet] Linking service ${serviceId} to project ${projectId}...`);
-            await invoke("link_mcp_service_to_project", {
-              projectId,
-              serviceId,
-              configOverride: null,
-            });
-            console.log(`[McpConfigImportSheet] Successfully linked service ${serviceId}`);
-          }
-          console.log(`[McpConfigImportSheet] Linked ${result.imported_service_ids.length} services to project ${projectId}`);
-        } catch (linkErr) {
-          // 关联失败不影响导入结果，只记录日志
-          console.error("[McpConfigImportSheet] Failed to link services to project:", linkErr);
-        }
+      // Story 11.29: 如果有 projectId，准备关联步骤
+      if (projectId) {
+        await prepareLinkStep(result);
       } else {
-        console.log("[McpConfigImportSheet] Skipping link operation:", {
-          imported_count: result.imported_count,
-          hasProjectId: !!projectId,
-          imported_service_ids_length: result.imported_service_ids?.length ?? 0,
-        });
-      }
-
-      // 如果有成功导入，通知父组件刷新
-      if (result.imported_count > 0) {
-        onSuccess();
+        // AC5: 无 projectId（Hub 页面），直接显示结果
+        setStep("result");
+        if (result.imported_count > 0) {
+          onSuccess();
+        }
       }
     } catch (err) {
       console.error("[McpConfigImportSheet] Import failed:", err);
@@ -435,6 +416,104 @@ export function McpConfigImportSheet({
     projectId,
     t,
   ]);
+
+  // Story 11.29: 准备关联步骤 - 获取服务关联状态
+  const prepareLinkStep = useCallback(async (_result: ImportResult) => {
+    if (!preview || !projectId) return;
+
+    try {
+      // 1. 构建 name → adapterId 映射（从 preview 数据）
+      const nameToAdapterId = new Map<string, string>();
+      preview.new_services.forEach((s) => nameToAdapterId.set(s.name, s.adapter_id));
+      preview.conflicts.forEach((c) => {
+        if (c.candidates.length > 0) {
+          nameToAdapterId.set(c.name, c.candidates[0].adapter_id);
+        }
+      });
+
+      // 2. 获取 Hub 中所有服务（匹配导入涉及的服务）
+      interface HubService { id: string; name: string; source_file: string | null; }
+      const allHubServices = await invoke<HubService[]>("list_mcp_services");
+
+      // 收集导入涉及的所有服务名称
+      const involvedNames = new Set<string>();
+      preview.new_services.forEach((s) => {
+        if (selectedServices.has(s.name)) involvedNames.add(s.name);
+      });
+      preview.conflicts.forEach((c) => {
+        if (selectedServices.has(c.name)) involvedNames.add(c.name);
+      });
+
+      // 按名称匹配 Hub 服务
+      const matchedServices = allHubServices.filter((s) => involvedNames.has(s.name));
+
+      // 3. 获取当前项目已关联的服务
+      interface LinkedService { id: string; name: string; }
+      const projectServices = await invoke<LinkedService[]>("get_project_mcp_services", { projectId });
+      const linkedIds = new Set(projectServices.map((s) => s.id));
+
+      // 4. 构建可关联服务列表
+      const services: LinkableService[] = matchedServices.map((s) => ({
+        id: s.id,
+        name: s.name,
+        adapterId: nameToAdapterId.get(s.name) || inferAdapterId(s.source_file),
+        alreadyLinked: linkedIds.has(s.id),
+      }));
+
+      setLinkableServices(services);
+
+      // 5. 检查是否全部已关联 (AC6)
+      const unlinkable = services.filter((s) => !s.alreadyLinked);
+      if (unlinkable.length === 0) {
+        setAllServicesLinked(true);
+        setLinkSelectedIds(new Set());
+      } else {
+        setAllServicesLinked(false);
+        // AC1: 默认全选
+        setLinkSelectedIds(new Set(unlinkable.map((s) => s.id)));
+      }
+
+      setStep("link");
+    } catch (err) {
+      console.error("[McpConfigImportSheet] Failed to prepare link step:", err);
+      // 准备关联步骤失败，回退到结果页
+      setStep("result");
+    }
+  }, [preview, projectId, selectedServices]);
+
+  // Story 11.29: 从 source_file 路径推断 adapterId
+  const inferAdapterId = (sourceFile: string | null): string => {
+    if (!sourceFile) return "claude";
+    const path = sourceFile.toLowerCase();
+    if (path.includes(".cursor")) return "cursor";
+    if (path.includes(".codex")) return "codex";
+    if (path.includes(".gemini")) return "gemini";
+    return "claude";
+  };
+
+  // Story 11.29: 执行关联操作 (AC3)
+  const handleLinkToProject = useCallback(async () => {
+    if (!projectId || linkSelectedIds.size === 0) return;
+
+    setIsLinking(true);
+    try {
+      for (const serviceId of linkSelectedIds) {
+        await invoke("link_mcp_service_to_project", {
+          projectId,
+          serviceId,
+          configOverride: null,
+        });
+      }
+      feedback.success(t("hub.import.linkSuccess", { count: linkSelectedIds.size }));
+      onSuccess();
+      onOpenChange(false);
+    } catch (err) {
+      console.error("[McpConfigImportSheet] Failed to link services:", err);
+      feedback.error(t("hub.import.linkError"), (err as Error).message);
+    } finally {
+      setIsLinking(false);
+    }
+  }, [projectId, linkSelectedIds, onSuccess, onOpenChange, t]);
 
   // 获取来源显示文本 (Story 11.8: 支持 adapter_id)
   const getSourceText = useCallback(
@@ -1114,24 +1193,33 @@ export function McpConfigImportSheet({
           </p>
         </div>
 
-        {/* 结果摘要 */}
+        {/* 结果摘要 - Story 11.29 AC7: 文案优化 */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 border rounded-lg text-center">
-            <p className="text-2xl font-bold text-green-500">
-              {importResult.imported_count}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("hub.import.imported")}
-            </p>
-          </div>
-          <div className="p-4 border rounded-lg text-center">
-            <p className="text-2xl font-bold text-muted-foreground">
-              {importResult.skipped_count}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("hub.import.skipped")}
-            </p>
-          </div>
+          {/* AC7: 当 imported === 0 && skipped > 0 时，隐藏 "0 已导入" */}
+          {!(importResult.imported_count === 0 && importResult.skipped_count > 0) && (
+            <div className="p-4 border rounded-lg text-center">
+              <p className="text-2xl font-bold text-green-500">
+                {importResult.imported_count}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("hub.import.imported")}
+              </p>
+            </div>
+          )}
+          {importResult.skipped_count > 0 && (
+            <div className={cn(
+              "p-4 border rounded-lg text-center",
+              importResult.imported_count === 0 && importResult.skipped_count > 0 && "col-span-2"
+            )}>
+              <p className="text-2xl font-bold text-muted-foreground">
+                {importResult.skipped_count}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {/* AC7: "N 已跳过" → "N 个服务已在 Hub 中" */}
+                {t("hub.import.servicesInHub", { count: importResult.skipped_count })}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 已接管的工具配置 */}
@@ -1216,6 +1304,17 @@ export function McpConfigImportSheet({
     );
   };
 
+  // Story 11.29: 渲染关联步骤
+  const renderLinkStep = () => (
+    <LinkToProjectStep
+      services={linkableServices}
+      projectName={projectName}
+      selectedIds={linkSelectedIds}
+      onSelectionChange={setLinkSelectedIds}
+      allLinked={allServicesLinked}
+    />
+  );
+
   // 获取当前步骤标题
   const getStepTitle = () => {
     switch (step) {
@@ -1233,6 +1332,8 @@ export function McpConfigImportSheet({
         return t("hub.import.importingTitle");
       case "result":
         return t("hub.import.resultTitle");
+      case "link":
+        return t("hub.import.linkTitle");
       default:
         return t("hub.import.title");
     }
@@ -1254,6 +1355,8 @@ export function McpConfigImportSheet({
       case "execute":
         return t("hub.import.importingDescription");
       case "result":
+        return t("hub.import.resultDescription");
+      case "link":
         return t("hub.import.resultDescription");
       default:
         return "";
@@ -1289,13 +1392,24 @@ export function McpConfigImportSheet({
           <ActionSheetDescription>{getStepDescription()}</ActionSheetDescription>
         </ActionSheetHeader>
 
-        {/* 步骤指示器 */}
-        {step !== "scan" && step !== "result" && (
+        {/* 步骤指示器 - Story 11.29: link 步骤也显示 */}
+        {step !== "scan" && step !== "result" && step !== "link" && (
           <div className="shrink-0 px-4">
             <ImportStepper
               currentStep={step}
               hasConflicts={hasConflicts}
               needsEnvVars={needsEnvVars}
+              hasLinkStep={!!projectId}
+            />
+          </div>
+        )}
+        {step === "link" && (
+          <div className="shrink-0 px-4">
+            <ImportStepper
+              currentStep={step}
+              hasConflicts={hasConflicts}
+              needsEnvVars={needsEnvVars}
+              hasLinkStep
             />
           </div>
         )}
@@ -1309,11 +1423,42 @@ export function McpConfigImportSheet({
           {step === "confirm" && renderConfirmStep()}
           {step === "execute" && renderExecuteStep()}
           {step === "result" && renderResultStep()}
+          {step === "link" && renderLinkStep()}
         </div>
 
         {/* 底部按钮 */}
         <ActionSheetFooter className="px-4 shrink-0">
-          {step === "result" ? (
+          {/* Story 11.29: 关联步骤的按钮 */}
+          {step === "link" ? (
+            allServicesLinked ? (
+              // AC6: 所有服务已关联，显示完成按钮
+              <Button onClick={() => { onSuccess(); onOpenChange(false); }}>
+                {t("hub.import.linkDone")}
+              </Button>
+            ) : (
+              <>
+                {/* AC4: 跳过按钮 */}
+                <Button
+                  variant="outline"
+                  onClick={() => { onSuccess(); onOpenChange(false); }}
+                  disabled={isLinking}
+                  data-testid="link-skip-button"
+                >
+                  {t("hub.import.skip")}
+                </Button>
+                {/* AC3: 关联到项目按钮 */}
+                <Button
+                  onClick={handleLinkToProject}
+                  disabled={linkSelectedIds.size === 0 || isLinking}
+                  data-testid="link-to-project-button"
+                >
+                  {isLinking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Link className="h-4 w-4 mr-2" />
+                  {t("hub.import.linkToProject")}
+                </Button>
+              </>
+            )
+          ) : step === "result" ? (
             <Button onClick={() => onOpenChange(false)}>
               {t("common.close")}
             </Button>

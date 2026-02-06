@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 // ===== 类型定义 =====
 
-type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result";
+type ImportStep = "scan" | "preview" | "conflicts" | "env" | "confirm" | "execute" | "result" | "link";
 
 interface ImportStepperProps {
   /** 当前步骤 */
@@ -20,13 +20,15 @@ interface ImportStepperProps {
   hasConflicts: boolean;
   /** 是否需要设置环境变量 */
   needsEnvVars: boolean;
+  /** 是否有关联项目步骤 (Story 11.29) */
+  hasLinkStep?: boolean;
 }
 
 interface StepInfo {
   id: ImportStep;
   labelKey: string;
-  /** 是否可选步骤（冲突/环境变量） */
-  optional?: "conflicts" | "env";
+  /** 是否可选步骤（冲突/环境变量/关联） */
+  optional?: "conflicts" | "env" | "link";
 }
 
 const STEPS: StepInfo[] = [
@@ -35,12 +37,14 @@ const STEPS: StepInfo[] = [
   { id: "env", labelKey: "hub.import.stepEnv", optional: "env" },
   { id: "confirm", labelKey: "hub.import.stepConfirm" },
   { id: "execute", labelKey: "hub.import.stepExecute" },
+  { id: "link", labelKey: "hub.import.stepLink", optional: "link" },
 ];
 
 export function ImportStepper({
   currentStep,
   hasConflicts,
   needsEnvVars,
+  hasLinkStep,
 }: ImportStepperProps) {
   const { t } = useTranslation();
 
@@ -48,6 +52,7 @@ export function ImportStepper({
   const visibleSteps = STEPS.filter((step) => {
     if (step.optional === "conflicts" && !hasConflicts) return false;
     if (step.optional === "env" && !needsEnvVars) return false;
+    if (step.optional === "link" && !hasLinkStep) return false;
     return true;
   });
 

@@ -1179,7 +1179,20 @@
       "diffArgs": "Arguments",
       "diffEnv": "Environment",
       "diffUrl": "URL",
-      "diffHeaders": "Headers"
+      "diffHeaders": "Headers",
+      "linkTitle": "Link to Project",
+      "linkDescription": "Select services to link to \"{{project}}\":",
+      "linkDescriptionGeneric": "Select services to link to the current project:",
+      "linkHint": "Once linked, these services' tools will be available for AI sessions in this project",
+      "linkSelectedCount": "{{count}} services selected",
+      "linkToProject": "Link to Project",
+      "linkSuccess": "{{count}} services linked to project",
+      "linkError": "Failed to link services",
+      "allLinkedTitle": "All services already linked to project",
+      "alreadyLinked": "Linked",
+      "stepLink": "Link",
+      "servicesInHub": "{{count}} services already in Hub",
+      "linkDone": "Done"
     },
     "mcpContext": {
       "title": "MCP Context",

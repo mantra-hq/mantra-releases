@@ -24,6 +24,7 @@ export { McpServiceSheet } from "./McpServiceSheet";
 export { McpServiceDeleteDialog } from "./McpServiceDeleteDialog";
 export { ProjectServiceAssociation } from "./ProjectServiceAssociation";
 export { McpConfigImportSheet } from "./McpConfigImportSheet";
+export { LinkToProjectStep, type LinkableService } from "./LinkToProjectStep";
 
 // Story 11.9: 项目 MCP 上下文
 export { McpContextCard, type McpContextCardProps } from "./McpContextCard";

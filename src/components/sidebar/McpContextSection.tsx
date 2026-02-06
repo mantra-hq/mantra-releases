@@ -507,6 +507,7 @@ export function McpContextSection({
         onSuccess={handleImportSuccess}
         projectPath={projectPath}
         projectId={projectId}
+        projectName={projectName}
       />
     </>
   );
