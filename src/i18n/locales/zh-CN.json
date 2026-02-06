@@ -1183,7 +1183,9 @@
       "diffCandidate": "候选 {{index}}",
       "diffCommand": "命令",
       "diffArgs": "参数",
-      "diffEnv": "环境变量"
+      "diffEnv": "环境变量",
+      "diffUrl": "URL",
+      "diffHeaders": "请求头"
     },
     "mcpContext": {
       "title": "MCP 上下文",

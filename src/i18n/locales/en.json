@@ -1177,7 +1177,9 @@
       "diffCandidate": "Candidate {{index}}",
       "diffCommand": "Command",
       "diffArgs": "Arguments",
-      "diffEnv": "Environment"
+      "diffEnv": "Environment",
+      "diffUrl": "URL",
+      "diffHeaders": "Headers"
     },
     "mcpContext": {
       "title": "MCP Context",

@@ -155,7 +155,15 @@ export function McpContextSection({
 
   // 加载项目 MCP 状态
   const loadStatus = useCallback(async () => {
+    // DEBUG: 打印传入的参数
+    console.log("[McpContextSection] loadStatus called with:", {
+      projectId,
+      projectPath,
+      projectName,
+    });
+
     if (!projectId) {
+      console.warn("[McpContextSection] No projectId provided, skipping load");
       setIsLoading(false);
       return;
     }
@@ -164,6 +172,13 @@ export function McpContextSection({
       const result = await invoke<ProjectMcpStatus>("check_project_mcp_status", {
         projectId,
         projectPath: projectPath || null,
+      });
+      // DEBUG: 打印返回结果
+      console.log("[McpContextSection] check_project_mcp_status result:", {
+        is_taken_over: result.is_taken_over,
+        associated_services_count: result.associated_services.length,
+        associated_services: result.associated_services.map(s => ({ id: s.id, name: s.name })),
+        detectable_configs_count: result.detectable_configs.length,
       });
       setStatus(result);
       // 初始化选中状态

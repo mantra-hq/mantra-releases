@@ -70,12 +70,24 @@ import { SourceIcon } from "@/components/import/SourceIcons";
 /** 配置作用域 (与后端 Rust 保持一致) */
 type ConfigScope = "user" | "project";
 
+/** MCP 传输类型 */
+type McpTransportType = "stdio" | "http";
+
 /** 检测到的 MCP 服务 */
 interface DetectedService {
   name: string;
+  /** 传输类型 */
+  transport_type?: McpTransportType;
+  /** 启动命令（stdio 模式） */
   command: string;
+  /** 命令参数（stdio 模式） */
   args: string[] | null;
+  /** 环境变量 */
   env: Record<string, string> | null;
+  /** HTTP 端点 URL（http 模式） */
+  url?: string | null;
+  /** HTTP 请求头（http 模式） */
+  headers?: Record<string, string> | null;
   source_file: string;
   /** 适配器 ID (Story 11.8: 替代旧的 source_type) */
   adapter_id: string;
@@ -228,12 +240,29 @@ export function McpConfigImportSheet({
 
   // 扫描配置文件
   const handleScan = useCallback(async () => {
+    // DEBUG: 打印扫描参数
+    console.log("[McpConfigImportSheet] handleScan called with:", {
+      projectPath,
+      projectId,
+    });
+
     setIsLoading(true);
     setError(null);
 
     try {
       const result = await invoke<ScanResult>("scan_mcp_configs_cmd", {
         projectPath: projectPath || null,
+      });
+
+      // DEBUG: 打印扫描结果
+      console.log("[McpConfigImportSheet] scan_mcp_configs_cmd result:", {
+        configs_count: result.configs.length,
+        configs: result.configs.map(c => ({
+          adapter_id: c.adapter_id,
+          path: c.path,
+          services_count: c.services.length,
+          services: c.services.map(s => s.name),
+        })),
       });
 
       setScanResult(result);
@@ -346,22 +375,43 @@ export function McpConfigImportSheet({
       setImportResult(result);
       setStep("result");
 
+      // DEBUG: 打印导入结果
+      console.log("[McpConfigImportSheet] Import result:", {
+        imported_count: result.imported_count,
+        skipped_count: result.skipped_count,
+        imported_service_ids: result.imported_service_ids,
+        errors: result.errors,
+        projectId,
+      });
+
       // 如果有成功导入且提供了项目 ID，自动建立项目关联
       if (result.imported_count > 0 && projectId && result.imported_service_ids?.length > 0) {
+        console.log("[McpConfigImportSheet] Attempting to link services to project:", {
+          projectId,
+          serviceIds: result.imported_service_ids,
+        });
         try {
           // 为每个导入的服务建立项目关联
           for (const serviceId of result.imported_service_ids) {
+            console.log(`[McpConfigImportSheet] Linking service ${serviceId} to project ${projectId}...`);
             await invoke("link_mcp_service_to_project", {
               projectId,
               serviceId,
               configOverride: null,
             });
+            console.log(`[McpConfigImportSheet] Successfully linked service ${serviceId}`);
           }
           console.log(`[McpConfigImportSheet] Linked ${result.imported_service_ids.length} services to project ${projectId}`);
         } catch (linkErr) {
           // 关联失败不影响导入结果，只记录日志
           console.error("[McpConfigImportSheet] Failed to link services to project:", linkErr);
         }
+      } else {
+        console.log("[McpConfigImportSheet] Skipping link operation:", {
+          imported_count: result.imported_count,
+          hasProjectId: !!projectId,
+          imported_service_ids_length: result.imported_service_ids?.length ?? 0,
+        });
       }
 
       // 如果有成功导入，通知父组件刷新
@@ -667,9 +717,18 @@ export function McpConfigImportSheet({
                                 )}
                               </div>
                               <code className="text-xs text-muted-foreground">
-                                {service.command}{" "}
-                                {service.args?.slice(0, 2).join(" ")}
-                                {service.args && service.args.length > 2 && " ..."}
+                                {/* 根据传输类型显示不同信息 */}
+                                {service.transport_type === "http" || (service.url && !service.command) ? (
+                                  // HTTP 类型：显示 URL
+                                  service.url || "-"
+                                ) : (
+                                  // Stdio 类型：显示命令和参数
+                                  <>
+                                    {service.command}{" "}
+                                    {service.args?.slice(0, 2).join(" ")}
+                                    {service.args && service.args.length > 2 && " ..."}
+                                  </>
+                                )}
                               </code>
                             </div>
                             {/* 动作标签 */}

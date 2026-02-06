@@ -3,6 +3,7 @@
  * Story 11.13: Task 2 - 冲突差异对比 (AC: #2)
  *
  * 并排展示已有配置和候选配置的关键字段对比，差异部分高亮显示。
+ * 支持 Stdio 和 HTTP 两种传输类型。
  */
 
 import { useTranslation } from "react-i18next";
@@ -11,10 +12,18 @@ import { cn } from "@/lib/utils";
 
 // ===== 类型定义 =====
 
+/** MCP 传输类型 */
+type McpTransportType = "stdio" | "http";
+
 interface McpServiceConfig {
-  command: string;
-  args: string[] | null;
-  env: Record<string, string> | null;
+  transport_type?: McpTransportType;
+  // Stdio 类型字段
+  command?: string;
+  args?: string[] | null;
+  env?: Record<string, string> | null;
+  // HTTP 类型字段
+  url?: string | null;
+  headers?: Record<string, string> | null;
 }
 
 interface DetectedService extends McpServiceConfig {
@@ -77,11 +86,22 @@ export function ConfigDiffView({
 }: ConfigDiffViewProps) {
   const { t } = useTranslation();
 
-  const fields: { key: keyof McpServiceConfig; label: string }[] = [
-    { key: "command", label: t("hub.import.diffCommand") },
-    { key: "args", label: t("hub.import.diffArgs") },
-    { key: "env", label: t("hub.import.diffEnv") },
-  ];
+  // 根据传输类型确定要显示的字段
+  // 优先从候选配置判断，因为候选配置更可能有 transport_type 字段
+  const isHttpType = candidates.some(c => c.transport_type === "http") ||
+    (candidates.length > 0 && candidates[0].url && !candidates[0].command);
+
+  const fields: { key: keyof McpServiceConfig; label: string }[] = isHttpType
+    ? [
+        { key: "url", label: t("hub.import.diffUrl", "URL") },
+        { key: "headers", label: t("hub.import.diffHeaders", "Headers") },
+        { key: "env", label: t("hub.import.diffEnv") },
+      ]
+    : [
+        { key: "command", label: t("hub.import.diffCommand") },
+        { key: "args", label: t("hub.import.diffArgs") },
+        { key: "env", label: t("hub.import.diffEnv") },
+      ];
 
   const columnCount = (existing ? 1 : 0) + candidates.length;
   // 计算数据列的最小宽度：单列时 300px，多列时 200px
