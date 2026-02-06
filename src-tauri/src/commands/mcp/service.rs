@@ -182,7 +182,9 @@ pub async fn toggle_mcp_service(
                 env_vars.get(var_name).cloned()
             };
 
-            // 服务启用：刷新以获取其 tools/resources/prompts
+            // 服务启用：先将服务配置添加回 aggregator，再刷新
+            // （因为 remove_service 会从 aggregator.services 中移除服务配置）
+            aggregator.update_service(service.clone()).await;
             let _ = aggregator.refresh_service(&id, env_resolver).await;
         } else {
             // 服务禁用：从 aggregator 中移除

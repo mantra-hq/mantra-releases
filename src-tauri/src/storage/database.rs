@@ -25,6 +25,10 @@ impl Database {
     pub fn new(path: &Path) -> Result<Self, StorageError> {
         let conn = Connection::open(path)?;
 
+        // Enable WAL mode for better concurrent read/write support
+        // This allows readers to see committed changes immediately
+        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
+
         // Enable foreign key support
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 
@@ -53,6 +57,10 @@ impl Database {
     /// Using it on an uninitialized database may cause query errors.
     pub fn open_for_query(path: &Path) -> Result<Self, StorageError> {
         let conn = Connection::open(path)?;
+
+        // Enable WAL mode for better concurrent read/write support
+        // WAL mode allows readers to see committed changes immediately
+        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
 
         // Enable foreign key support for query consistency
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
