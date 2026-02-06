@@ -111,9 +111,13 @@ export function LinkToProjectStep({
             <div
               key={service.id}
               className={cn(
-                "flex items-center gap-3 p-3 border rounded-lg bg-muted/30",
+                "flex items-center gap-3 p-3 border rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors",
                 service.alreadyLinked && "opacity-60"
               )}
+              onClick={() =>
+                !service.alreadyLinked &&
+                toggleService(service.id, !selectedIds.has(service.id))
+              }
               data-testid={`link-service-${service.name}`}
             >
               <Checkbox
@@ -122,7 +126,8 @@ export function LinkToProjectStep({
                 onCheckedChange={(checked) =>
                   toggleService(service.id, checked as boolean)
                 }
-                className="border-zinc-500 data-[state=unchecked]:bg-zinc-800/50"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
                 data-testid={`link-checkbox-${service.name}`}
               />
               <SourceIcon source={service.adapterId} className="h-5 w-5 shrink-0" />

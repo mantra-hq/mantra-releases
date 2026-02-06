@@ -493,13 +493,16 @@ export function ToolPolicyEditor({
     return (
       <div
         key={tool.name}
-        className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50"
+        className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 cursor-pointer"
+        onClick={() => handleToggleTool(tool.name, !isSelected)}
         data-testid={`tool-item-${tool.name}`}
       >
         <Checkbox
           id={`tool-${tool.name}`}
           checked={isSelected}
           onCheckedChange={(checked) => handleToggleTool(tool.name, checked === true)}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
           data-testid={`tool-checkbox-${tool.name}`}
         />
         <div className="flex-1 min-w-0">
@@ -774,13 +777,16 @@ export function ToolPolicyEditor({
                   return (
                     <div
                       key={tool.name}
-                      className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50"
+                      className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 cursor-pointer"
+                      onClick={() => handleToggleTool(tool.name, !isSelected)}
                       data-testid={`tool-item-${tool.name}`}
                     >
                       <Checkbox
                         id={`tool-${tool.name}`}
                         checked={isSelected}
                         onCheckedChange={(checked) => handleToggleTool(tool.name, checked === true)}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
                         data-testid={`tool-checkbox-${tool.name}`}
                       />
                       <div className="flex-1 min-w-0">

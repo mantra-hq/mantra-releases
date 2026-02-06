@@ -1,7 +1,7 @@
 /**
  * Hub 组件导出
  * Story 11.4: 环境变量管理
- * Story 11.6: Mantra Hub UI
+ * Story 11.6: MCP Hub UI
  * Story 11.9: 项目详情页 MCP 集成
  */
 

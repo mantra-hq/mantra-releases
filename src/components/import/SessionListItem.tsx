@@ -101,7 +101,10 @@ export function SessionListItem({
                     disabled={disabled}
                     onCheckedChange={disabled ? undefined : onToggle}
                     aria-label={`选择会话 ${session.name}`}
-                    className={disabled ? "cursor-not-allowed" : "cursor-pointer"}
+                    className={cn(
+                        "border-zinc-400 data-[state=unchecked]:bg-zinc-700/30",
+                        disabled ? "cursor-not-allowed" : "cursor-pointer"
+                    )}
                 />
             </div>
 

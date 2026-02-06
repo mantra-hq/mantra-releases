@@ -414,6 +414,8 @@ export function McpContextSection({
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => handleToggleService(service.id)}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
                           />
                           <span className="text-sm flex-1 truncate">{service.name}</span>
                           <SourceIcon source={adapterId} className="h-4 w-4" />

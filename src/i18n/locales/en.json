@@ -946,7 +946,7 @@
     }
   },
   "hub": {
-    "title": "Mantra Hub",
+    "title": "MCP Hub",
     "description": "MCP Gateway Management Center",
     "gateway": {
       "title": "Gateway Status",

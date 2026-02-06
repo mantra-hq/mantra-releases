@@ -568,13 +568,13 @@ function ToolPreviewCard({
       } ${!tool.installed ? "opacity-60" : ""}`}
     >
       {/* 工具头部 */}
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
         {/* 勾选框 */}
         <Checkbox
           checked={selected}
           onCheckedChange={onToggleSelect}
           disabled={!tool.installed || !hasServices}
-          className="shrink-0"
+          className="shrink-0 border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
         />
 
         {/* 工具图标和名称 */}

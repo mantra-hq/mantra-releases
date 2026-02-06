@@ -1,5 +1,5 @@
 /**
- * Hub Page - Mantra Hub 页面
+ * Hub Page - MCP Hub 页面
  * Story 11.6: Task 1 - Hub 路由和页面布局 (AC: #1)
  * Story 11.15: Task 7.4 - 集成接管状态卡片
  *

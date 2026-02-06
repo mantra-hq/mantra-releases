@@ -760,9 +760,12 @@ export function McpConfigImportSheet({
                           <div
                             key={serviceIndex}
                             className={cn(
-                              "flex items-center gap-3 p-2 rounded-md bg-muted/50",
+                              "flex items-center gap-3 p-2 rounded-md bg-muted/50 cursor-pointer hover:bg-muted/80 transition-colors",
                               !isSelected && "opacity-60"
                             )}
+                            onClick={() =>
+                              toggleService(service.name, !isSelected)
+                            }
                           >
                             <Checkbox
                               id={`service-${configIndex}-${serviceIndex}`}
@@ -770,8 +773,11 @@ export function McpConfigImportSheet({
                               onCheckedChange={(checked) =>
                                 toggleService(service.name, checked as boolean)
                               }
+                              onClick={(e: React.MouseEvent) =>
+                                e.stopPropagation()
+                              }
                               data-testid={`import-service-checkbox-${service.name}`}
-                              className="border-zinc-500 data-[state=unchecked]:bg-zinc-800/50"
+                              className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">

@@ -211,12 +211,15 @@ export function ProjectServiceAssociation({
                       return (
                         <div
                           key={project.id}
-                          className="flex items-center justify-between p-3 rounded-md border bg-card hover:bg-accent/50 transition-colors"
+                          className="flex items-center justify-between p-3 rounded-md border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => handleToggleProject(project.id)}
                         >
                           <div className="flex items-center gap-3">
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => handleToggleProject(project.id)}
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                              className="border-zinc-400 data-[state=unchecked]:bg-zinc-700/30"
                               data-testid={`project-checkbox-${project.id}`}
                             />
                             <div className="flex items-center gap-2">

@@ -951,7 +951,7 @@
     }
   },
   "hub": {
-    "title": "Mantra Hub",
+    "title": "MCP Hub",
     "description": "MCP Gateway 管理中心",
     "gateway": {
       "title": "Gateway 状态",

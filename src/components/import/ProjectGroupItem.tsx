@@ -147,7 +147,7 @@ export function ProjectGroupItem({
                             onCheckedChange={onToggleProject}
                             aria-label={t("import.selectProject", { name: group.projectName })}
                             className={cn(
-                                "cursor-pointer",
+                                "cursor-pointer border-zinc-400 data-[state=unchecked]:bg-zinc-700/30",
                                 isImported && "cursor-not-allowed opacity-50"
                             )}
                         />
