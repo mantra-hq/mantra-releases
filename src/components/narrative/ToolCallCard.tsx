@@ -24,6 +24,7 @@ import {
     ExternalLink,
     ListTodo,
     Edit3,
+    Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCollapsible } from "@/hooks/useCollapsible";
@@ -325,6 +326,10 @@ function getToolSummaryWithStandardTool(
             }
             case "content_search": {
                 return { icon: Search, summary: `"${standardTool.pattern}"` };
+            }
+            case "skill_invoke": {
+                const args = standardTool.args ? ` ${standardTool.args}` : "";
+                return { icon: Zap, summary: `${standardTool.skill}${args}` };
             }
             case "other":
                 // 回退到现有逻辑

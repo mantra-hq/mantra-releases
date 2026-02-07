@@ -245,6 +245,62 @@ fn test_normalize_tool_task() {
     }
 }
 
+// ===== SkillInvoke normalize_tool Tests =====
+
+#[test]
+fn test_normalize_tool_claude_skill() {
+    // Claude Code: tool name "Skill", input { skill, args }
+    let input = serde_json::json!({"skill": "commit", "args": "-m 'fix bug'"});
+    let tool = normalize_tool("Skill", &input);
+    match tool {
+        StandardTool::SkillInvoke { skill, args } => {
+            assert_eq!(skill, "commit");
+            assert_eq!(args, Some("-m 'fix bug'".to_string()));
+        }
+        _ => panic!("Expected SkillInvoke, got {:?}", tool),
+    }
+}
+
+#[test]
+fn test_normalize_tool_claude_skill_no_args() {
+    let input = serde_json::json!({"skill": "review-pr"});
+    let tool = normalize_tool("Skill", &input);
+    match tool {
+        StandardTool::SkillInvoke { skill, args } => {
+            assert_eq!(skill, "review-pr");
+            assert!(args.is_none());
+        }
+        _ => panic!("Expected SkillInvoke, got {:?}", tool),
+    }
+}
+
+#[test]
+fn test_normalize_tool_gemini_activate_skill() {
+    // Gemini CLI: tool name "activate_skill", input { name }
+    let input = serde_json::json!({"name": "commit"});
+    let tool = normalize_tool("activate_skill", &input);
+    match tool {
+        StandardTool::SkillInvoke { skill, args } => {
+            assert_eq!(skill, "commit");
+            assert!(args.is_none());
+        }
+        _ => panic!("Expected SkillInvoke, got {:?}", tool),
+    }
+}
+
+#[test]
+fn test_normalize_tool_gemini_activate_skill_with_skill_field() {
+    // Gemini: if both "skill" and "name" present, "skill" takes precedence
+    let input = serde_json::json!({"skill": "primary", "name": "fallback"});
+    let tool = normalize_tool("activate_skill", &input);
+    match tool {
+        StandardTool::SkillInvoke { skill, .. } => {
+            assert_eq!(skill, "primary");
+        }
+        _ => panic!("Expected SkillInvoke, got {:?}", tool),
+    }
+}
+
 // ===== Story 8.17: FileDelete Tests =====
 
 #[test]

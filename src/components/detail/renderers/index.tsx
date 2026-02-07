@@ -13,8 +13,9 @@ import { TerminalRenderer } from "./TerminalRenderer";
 import { FileRenderer } from "./FileRenderer";
 import { SearchResultRenderer } from "./SearchResultRenderer";
 import { GenericRenderer } from "./GenericRenderer";
-import type { StandardTool } from "@/types/message";
-import { isTerminalTool, isFileTool, isSearchTool, getToolPath } from "@/lib/tool-utils";
+import { SkillRenderer } from "./SkillRenderer";
+import type { StandardTool, StandardToolSkillInvoke } from "@/types/message";
+import { isTerminalTool, isFileTool, isSearchTool, isSkillInvokeTool, getToolPath } from "@/lib/tool-utils";
 
 /** 渲染器 Props */
 export interface RendererProps {
@@ -53,6 +54,17 @@ export function getToolRenderer(standardTool?: StandardTool): RendererComponent 
     if (isSearchTool(standardTool)) {
         return ({ content, onResultClick }) => (
             <SearchResultRenderer content={content} onResultClick={onResultClick} />
+        );
+    }
+
+    // 技能调用工具
+    if (isSkillInvokeTool(standardTool)) {
+        return ({ content, standardTool: st, isError }) => (
+            <SkillRenderer
+                content={content}
+                standardTool={st as StandardToolSkillInvoke}
+                isError={isError}
+            />
         );
     }
 

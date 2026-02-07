@@ -362,7 +362,10 @@
     "approved": "Approved",
     "rejected": "Rejected",
     "exitCode": "Exit Code",
-    "noContentToShow": "No content to display"
+    "noContentToShow": "No content to display",
+    "skill": "Skill",
+    "skillInvoke": "Invoke skill {{skillName}}",
+    "skillArgs": "Arguments"
   },
   "filter": {
     "clearFilter": "Clear Filter",
@@ -841,6 +844,8 @@
       "todo_manage": "Todo Management",
       "sub_task": "Sub Task",
       "user_prompt": "User Prompt",
+      "skill_invoke": "Skill Invoke",
+      "plan_mode": "Plan Mode",
       "unknown": "Other"
     },
     "units": {

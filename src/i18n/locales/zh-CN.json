@@ -367,7 +367,10 @@
     "approved": "已批准",
     "rejected": "已拒绝",
     "exitCode": "退出码",
-    "noContentToShow": "无内容可显示"
+    "noContentToShow": "无内容可显示",
+    "skill": "技能",
+    "skillInvoke": "调用技能 {{skillName}}",
+    "skillArgs": "参数"
   },
   "filter": {
     "clearFilter": "清除过滤",
@@ -846,6 +849,8 @@
       "todo_manage": "任务管理",
       "sub_task": "子任务",
       "user_prompt": "用户提示",
+      "skill_invoke": "技能调用",
+      "plan_mode": "计划模式",
       "unknown": "其他"
     },
     "units": {

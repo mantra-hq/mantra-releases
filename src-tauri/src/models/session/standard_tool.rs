@@ -376,8 +376,12 @@ pub fn normalize_tool(name: &str, input: &serde_json::Value) -> StandardTool {
         "exitplanmode" | "exit_plan_mode" => StandardTool::PlanMode { entering: false },
 
         // SkillInvoke: Invoke a skill
-        "skill" => StandardTool::SkillInvoke {
-            skill: get_str("skill").unwrap_or_default(),
+        // Claude Code: tool name "Skill", input { skill, args }
+        // Gemini CLI: tool name "activate_skill", input { name }
+        "skill" | "activate_skill" => StandardTool::SkillInvoke {
+            skill: get_str("skill")
+                .or_else(|| get_str("name"))
+                .unwrap_or_default(),
             args: get_str("args"),
         },
 

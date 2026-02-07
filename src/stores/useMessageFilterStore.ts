@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 import type { ContentBlock, NarrativeMessage } from "@/types/message";
-import { isFileTool, isTerminalTool, isSearchTool } from "@/lib/tool-utils";
+import { isFileTool, isTerminalTool, isSearchTool, isSkillInvokeTool } from "@/lib/tool-utils";
 
 /**
  * 消息类型配置
@@ -71,6 +71,12 @@ export const MESSAGE_TYPES: MessageTypeConfig[] = [
         icon: "🔍",
         // Story 8.12: 使用 standardTool 判断搜索类工具
         match: (b) => b.type === "tool_use" && isSearchTool(b.standardTool),
+    },
+    {
+        id: "skill",
+        label: "message.skill",
+        icon: "⚡",
+        match: (b) => b.type === "tool_use" && isSkillInvokeTool(b.standardTool),
     },
 ];
 
