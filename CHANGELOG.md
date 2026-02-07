@@ -1,8 +1,55 @@
 # Mantra - Changelog
 
+**English** | [中文](./CHANGELOG.zh-CN.md)
+
 **Mantra** is a local-first "time machine" for AI-assisted coding sessions. It aligns AI conversation logs (from tools like Claude Code, Cursor, Gemini CLI, etc.) with Git history on a unified timeline, allowing developers to replay context and understand the "why" behind code changes.
 
 ---
+
+## [v0.7.0] - 2026-02-06
+
+### Added
+
+- **MCP Gateway (Epic 11)**:
+    - **SSE Server Core**: Implemented an embedded Axum SSE Server with JSON-RPC protocol support (Story 11.1).
+    - **MCP Service Data Model**: Built CRUD operations and state management for MCP services on SQLite (Story 11.2).
+    - **Config Import & Smart Takeover**: One-click import of MCP configurations from Claude Code, Cursor, Gemini CLI, and Codex, with conflict diff comparison and shadow mode preview (Story 11.3, 11.13).
+    - **Environment Variable Management**: Centralized management of sensitive information (API keys, etc.) with encrypted storage and cross-service reference detection (Story 11.4).
+    - **Context Routing**: Implemented Longest Prefix Match (LPM) routing algorithm to automatically select MCP services based on project context (Story 11.5).
+    - **Mantra Hub UI**: New Hub page integrating Gateway status card, MCP service list, service forms, environment variable manager, and project association features (Story 11.6).
+    - **System Tray Integration**: System tray with quick actions including project switching and Gateway status management (Story 11.7).
+    - **Architecture Refactor (ADR-001)**: Modular adapter pattern supporting Claude, Gemini, Cursor, and Codex configuration adapters (Story 11.8).
+    - **Project Detail MCP Integration**: Embedded MCP management entry in project detail page with project-level service association and status viewing (Story 11.9).
+    - **Tool Granular Management**: Implemented ToolPolicy model with global and service-level tool permission control and Gateway interception (Story 11.10).
+    - **Built-in MCP Inspector**: Integrated debugger with ToolExplorer, ToolTester, and RpcLogViewer components (Story 11.11).
+    - **Remote MCP OAuth Support**: OAuth authentication flow for remote MCP services like Google Drive and Slack (Story 11.12).
+    - **Streamable HTTP Compliance**: Compliant with MCP Streamable HTTP spec (2025-03-26), unified `/mcp` endpoint with Origin validation and Session Header (Story 11.14).
+    - **Smart Takeover Merge Engine**: Three-tier classification (add/update/conflict) with source tracking and conflict resolution (Story 11.19).
+    - **Full Tool Auto-Takeover**: Full tool grouped preview, tool selection, and transactional takeover (Story 11.20).
+    - **Claude Local Scope Support**: Full support for Claude Code local scope configuration (Story 11.21).
+    - **Atomic Backup & Restore**: Backup integrity verification and atomic operations, retaining the last 5 versions with auto-cleanup (Story 11.22, 11.23).
+    - **MCP Roots Mechanism**: Implemented MCP Roots protocol with LPM integration for project-level configuration awareness (Story 11.26, 11.27).
+    - **Strict Mode Service Filtering**: Project context-based service filtering to expose only relevant services (Story 11.28).
+    - **Post-Import Auto-Linking**: Automatic project association guidance after config import, with name matching and parallel linking (Story 11.29).
+
+- **UX Interaction Consistency (Epic 12)**:
+    - **Dialog → Sheet Migration**: Migrated non-confirmation Dialogs to Sheet (side drawer) pattern, including ProjectInfo, McpConfigImport, EditMessage, EnvVariable, OAuthConfig, and more (Story 12.1 ~ 12.4).
+    - **ActionSheet Wrapper**: Introduced unified ActionSheet wrapper component to standardize overlay interaction patterns (Story 12.4).
+    - **Tool Policy UX Optimization**: Improved tool permission management entry points for better clarity and consistency (Story 12.5).
+
+- **Database**: Introduced lightweight database connection method for optimized query performance (Story 11.2).
+
+### Changed
+
+- **MCP Architecture**: Refactored MCP command structure and Gateway startup logic, unified configuration writing flow.
+- **UI Components**: Standardized Dialog sizing across the application for improved responsiveness and usability.
+- **i18n**: Updated English and Chinese translations covering backup management, OAuth, tool policy, and other new features.
+
+### Fixed
+
+- **MCP**: Fixed service configuration handling during toggle, tool selection initialization logic, and project-level config file cleanup (Story 11.25).
+- **Hub**: Fixed ToolPolicyEditor layout consistency issues and TakeoverStatusCard test implementations.
+- **Gateway**: Fixed SSE stream handling for roots/list requests and Gateway restart behavior.
 
 ## [v0.6.0] - 2026-01-25
 
