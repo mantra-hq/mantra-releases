@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::storage::Database;
+
 /// MCP 服务参数类型别名
 pub type McpServiceArgs = Vec<String>;
 
@@ -567,6 +569,35 @@ impl ToolType {
         }
     }
 
+    /// 获取工具的默认配置目录
+    ///
+    /// Story 13.1: 工具配置路径可配置化
+    ///
+    /// 返回各工具默认的配置目录路径（如 ~/.claude、~/.cursor 等）
+    pub fn get_default_config_dir(&self) -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+        match self {
+            ToolType::ClaudeCode => home.join(".claude"),
+            ToolType::Cursor => home.join(".cursor"),
+            ToolType::Codex => home.join(".codex"),
+            ToolType::GeminiCli => home.join(".gemini"),
+        }
+    }
+
+    /// 获取工具配置目录内的配置文件名
+    ///
+    /// Story 13.1: 工具配置路径可配置化
+    ///
+    /// 返回配置文件在工具目录内的文件名
+    pub fn get_config_filename(&self) -> &'static str {
+        match self {
+            ToolType::ClaudeCode => ".claude.json",
+            ToolType::Cursor => "mcp.json",
+            ToolType::Codex => "config.toml",
+            ToolType::GeminiCli => "settings.json",
+        }
+    }
+
     /// 获取工具显示名称
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -587,6 +618,26 @@ impl ToolType {
             ToolType::Codex,
             ToolType::GeminiCli,
         ]
+    }
+
+    /// 解析工具的配置文件路径（统一入口）
+    ///
+    /// Story 13.1: 工具配置路径可配置化 - AC 2
+    ///
+    /// 查询数据库中是否有用户覆盖的目录，有则用覆盖目录 + 配置文件名，
+    /// 否则使用默认的硬编码路径。
+    ///
+    /// # Arguments
+    /// * `db` - 数据库连接
+    ///
+    /// # Returns
+    /// 配置文件完整路径
+    pub fn resolve_config_path(&self, db: &Database) -> PathBuf {
+        if let Ok(Some(override_dir)) = db.get_tool_config_override(self.as_str()) {
+            PathBuf::from(override_dir).join(self.get_config_filename())
+        } else {
+            self.get_user_config_path()
+        }
     }
 }
 

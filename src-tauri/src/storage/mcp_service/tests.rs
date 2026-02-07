@@ -1345,3 +1345,113 @@ fn test_get_active_local_scope_takeovers() {
         assert_eq!(backup.tool_type, ToolType::ClaudeCode);
     }
 }
+
+// ===== Story 13.1: 工具配置路径覆盖测试 =====
+
+#[test]
+fn test_get_tool_config_override_returns_none_when_empty() {
+    let db = Database::new_in_memory().unwrap();
+    let result = db.get_tool_config_override("claude_code").unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_upsert_and_get_tool_config_override() {
+    let db = Database::new_in_memory().unwrap();
+
+    db.upsert_tool_config_path("claude_code", "/custom/path/.claude.json")
+        .unwrap();
+
+    let result = db.get_tool_config_override("claude_code").unwrap();
+    assert_eq!(result, Some("/custom/path/.claude.json".to_string()));
+}
+
+#[test]
+fn test_upsert_tool_config_path_overwrites() {
+    let db = Database::new_in_memory().unwrap();
+
+    db.upsert_tool_config_path("cursor", "/first/path").unwrap();
+    db.upsert_tool_config_path("cursor", "/second/path").unwrap();
+
+    let result = db.get_tool_config_override("cursor").unwrap();
+    assert_eq!(result, Some("/second/path".to_string()));
+}
+
+#[test]
+fn test_delete_tool_config_path() {
+    let db = Database::new_in_memory().unwrap();
+
+    db.upsert_tool_config_path("codex", "/custom/codex").unwrap();
+    assert!(db.get_tool_config_override("codex").unwrap().is_some());
+
+    db.delete_tool_config_path("codex").unwrap();
+    assert!(db.get_tool_config_override("codex").unwrap().is_none());
+}
+
+#[test]
+fn test_delete_nonexistent_tool_config_path() {
+    let db = Database::new_in_memory().unwrap();
+    // Should not error when deleting something that doesn't exist
+    db.delete_tool_config_path("gemini_cli").unwrap();
+}
+
+#[test]
+fn test_get_all_tool_config_overrides() {
+    let db = Database::new_in_memory().unwrap();
+
+    db.upsert_tool_config_path("claude_code", "/path/claude").unwrap();
+    db.upsert_tool_config_path("cursor", "/path/cursor").unwrap();
+
+    let overrides = db.get_all_tool_config_overrides().unwrap();
+    assert_eq!(overrides.len(), 2);
+
+    // Should be sorted by tool_type
+    assert_eq!(overrides[0].0, "claude_code");
+    assert_eq!(overrides[0].1, "/path/claude");
+    assert_eq!(overrides[1].0, "cursor");
+    assert_eq!(overrides[1].1, "/path/cursor");
+}
+
+#[test]
+fn test_get_all_tool_config_overrides_empty() {
+    let db = Database::new_in_memory().unwrap();
+    let overrides = db.get_all_tool_config_overrides().unwrap();
+    assert!(overrides.is_empty());
+}
+
+#[test]
+fn test_resolve_config_path_uses_default_when_no_override() {
+    let db = Database::new_in_memory().unwrap();
+
+    let path = ToolType::ClaudeCode.resolve_config_path(&db);
+    let default_path = ToolType::ClaudeCode.get_user_config_path();
+    assert_eq!(path, default_path);
+}
+
+#[test]
+fn test_resolve_config_path_uses_override_when_set() {
+    let db = Database::new_in_memory().unwrap();
+
+    // 存储的是覆盖目录，resolve 会拼接相对路径
+    db.upsert_tool_config_path("claude_code", "/custom/home")
+        .unwrap();
+
+    let path = ToolType::ClaudeCode.resolve_config_path(&db);
+    assert_eq!(
+        path,
+        std::path::PathBuf::from("/custom/home/.claude.json")
+    );
+}
+
+#[test]
+fn test_resolve_config_path_returns_default_after_reset() {
+    let db = Database::new_in_memory().unwrap();
+
+    db.upsert_tool_config_path("cursor", "/custom/home")
+        .unwrap();
+    db.delete_tool_config_path("cursor").unwrap();
+
+    let path = ToolType::Cursor.resolve_config_path(&db);
+    let default_path = ToolType::Cursor.get_user_config_path();
+    assert_eq!(path, default_path);
+}

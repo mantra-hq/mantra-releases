@@ -8,6 +8,7 @@
 //! 提供 MCP 服务、项目关联、环境变量管理和配置导入的 Tauri IPC 命令
 
 mod config;
+mod config_path;
 mod env;
 mod runtime;
 mod service;
@@ -28,6 +29,7 @@ use crate::storage::Database;
 
 // Re-export all submodule contents
 pub use config::*;
+pub use config_path::*;
 pub use env::*;
 pub use runtime::*;
 pub use service::*;

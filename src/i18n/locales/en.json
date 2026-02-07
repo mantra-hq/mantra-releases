@@ -433,6 +433,15 @@
     "builtinRules": "Built-in Rules",
     "builtinRulesCount": "{{count}} rules",
     "privacyRecordsDesc": "View historical privacy interception records",
+    "toolConfigPaths": {
+      "title": "Tool Config Directories",
+      "description": "Customize the configuration directories for AI coding tools. The system will look for config files in the selected directory.",
+      "browse": "Browse",
+      "selectDir": "Select Configuration Directory",
+      "reset": "Reset",
+      "saveSuccess": "Config directory updated",
+      "resetSuccess": "Config directory reset to default"
+    },
     "localServer": {
       "title": "Local API Server",
       "description": "Local service for Claude Code Hook and other tools",

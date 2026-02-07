@@ -130,7 +130,7 @@ impl<'a> ImportExecutor<'a> {
                     if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
                         // Story 11.15 PD-001: 统一写入用户级配置
                         // 无论扫描到的是 Project 还是 User scope，都写入用户级配置文件
-                        let user_config_path = tool_type.get_user_config_path();
+                        let user_config_path = tool_type.resolve_config_path(self.db);
 
                         // 避免重复接管同一个用户级配置
                         if processed_user_configs.contains(&user_config_path) {

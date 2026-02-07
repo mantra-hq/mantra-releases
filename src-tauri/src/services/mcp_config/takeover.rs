@@ -468,7 +468,7 @@ pub fn execute_smart_takeover(
 
             if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
                 // Story 11.15 PD-001: 统一写入用户级配置
-                let user_config_path = tool_type.get_user_config_path();
+                let user_config_path = tool_type.resolve_config_path(db);
 
                 // 避免重复接管同一个用户级配置
                 if processed_user_configs.contains(&user_config_path) {
@@ -799,7 +799,7 @@ pub fn execute_full_tool_takeover(
 
     // Phase 3: 处理 Claude Code Local Scope (Story 11.21 - Task 5)
     // Local Scope 是 Claude Code 特有的功能，对应 ~/.claude.json 中的 projects.{path}.mcpServers
-    let claude_user_config = ToolType::ClaudeCode.get_user_config_path();
+    let claude_user_config = ToolType::ClaudeCode.resolve_config_path(db);
     if claude_user_config.exists() {
         use crate::services::mcp_adapters::ClaudeAdapter;
 

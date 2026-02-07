@@ -1274,6 +1274,73 @@ impl Database {
             groups: group_stats,
         })
     }
+
+    // ===== Story 13.1: 工具配置路径覆盖 =====
+
+    /// 获取单个工具的配置路径覆盖
+    ///
+    /// # Arguments
+    /// * `tool_type` - 工具类型字符串 (claude_code/cursor/codex/gemini_cli)
+    ///
+    /// # Returns
+    /// 覆盖路径，如果未设置则返回 None
+    pub fn get_tool_config_override(&self, tool_type: &str) -> Result<Option<String>, StorageError> {
+        let result = self.connection().query_row(
+            "SELECT config_path FROM tool_config_paths WHERE tool_type = ?1",
+            [tool_type],
+            |row| row.get(0),
+        );
+
+        match result {
+            Ok(path) => Ok(Some(path)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// 写入或更新工具配置路径覆盖
+    ///
+    /// # Arguments
+    /// * `tool_type` - 工具类型字符串
+    /// * `path` - 自定义配置文件路径
+    pub fn upsert_tool_config_path(&self, tool_type: &str, path: &str) -> Result<(), StorageError> {
+        self.connection().execute(
+            "INSERT INTO tool_config_paths (tool_type, config_path, updated_at)
+             VALUES (?1, ?2, datetime('now'))
+             ON CONFLICT(tool_type) DO UPDATE SET config_path = ?2, updated_at = datetime('now')",
+            params![tool_type, path],
+        )?;
+        Ok(())
+    }
+
+    /// 删除工具配置路径覆盖（回退到默认值）
+    ///
+    /// # Arguments
+    /// * `tool_type` - 工具类型字符串
+    pub fn delete_tool_config_path(&self, tool_type: &str) -> Result<(), StorageError> {
+        self.connection().execute(
+            "DELETE FROM tool_config_paths WHERE tool_type = ?1",
+            [tool_type],
+        )?;
+        Ok(())
+    }
+
+    /// 获取所有工具的配置路径覆盖
+    ///
+    /// # Returns
+    /// 覆盖列表: Vec<(tool_type, config_path)>
+    pub fn get_all_tool_config_overrides(&self) -> Result<Vec<(String, String)>, StorageError> {
+        let mut stmt = self.connection().prepare(
+            "SELECT tool_type, config_path FROM tool_config_paths ORDER BY tool_type",
+        )?;
+
+        let overrides = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(overrides)
+    }
 }
 
 #[cfg(test)]

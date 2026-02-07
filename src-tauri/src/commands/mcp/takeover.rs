@@ -178,8 +178,11 @@ pub fn preview_full_tool_takeover(
 /// # Returns
 /// 所有工具的检测结果，包括各工具的安装状态和配置路径
 #[tauri::command]
-pub fn detect_installed_tools() -> crate::models::mcp::AllToolsDetectionResult {
-    crate::services::mcp_config::detect_installed_tools()
+pub fn detect_installed_tools(
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::AllToolsDetectionResult, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    Ok(crate::services::mcp_config::detect_installed_tools(&db))
 }
 
 /// 扫描所有工具的配置（按工具分组）
@@ -192,9 +195,13 @@ pub fn detect_installed_tools() -> crate::models::mcp::AllToolsDetectionResult {
 /// # Returns
 /// 所有工具的扫描结果，按工具分组
 #[tauri::command]
-pub fn scan_all_tool_configs(project_path: String) -> crate::models::mcp::AllToolsScanResult {
+pub fn scan_all_tool_configs(
+    project_path: String,
+    state: State<'_, McpState>,
+) -> Result<crate::models::mcp::AllToolsScanResult, AppError> {
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
     let path = std::path::Path::new(&project_path);
-    crate::services::mcp_config::scan_all_tool_configs(path)
+    Ok(crate::services::mcp_config::scan_all_tool_configs(path, &db))
 }
 
 /// 执行全工具接管（带事务支持）
@@ -307,11 +314,14 @@ pub async fn execute_full_tool_takeover_cmd(
 /// # Returns
 /// Local Scope 项目列表，每项包含项目路径、服务数量、服务名称
 #[tauri::command]
-pub fn scan_local_scopes() -> Result<Vec<crate::models::mcp::LocalScopeScanResult>, AppError> {
+pub fn scan_local_scopes(
+    state: State<'_, McpState>,
+) -> Result<Vec<crate::models::mcp::LocalScopeScanResult>, AppError> {
     use crate::models::mcp::{LocalScopeScanResult, ToolType};
     use crate::services::mcp_adapters::ClaudeAdapter;
 
-    let user_config = ToolType::ClaudeCode.get_user_config_path();
+    let db = state.db.lock().map_err(|_| AppError::LockError)?;
+    let user_config = ToolType::ClaudeCode.resolve_config_path(&db);
 
     if !user_config.exists() {
         return Ok(Vec::new());

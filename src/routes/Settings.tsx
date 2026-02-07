@@ -6,6 +6,7 @@
  * Story 3.10: 合并内置规则展示（默认折叠）
  * Story 3.11: Task 4.5 - 本地 API 端口配置
  * Story 11.4: Task 6 - 环境变量管理入口
+ * Story 13.1: Task 7 - 工具配置路径管理入口
  */
 
 import { useState, useCallback } from 'react';
@@ -19,6 +20,7 @@ import { RuleTestPanel } from '@/components/settings/RuleTestPanel';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { SystemRuleList } from '@/components/settings/SystemRuleList';
 import { LocalServerConfig } from '@/components/settings/LocalServerConfig';
+import { ToolConfigPathManager } from '@/components/settings/ToolConfigPathManager';
 import { EnvVariableManager } from '@/components/hub/EnvVariableManager';
 import { useSanitizationRulesStore } from '@/stores/useSanitizationRulesStore';
 import { exportRules, importRules } from '@/lib/rule-io';
@@ -118,6 +120,11 @@ export function Settings() {
                     {/* Story 11.4: 环境变量管理 (Task 6) */}
                     <section className="rounded-lg border bg-card p-4">
                         <EnvVariableManager />
+                    </section>
+
+                    {/* Story 13.1: 工具配置路径管理 (Task 7) */}
+                    <section className="rounded-lg border bg-card p-4">
+                        <ToolConfigPathManager />
                     </section>
 
                     {/* Story 2.28: 帮助 - 复制运行日志 (AC #1, AC #3) */}

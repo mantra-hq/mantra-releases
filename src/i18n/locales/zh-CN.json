@@ -438,6 +438,15 @@
     "builtinRules": "系统预设规则",
     "builtinRulesCount": "{{count}} 条规则",
     "privacyRecordsDesc": "查看历史隐私拦截记录",
+    "toolConfigPaths": {
+      "title": "工具配置目录",
+      "description": "自定义 AI 编程工具的配置目录位置。系统将在所选目录中查找配置文件。",
+      "browse": "浏览",
+      "selectDir": "选择配置目录",
+      "reset": "重置",
+      "saveSuccess": "配置目录已更新",
+      "resetSuccess": "配置目录已重置为默认值"
+    },
     "localServer": {
       "title": "本地 API 服务",
       "description": "供 Claude Code Hook 等工具连接的本地服务",

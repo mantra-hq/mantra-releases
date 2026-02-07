@@ -137,13 +137,13 @@ pub fn scan_mcp_configs(project_path: Option<&Path>) -> ScanResult {
 ///
 /// 扫描所有支持的 AI 编程工具，检测其用户级配置文件是否存在
 /// 配置文件存在即视为工具已安装
-pub fn detect_installed_tools() -> crate::models::mcp::AllToolsDetectionResult {
+pub fn detect_installed_tools(db: &Database) -> crate::models::mcp::AllToolsDetectionResult {
     use crate::models::mcp::{AllToolsDetectionResult, ToolDetectionResult, ToolType};
 
     let tools: Vec<ToolDetectionResult> = ToolType::all()
         .into_iter()
         .map(|tool_type| {
-            let user_config_path = tool_type.get_user_config_path();
+            let user_config_path = tool_type.resolve_config_path(db);
             let user_config_exists = user_config_path.exists();
 
             ToolDetectionResult {
@@ -172,7 +172,7 @@ pub fn detect_installed_tools() -> crate::models::mcp::AllToolsDetectionResult {
 /// Story 11.20: 全工具自动接管生成 - AC 2
 ///
 /// 扫描所有支持的 AI 编程工具的 MCP 配置，按工具分组返回结果。
-pub fn scan_all_tool_configs(project_path: &Path) -> crate::models::mcp::AllToolsScanResult {
+pub fn scan_all_tool_configs(project_path: &Path, db: &Database) -> crate::models::mcp::AllToolsScanResult {
     use crate::models::mcp::{AllToolsScanResult, ScopeScanResult, ToolScanResult, ToolType};
 
     let registry = ToolAdapterRegistry::new();
@@ -245,7 +245,7 @@ pub fn scan_all_tool_configs(project_path: &Path) -> crate::models::mcp::AllTool
         // Story 11.21: 扫描 Claude Code Local Scope (projects.*)
         // 只有 Claude Code 支持 Local Scope
         if tool_type == ToolType::ClaudeCode {
-            let user_config = tool_type.get_user_config_path();
+            let user_config = tool_type.resolve_config_path(db);
             if user_config.exists() {
                 if let Ok(content) = fs::read_to_string(&user_config) {
                     use crate::services::mcp_adapters::ClaudeAdapter;
@@ -297,7 +297,7 @@ pub fn generate_full_tool_takeover_preview(
         FullToolTakeoverPreview, ScopeTakeoverPreview, ToolTakeoverPreview,
     };
 
-    let scan_result = scan_all_tool_configs(project_path);
+    let scan_result = scan_all_tool_configs(project_path, db);
     let mut tool_previews: Vec<ToolTakeoverPreview> = Vec::new();
     let mut all_env_vars: Vec<String> = Vec::new();
 

@@ -65,6 +65,9 @@ pub(super) fn run_all(conn: &Connection) -> Result<(), StorageError> {
     // Migration: Add backup_hash to takeover backups (Story 11.22)
     run_mcp_backup_hash_migration(conn)?;
 
+    // Migration: Add tool_config_paths table (Story 13.1)
+    run_tool_config_paths_migration(conn)?;
+
     Ok(())
 }
 
@@ -788,5 +791,17 @@ fn run_mcp_backup_hash_migration(conn: &Connection) -> Result<(), StorageError> 
         )?;
     }
 
+    Ok(())
+}
+
+/// Migration for tool_config_paths table (Story 13.1)
+fn run_tool_config_paths_migration(conn: &Connection) -> Result<(), StorageError> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tool_config_paths (
+            tool_type TEXT PRIMARY KEY NOT NULL,
+            config_path TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
+    )?;
     Ok(())
 }

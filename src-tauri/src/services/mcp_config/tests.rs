@@ -1737,7 +1737,8 @@ use crate::storage::Database;
     #[test]
     fn test_detect_installed_tools_returns_all_tools() {
         // 测试 detect_installed_tools 返回所有 4 个工具
-        let result = super::detect_installed_tools();
+        let db = Database::new_in_memory().unwrap();
+        let result = super::detect_installed_tools(&db);
 
         assert_eq!(result.total_count, 4);
         assert_eq!(result.tools.len(), 4);
@@ -1752,7 +1753,8 @@ use crate::storage::Database;
 
     #[test]
     fn test_detect_installed_tools_has_correct_display_names() {
-        let result = super::detect_installed_tools();
+        let db = Database::new_in_memory().unwrap();
+        let result = super::detect_installed_tools(&db);
 
         for tool in &result.tools {
             match tool.adapter_id.as_str() {
@@ -1767,7 +1769,8 @@ use crate::storage::Database;
 
     #[test]
     fn test_detect_installed_tools_user_config_paths() {
-        let result = super::detect_installed_tools();
+        let db = Database::new_in_memory().unwrap();
+        let result = super::detect_installed_tools(&db);
 
         for tool in &result.tools {
             let path_str = tool.user_config_path.to_string_lossy();
@@ -1783,7 +1786,8 @@ use crate::storage::Database;
 
     #[test]
     fn test_detect_installed_tools_installed_count_matches() {
-        let result = super::detect_installed_tools();
+        let db = Database::new_in_memory().unwrap();
+        let result = super::detect_installed_tools(&db);
 
         let actual_installed_count = result.tools.iter().filter(|t| t.installed).count();
         assert_eq!(result.installed_count, actual_installed_count);
@@ -1791,7 +1795,8 @@ use crate::storage::Database;
 
     #[test]
     fn test_detect_installed_tools_consistency() {
-        let result = super::detect_installed_tools();
+        let db = Database::new_in_memory().unwrap();
+        let result = super::detect_installed_tools(&db);
 
         for tool in &result.tools {
             // installed 应该与 user_config_exists 一致
@@ -1818,7 +1823,8 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_returns_all_tools() {
         let temp_dir = TempDir::new().unwrap();
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let db = Database::new_in_memory().unwrap();
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 应该返回所有 4 个工具的结果
         assert_eq!(result.tools.len(), 4);
@@ -1834,6 +1840,7 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_with_project_config() {
         let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
 
         // 创建 Claude Code 项目级配置
         let mcp_json = temp_dir.path().join(".mcp.json");
@@ -1854,7 +1861,7 @@ use crate::storage::Database;
         )
         .unwrap();
 
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 查找 Claude Code 的结果
         let claude = result.tools.iter().find(|t| t.adapter_id == "claude").unwrap();
@@ -1874,7 +1881,8 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_empty_project() {
         let temp_dir = TempDir::new().unwrap();
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let db = Database::new_in_memory().unwrap();
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 空项目的 project_scope 应该没有服务
         // 注意：user_scope 可能有服务（来自用户实际的配置文件）
@@ -1894,7 +1902,8 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_project_path_stored() {
         let temp_dir = TempDir::new().unwrap();
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let db = Database::new_in_memory().unwrap();
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         assert_eq!(
             result.project_path,
@@ -1905,6 +1914,7 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_cursor_project() {
         let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
 
         // 创建 Cursor 项目级配置
         let cursor_dir = temp_dir.path().join(".cursor");
@@ -1923,7 +1933,7 @@ use crate::storage::Database;
         )
         .unwrap();
 
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 查找 Cursor 的结果
         let cursor = result.tools.iter().find(|t| t.adapter_id == "cursor").unwrap();
@@ -1939,6 +1949,7 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_filters_gateway() {
         let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
 
         // 创建包含 gateway 服务的配置
         let mcp_json = temp_dir.path().join(".mcp.json");
@@ -1958,7 +1969,7 @@ use crate::storage::Database;
         )
         .unwrap();
 
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 查找 Claude Code 的结果
         let claude = result.tools.iter().find(|t| t.adapter_id == "claude").unwrap();
@@ -1973,6 +1984,7 @@ use crate::storage::Database;
     #[test]
     fn test_scan_all_tool_configs_statistics() {
         let temp_dir = TempDir::new().unwrap();
+        let db = Database::new_in_memory().unwrap();
 
         // 创建 Claude Code 项目级配置
         let mcp_json = temp_dir.path().join(".mcp.json");
@@ -2002,7 +2014,7 @@ use crate::storage::Database;
         )
         .unwrap();
 
-        let result = super::scan_all_tool_configs(temp_dir.path());
+        let result = super::scan_all_tool_configs(temp_dir.path(), &db);
 
         // 验证项目级服务数量
         // 注意：total_service_count 可能包含用户级配置中的服务
