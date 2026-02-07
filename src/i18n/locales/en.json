@@ -433,6 +433,20 @@
     "builtinRules": "Built-in Rules",
     "builtinRulesCount": "{{count}} rules",
     "privacyRecordsDesc": "View historical privacy interception records",
+    "nav": {
+      "general": "General",
+      "development": "Development",
+      "privacy": "Privacy & Security",
+      "language": "Language",
+      "helpAndSupport": "Help & Support",
+      "localServer": "Local Server",
+      "toolPaths": "Tool Paths",
+      "envVariables": "Environment Variables",
+      "systemRules": "System Rules",
+      "customRules": "Custom Rules",
+      "ruleTest": "Rule Test",
+      "privacyRecords": "Interception Records"
+    },
     "toolConfigPaths": {
       "title": "Tool Config Directories",
       "description": "Customize the configuration directories for AI coding tools. The system will look for config files in the selected directory.",

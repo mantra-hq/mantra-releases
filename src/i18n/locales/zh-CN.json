@@ -438,6 +438,20 @@
     "builtinRules": "系统预设规则",
     "builtinRulesCount": "{{count}} 条规则",
     "privacyRecordsDesc": "查看历史隐私拦截记录",
+    "nav": {
+      "general": "通用",
+      "development": "开发环境",
+      "privacy": "隐私与安全",
+      "language": "语言",
+      "helpAndSupport": "帮助与支持",
+      "localServer": "本地服务器",
+      "toolPaths": "工具路径",
+      "envVariables": "环境变量",
+      "systemRules": "系统规则",
+      "customRules": "自定义规则",
+      "ruleTest": "规则测试",
+      "privacyRecords": "拦截记录"
+    },
     "toolConfigPaths": {
       "title": "工具配置目录",
       "description": "自定义 AI 编程工具的配置目录位置。系统将在所选目录中查找配置文件。",
