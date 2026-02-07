@@ -67,6 +67,23 @@ pub fn set_tool_config_path(
         )));
     }
 
+    // 验证 dir 不为空
+    let dir = dir.trim().to_string();
+    if dir.is_empty() {
+        return Err(AppError::Validation(
+            "配置目录路径不能为空".to_string(),
+        ));
+    }
+
+    // 验证目录存在
+    let path = std::path::Path::new(&dir);
+    if !path.is_dir() {
+        return Err(AppError::Validation(format!(
+            "配置目录不存在: {}",
+            dir
+        )));
+    }
+
     let db = state.db.lock().map_err(|_| AppError::LockError)?;
     db.upsert_tool_config_path(&tool_type, &dir)
         .map_err(|e| AppError::internal(e.to_string()))

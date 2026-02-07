@@ -176,7 +176,6 @@ pub fn scan_all_tool_configs(project_path: &Path, db: &Database) -> crate::model
     use crate::models::mcp::{AllToolsScanResult, ScopeScanResult, ToolScanResult, ToolType};
 
     let registry = ToolAdapterRegistry::new();
-    let home_dir = dirs::home_dir();
 
     let mut tool_results: Vec<ToolScanResult> = Vec::new();
 
@@ -191,17 +190,13 @@ pub fn scan_all_tool_configs(project_path: &Path, db: &Database) -> crate::model
             for (scope, pattern) in adapter.scan_patterns() {
                 let path = match scope {
                     ConfigScope::Project => project_path.join(&pattern),
-                    ConfigScope::User | ConfigScope::Local => {
-                        // Local scope 在 scan_patterns 中不会出现，但为完整性处理
-                        if let Some(ref home) = home_dir {
-                            if pattern.starts_with("~/") {
-                                home.join(&pattern[2..])
-                            } else {
-                                home.join(&pattern)
-                            }
-                        } else {
-                            continue;
-                        }
+                    ConfigScope::User => {
+                        // Story 13.1: 通过 resolve_config_path 支持自定义路径
+                        tool_type.resolve_config_path(db)
+                    }
+                    ConfigScope::Local => {
+                        // Local scope 在 scan_patterns 中不会出现，跳过
+                        continue;
                     }
                 };
 

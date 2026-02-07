@@ -706,7 +706,8 @@ pub fn execute_full_tool_takeover(
 
         if let Some(tool_type) = ToolType::from_adapter_id(&config.adapter_id) {
             // Story 11.15 PD-001: 统一写入用户级配置
-            let user_config_path = tool_type.get_user_config_path();
+            // Story 13.1: 使用 resolve_config_path 支持用户自定义配置目录
+            let user_config_path = tool_type.resolve_config_path(db);
 
             // 避免重复接管同一个用户级配置
             if processed_user_configs.contains(&user_config_path) {

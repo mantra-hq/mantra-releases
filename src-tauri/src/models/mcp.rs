@@ -573,11 +573,13 @@ impl ToolType {
     ///
     /// Story 13.1: 工具配置路径可配置化
     ///
-    /// 返回各工具默认的配置目录路径（如 ~/.claude、~/.cursor 等）
+    /// 返回各工具默认的配置目录路径。
+    /// 注意：ClaudeCode 的配置文件 `.claude.json` 位于 home 目录下，
+    /// 因此其默认配置目录为 home 目录本身（而非 `~/.claude`）。
     pub fn get_default_config_dir(&self) -> PathBuf {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
         match self {
-            ToolType::ClaudeCode => home.join(".claude"),
+            ToolType::ClaudeCode => home,
             ToolType::Cursor => home.join(".cursor"),
             ToolType::Codex => home.join(".codex"),
             ToolType::GeminiCli => home.join(".gemini"),
