@@ -971,6 +971,18 @@
       "critical": "高危",
       "warning": "警告",
       "info": "提示"
+    },
+    "pledge": {
+      "title": "你的数据，由你掌控",
+      "localFirst": "本地优先",
+      "localFirstDesc": "所有数据存储在你的电脑上",
+      "encrypted": "加密存储",
+      "encryptedDesc": "密钥和敏感信息使用 AES-256 加密",
+      "reviewBeforeUpload": "上传前审查",
+      "reviewBeforeUploadDesc": "分享前逐行检查，你说了算",
+      "neverAutoUpload": "绝不自动上传",
+      "neverAutoUploadDesc": "未经你确认，数据不会离开本地",
+      "learnMore": "了解隐私与安全策略 →"
     }
   },
   "hub": {

@@ -10,6 +10,7 @@
 import { Play, FolderOpen, Rocket } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { PrivacyPledge } from "@/components/privacy";
 import { cn } from "@/lib/utils";
 
 /**
@@ -78,6 +79,9 @@ export function PlayerEmptyState({
             {t("player.importProject")}
           </Button>
         </div>
+
+        {/* 隐私宣言 */}
+        <PrivacyPledge />
       </div>
     );
   }
@@ -125,6 +129,9 @@ export function PlayerEmptyState({
       <p className="text-xs text-muted-foreground">
         {t("player.supportedLabel")} {t("import.supportedTools")}
       </p>
+
+      {/* 隐私宣言 */}
+      <PrivacyPledge />
     </div>
   );
 }

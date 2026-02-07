@@ -966,6 +966,18 @@
       "critical": "Critical",
       "warning": "Warning",
       "info": "Info"
+    },
+    "pledge": {
+      "title": "Your data, your control",
+      "localFirst": "Local First",
+      "localFirstDesc": "All data stays on your machine",
+      "encrypted": "Encrypted Storage",
+      "encryptedDesc": "Keys and secrets encrypted with AES-256",
+      "reviewBeforeUpload": "Review Before Upload",
+      "reviewBeforeUploadDesc": "Inspect every line before sharing",
+      "neverAutoUpload": "Never Auto-Upload",
+      "neverAutoUploadDesc": "Nothing leaves your device without consent",
+      "learnMore": "Learn about privacy & security →"
     }
   },
   "hub": {

@@ -17,4 +17,5 @@ export { PrivacyScanReport, type PrivacyScanReportProps } from './PrivacyScanRep
 export { RuleListItem, type RuleListItemProps } from './RuleListItem';
 export { AddRuleSheet, type AddRuleSheetProps } from './AddRuleSheet';
 export { PrivacySettingsPanel, type PrivacySettingsPanelProps } from './PrivacySettingsPanel';
+export { PrivacyPledge } from './PrivacyPledge';
 
