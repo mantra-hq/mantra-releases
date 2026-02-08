@@ -102,13 +102,18 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip.sig
 
       - name: Upload artifacts (macOS)
         if: startsWith(matrix.os, 'macos')
         uses: actions/upload-artifact@v4
         with:
           name: Mantra-${{ steps.version.outputs.version }}-${{ matrix.platform_name }}-${{ matrix.arch }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
 
       - name: Upload artifacts (Linux)
         if: matrix.os == 'ubuntu-22.04'
@@ -118,6 +123,8 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.tar.gz.sig
             src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
 
   release:
@@ -142,7 +149,9 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release-files
-          find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) | while read file; do
+
+          # Phase 1: Installer files (rename to unified format)
+          find artifacts -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) | while IFS= read -r file; do
             dir_name=$(dirname "$file" | xargs basename)
             base_name=$(basename "$file")
             ext="${base_name##*.}"
@@ -150,7 +159,23 @@ jobs:
             platform_arch=$(echo "$dir_name" | sed 's/Mantra-[^-]*-//')
             cp "$file" "release-files/Mantra_${{ steps.version.outputs.version }}_${platform_arch}.${ext}"
           done
+
+          # Phase 2: Updater artifacts (keep original names, already contain version and arch)
+          find artifacts -type f \( -name "*.nsis.zip" -o -name "*.nsis.zip.sig" \
+            -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
+            -o -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" \) | while IFS= read -r file; do
+            cp "$file" "release-files/$(basename "$file")"
+          done
+
           ls -la release-files/
+
+          # Validate updater artifacts exist
+          updater_count=$(find release-files -type f \( -name "*.tar.gz" -o -name "*.nsis.zip" \) | wc -l)
+          if [ "$updater_count" -eq 0 ]; then
+            echo "::error::No updater artifacts found! Check createUpdaterArtifacts config in tauri.conf.json."
+            exit 1
+          fi
+          echo "Found $updater_count updater artifact(s)"
 
       - name: Create GitHub Release (Private Repo)
         uses: softprops/action-gh-release@v2

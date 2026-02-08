@@ -68,6 +68,9 @@ jobs:
           | **macOS (Intel)** | \`Mantra_*_macos-x64.dmg\` |
           | **Windows** | \`.msi\` 或 \`.exe\` |
           | **Linux** | \`.AppImage\`, \`.deb\` 或 \`.rpm\` |
+
+          > 💡 \`.tar.gz\`, \`.nsis.zip\` 及 \`.sig\` 文件为自动更新产物，无需手动下载。
+          > \`.tar.gz\`, \`.nsis.zip\` and \`.sig\` files are auto-update artifacts, no manual download needed.
           
           ---
           
