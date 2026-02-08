@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GeneralSettings } from "./GeneralSettings";
+import type { UseUpdateCheckerResult } from "@/hooks/useUpdateChecker";
 
 // Mock @tauri-apps/plugin-opener
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -35,11 +36,11 @@ const mockCheckForUpdate = vi.fn().mockResolvedValue(undefined);
 const mockRestartToUpdate = vi.fn().mockResolvedValue(undefined);
 const mockDismissUpdate = vi.fn();
 
-const defaultUpdateCheckerState = {
+const defaultUpdateCheckerState: UseUpdateCheckerResult = {
   updateAvailable: false,
   updateInfo: null,
   downloadProgress: 0,
-  updateStatus: "idle" as const,
+  updateStatus: "idle",
   errorMessage: null,
   checkForUpdate: mockCheckForUpdate,
   downloadAndInstall: vi.fn(),
@@ -47,7 +48,7 @@ const defaultUpdateCheckerState = {
   dismissUpdate: mockDismissUpdate,
 };
 
-let mockUpdateCheckerReturn = { ...defaultUpdateCheckerState };
+let mockUpdateCheckerReturn: UseUpdateCheckerResult = { ...defaultUpdateCheckerState };
 
 vi.mock("@/contexts/UpdateCheckerContext", () => ({
   useUpdateCheckerContext: () => mockUpdateCheckerReturn,
@@ -186,7 +187,7 @@ describe("GeneralSettings", () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateAvailable: true,
-        updateInfo: { version: "0.8.0", date: null, body: null },
+        updateInfo: { version: "0.8.0" },
       };
       await renderSettled();
 
@@ -211,7 +212,7 @@ describe("GeneralSettings", () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "ready",
-        updateInfo: { version: "0.8.0", date: null, body: null },
+        updateInfo: { version: "0.8.0" },
       };
       await renderSettled();
 
@@ -224,7 +225,7 @@ describe("GeneralSettings", () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "ready",
-        updateInfo: { version: "0.8.0", date: null, body: null },
+        updateInfo: { version: "0.8.0" },
       };
       await renderSettled();
 
