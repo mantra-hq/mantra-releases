@@ -64,7 +64,7 @@
         "bundleMediaFramework": false
       }
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": "v1Compatible"
   },
   "plugins": {
     "updater": {
