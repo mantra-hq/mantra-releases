@@ -25,7 +25,9 @@ import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
 // TODO: 通知功能暂未开放
 // import { NotificationBannerStack } from "./components/notifications";
+import { UpdateNotificationBar } from "./components/notifications/UpdateNotificationBar";
 import { useGlobalShortcut } from "./hooks";
+import { useUpdateChecker } from "./hooks/useUpdateChecker";
 // import { useNotificationInit } from "./hooks";
 // Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
 import "./i18n";
@@ -84,6 +86,31 @@ function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * UpdateCheckerProvider - 更新检查 Provider (Story 14.6)
+ * 在根级别调用 useUpdateChecker，渲染 UpdateNotificationBar
+ */
+function UpdateCheckerProvider({ children }: { children: React.ReactNode }) {
+  const {
+    updateStatus,
+    updateInfo,
+    restartToUpdate,
+    dismissUpdate,
+  } = useUpdateChecker();
+
+  return (
+    <>
+      <UpdateNotificationBar
+        updateStatus={updateStatus}
+        updateInfo={updateInfo}
+        onRestart={restartToUpdate}
+        onDismiss={dismissUpdate}
+      />
+      {children}
+    </>
+  );
+}
+
+/**
  * 应用启动函数
  * Story 9.2 Fix: 确保测试环境 Mock 注入完成后再渲染 React
  * 避免首次 IPC 调用在 Mock 注入前发生
@@ -101,6 +128,7 @@ async function startApp() {
           <GlobalShortcutProvider>
             {/* TODO: 通知功能暂未开放 */}
             {/* <NotificationBannerStack /> */}
+            <UpdateCheckerProvider>
             <Routes>
               {/* Story 2.21: 首页即 Player (空状态) */}
               <Route path="/" element={<Player />} />
@@ -122,6 +150,7 @@ async function startApp() {
               {/* 默认重定向到首页 */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </UpdateCheckerProvider>
             {/* 全局搜索 Modal (Story 2.10) */}
             <GlobalSearch />
             {/* 全局 Toast 通知 */}
