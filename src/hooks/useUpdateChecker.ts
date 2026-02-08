@@ -79,6 +79,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const periodicTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const isCheckingRef = useRef(false);
+  const isDownloadingRef = useRef(false);
 
   /**
    * 释放当前 Update 资源
@@ -99,6 +101,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
    */
   const performDownload = useCallback(async (update: Update) => {
     if (!mountedRef.current) return;
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
     setUpdateStatus('downloading');
     setDownloadProgress(0);
 
@@ -135,6 +139,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       console.warn('[useUpdateChecker] download error:', msg);
       setErrorMessage(msg);
       setUpdateStatus('error');
+    } finally {
+      isDownloadingRef.current = false;
     }
   }, []);
 
@@ -144,6 +150,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
    */
   const performCheck = useCallback(async (silent: boolean) => {
     if (!mountedRef.current) return;
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
 
     // 清理旧的 Update 资源
     await cleanupUpdate();
@@ -154,7 +162,10 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     try {
       const update = await check();
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        isCheckingRef.current = false;
+        return;
+      }
 
       if (update) {
         updateRef.current = update;
@@ -164,12 +175,12 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
           date: update.date,
           body: update.body,
         });
-        setUpdateStatus('idle');
 
         // 记录检查时间
         safeSetItem(LAST_CHECK_KEY, Date.now().toString());
 
-        // 自动触发静默下载 (AC #6)
+        // 自动触发静默下载 (AC #6) — 直接从 checking 进入 downloading，跳过 idle
+        isCheckingRef.current = false;
         await performDownload(update);
       } else {
         setUpdateAvailable(false);
@@ -178,9 +189,13 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
 
         // 记录检查时间
         safeSetItem(LAST_CHECK_KEY, Date.now().toString());
+        isCheckingRef.current = false;
       }
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        isCheckingRef.current = false;
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Check failed';
       console.warn('[useUpdateChecker]', msg);
 
@@ -192,6 +207,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
         setErrorMessage(msg);
         setUpdateStatus('error');
       }
+      isCheckingRef.current = false;
     }
   }, [cleanupUpdate, performDownload]);
 

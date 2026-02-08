@@ -269,8 +269,8 @@ describe("useUpdateChecker", () => {
       });
 
       expect(result.current.updateStatus).toBe("idle");
-      // 自动检查不设 errorMessage — 但由于这里 mock 比较复杂，
-      // 我们主要验证状态回到 idle
+      // AC #7: 自动检查失败不应设置 errorMessage
+      expect(result.current.errorMessage).toBeNull();
     });
 
     it("非 Error 对象的异常应提供默认消息", async () => {
