@@ -1,0 +1,54 @@
+name: Test Signing Key
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-sign:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        run: pnpm add -g @tauri-apps/cli
+
+      - name: Debug key info
+        shell: bash
+        run: |
+          echo "Key length: ${#TAURI_SIGNING_PRIVATE_KEY}"
+          echo "Password length: ${#TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
+          echo "Key first 20 chars: ${TAURI_SIGNING_PRIVATE_KEY:0:20}..."
+          echo "Key last 10 chars: ...${TAURI_SIGNING_PRIVATE_KEY: -10}"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Test signing
+        shell: bash
+        run: |
+          echo "test content for signing" > /tmp/test-file.txt
+          tauri signer sign /tmp/test-file.txt
+          echo "Signing succeeded on ${{ matrix.name }}!"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
