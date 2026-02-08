@@ -63,6 +63,18 @@
       "appimage": {
         "bundleMediaFramework": false
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://updater.mantra.gonewx.com/check/mantra-hq/mantra-releases/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJBMzFFMTM0QjUwQzdFOTIKUldTU2ZneTFOT0V4S29ObmhNajQxdHl3MUt3amVJcDlhZFNXaUZXaGZ2ZnRkcHprcSt4L3hsZXQK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

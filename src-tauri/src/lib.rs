@@ -143,6 +143,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            // Story 14.2: 注册 updater 和 process 插件（桌面平台条件编译守卫）
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             // Get app data directory for database storage
             let app_data_dir = app
                 .path()
