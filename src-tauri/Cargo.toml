@@ -1,6 +1,6 @@
 [package]
 name = "client"
-version = "0.7.1-beta"
+version = "0.7.1-1"
 description = "Mantra - AI 编程过程资产与方法论分享社区客户端"
 authors = ["Mantra Team <team@mantra.dev>"]
 edition = "2021"
