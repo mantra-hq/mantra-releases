@@ -25,7 +25,7 @@ import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
 // TODO: 通知功能暂未开放
 // import { NotificationBannerStack } from "./components/notifications";
-import { UpdateNotificationBar } from "./components/notifications/UpdateNotificationBar";
+import { UpdateNotificationBar } from "./components/notifications";
 import { useGlobalShortcut } from "./hooks";
 import { useUpdateChecker } from "./hooks/useUpdateChecker";
 // import { useNotificationInit } from "./hooks";
@@ -129,27 +129,27 @@ async function startApp() {
             {/* TODO: 通知功能暂未开放 */}
             {/* <NotificationBannerStack /> */}
             <UpdateCheckerProvider>
-            <Routes>
-              {/* Story 2.21: 首页即 Player (空状态) */}
-              <Route path="/" element={<Player />} />
-              {/* Player: 会话回放页 */}
-              <Route path="/session/:sessionId" element={<Player />} />
-              {/* 兼容旧 URL: /player/:sessionId → /session/:sessionId */}
-              <Route path="/player/:sessionId" element={<Player />} />
-              {/* Settings: 设置页面 - 嵌套路由 (Story 2-35) */}
-              <Route path="/settings" element={<Settings />}>
-                <Route index element={<Navigate to="general" replace />} />
-                <Route path="general" element={<GeneralSettings />} />
-                <Route path="development" element={<DevelopmentSettings />} />
-                <Route path="privacy" element={<PrivacySettings />} />
-              </Route>
-              {/* PrivacyRecords: 隐私保护记录页面 (Story 3-8) */}
-              <Route path="/privacy-records" element={<PrivacyRecords />} />
-              {/* Hub: MCP Gateway 管理页面 (Story 11.6) */}
-              <Route path="/hub" element={<Hub />} />
-              {/* 默认重定向到首页 */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+              <Routes>
+                {/* Story 2.21: 首页即 Player (空状态) */}
+                <Route path="/" element={<Player />} />
+                {/* Player: 会话回放页 */}
+                <Route path="/session/:sessionId" element={<Player />} />
+                {/* 兼容旧 URL: /player/:sessionId → /session/:sessionId */}
+                <Route path="/player/:sessionId" element={<Player />} />
+                {/* Settings: 设置页面 - 嵌套路由 (Story 2-35) */}
+                <Route path="/settings" element={<Settings />}>
+                  <Route index element={<Navigate to="general" replace />} />
+                  <Route path="general" element={<GeneralSettings />} />
+                  <Route path="development" element={<DevelopmentSettings />} />
+                  <Route path="privacy" element={<PrivacySettings />} />
+                </Route>
+                {/* PrivacyRecords: 隐私保护记录页面 (Story 3-8) */}
+                <Route path="/privacy-records" element={<PrivacyRecords />} />
+                {/* Hub: MCP Gateway 管理页面 (Story 11.6) */}
+                <Route path="/hub" element={<Hub />} />
+                {/* 默认重定向到首页 */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </UpdateCheckerProvider>
             {/* 全局搜索 Modal (Story 2.10) */}
             <GlobalSearch />

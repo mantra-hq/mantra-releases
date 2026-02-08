@@ -6,7 +6,7 @@
  * 消费 useUpdateChecker Hook 的状态。
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Download, RefreshCw, FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -29,14 +29,35 @@ export function UpdateNotificationBar({
   const { t } = useTranslation();
   const [showNotes, setShowNotes] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // [H2 fix] Cleanup dismiss timer on unmount to prevent setState on unmounted component
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
     // Wait for exit animation before calling onDismiss
-    setTimeout(() => {
+    dismissTimerRef.current = setTimeout(() => {
+      dismissTimerRef.current = null;
       onDismiss();
     }, 200);
   }, [onDismiss]);
+
+  // [H1 fix] Wrap async onRestart to catch unhandled rejections
+  const handleRestart = useCallback(async () => {
+    try {
+      await onRestart();
+    } catch (err) {
+      console.error('[UpdateNotificationBar] restart failed:', err);
+    }
+  }, [onRestart]);
 
   const handleToggleNotes = useCallback(() => {
     setShowNotes((prev) => !prev);
@@ -61,7 +82,7 @@ export function UpdateNotificationBar({
       )}
       data-state={isExiting ? "closed" : "open"}
       data-testid="update-notification-bar"
-      role="alert"
+      role="status"
       aria-label={t("updater.readyToInstall", { version: updateInfo?.version ?? "" })}
     >
       {/* Main row */}
@@ -95,7 +116,7 @@ export function UpdateNotificationBar({
             variant="default"
             size="sm"
             className="h-7 text-xs"
-            onClick={onRestart}
+            onClick={handleRestart}
             data-testid="update-restart-btn"
           >
             <RefreshCw className="h-3.5 w-3.5 mr-1" />

@@ -84,6 +84,23 @@ describe("UpdateNotificationBar", () => {
       expect(defaultProps.onRestart).toHaveBeenCalledTimes(1);
     });
 
+    it("onRestart 失败时不抛出 unhandled rejection", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const failingRestart = vi.fn().mockRejectedValue(new Error("relaunch failed"));
+      render(<UpdateNotificationBar {...defaultProps} onRestart={failingRestart} />);
+
+      fireEvent.click(screen.getByTestId("update-restart-btn"));
+      // Wait for the async handler to settle
+      await vi.waitFor(() => {
+        expect(consoleError).toHaveBeenCalledWith(
+          "[UpdateNotificationBar] restart failed:",
+          expect.any(Error)
+        );
+      });
+
+      consoleError.mockRestore();
+    });
+
     it("点击关闭按钮触发退出动画后调用 onDismiss", () => {
       vi.useFakeTimers();
       render(<UpdateNotificationBar {...defaultProps} />);
@@ -154,14 +171,14 @@ describe("UpdateNotificationBar", () => {
   });
 
   describe("无障碍属性 (AC #8)", () => {
-    it("应有 role='alert'", () => {
+    it("应有 role='status'（非侵入式通知）", () => {
       render(<UpdateNotificationBar {...defaultProps} />);
-      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toBeInTheDocument();
     });
 
     it("应有正确的 aria-label", () => {
       render(<UpdateNotificationBar {...defaultProps} />);
-      expect(screen.getByRole("alert")).toHaveAttribute(
+      expect(screen.getByRole("status")).toHaveAttribute(
         "aria-label",
         "Version 1.2.0 is ready to install"
       );
