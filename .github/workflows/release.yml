@@ -161,14 +161,32 @@ jobs:
             cp "$file" "release-files/Mantra_${{ steps.version.outputs.version }}_${platform_arch}.${ext}"
           done
 
-          # Phase 2: Updater artifacts — v2 format (keep original names for sig matching)
-          # Windows: .exe + .exe.sig (direct signing)
-          # macOS: .app.tar.gz + .app.tar.gz.sig
-          # Linux: .AppImage + .AppImage.sig (direct signing)
+          # Phase 2: Updater artifacts — v2 format
+          # Windows: .exe + .exe.sig (direct signing, keep original names)
+          # macOS: .app.tar.gz + .sig (rename to include arch for Worker matching)
+          # Linux: .AppImage + .AppImage.sig (direct signing, keep original names)
+          VERSION_NUM="${{ steps.version.outputs.version }}"
+          VERSION_NUM="${VERSION_NUM#v}"
           find artifacts -type f \( -name "*.exe" -o -name "*.exe.sig" \
             -o -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \
             -o -name "*.AppImage" -o -name "*.AppImage.sig" \) | while IFS= read -r file; do
-            cp "$file" "release-files/$(basename "$file")"
+            base_name=$(basename "$file")
+            artifact_dir=$(echo "$file" | cut -d'/' -f2)
+            if echo "$base_name" | grep -qE '\.app\.tar\.gz'; then
+              # macOS: Tauri outputs generic "Mantra.app.tar.gz" — rename to include arch
+              dir_arch=$(echo "$artifact_dir" | sed "s/Mantra-${{ steps.version.outputs.version }}-macos-//")
+              case "$dir_arch" in
+                arm64) tauri_arch="aarch64" ;;
+                *) tauri_arch="$dir_arch" ;;
+              esac
+              if echo "$base_name" | grep -q '\.sig$'; then
+                cp "$file" "release-files/Mantra_${VERSION_NUM}_${tauri_arch}.app.tar.gz.sig"
+              else
+                cp "$file" "release-files/Mantra_${VERSION_NUM}_${tauri_arch}.app.tar.gz"
+              fi
+            else
+              cp "$file" "release-files/${base_name}"
+            fi
           done
 
           ls -la release-files/
