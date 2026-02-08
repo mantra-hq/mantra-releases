@@ -48,8 +48,11 @@ const initTestEnv = async (): Promise<void> => {
 
     // 动态导入 Mock 处理器 (仅测试环境加载)
     try {
-      const { mockInvoke } = await import("../e2e/fixtures/ipc-mock");
+      const { mockInvoke, setupTauriInternals } = await import("../e2e/fixtures/ipc-mock");
       setMockInvoke(mockInvoke);
+      // Story 14.9: 设置 window.__TAURI_INTERNALS__ 以拦截 Tauri 插件调用
+      // (updater, process, app 等插件不经过 ipc-adapter，直接调用 __TAURI_INTERNALS__)
+      setupTauriInternals();
       console.log("[Mantra] IPC Mock 已注入");
     } catch (err) {
       console.error("[Mantra] 加载 IPC Mock 失败:", err);

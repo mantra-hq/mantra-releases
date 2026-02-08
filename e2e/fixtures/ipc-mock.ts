@@ -1,6 +1,7 @@
 /**
  * IPC Mock - E2E 测试 IPC Mock 处理器
  * Story 9.2: Task 4
+ * Story 14.9: Task 8.1 (Tauri 插件 Mock 支持)
  *
  * 实现所有 Tauri IPC 命令的 Mock 版本
  * 用于 Playwright E2E 测试，独立于 Rust 后端运行
@@ -45,6 +46,64 @@ function getArg<T>(args: InvokeArgs | undefined, key: string): T | undefined {
   return undefined;
 }
 
+// ==========================================================================
+// Story 14.9: Tauri 插件 Mock 支持 (Channel 回调管理)
+// ==========================================================================
+
+/**
+ * Channel 回调注册表
+ * 用于模拟 Tauri Channel 机制（插件通过 Channel 发送进度事件）
+ */
+const callbackMap: Record<number, { callback: (payload: unknown) => void; once: boolean }> = {};
+let callbackIdCounter = 0;
+
+/**
+ * 调用已注册的 Channel 回调
+ */
+function callMockCallback(id: number, payload: unknown): void {
+  const entry = callbackMap[id];
+  if (entry) {
+    entry.callback(payload);
+    if (entry.once) delete callbackMap[id];
+  }
+}
+
+/**
+ * Mock 更新配置（可通过 window.__MOCK_UPDATE_CONFIG__ 从测试中控制）
+ */
+interface MockUpdateConfig {
+  hasUpdate: boolean;
+  version?: string;
+  body?: string;
+}
+
+function getMockUpdateConfig(): MockUpdateConfig {
+  const config = (window as unknown as Record<string, unknown>).__MOCK_UPDATE_CONFIG__ as MockUpdateConfig | undefined;
+  return config ?? { hasUpdate: true, version: "0.8.0", body: "Bug fixes and improvements" };
+}
+
+/**
+ * 初始化 window.__TAURI_INTERNALS__ Mock
+ *
+ * Tauri 插件（updater, process, app）直接调用 window.__TAURI_INTERNALS__.invoke()，
+ * 不经过 ipc-adapter.ts。此函数在 Playwright 模式下拦截这些调用。
+ */
+export function setupTauriInternals(): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__TAURI_INTERNALS__ = {
+    invoke: async (cmd: string, args?: InvokeArgs) => {
+      return mockInvoke(cmd, args);
+    },
+    transformCallback: (callback: (payload: unknown) => void, once: boolean = false) => {
+      const id = callbackIdCounter++;
+      callbackMap[id] = { callback, once };
+      return id;
+    },
+    convertFileSrc: (filePath: string) => filePath,
+  };
+  console.log("[IPC Mock] window.__TAURI_INTERNALS__ 已设置");
+}
+
 /**
  * Mock Invoke 处理器
  *
@@ -85,6 +144,22 @@ export async function mockInvoke<T>(cmd: string, args?: InvokeArgs): Promise<T> 
       if (!projectId) return [] as T;
       const sessions = getSessionsByProjectId(projectId);
       return sessions as T;
+    }
+
+    case "get_logical_project_stats": {
+      // 基于 MOCK_PROJECTS 生成逻辑项目统计
+      return MOCK_PROJECTS.map((p) => ({
+        physical_path: p.cwd,
+        project_count: 1,
+        project_ids: [p.id],
+        total_sessions: p.session_count,
+        last_activity: p.last_activity,
+        display_name: p.name,
+        path_type: "local" as const,
+        path_exists: true,
+        needs_association: false,
+        has_git_repo: p.has_git_repo,
+      })) as T;
     }
 
     // ==========================================================================
@@ -371,6 +446,59 @@ export async function mockInvoke<T>(cmd: string, args?: InvokeArgs): Promise<T> 
         tools: MOCK_MCP_TOOLS,
         fromCache: false,
       } as T;
+    }
+
+    // ==========================================================================
+    // Tauri 插件 Mock (Story 14.9: Task 8.1)
+    // ==========================================================================
+
+    // Plugin: Updater
+    case "plugin:updater|check": {
+      const config = getMockUpdateConfig();
+      if (!config.hasUpdate) {
+        return null as T;
+      }
+      return {
+        rid: 1,
+        version: config.version ?? "0.8.0",
+        date: "2026-02-08",
+        ...(config.body !== undefined ? { body: config.body } : {}),
+      } as T;
+    }
+
+    case "plugin:updater|download_and_install": {
+      // 获取 Channel 对象，通过回调模拟下载进度
+      const onEvent = getArg<{ id: number }>(args, "onEvent");
+      if (onEvent && typeof onEvent.id === "number") {
+        // 模拟下载事件序列：Started → Progress → Finished
+        callMockCallback(onEvent.id, { event: "Started", data: { contentLength: 1000 } });
+        callMockCallback(onEvent.id, { event: "Progress", data: { chunkLength: 500 } });
+        callMockCallback(onEvent.id, { event: "Progress", data: { chunkLength: 500 } });
+        callMockCallback(onEvent.id, { event: "Finished", data: {} });
+      }
+      return undefined as T;
+    }
+
+    case "plugin:updater|close": {
+      return undefined as T;
+    }
+
+    // Plugin: Process
+    case "plugin:process|restart": {
+      console.log("[IPC Mock] 🔄 模拟应用重启");
+      return undefined as T;
+    }
+
+    // Plugin: App
+    case "plugin:app|version": {
+      return "0.7.0" as T;
+    }
+
+    // Plugin: Opener (openUrl)
+    case "plugin:opener|open_url": {
+      const url = getArg<string>(args, "url");
+      console.log("[IPC Mock] 🔗 模拟打开 URL:", url);
+      return undefined as T;
     }
 
     // ==========================================================================
