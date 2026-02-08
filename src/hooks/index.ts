@@ -112,3 +112,11 @@ export {
 
 // Story 11.4: 环境变量管理 hook
 export { useEnvVariables } from "./useEnvVariables";
+
+// Story 14.5: 更新检查 hook
+export {
+    useUpdateChecker,
+    type UpdateStatus,
+    type UpdateInfo,
+    type UseUpdateCheckerResult,
+} from "./useUpdateChecker";
