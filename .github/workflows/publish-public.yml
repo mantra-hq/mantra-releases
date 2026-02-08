@@ -88,11 +88,10 @@ jobs:
             # 1. Match the version line (e.g., "## [v0.6.0]...") -> set flag=1, skip line
             # 2. If flag is set and we hit the next version line (starts with "## [v") -> exit
             # 3. If flag is set, print the line
-            # Escape special regex characters in version string (e.g., dots, hyphens in brackets)
-            ESCAPED_VERSION=$(echo "$VERSION" | sed 's/[.[\*^$()+?{|\\]/\\&/g')
-            awk -v ver="^## \\[${ESCAPED_VERSION}\\]" '
-              $0 ~ ver { flag=1; next } 
-              /^## \[v/ && flag { flag=0; exit } 
+            # Use index() for literal string matching (avoids regex escaping issues with versions like v0.7.2-1)
+            awk -v ver="## [${VERSION}]" '
+              index($0, ver) == 1 { flag=1; next }
+              /^## \[v/ && flag { flag=0; exit }
               flag { print }
             ' "$CHANGELOG_FILE" >> release_body.md
           else
