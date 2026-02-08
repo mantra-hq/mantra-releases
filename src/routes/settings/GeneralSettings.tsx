@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ClipboardCopy, Loader2, Globe, BookOpen, CheckCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
-import { useUpdateChecker } from '@/hooks';
+import { useUpdateCheckerContext } from '@/contexts/UpdateCheckerContext';
 import { feedback } from '@/lib/feedback';
 import { useLogStore } from '@/stores';
 
@@ -32,11 +32,18 @@ export function GeneralSettings() {
         updateStatus,
         checkForUpdate,
         restartToUpdate,
-    } = useUpdateChecker();
+    } = useUpdateCheckerContext();
 
     useEffect(() => {
-        getVersion().then(setAppVersion);
+        getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
     }, []);
+
+    // Reset hasChecked when an update is found, so dismiss won't falsely show "up to date"
+    useEffect(() => {
+        if (updateAvailable) {
+            setHasChecked(false);
+        }
+    }, [updateAvailable]);
 
     const handleCheckForUpdate = useCallback(async () => {
         await checkForUpdate();

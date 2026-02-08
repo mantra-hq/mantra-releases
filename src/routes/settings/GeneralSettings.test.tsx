@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GeneralSettings } from "./GeneralSettings";
 
 // Mock @tauri-apps/plugin-opener
@@ -30,7 +30,7 @@ vi.mock("@/stores", () => ({
     selector({ copyToClipboard: mockCopyToClipboard }),
 }));
 
-// Mock useUpdateChecker
+// Mock useUpdateCheckerContext (replaces direct useUpdateChecker mock)
 const mockCheckForUpdate = vi.fn().mockResolvedValue(undefined);
 const mockRestartToUpdate = vi.fn().mockResolvedValue(undefined);
 const mockDismissUpdate = vi.fn();
@@ -49,8 +49,8 @@ const defaultUpdateCheckerState = {
 
 let mockUpdateCheckerReturn = { ...defaultUpdateCheckerState };
 
-vi.mock("@/hooks", () => ({
-  useUpdateChecker: () => mockUpdateCheckerReturn,
+vi.mock("@/contexts/UpdateCheckerContext", () => ({
+  useUpdateCheckerContext: () => mockUpdateCheckerReturn,
 }));
 
 // Mock Progress component
@@ -60,6 +60,16 @@ vi.mock("@/components/ui/progress", () => ({
   ),
 }));
 
+/**
+ * Helper: render and flush the async getVersion() microtask
+ * to eliminate act() warnings from the useEffect state update.
+ */
+async function renderSettled() {
+  await act(async () => {
+    render(<GeneralSettings />);
+  });
+}
+
 describe("GeneralSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,34 +77,34 @@ describe("GeneralSettings", () => {
   });
 
   // --- Existing tests ---
-  it("renders LanguageSwitcher component", () => {
-    render(<GeneralSettings />);
+  it("renders LanguageSwitcher component", async () => {
+    await renderSettled();
     expect(screen.getByTestId("language-switcher")).toBeInTheDocument();
   });
 
-  it("renders help section with title", () => {
-    render(<GeneralSettings />);
+  it("renders help section with title", async () => {
+    await renderSettled();
     expect(screen.getByText("帮助")).toBeInTheDocument();
   });
 
-  it("renders official website button", () => {
-    render(<GeneralSettings />);
+  it("renders official website button", async () => {
+    await renderSettled();
     expect(screen.getByTestId("official-website-button")).toBeInTheDocument();
   });
 
-  it("renders documentation button", () => {
-    render(<GeneralSettings />);
+  it("renders documentation button", async () => {
+    await renderSettled();
     expect(screen.getByTestId("documentation-button")).toBeInTheDocument();
   });
 
-  it("renders copy logs button", () => {
-    render(<GeneralSettings />);
+  it("renders copy logs button", async () => {
+    await renderSettled();
     expect(screen.getByTestId("copy-logs-button")).toBeInTheDocument();
   });
 
   it("calls openUrl when official website button is clicked", async () => {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
-    render(<GeneralSettings />);
+    await renderSettled();
 
     fireEvent.click(screen.getByTestId("official-website-button"));
     expect(openUrl).toHaveBeenCalledWith("https://mantra.gonewx.com");
@@ -102,7 +112,7 @@ describe("GeneralSettings", () => {
 
   it("calls openUrl when documentation button is clicked", async () => {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
-    render(<GeneralSettings />);
+    await renderSettled();
 
     fireEvent.click(screen.getByTestId("documentation-button"));
     expect(openUrl).toHaveBeenCalledWith("https://docs.mantra.gonewx.com");
@@ -110,7 +120,7 @@ describe("GeneralSettings", () => {
 
   it("copies logs when copy button is clicked", async () => {
     mockCopyToClipboard.mockResolvedValueOnce(true);
-    render(<GeneralSettings />);
+    await renderSettled();
 
     fireEvent.click(screen.getByTestId("copy-logs-button"));
     await waitFor(() => {
@@ -120,40 +130,38 @@ describe("GeneralSettings", () => {
 
   // --- About Mantra section tests (Story 14.7) ---
   describe("About Mantra section", () => {
-    it("renders the about section with title", () => {
-      render(<GeneralSettings />);
+    it("renders the about section with title", async () => {
+      await renderSettled();
       expect(screen.getByTestId("about-mantra-section")).toBeInTheDocument();
       expect(screen.getByText("关于 Mantra")).toBeInTheDocument();
     });
 
     it("displays the current version number", async () => {
-      render(<GeneralSettings />);
-      await waitFor(() => {
-        expect(screen.getByTestId("app-version")).toHaveTextContent("v0.7.1");
-      });
+      await renderSettled();
+      expect(screen.getByTestId("app-version")).toHaveTextContent("v0.7.1");
     });
 
-    it("renders check for updates button", () => {
-      render(<GeneralSettings />);
+    it("renders check for updates button", async () => {
+      await renderSettled();
       expect(screen.getByTestId("check-update-button")).toBeInTheDocument();
       expect(screen.getByText("检查更新")).toBeInTheDocument();
     });
 
     it("calls checkForUpdate when button is clicked", async () => {
-      render(<GeneralSettings />);
+      await renderSettled();
 
-      fireEvent.click(screen.getByTestId("check-update-button"));
-      await waitFor(() => {
-        expect(mockCheckForUpdate).toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("check-update-button"));
       });
+      expect(mockCheckForUpdate).toHaveBeenCalled();
     });
 
-    it("shows disabled button with spinner when checking", () => {
+    it("shows disabled button with spinner when checking", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "checking",
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       const button = screen.getByTestId("check-update-button");
       expect(button).toBeDisabled();
@@ -161,10 +169,12 @@ describe("GeneralSettings", () => {
     });
 
     it("shows up-to-date status after check completes with no update", async () => {
-      render(<GeneralSettings />);
+      await renderSettled();
 
       // Click check → triggers hasChecked = true
-      fireEvent.click(screen.getByTestId("check-update-button"));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("check-update-button"));
+      });
 
       await waitFor(() => {
         expect(screen.getByTestId("up-to-date-status")).toBeInTheDocument();
@@ -172,63 +182,63 @@ describe("GeneralSettings", () => {
       });
     });
 
-    it("shows update available status", () => {
+    it("shows update available status", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateAvailable: true,
         updateInfo: { version: "0.8.0", date: null, body: null },
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       expect(screen.getByTestId("update-available-status")).toBeInTheDocument();
       expect(screen.getByText("新版本 0.8.0 可用")).toBeInTheDocument();
     });
 
-    it("shows downloading status with progress bar", () => {
+    it("shows downloading status with progress bar", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "downloading",
         downloadProgress: 65,
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       expect(screen.getByTestId("downloading-status")).toBeInTheDocument();
-      expect(screen.getByTestId("progress-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("progress-bar")).toHaveAttribute("data-value", "65");
       expect(screen.getByText("下载中... 65%")).toBeInTheDocument();
     });
 
-    it("shows ready status with restart button", () => {
+    it("shows ready status with restart button", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "ready",
         updateInfo: { version: "0.8.0", date: null, body: null },
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       expect(screen.getByTestId("ready-status")).toBeInTheDocument();
       expect(screen.getByTestId("restart-to-update-button")).toBeInTheDocument();
       expect(screen.getByText("重启以更新")).toBeInTheDocument();
     });
 
-    it("calls restartToUpdate when restart button is clicked", () => {
+    it("calls restartToUpdate when restart button is clicked", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "ready",
         updateInfo: { version: "0.8.0", date: null, body: null },
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       fireEvent.click(screen.getByTestId("restart-to-update-button"));
       expect(mockRestartToUpdate).toHaveBeenCalled();
     });
 
-    it("shows error status", () => {
+    it("shows error status", async () => {
       mockUpdateCheckerReturn = {
         ...defaultUpdateCheckerState,
         updateStatus: "error",
         errorMessage: "Network error",
       };
-      render(<GeneralSettings />);
+      await renderSettled();
 
       expect(screen.getByTestId("error-status")).toBeInTheDocument();
       expect(screen.getByText("检查更新失败，请稍后重试")).toBeInTheDocument();

@@ -27,7 +27,7 @@ import { GlobalSearch } from "./components/search";
 // import { NotificationBannerStack } from "./components/notifications";
 import { UpdateNotificationBar } from "./components/notifications";
 import { useGlobalShortcut } from "./hooks";
-import { useUpdateChecker } from "./hooks/useUpdateChecker";
+import { UpdateCheckerProvider, useUpdateCheckerContext } from "./contexts/UpdateCheckerContext";
 // import { useNotificationInit } from "./hooks";
 // Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
 import "./i18n";
@@ -86,27 +86,24 @@ function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * UpdateCheckerProvider - 更新检查 Provider (Story 14.6)
- * 在根级别调用 useUpdateChecker，渲染 UpdateNotificationBar
+ * UpdateNotificationBarContainer - 从 Context 消费更新状态渲染通知条
+ * Story 14.6 + 14.7 Code Review: 通过 Context 共享单一 Hook 实例
  */
-function UpdateCheckerProvider({ children }: { children: React.ReactNode }) {
+function UpdateNotificationBarContainer() {
   const {
     updateStatus,
     updateInfo,
     restartToUpdate,
     dismissUpdate,
-  } = useUpdateChecker();
+  } = useUpdateCheckerContext();
 
   return (
-    <>
-      <UpdateNotificationBar
-        updateStatus={updateStatus}
-        updateInfo={updateInfo}
-        onRestart={restartToUpdate}
-        onDismiss={dismissUpdate}
-      />
-      {children}
-    </>
+    <UpdateNotificationBar
+      updateStatus={updateStatus}
+      updateInfo={updateInfo}
+      onRestart={restartToUpdate}
+      onDismiss={dismissUpdate}
+    />
   );
 }
 
@@ -129,6 +126,7 @@ async function startApp() {
             {/* TODO: 通知功能暂未开放 */}
             {/* <NotificationBannerStack /> */}
             <UpdateCheckerProvider>
+              <UpdateNotificationBarContainer />
               <Routes>
                 {/* Story 2.21: 首页即 Player (空状态) */}
                 <Route path="/" element={<Player />} />
