@@ -66,7 +66,7 @@ export function GeneralSettings() {
         }
     }, [copyLogsToClipboard, t]);
 
-    const isChecking = updateStatus === 'checking';
+    const isCheckDisabled = updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'ready';
 
     return (
         <div className="space-y-8">
@@ -172,16 +172,16 @@ export function GeneralSettings() {
                             variant="outline"
                             size="sm"
                             onClick={handleCheckForUpdate}
-                            disabled={isChecking}
+                            disabled={isCheckDisabled}
                             className="gap-2"
                             data-testid="check-update-button"
                         >
-                            {isChecking ? (
+                            {updateStatus === 'checking' ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                                 <RefreshCw className="h-4 w-4" />
                             )}
-                            {isChecking ? t("updater.checking") : t("updater.checkForUpdates")}
+                            {updateStatus === 'checking' ? t("updater.checking") : t("updater.checkForUpdates")}
                         </Button>
                     </div>
 

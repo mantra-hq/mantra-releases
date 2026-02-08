@@ -196,8 +196,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
         isCheckingRef.current = false;
         return;
       }
-      const msg = err instanceof Error ? err.message : 'Check failed';
-      console.warn('[useUpdateChecker]', msg);
+      const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Check failed';
+      console.warn('[useUpdateChecker] check error:', msg, err);
 
       if (silent) {
         // AC #7: 自动检查失败 → 回到 idle，不设 errorMessage

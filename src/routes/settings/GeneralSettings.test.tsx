@@ -206,6 +206,7 @@ describe("GeneralSettings", () => {
       expect(screen.getByTestId("downloading-status")).toBeInTheDocument();
       expect(screen.getByTestId("progress-bar")).toHaveAttribute("data-value", "65");
       expect(screen.getByText("下载中... 65%")).toBeInTheDocument();
+      expect(screen.getByTestId("check-update-button")).toBeDisabled();
     });
 
     it("shows ready status with restart button", async () => {
@@ -219,6 +220,7 @@ describe("GeneralSettings", () => {
       expect(screen.getByTestId("ready-status")).toBeInTheDocument();
       expect(screen.getByTestId("restart-to-update-button")).toBeInTheDocument();
       expect(screen.getByText("重启以更新")).toBeInTheDocument();
+      expect(screen.getByTestId("check-update-button")).toBeDisabled();
     });
 
     it("calls restartToUpdate when restart button is clicked", async () => {

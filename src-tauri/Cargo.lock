@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "0.7.0"
+version = "0.7.2-1"
 dependencies = [
  "async-stream",
  "async-trait",
