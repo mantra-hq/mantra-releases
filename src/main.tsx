@@ -17,7 +17,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Player, PrivacyRecords, Hub } from "./routes";
-import { Settings } from "./routes/Settings";
+import { Settings } from "./routes/SettingsLayout";
 import { GeneralSettings, DevelopmentSettings, PrivacySettings } from "./routes/settings";
 import { ThemeProvider } from "./lib/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
