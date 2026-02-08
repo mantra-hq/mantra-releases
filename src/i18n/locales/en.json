@@ -448,7 +448,8 @@
       "systemRules": "System Rules",
       "customRules": "Custom Rules",
       "ruleTest": "Rule Test",
-      "privacyRecords": "Interception Records"
+      "privacyRecords": "Interception Records",
+      "aboutAndUpdate": "About & Update"
     },
     "toolConfigPaths": {
       "title": "Tool Config Directories",

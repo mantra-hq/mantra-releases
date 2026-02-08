@@ -453,7 +453,8 @@
       "systemRules": "系统规则",
       "customRules": "自定义规则",
       "ruleTest": "规则测试",
-      "privacyRecords": "拦截记录"
+      "privacyRecords": "拦截记录",
+      "aboutAndUpdate": "关于与更新"
     },
     "toolConfigPaths": {
       "title": "工具配置目录",

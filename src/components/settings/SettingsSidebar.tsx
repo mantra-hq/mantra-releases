@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import {
     Globe,
     HelpCircle,
+    Info,
     Server,
     FolderCog,
     KeyRound,
@@ -38,6 +39,7 @@ const NAV_GROUPS: NavGroup[] = [
         items: [
             { labelKey: 'settings.nav.language', icon: Globe },
             { labelKey: 'settings.nav.helpAndSupport', icon: HelpCircle },
+            { labelKey: 'settings.nav.aboutAndUpdate', icon: Info },
         ],
     },
     {
