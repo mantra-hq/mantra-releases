@@ -27,12 +27,12 @@ jobs:
             arch: x64
           - os: macos-15
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: dmg,app
             platform_name: macos
             arch: x64
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: dmg,app
             platform_name: macos
             arch: arm64
           - os: ubuntu-22.04
@@ -152,11 +152,12 @@ jobs:
           # Note: .exe and .AppImage are excluded — in v2 format they serve as both
           # installer and updater artifact, handled in Phase 2 with original names
           find artifacts -type f \( -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" \) | while IFS= read -r file; do
-            dir_name=$(dirname "$file" | xargs basename)
             base_name=$(basename "$file")
             ext="${base_name##*.}"
-            # Extract platform and arch from artifact directory name
-            platform_arch=$(echo "$dir_name" | sed 's/Mantra-[^-]*-//')
+            # Extract artifact directory name (2nd path component: artifacts/<name>/...)
+            artifact_dir=$(echo "$file" | cut -d'/' -f2)
+            # Remove "Mantra-VERSION-" prefix to get platform-arch
+            platform_arch=$(echo "$artifact_dir" | sed "s/Mantra-${{ steps.version.outputs.version }}-//")
             cp "$file" "release-files/Mantra_${{ steps.version.outputs.version }}_${platform_arch}.${ext}"
           done
 
