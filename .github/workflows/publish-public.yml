@@ -88,7 +88,9 @@ jobs:
             # 1. Match the version line (e.g., "## [v0.6.0]...") -> set flag=1, skip line
             # 2. If flag is set and we hit the next version line (starts with "## [v") -> exit
             # 3. If flag is set, print the line
-            awk -v ver="^## \[${VERSION}\]" '
+            # Escape special regex characters in version string (e.g., dots, hyphens in brackets)
+            ESCAPED_VERSION=$(echo "$VERSION" | sed 's/[.[\*^$()+?{|\\]/\\&/g')
+            awk -v ver="^## \\[${ESCAPED_VERSION}\\]" '
               $0 ~ ver { flag=1; next } 
               /^## \[v/ && flag { flag=0; exit } 
               flag { print }
@@ -110,7 +112,7 @@ jobs:
           name: Mantra ${{ inputs.version }}
           files: release-files/*
           draft: false
-          prerelease: ${{ contains(inputs.version, '-') }}
+          prerelease: false
           make_latest: true
           body_path: release_body.md
 
