@@ -6,6 +6,22 @@
 
 ---
 
+## [v0.8.1] - 2026-02-09
+
+### Added
+
+- **Single Instance**: Added `tauri-plugin-single-instance` to prevent multiple app instances from running simultaneously; second launch focuses the existing window.
+
+### Changed
+
+- **Branding**: Renamed "Gateway" to "MCP Hub" across all UI text, system tray menus, tooltips, and i18n translations (zh-CN & en).
+- **App Icon**: Added transparent padding (~10%) to the app icon so it visually matches the size of other applications on macOS/Windows/Linux; tray icon uses a separate full-bleed icon to remain legible at small sizes.
+
+### Fixed
+
+- **System Tray Status Sync**: Fixed tray status never refreshing because the tray was created without an explicit ID (`TrayIconBuilder::new()` → `TrayIconBuilder::with_id("main")`). Start/stop/restart gateway commands now correctly sync tray state.
+- **System Tray Cleanup**: Removed the "Switch Project" submenu from the tray menu.
+
 ## [v0.8.0] - 2026-02-09
 
 ### Added
@@ -31,19 +47,10 @@
 - **MCP Enhancements**:
     - **Custom Config Path Resolution**: Support user-defined configuration directories for MCP tool scanning and takeover.
 
-- **Single Instance**: Added `tauri-plugin-single-instance` to prevent multiple app instances from running simultaneously; second launch focuses the existing window.
-
 ### Changed
 
 - **Settings Layout**: Centered content layout inspired by VS Code settings for improved readability.
 - **CI/CD**: Improved version string handling in release workflows (awk-based changelog extraction).
-- **Branding**: Renamed "Gateway" to "MCP Hub" across all UI text, system tray menus, tooltips, and i18n translations (zh-CN & en).
-- **App Icon**: Added transparent padding (~10%) to the app icon so it visually matches the size of other applications on macOS/Windows/Linux; tray icon uses a separate full-bleed icon to remain legible at small sizes.
-
-### Fixed
-
-- **System Tray Status Sync**: Fixed tray status never refreshing because the tray was created without an explicit ID (`TrayIconBuilder::new()` → `TrayIconBuilder::with_id("main")`). Start/stop/restart gateway commands now correctly sync tray state.
-- **System Tray Cleanup**: Removed the "Switch Project" submenu from the tray menu.
 
 ## [v0.7.0] - 2026-02-06
 
