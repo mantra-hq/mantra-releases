@@ -6,6 +6,36 @@
 
 ---
 
+## [v0.8.0] - 2026-02-09
+
+### Added
+
+- **Auto-Updater System (Epic 14)**:
+    - **Tauri Plugin Updater Integration**: Configured `tauri-plugin-updater` with signing key verification and update endpoint (Story 14.1, 14.2).
+    - **Cloudflare Worker Update Endpoint**: Deployed a Cloudflare Worker to serve update metadata from the public release repository (Story 14.3).
+    - **CI/CD Updater Artifacts**: Extended `release.yml` and `publish-public.yml` to build, sign, and publish updater artifacts (`.sig`, `.app.tar.gz`) across all platforms (Story 14.4).
+    - **useUpdateChecker Hook**: Implemented a React Hook for automatic update checking (every 24h), silent background downloading, and restart-to-update flow (Story 14.5).
+    - **Settings "About & Update" Section**: Added version display and manual update check to the General Settings page, with download progress and restart button (Story 14.7).
+    - **Lightweight Update UX (VS Code-style)**: Badge indicator on the settings button when an update is ready; auto-check toggle with localStorage persistence; changelog opens as external link (Story 14.10).
+    - **i18n**: Added `updater` namespace translations for English and Chinese (Story 14.8).
+    - **E2E Verification**: Completed full end-to-end update flow validation across platforms (Story 14.9).
+
+- **Settings Page Overhaul**:
+    - **Nested Routing**: Refactored Settings into sidebar navigation with General, Development, and Privacy sub-pages.
+    - **ToolConfigPathManager**: Added UI for managing custom AI tool configuration paths (Claude Code, Cursor, etc.).
+
+- **Session Player**:
+    - **SkillRenderer**: New component for displaying skill/command invocation details (name, arguments, results) in session narratives.
+    - **PrivacyPledge**: Added privacy commitment display to the Player empty state.
+
+- **MCP Enhancements**:
+    - **Custom Config Path Resolution**: Support user-defined configuration directories for MCP tool scanning and takeover.
+
+### Changed
+
+- **Settings Layout**: Centered content layout inspired by VS Code settings for improved readability.
+- **CI/CD**: Improved version string handling in release workflows (awk-based changelog extraction).
+
 ## [v0.7.0] - 2026-02-06
 
 ### Added
