@@ -53,12 +53,9 @@ test.describe("设置页关于与更新区域", () => {
     await basePage.goto("/settings/general");
     await basePage.waitForAppReady();
 
-    // 等待自动检查完成
-    await page.waitForTimeout(7000);
-
-    // 点击手动检查
+    // 等待自动检查完成（按钮变为可点击状态）
     const checkUpdateBtn = basePage.getByTestId("check-update-button");
-    await expect(checkUpdateBtn).toBeVisible({ timeout: 10000 });
+    await expect(checkUpdateBtn).toBeEnabled({ timeout: 15000 });
     await checkUpdateBtn.click();
 
     // 应显示「已是最新版本」状态

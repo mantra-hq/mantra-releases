@@ -282,7 +282,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     mountedRef.current = true;
 
     // Story 14.10 AC #4: autoUpdateEnabled === false 时跳过自动检查
-    if (!autoUpdateEnabledRef.current) {
+    if (!autoUpdateEnabled) {
       return () => {
         mountedRef.current = false;
         cleanupUpdate();
@@ -323,7 +323,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       // 清理 Update 资源
       cleanupUpdate();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoUpdateEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     updateAvailable,

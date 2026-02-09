@@ -552,6 +552,35 @@ describe("useUpdateChecker", () => {
       expect(result.current.updateStatus).toBe("idle");
     });
 
+    it("运行时从 false 切换到 true 应触发自动检查", async () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "false");
+      mockCheck.mockResolvedValue(null);
+
+      const { result } = renderHook(() => useUpdateChecker());
+
+      // 初始状态不应触发检查
+      await act(async () => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(mockCheck).not.toHaveBeenCalled();
+
+      // 启用自动更新
+      act(() => {
+        result.current.setAutoUpdateEnabled(true);
+      });
+
+      // useEffect 重新运行，创建 startup timer
+      await act(async () => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(mockCheck).toHaveBeenCalled();
+    });
+
     it("应暴露 setAutoUpdateEnabled 方法", () => {
       const { result } = renderHook(() => useUpdateChecker());
       expect(typeof result.current.setAutoUpdateEnabled).toBe("function");
