@@ -101,7 +101,7 @@ use commands::{
     // Story 13.1: Tool Config Path Management commands
     get_tool_config_paths, set_tool_config_path, reset_tool_config_path,
     // Story 11.7: Tray commands
-    get_tray_status, update_tray_gateway_status, update_tray_project, set_tray_error,
+    get_tray_status, update_tray_gateway_status, set_tray_error,
     // Story 11.12: OAuth commands
     OAuthState, oauth_start_flow, oauth_get_status, oauth_disconnect, oauth_refresh_token,
     // Story 11.11: MCP Inspector commands
@@ -139,6 +139,14 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 当第二个实例尝试启动时，聚焦已有窗口
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -262,6 +270,16 @@ pub fn run() {
                     match start_gateway(app_handle.clone(), gateway_state, app_state, mcp_state).await {
                         Ok(status) => {
                             println!("[Mantra] Gateway Server started on port {}", status.port.unwrap_or(0));
+
+                            // 同步更新托盘状态
+                            let tray_state: tauri::State<'_, TrayState> = app_handle.state();
+                            {
+                                let mut tray_manager = tray_state.manager.write().await;
+                                tray_manager.set_hub_running(true);
+                            }
+                            if let Err(e) = tray::refresh_tray(&app_handle).await {
+                                eprintln!("[Mantra] Failed to refresh tray after gateway start: {}", e);
+                            }
                         }
                         Err(e) => {
                             eprintln!("[Mantra] Failed to start Gateway Server: {:?}", e);
@@ -451,7 +469,6 @@ pub fn run() {
             // Story 11.7: Tray
             get_tray_status,
             update_tray_gateway_status,
-            update_tray_project,
             set_tray_error,
             // Story 11.12: OAuth
             oauth_start_flow,

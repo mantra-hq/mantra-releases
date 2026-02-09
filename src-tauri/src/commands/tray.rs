@@ -15,12 +15,10 @@ use crate::tray::{TrayIconState, TrayState};
 pub struct TrayStatusResponse {
     /// 图标状态
     pub icon_state: String,
-    /// 当前项目
-    pub current_project: Option<String>,
     /// 连接数
     pub connection_count: u32,
-    /// Gateway 是否运行中
-    pub gateway_running: bool,
+    /// MCP Hub 是否运行中
+    pub hub_running: bool,
     /// Tooltip 文本
     pub tooltip: String,
 }
@@ -42,14 +40,13 @@ pub async fn get_tray_status(tray_state: State<'_, TrayState>) -> Result<TraySta
 
     Ok(TrayStatusResponse {
         icon_state: manager.icon_state.into(),
-        current_project: manager.current_project.clone(),
         connection_count: manager.connection_count,
-        gateway_running: manager.gateway_running,
+        hub_running: manager.hub_running,
         tooltip: manager.get_tooltip(),
     })
 }
 
-/// 更新托盘 Gateway 状态
+/// 更新托盘 MCP Hub 状态
 #[tauri::command]
 pub async fn update_tray_gateway_status(
     tray_state: State<'_, TrayState>,
@@ -58,33 +55,13 @@ pub async fn update_tray_gateway_status(
 ) -> Result<TrayStatusResponse, AppError> {
     let mut manager = tray_state.manager.write().await;
 
-    manager.set_gateway_running(running);
+    manager.set_hub_running(running);
     manager.set_connection_count(connection_count);
 
     Ok(TrayStatusResponse {
         icon_state: manager.icon_state.into(),
-        current_project: manager.current_project.clone(),
         connection_count: manager.connection_count,
-        gateway_running: manager.gateway_running,
-        tooltip: manager.get_tooltip(),
-    })
-}
-
-/// 更新托盘当前项目
-#[tauri::command]
-pub async fn update_tray_project(
-    tray_state: State<'_, TrayState>,
-    project_name: Option<String>,
-) -> Result<TrayStatusResponse, AppError> {
-    let mut manager = tray_state.manager.write().await;
-
-    manager.set_current_project(project_name);
-
-    Ok(TrayStatusResponse {
-        icon_state: manager.icon_state.into(),
-        current_project: manager.current_project.clone(),
-        connection_count: manager.connection_count,
-        gateway_running: manager.gateway_running,
+        hub_running: manager.hub_running,
         tooltip: manager.get_tooltip(),
     })
 }
@@ -98,9 +75,8 @@ pub async fn set_tray_error(tray_state: State<'_, TrayState>) -> Result<TrayStat
 
     Ok(TrayStatusResponse {
         icon_state: manager.icon_state.into(),
-        current_project: manager.current_project.clone(),
         connection_count: manager.connection_count,
-        gateway_running: manager.gateway_running,
+        hub_running: manager.hub_running,
         tooltip: manager.get_tooltip(),
     })
 }

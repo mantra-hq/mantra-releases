@@ -248,12 +248,19 @@ pub async fn start_gateway(
         }
     }
 
-    get_gateway_status_internal(&manager)
+    let result = get_gateway_status_internal(&manager);
+
+    // 同步更新托盘状态
+    drop(manager);
+    sync_tray_hub_state(&app_handle, true).await;
+
+    result
 }
 
 /// 停止 Gateway Server
 #[tauri::command]
 pub async fn stop_gateway(
+    app_handle: tauri::AppHandle,
     gateway_state: State<'_, GatewayServerState>,
     app_state: State<'_, AppState>,
 ) -> Result<GatewayStatusResponse, AppError> {
@@ -272,7 +279,13 @@ pub async fn stop_gateway(
             .map_err(|e| AppError::internal(e.to_string()))?;
     }
 
-    get_gateway_status_internal(&manager)
+    let result = get_gateway_status_internal(&manager);
+
+    // 同步更新托盘状态
+    drop(manager);
+    sync_tray_hub_state(&app_handle, false).await;
+
+    result
 }
 
 /// 重启 Gateway Server
@@ -393,7 +406,13 @@ pub async fn restart_gateway(
         }
     }
 
-    get_gateway_status_internal(&manager)
+    let result = get_gateway_status_internal(&manager);
+
+    // 同步更新托盘状态
+    drop(manager);
+    sync_tray_hub_state(&app_handle, true).await;
+
+    result
 }
 
 /// 重新生成 Gateway Token
@@ -964,4 +983,16 @@ pub async fn gateway_refresh_all(
     let result = aggregator.refresh_all(env_resolver).await;
 
     Ok(result.into())
+}
+
+/// 同步托盘 MCP Hub 状态
+async fn sync_tray_hub_state(app_handle: &tauri::AppHandle, running: bool) {
+    let tray_state: tauri::State<'_, crate::tray::TrayState> = app_handle.state();
+    {
+        let mut tray_manager = tray_state.manager.write().await;
+        tray_manager.set_hub_running(running);
+    }
+    if let Err(e) = crate::tray::refresh_tray(app_handle).await {
+        eprintln!("[Gateway] Failed to refresh tray: {}", e);
+    }
 }
