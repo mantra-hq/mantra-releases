@@ -16,8 +16,8 @@ pub enum TrayIconState {
 }
 
 // 内嵌图标资源
-// 使用应用的 ICO 图标作为托盘图标
-const ICON_BYTES: &[u8] = include_bytes!("../../icons/icon.ico");
+// 使用专用的托盘图标（无边距，在小尺寸下更清晰）
+const ICON_BYTES: &[u8] = include_bytes!("../../icons/tray-icon.ico");
 
 /// 加载托盘图标
 ///
