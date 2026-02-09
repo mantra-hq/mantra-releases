@@ -8,4 +8,3 @@ export { NotificationBell } from "./NotificationBell";
 export { NotificationInbox } from "./NotificationInbox";
 export { NotificationBanner } from "./NotificationBanner";
 export { NotificationBannerStack } from "./NotificationBannerStack";
-export { UpdateNotificationBar } from "./UpdateNotificationBar";

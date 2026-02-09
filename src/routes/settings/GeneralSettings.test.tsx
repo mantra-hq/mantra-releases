@@ -35,6 +35,7 @@ vi.mock("@/stores", () => ({
 const mockCheckForUpdate = vi.fn().mockResolvedValue(undefined);
 const mockRestartToUpdate = vi.fn().mockResolvedValue(undefined);
 const mockDismissUpdate = vi.fn();
+const mockSetAutoUpdateEnabled = vi.fn();
 
 const defaultUpdateCheckerState: UseUpdateCheckerResult = {
   updateAvailable: false,
@@ -42,10 +43,12 @@ const defaultUpdateCheckerState: UseUpdateCheckerResult = {
   downloadProgress: 0,
   updateStatus: "idle",
   errorMessage: null,
+  autoUpdateEnabled: true,
   checkForUpdate: mockCheckForUpdate,
   downloadAndInstall: vi.fn(),
   restartToUpdate: mockRestartToUpdate,
   dismissUpdate: mockDismissUpdate,
+  setAutoUpdateEnabled: mockSetAutoUpdateEnabled,
 };
 
 let mockUpdateCheckerReturn: UseUpdateCheckerResult = { ...defaultUpdateCheckerState };
@@ -245,6 +248,64 @@ describe("GeneralSettings", () => {
 
       expect(screen.getByTestId("error-status")).toBeInTheDocument();
       expect(screen.getByText("检查更新失败，请稍后重试")).toBeInTheDocument();
+    });
+
+    // --- Story 14.10: 自动更新开关测试 ---
+
+    it("renders auto-update switch checked by default", async () => {
+      await renderSettled();
+      const switchEl = screen.getByTestId("auto-update-switch");
+      expect(switchEl).toBeInTheDocument();
+      expect(switchEl).toHaveAttribute("data-state", "checked");
+    });
+
+    it("renders auto-update switch unchecked when disabled", async () => {
+      mockUpdateCheckerReturn = {
+        ...defaultUpdateCheckerState,
+        autoUpdateEnabled: false,
+      };
+      await renderSettled();
+      const switchEl = screen.getByTestId("auto-update-switch");
+      expect(switchEl).toHaveAttribute("data-state", "unchecked");
+    });
+
+    it("calls setAutoUpdateEnabled when switch is toggled", async () => {
+      await renderSettled();
+      const switchEl = screen.getByTestId("auto-update-switch");
+      fireEvent.click(switchEl);
+      expect(mockSetAutoUpdateEnabled).toHaveBeenCalledWith(false);
+    });
+
+    // --- Story 14.10: 查看更新日志按钮测试 ---
+
+    it("shows changelog button in ready status", async () => {
+      mockUpdateCheckerReturn = {
+        ...defaultUpdateCheckerState,
+        updateStatus: "ready",
+        updateInfo: { version: "0.8.0" },
+      };
+      await renderSettled();
+      expect(screen.getByTestId("view-changelog-button")).toBeInTheDocument();
+    });
+
+    it("opens changelog URL when changelog button is clicked", async () => {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      mockUpdateCheckerReturn = {
+        ...defaultUpdateCheckerState,
+        updateStatus: "ready",
+        updateInfo: { version: "0.8.0" },
+      };
+      await renderSettled();
+
+      fireEvent.click(screen.getByTestId("view-changelog-button"));
+      expect(openUrl).toHaveBeenCalledWith(
+        "https://github.com/mantra-hq/mantra-releases/blob/main/CHANGELOG.md"
+      );
+    });
+
+    it("does not show changelog button in idle status", async () => {
+      await renderSettled();
+      expect(screen.queryByTestId("view-changelog-button")).not.toBeInTheDocument();
     });
   });
 });

@@ -15,6 +15,24 @@ vi.mock("@/components/theme-toggle", () => ({
   ThemeToggle: () => <button data-testid="theme-toggle">Toggle Theme</button>,
 }));
 
+// Mock useUpdateCheckerContext (Story 14.10)
+const mockUpdateCheckerContext = {
+  updateStatus: 'idle' as string,
+  updateAvailable: false,
+  updateInfo: null,
+  downloadProgress: 0,
+  errorMessage: null,
+  autoUpdateEnabled: true,
+  checkForUpdate: vi.fn(),
+  downloadAndInstall: vi.fn(),
+  restartToUpdate: vi.fn(),
+  dismissUpdate: vi.fn(),
+  setAutoUpdateEnabled: vi.fn(),
+};
+vi.mock("@/contexts/UpdateCheckerContext", () => ({
+  useUpdateCheckerContext: () => mockUpdateCheckerContext,
+}));
+
 // Mock useSearchStore
 const mockOpenSearch = vi.fn();
 vi.mock("@/stores/useSearchStore", () => ({
@@ -45,6 +63,7 @@ function renderWithRouter(ui: React.ReactElement) {
 describe("TopBarActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdateCheckerContext.updateStatus = 'idle';
   });
 
   describe("UI 展示", () => {
@@ -129,6 +148,32 @@ describe("TopBarActions", () => {
     it("isSyncing=false 时同步按钮应该启用", () => {
       renderWithRouter(<TopBarActions {...defaultProps} isSyncing={false} />);
       expect(screen.getByTestId("topbar-sync-button")).not.toBeDisabled();
+    });
+  });
+
+  describe("更新徽标 (Story 14.10)", () => {
+    it("updateStatus === 'ready' 时设置按钮应显示徽标", () => {
+      mockUpdateCheckerContext.updateStatus = 'ready';
+      renderWithRouter(<TopBarActions {...defaultProps} />);
+      expect(screen.getByTestId("settings-update-badge")).toBeInTheDocument();
+    });
+
+    it("updateStatus === 'idle' 时设置按钮不应显示徽标", () => {
+      mockUpdateCheckerContext.updateStatus = 'idle';
+      renderWithRouter(<TopBarActions {...defaultProps} />);
+      expect(screen.queryByTestId("settings-update-badge")).not.toBeInTheDocument();
+    });
+
+    it("updateStatus === 'checking' 时设置按钮不应显示徽标", () => {
+      mockUpdateCheckerContext.updateStatus = 'checking';
+      renderWithRouter(<TopBarActions {...defaultProps} />);
+      expect(screen.queryByTestId("settings-update-badge")).not.toBeInTheDocument();
+    });
+
+    it("updateStatus === 'downloading' 时设置按钮不应显示徽标", () => {
+      mockUpdateCheckerContext.updateStatus = 'downloading';
+      renderWithRouter(<TopBarActions {...defaultProps} />);
+      expect(screen.queryByTestId("settings-update-badge")).not.toBeInTheDocument();
     });
   });
 

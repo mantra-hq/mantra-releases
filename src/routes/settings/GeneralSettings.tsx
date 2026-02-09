@@ -11,8 +11,10 @@ import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { getVersion } from '@tauri-apps/api/app';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { ClipboardCopy, Loader2, Globe, BookOpen, CheckCircle, RefreshCw, RotateCcw } from 'lucide-react';
+import { ClipboardCopy, Loader2, Globe, BookOpen, CheckCircle, RefreshCw, RotateCcw, ExternalLink } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 import { useUpdateCheckerContext } from '@/contexts/UpdateCheckerContext';
 import { feedback } from '@/lib/feedback';
@@ -32,6 +34,8 @@ export function GeneralSettings() {
         updateStatus,
         checkForUpdate,
         restartToUpdate,
+        autoUpdateEnabled,
+        setAutoUpdateEnabled,
     } = useUpdateCheckerContext();
 
     useEffect(() => {
@@ -158,6 +162,19 @@ export function GeneralSettings() {
                     {t("updater.aboutMantra")}
                 </h2>
                 <div className="space-y-3">
+                    {/* 自动检查更新开关 (Story 14.10 AC #4) */}
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="auto-update-switch" className="text-sm font-medium cursor-pointer">
+                            {t("updater.autoCheck")}
+                        </Label>
+                        <Switch
+                            id="auto-update-switch"
+                            checked={autoUpdateEnabled}
+                            onCheckedChange={setAutoUpdateEnabled}
+                            data-testid="auto-update-switch"
+                        />
+                    </div>
+
                     {/* 版本号 + 检查更新按钮 */}
                     <div className="flex items-center justify-between">
                         <div>
@@ -213,16 +230,28 @@ export function GeneralSettings() {
                             <span className="text-sm text-blue-500">
                                 {t("updater.readyToInstall", { version: updateInfo?.version })}
                             </span>
-                            <Button
-                                variant="default"
-                                size="sm"
-                                onClick={restartToUpdate}
-                                className="gap-2"
-                                data-testid="restart-to-update-button"
-                            >
-                                <RotateCcw className="h-4 w-4" />
-                                {t("updater.restartToUpdate")}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openUrl('https://github.com/mantra-hq/mantra-releases/blob/main/CHANGELOG.md')}
+                                    className="gap-2"
+                                    data-testid="view-changelog-button"
+                                >
+                                    <ExternalLink className="h-4 w-4" />
+                                    {t("updater.viewChangelog")}
+                                </Button>
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={restartToUpdate}
+                                    className="gap-2"
+                                    data-testid="restart-to-update-button"
+                                >
+                                    <RotateCcw className="h-4 w-4" />
+                                    {t("updater.restartToUpdate")}
+                                </Button>
+                            </div>
                         </div>
                     )}
 

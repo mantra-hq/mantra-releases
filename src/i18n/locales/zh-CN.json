@@ -1494,10 +1494,10 @@
     "downloadProgress": "下载中... {{progress}}%",
     "readyToInstall": "新版本 {{version}} 已就绪",
     "restartToUpdate": "重启以更新",
-    "releaseNotes": "更新日志",
-    "dismiss": "忽略",
     "checkFailed": "检查更新失败，请稍后重试",
     "aboutMantra": "关于 Mantra",
-    "currentVersion": "当前版本"
+    "currentVersion": "当前版本",
+    "autoCheck": "自动检查更新",
+    "viewChangelog": "查看更新日志"
   }
 }

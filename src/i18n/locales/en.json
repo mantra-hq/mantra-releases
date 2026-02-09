@@ -1488,10 +1488,10 @@
     "downloadProgress": "Downloading... {{progress}}%",
     "readyToInstall": "Version {{version}} is ready to install",
     "restartToUpdate": "Restart to Update",
-    "releaseNotes": "Release Notes",
-    "dismiss": "Dismiss",
     "checkFailed": "Update check failed, please try again later",
     "aboutMantra": "About Mantra",
-    "currentVersion": "Current Version"
+    "currentVersion": "Current Version",
+    "autoCheck": "Auto Check for Updates",
+    "viewChangelog": "View Changelog"
   }
 }

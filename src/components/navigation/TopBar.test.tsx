@@ -29,6 +29,23 @@ vi.mock("@/components/theme-toggle", () => ({
   ThemeToggle: () => <button data-testid="theme-toggle">Toggle Theme</button>,
 }));
 
+// Mock useUpdateCheckerContext (Story 14.10)
+vi.mock("@/contexts/UpdateCheckerContext", () => ({
+  useUpdateCheckerContext: () => ({
+    updateStatus: 'idle',
+    updateAvailable: false,
+    updateInfo: null,
+    downloadProgress: 0,
+    errorMessage: null,
+    autoUpdateEnabled: true,
+    checkForUpdate: vi.fn(),
+    downloadAndInstall: vi.fn(),
+    restartToUpdate: vi.fn(),
+    dismissUpdate: vi.fn(),
+    setAutoUpdateEnabled: vi.fn(),
+  }),
+}));
+
 // 测试数据
 const mockSessions: SessionSummary[] = [
   {

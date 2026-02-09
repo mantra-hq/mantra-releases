@@ -283,7 +283,7 @@ describe("useUpdateChecker", () => {
       });
 
       expect(result.current.updateStatus).toBe("error");
-      expect(result.current.errorMessage).toBe("Check failed");
+      expect(result.current.errorMessage).toBe("string error");
     });
 
     it("错误应写入 console.warn", async () => {
@@ -297,8 +297,9 @@ describe("useUpdateChecker", () => {
       });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        "[useUpdateChecker]",
-        "Test error"
+        "[useUpdateChecker] check error:",
+        "Test error",
+        expect.any(Error)
       );
       warnSpy.mockRestore();
     });
@@ -462,6 +463,98 @@ describe("useUpdateChecker", () => {
       });
 
       expect(mockClose).toHaveBeenCalled();
+    });
+  });
+
+  // --- 自动更新开关 (Story 14.10) ---
+
+  describe("autoUpdateEnabled", () => {
+    it("默认应为 true（无 localStorage 记录时）", () => {
+      const { result } = renderHook(() => useUpdateChecker());
+      expect(result.current.autoUpdateEnabled).toBe(true);
+    });
+
+    it("localStorage 为 'false' 时应初始化为 false", () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "false");
+      const { result } = renderHook(() => useUpdateChecker());
+      expect(result.current.autoUpdateEnabled).toBe(false);
+    });
+
+    it("localStorage 为 'true' 时应初始化为 true", () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "true");
+      const { result } = renderHook(() => useUpdateChecker());
+      expect(result.current.autoUpdateEnabled).toBe(true);
+    });
+
+    it("setAutoUpdateEnabled 应更新状态和 localStorage", () => {
+      const { result } = renderHook(() => useUpdateChecker());
+
+      act(() => {
+        result.current.setAutoUpdateEnabled(false);
+      });
+
+      expect(result.current.autoUpdateEnabled).toBe(false);
+      expect(window.localStorage.getItem("mantra-auto-update-enabled")).toBe("false");
+
+      act(() => {
+        result.current.setAutoUpdateEnabled(true);
+      });
+
+      expect(result.current.autoUpdateEnabled).toBe(true);
+      expect(window.localStorage.getItem("mantra-auto-update-enabled")).toBe("true");
+    });
+
+    it("autoUpdateEnabled === false 时不应触发启动延迟检查", async () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "false");
+
+      renderHook(() => useUpdateChecker());
+
+      // 快进超过 startup delay
+      await act(async () => {
+        vi.advanceTimersByTime(10000);
+      });
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(mockCheck).not.toHaveBeenCalled();
+    });
+
+    it("autoUpdateEnabled === false 时不应触发周期检查", async () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "false");
+
+      renderHook(() => useUpdateChecker());
+
+      // 快进超过 24h
+      await act(async () => {
+        vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+      });
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(mockCheck).not.toHaveBeenCalled();
+    });
+
+    it("autoUpdateEnabled === false 时手动检查仍可用", async () => {
+      window.localStorage.setItem("mantra-auto-update-enabled", "false");
+      mockCheck.mockResolvedValue(null);
+
+      const { result } = renderHook(() => useUpdateChecker());
+
+      await act(async () => {
+        await result.current.checkForUpdate();
+      });
+
+      expect(mockCheck).toHaveBeenCalled();
+      expect(result.current.updateStatus).toBe("idle");
+    });
+
+    it("应暴露 setAutoUpdateEnabled 方法", () => {
+      const { result } = renderHook(() => useUpdateChecker());
+      expect(typeof result.current.setAutoUpdateEnabled).toBe("function");
     });
   });
 

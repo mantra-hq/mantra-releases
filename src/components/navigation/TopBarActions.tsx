@@ -20,6 +20,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ModeSwitch } from "@/components/layout/ModeSwitch";
 import { useSearchStore } from "@/stores/useSearchStore";
 import { useSanitizePreviewStore } from "@/stores/useSanitizePreviewStore";
+import { useUpdateCheckerContext } from "@/contexts/UpdateCheckerContext";
 import {
   Tooltip,
   TooltipContent,
@@ -63,6 +64,9 @@ export function TopBarActions({
   const isLoading = useSanitizePreviewStore((state) => state.isLoading);
   const setSessionId = useSanitizePreviewStore((state) => state.setSessionId);
   const enterPreviewMode = useSanitizePreviewStore((state) => state.enterPreviewMode);
+
+  // 更新状态 (Story 14.10 AC #2)
+  const { updateStatus } = useUpdateCheckerContext();
 
   // 同步 sessionId 到 store
   useEffect(() => {
@@ -185,7 +189,7 @@ export function TopBarActions({
         {/* TODO: 通知功能暂未开放 */}
         {/* <NotificationBell /> */}
 
-        {/* 设置按钮 (Story 2.21 AC #16) */}
+        {/* 设置按钮 (Story 2.21 AC #16) + 更新徽标 (Story 14.10 AC #2) */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -194,9 +198,15 @@ export function TopBarActions({
               onClick={() => navigate("/settings")}
               aria-label={t("settings.title")}
               data-testid="topbar-settings-button"
-              className="h-8 w-8"
+              className="relative h-8 w-8"
             >
               <Settings className="h-4 w-4" />
+              {updateStatus === 'ready' && (
+                <span
+                  className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500"
+                  data-testid="settings-update-badge"
+                />
+              )}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">

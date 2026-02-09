@@ -25,9 +25,8 @@ import { Toaster } from "./components/ui/sonner";
 import { GlobalSearch } from "./components/search";
 // TODO: 通知功能暂未开放
 // import { NotificationBannerStack } from "./components/notifications";
-import { UpdateNotificationBar } from "./components/notifications";
 import { useGlobalShortcut } from "./hooks";
-import { UpdateCheckerProvider, useUpdateCheckerContext } from "./contexts/UpdateCheckerContext";
+import { UpdateCheckerProvider } from "./contexts/UpdateCheckerContext";
 // import { useNotificationInit } from "./hooks";
 // Story 2-26: i18n 配置 (在导入 index.css 之前初始化)
 import "./i18n";
@@ -89,28 +88,6 @@ function GlobalShortcutProvider({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * UpdateNotificationBarContainer - 从 Context 消费更新状态渲染通知条
- * Story 14.6 + 14.7 Code Review: 通过 Context 共享单一 Hook 实例
- */
-function UpdateNotificationBarContainer() {
-  const {
-    updateStatus,
-    updateInfo,
-    restartToUpdate,
-    dismissUpdate,
-  } = useUpdateCheckerContext();
-
-  return (
-    <UpdateNotificationBar
-      updateStatus={updateStatus}
-      updateInfo={updateInfo}
-      onRestart={restartToUpdate}
-      onDismiss={dismissUpdate}
-    />
-  );
-}
-
-/**
  * 应用启动函数
  * Story 9.2 Fix: 确保测试环境 Mock 注入完成后再渲染 React
  * 避免首次 IPC 调用在 Mock 注入前发生
@@ -129,7 +106,6 @@ async function startApp() {
             {/* TODO: 通知功能暂未开放 */}
             {/* <NotificationBannerStack /> */}
             <UpdateCheckerProvider>
-              <UpdateNotificationBarContainer />
               <Routes>
                 {/* Story 2.21: 首页即 Player (空状态) */}
                 <Route path="/" element={<Player />} />

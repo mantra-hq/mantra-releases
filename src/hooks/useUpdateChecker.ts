@@ -31,16 +31,20 @@ export interface UseUpdateCheckerResult {
   downloadProgress: number;
   updateStatus: UpdateStatus;
   errorMessage: string | null;
+  // 自动更新开关 (Story 14.10 AC #4)
+  autoUpdateEnabled: boolean;
   // 方法 (AC #3)
   checkForUpdate: () => Promise<void>;
   downloadAndInstall: () => Promise<void>;
   restartToUpdate: () => Promise<void>;
   dismissUpdate: () => void;
+  setAutoUpdateEnabled: (enabled: boolean) => void;
 }
 
 // --- Constants ---
 
 const LAST_CHECK_KEY = 'mantra-update-last-check';
+const AUTO_UPDATE_KEY = 'mantra-auto-update-enabled';
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const STARTUP_DELAY_MS = 5000; // 5 seconds
 
@@ -73,6 +77,12 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 自动更新开关状态 (Story 14.10 AC #4)
+  const [autoUpdateEnabled, setAutoUpdateEnabledState] = useState<boolean>(
+    () => safeGetItem(AUTO_UPDATE_KEY) !== 'false'
+  );
+  const autoUpdateEnabledRef = useRef(autoUpdateEnabled);
 
   // Refs for resource management
   const updateRef = useRef<Update | null>(null);
@@ -257,10 +267,27 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     cleanupUpdate();
   }, [cleanupUpdate]);
 
+  /**
+   * 设置自动更新开关 (Story 14.10 AC #4)
+   */
+  const setAutoUpdateEnabled = useCallback((enabled: boolean) => {
+    setAutoUpdateEnabledState(enabled);
+    autoUpdateEnabledRef.current = enabled;
+    safeSetItem(AUTO_UPDATE_KEY, String(enabled));
+  }, []);
+
   // --- 自动检查逻辑 (AC #4, #5) ---
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // Story 14.10 AC #4: autoUpdateEnabled === false 时跳过自动检查
+    if (!autoUpdateEnabledRef.current) {
+      return () => {
+        mountedRef.current = false;
+        cleanupUpdate();
+      };
+    }
 
     const lastCheckStr = safeGetItem(LAST_CHECK_KEY);
     const lastCheck = lastCheckStr ? parseInt(lastCheckStr, 10) : 0;
@@ -270,13 +297,17 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     if (elapsed >= CHECK_INTERVAL_MS || lastCheck === 0) {
       // AC #4: 启动延迟检查
       startupTimerRef.current = setTimeout(() => {
-        performCheck(true);
+        if (autoUpdateEnabledRef.current) {
+          performCheck(true);
+        }
       }, STARTUP_DELAY_MS);
     }
 
     // 24 小时补充 setTimeout (长时间运行)
     periodicTimerRef.current = setTimeout(() => {
-      performCheck(true);
+      if (autoUpdateEnabledRef.current) {
+        performCheck(true);
+      }
     }, CHECK_INTERVAL_MS);
 
     return () => {
@@ -300,9 +331,11 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     downloadProgress,
     updateStatus,
     errorMessage,
+    autoUpdateEnabled,
     checkForUpdate,
     downloadAndInstall,
     restartToUpdate,
     dismissUpdate,
+    setAutoUpdateEnabled,
   };
 }

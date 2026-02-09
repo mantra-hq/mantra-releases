@@ -3,7 +3,7 @@
  * Story 14.7 Code Review Fix: 消除 useUpdateChecker 重复实例化
  *
  * 在根级别调用一次 useUpdateChecker，通过 Context 共享给所有消费者
- * (UpdateNotificationBar, GeneralSettings 等)
+ * (TopBarActions, GeneralSettings 等)
  */
 
 /* eslint-disable react-refresh/only-export-components */
