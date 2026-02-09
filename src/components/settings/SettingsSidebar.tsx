@@ -68,7 +68,7 @@ export function SettingsSidebar() {
 
     return (
         <nav
-            className="w-[200px] shrink-0 border-r bg-zinc-900/50 overflow-y-auto"
+            className="w-[200px] shrink-0 border-r"
             data-testid="settings-sidebar"
         >
             <div className="py-4 space-y-4">

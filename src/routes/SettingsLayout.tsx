@@ -37,12 +37,14 @@ export function Settings() {
                 </div>
             </header>
 
-            {/* Sidebar + Content */}
-            <div className="flex flex-1 overflow-hidden">
-                <SettingsSidebar />
-                <main className="flex-1 overflow-y-auto px-6 py-6 max-w-4xl mx-auto">
-                    <Outlet />
-                </main>
+            {/* Sidebar + Content — centered like VSCode settings */}
+            <div className="flex-1 overflow-y-auto">
+                <div className="max-w-5xl mx-auto flex min-h-full">
+                    <SettingsSidebar />
+                    <main className="flex-1 min-w-0 px-8 py-6">
+                        <Outlet />
+                    </main>
+                </div>
             </div>
         </div>
     );
