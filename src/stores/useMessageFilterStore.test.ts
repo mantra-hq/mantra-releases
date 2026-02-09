@@ -199,7 +199,7 @@ describe("useMessageFilterStore", () => {
 
 describe("MESSAGE_TYPES configuration", () => {
     it("should have correct number of types", () => {
-        expect(MESSAGE_TYPES).toHaveLength(6);
+        expect(MESSAGE_TYPES).toHaveLength(7);
     });
 
     it("should have unique ids", () => {

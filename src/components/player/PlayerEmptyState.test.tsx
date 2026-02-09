@@ -7,17 +7,20 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { PlayerEmptyState } from "./PlayerEmptyState";
 
 describe("PlayerEmptyState", () => {
   describe("有项目时的 UI (AC #4-8)", () => {
     it("应该显示 Play 图标 (AC #5)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       const icon = screen.getByTestId("empty-state-icon");
@@ -26,11 +29,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示主标题「选择一个会话开始回放」(AC #6)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByText("选择一个会话开始回放")).toBeInTheDocument();
@@ -38,11 +43,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示副标题 (AC #7)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(
@@ -52,11 +59,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示双按钮 (AC #8)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByText("打开项目列表")).toBeInTheDocument();
@@ -66,11 +75,13 @@ describe("PlayerEmptyState", () => {
     it("点击「打开项目列表」应该触发 onOpenDrawer (AC #8)", () => {
       const onOpenDrawer = vi.fn();
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={onOpenDrawer}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={onOpenDrawer}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       fireEvent.click(screen.getByText("打开项目列表"));
@@ -80,11 +91,13 @@ describe("PlayerEmptyState", () => {
     it("点击「导入项目」应该触发 onImport (AC #8)", () => {
       const onImport = vi.fn();
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={onImport}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={onImport}
+          />
+        </MemoryRouter>
       );
 
       fireEvent.click(screen.getByText("导入项目"));
@@ -95,11 +108,13 @@ describe("PlayerEmptyState", () => {
   describe("无项目时的 UI (AC #9)", () => {
     it("应该显示 Folder 图标", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       const icon = screen.getByTestId("empty-state-icon");
@@ -108,11 +123,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示主标题「还没有导入任何项目」(AC #9)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByText("还没有导入任何项目")).toBeInTheDocument();
@@ -120,11 +137,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示副标题 (AC #9)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(
@@ -134,11 +153,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示单个 CTA「导入第一个项目」(AC #9)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByText(/导入第一个项目/)).toBeInTheDocument();
@@ -148,11 +169,13 @@ describe("PlayerEmptyState", () => {
 
     it("应该显示支持说明 (AC #9)", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByText(/Claude Code/)).toBeInTheDocument();
@@ -164,11 +187,13 @@ describe("PlayerEmptyState", () => {
     it("点击「导入第一个项目」应该触发 onImport (AC #9)", () => {
       const onImport = vi.fn();
       render(
-        <PlayerEmptyState
-          hasProjects={false}
-          onOpenDrawer={vi.fn()}
-          onImport={onImport}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={false}
+            onOpenDrawer={vi.fn()}
+            onImport={onImport}
+          />
+        </MemoryRouter>
       );
 
       fireEvent.click(screen.getByText(/导入第一个项目/));
@@ -179,11 +204,13 @@ describe("PlayerEmptyState", () => {
   describe("data-testid", () => {
     it("应该有 player-empty-state testid", () => {
       render(
-        <PlayerEmptyState
-          hasProjects={true}
-          onOpenDrawer={vi.fn()}
-          onImport={vi.fn()}
-        />
+        <MemoryRouter>
+          <PlayerEmptyState
+            hasProjects={true}
+            onOpenDrawer={vi.fn()}
+            onImport={vi.fn()}
+          />
+        </MemoryRouter>
       );
 
       expect(screen.getByTestId("player-empty-state")).toBeInTheDocument();
