@@ -6,6 +6,31 @@
 
 ---
 
+## [v0.8.2] - 2026-02-12
+
+### Added
+
+- **MCP Project Management (Story 11.30, 11.31)**:
+    - **McpManagementSheet**: New sidebar sheet for managing MCP service associations directly from the project context menu, with associated service list, detected project configurations, error handling, and retry functionality.
+    - **Scoped Config Import**: `McpConfigImportSheet` now supports `initialScanResult` and `scopeFilter` props for automatic scanning and filtering based on project scope, skipping redundant scans.
+    - **Detectable Config Enhancement**: `DetectableConfig` now reports new service names and counts, filtering out services already present in the Hub for accurate representation.
+
+### Changed
+
+- **MCP Hub Icon**: Replaced Radio icon with Plug icon in GatewayStatusCard, TopBarActions, and Hub components for improved visual clarity.
+
+### Fixed
+
+- **AppImage Environment**: Fixed external subprocesses (Python, etc.) failing inside AppImage by cleaning up AppImage-injected environment variables (`LD_LIBRARY_PATH`, etc.) before spawning child processes.
+- **MCP Configuration Import**: Improved error handling for non-Error string messages during import; enhanced service detection with typed `DetectedServiceInfo` interface.
+
+### Internal
+
+- **Local Cross-Platform Release Workflow**: Added GitHub Actions workflows (`release-local.yml`, `release-act.yml`) for building on self-hosted macOS (x86_64 + ARM64), Linux, and Windows VMs via SSH.
+- **Local Release Script**: New `scripts/local-release.sh` with `--publish-only`, `--repo`, and platform selection options; comprehensive documentation (`release-act-setup.zh-CN.md`, `release-local-setup.zh-CN.md`).
+- **Makefile Release Targets**: Added `release-check`, `release-build`, and `release-publish` targets for streamlined cross-platform release management.
+- **Automated Release Body**: CI now auto-generates release body with download links and extracts changelog entries for the published version; syncs CHANGELOG to the public repository.
+
 ## [v0.8.1] - 2026-02-09
 
 ### Added
