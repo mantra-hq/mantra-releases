@@ -6,6 +6,31 @@
 
 ---
 
+## [v0.9.0] - 2026-02-14
+
+### Added
+
+- **Skills Hub — Unified Skills Management (Epic 15)**:
+    Skills Hub is the second pillar of Mantra's "Unified Configuration Plane" (alongside MCP Hub). It brings scattered AI tool skills into one place: **import once, use everywhere**.
+
+    - **Multi-Tool Skills Scanning**: Automatically discover skills across Claude Code, Cursor, Codex, and Gemini CLI — both user-level and project-level directories.
+    - **Smart Import with Three-Tier Preview**: Before importing, the system classifies each detected skill as "auto import", "auto skip", or "needs decision" based on content comparison, so you always know what will happen.
+    - **Safe Takeover with Automatic Backup**: Original skill directories are backed up before import. If anything goes wrong, changes are automatically rolled back. You can also manually restore backups at any time.
+    - **Cross-Tool Symlink Distribution**: Imported skills are stored centrally and distributed to each AI tool's skills directory via symlinks — all tools see the same skills without duplication.
+    - **Project-Level Skill Linking**: Flexibly associate skills to projects. User-level skills automatically link to all projects; project-level skills link only to their source project. Link or unlink at any time, and tool directories update automatically.
+    - **Reverse Flow Detection**: When opening a project, Mantra detects new skills created directly by AI tools (outside of Mantra) and prompts you to import them.
+    - **Skills Hub Page**: A dedicated management page with overview metrics, source-tool filter chips, search, list/grid view toggle, and collapsible backup status summary.
+    - **5-Step Import Wizard**: Guided import flow — Scan, Preview, Conflict Resolution, Execute, Link — with per-tool scan progress, structured diff highlighting, and post-import highlight animation.
+    - **Project Detail Integration**: Skills card embedded in the project detail page showing associated skills, unmanaged skill alerts, and quick-link actions — symmetric with MCP Hub's project integration.
+    - **Skill Detail & Lifecycle Management**: View full skill metadata and content, manage associated projects, delete skills with impact preview, and restore from backups with integrity verification.
+    - **Cross-Page Navigation**: Seamless navigation between Skills Hub and project detail pages in both directions.
+    - **Cross-Platform Support**: Works on Linux, macOS, and Windows (with automatic junction fallback on Windows).
+    - **i18n**: Full English and Chinese translations for all Skills Hub features.
+
+### Fixed
+
+- **Skills**: Fixed an error when syncing skill links for projects with virtual paths.
+
 ## [v0.8.2] - 2026-02-12
 
 ### Added
