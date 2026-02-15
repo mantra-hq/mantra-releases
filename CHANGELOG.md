@@ -6,6 +6,28 @@
 
 ---
 
+## [v0.9.1] - 2026-02-15
+
+### Added
+
+- **Search Result Message Navigation (Story 2.36)**:
+    - **Precise Message Positioning**: Clicking a search result now scrolls directly to the matching message with smooth animation and center alignment.
+    - **Message Highlight**: The focused message displays a blue left border with a pulsing background glow; other matches in the same session show a subtle blue marker.
+    - **In-Message Keyword Highlighting**: Matched keywords within message text are highlighted in yellow, case-insensitive. Code blocks and thinking blocks are excluded to avoid visual noise.
+    - **Multi-Match Navigator**: When a session has 2+ matches, a floating navigation bar appears at the top-right of the narrative panel — showing the keyword, match counter (e.g. "2/5"), and Previous/Next buttons with wrap-around.
+    - **Keyboard Shortcuts**: `Enter` jumps to the next match, `Shift+Enter` to the previous, and `Esc` dismisses all highlights.
+    - **i18n**: Full English and Chinese translations for all navigator labels.
+
+- **Skills Hub — Project Detail Integration Enhancement (Story 15.15)**:
+    - **SkillContextCard**: New compact overview card embedded in the project detail sheet, showing associated skill count, tool brand icons, and expandable skill list — symmetric with MCP Hub's project integration.
+    - **Unmanaged Skills Alert**: When unmanaged skills are detected in a project directory, an amber banner appears inside the card with a one-click import button.
+    - **Cross-Page Navigation**: Bidirectional navigation between Skills Hub and project detail pages — skill cards link to associated projects, project detail links back to Skills Hub.
+    - **Associated Skills Search**: When a project has more than 5 associated skills, a search box appears for quick filtering by name or description.
+
+### Fixed
+
+- **Search**: Fixed search result navigation losing message positioning parameters when switching between Compress/Analytics and Playback modes.
+
 ## [v0.9.0] - 2026-02-14
 
 ### Added
