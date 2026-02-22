@@ -6,6 +6,40 @@
 
 ---
 
+## [v0.10.0] - 2026-02-22
+
+### Added
+
+- **Session Live Streaming (Epic 16)**:
+    Mantra now supports real-time session updates — open an in-progress AI coding session and watch new messages appear live, like watching a livestream.
+
+    - **Unified Session Watcher**: A unified session watcher abstraction supports all four data sources (Claude Code, Codex, Cursor, Gemini CLI), serving as the foundation for both local and remote live updates.
+    - **Local JSONL Live Watch**: For Claude Code and Codex sessions, new messages are detected via file monitoring with incremental reading — only new content is processed, keeping resource usage minimal.
+    - **Local Cursor Live Watch**: For Cursor sessions, new messages are detected via periodic read-only database polling, ensuring no interference with Cursor's own operations.
+    - **Local Gemini Live Watch**: For Gemini CLI sessions, file changes trigger a full re-parse with diff comparison to extract new messages.
+    - **Live Message Rendering**: New messages appear in the narrative panel with fade-in animation. Smart scrolling auto-follows when you're at the bottom, or shows a "N new messages" floating button when you've scrolled up.
+    - **Live Status Indicator**: A status indicator next to the session title shows the current watch state — Live, Stopped, or Reconnecting.
+    - **Error Recovery**: Automatic reconnection with exponential backoff (up to 3 retries). Manual reconnect button available when automatic recovery fails. Idle detection lowers polling frequency when a session appears to have ended.
+
+- **Remote SSH Project Access (Epic 17)**:
+    Connect to remote servers via SSH and manage AI coding sessions as if they were local — import, browse files, and watch live updates, all without installing anything on the remote server.
+
+    - **Zero-Config SSH Connection**: Reads your existing `~/.ssh/config` to auto-discover remote hosts. Supports key file, ssh-agent, and password authentication with automatic fallback.
+    - **SSH Connection Persistence**: Successfully connected servers are saved locally for one-click reuse, sorted by last-used time on the import page.
+    - **File System Abstraction Layer**: A unified file system interface makes local and remote file operations interchangeable — all import, scan, and browse operations work identically regardless of data source location.
+    - **Remote Source Auto-Detection**: After connecting to a remote server, Mantra automatically detects available AI tool sessions (Claude Code, Cursor, Gemini CLI, Codex) with estimated session counts.
+    - **Remote Session Import**: Import sessions from remote servers via SFTP streaming (for JSONL sources) or remote command execution (for Cursor). No files are downloaded to your local machine.
+    - **Import Page Redesign**: The import page now uses a flat, location-grouped layout — local sources on top, each remote server below with its detected sessions. Add new remote servers from the SSH host list or manual input.
+    - **Remote Project File Browsing**: Browse remote project directories and read source code files directly in the session detail view, with memory cache for frequently accessed files.
+    - **Remote Session Live Updates**: Watch in-progress remote sessions in real-time — JSONL sources via streaming tail, Cursor via periodic remote database queries, and Gemini via remote file polling. Automatic reconnection from the last offset on SSH disconnection.
+    - **SSH Connection Pool & Keepalive**: Multiple operations (file browsing, live watch, import) share a single SSH connection with automatic channel multiplexing. Keepalive messages prevent idle timeout. Disconnected connections auto-recover on next use with a 60-second grace period before cleanup.
+    - **Remote Project Sync**: The "Sync" button works for remote projects — scans the remote server for new sessions and message updates without re-importing, with automatic SSH reconnection on network interruptions.
+
+### Fixed
+
+- **Live Watch**: Fixed session live watch not starting correctly for Claude Code sessions.
+- **Remote Live Recovery**: Fixed automatic recovery of remote session live updates after SSH disconnection — the connection ID is now preserved during disconnections, enabling seamless reconnection.
+
 ## [v0.9.1] - 2026-02-15
 
 ### Added
