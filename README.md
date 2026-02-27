@@ -39,18 +39,6 @@ Mantra is a desktop app that turns your AI coding sessions into navigable, repla
 
 ## Download
 
-> **Latest release: [v0.9.1](https://github.com/mantra-hq/mantra-releases/releases/tag/v0.9.1)**
-
-| Platform | Download | Type |
-|----------|----------|------|
-| **macOS** (Apple Silicon) | [Mantra_0.9.1_macos-arm64.dmg](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_macos-arm64.dmg) | DMG |
-| **macOS** (Intel) | [Mantra_0.9.1_macos-x64.dmg](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_macos-x64.dmg) | DMG |
-| **Windows** | [Mantra_0.9.1_windows-x64-setup.exe](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_windows-x64-setup.exe) | Installer |
-| **Windows** | [Mantra_0.9.1_windows-x64.msi](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_windows-x64.msi) | MSI |
-| **Linux** | [Mantra_0.9.1_linux-x64.AppImage](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_linux-x64.AppImage) | AppImage |
-| **Linux** (Debian/Ubuntu) | [Mantra_0.9.1_linux-x64.deb](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_linux-x64.deb) | DEB |
-| **Linux** (Fedora/RHEL) | [Mantra_0.9.1_linux-x64.rpm](https://github.com/mantra-hq/mantra-releases/releases/download/v0.9.1/Mantra_0.9.1_linux-x64.rpm) | RPM |
-
 See all assets on the [Releases](https://github.com/mantra-hq/mantra-releases/releases) page.
 
 ## How It Works
