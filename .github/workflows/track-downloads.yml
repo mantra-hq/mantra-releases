@@ -1,0 +1,133 @@
+name: Track Daily Download Stats
+
+on:
+  schedule:
+    # 每天 09:00 UTC（北京时间 17:00）自动运行
+    - cron: '0 9 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  track-downloads:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 需要写权限来提交 CSV
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch release download stats
+        id: fetch_stats
+        run: |
+          python3 << 'EOF'
+          import json
+          import csv
+          import os
+          import urllib.request
+          from datetime import datetime, timezone
+
+          REPO = "mantra-hq/mantra-releases"
+          API_URL = f"https://api.github.com/repos/{REPO}/releases"
+          CSV_PATH = "stats/downloads.csv"
+          TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+          # 需要统计的平台（排除 .sig 和 .tar.gz updater 文件）
+          PLATFORMS = {
+              "macos-arm64.dmg":        "macOS Apple Silicon",
+              "macos-x64.dmg":          "macOS Intel",
+              "linux-x64.AppImage":     "Linux AppImage",
+              "linux-x64.deb":          "Linux Debian",
+              "linux-x64.rpm":          "Linux RPM",
+              "windows-x64-setup.exe":  "Windows EXE",
+              "windows-x64.msi":        "Windows MSI",
+          }
+
+          # 请求 GitHub API（公开仓库无需 token）
+          headers = {"User-Agent": "mantra-download-tracker"}
+          req = urllib.request.Request(API_URL, headers=headers)
+          with urllib.request.urlopen(req) as resp:
+              releases = json.loads(resp.read())
+
+          # 汇总每个平台的总下载量（跨所有版本）
+          platform_totals = {key: 0 for key in PLATFORMS}
+          version_data = {}  # {version: {platform: count}}
+
+          for release in releases:
+              tag = release["tag_name"]  # 如 v0.10.0
+              version_data[tag] = {}
+              for asset in release["assets"]:
+                  name = asset["name"]
+                  count = asset["download_count"]
+                  for suffix, label in PLATFORMS.items():
+                      if name.endswith(suffix):
+                          platform_totals[suffix] += count
+                          version_data[tag][label] = count
+                          break
+
+          # 最新版本
+          latest = releases[0]["tag_name"] if releases else "N/A"
+          latest_counts = version_data.get(latest, {})
+
+          # 确保 stats 目录存在
+          os.makedirs("stats", exist_ok=True)
+
+          # 检查 CSV 是否已有今日记录
+          existing_rows = []
+          if os.path.exists(CSV_PATH):
+              with open(CSV_PATH, "r", newline="") as f:
+                  reader = csv.reader(f)
+                  existing_rows = list(reader)
+
+          # 检查是否已有今日数据
+          today_exists = any(row[0] == TODAY for row in existing_rows[1:] if row)
+
+          if today_exists:
+              print(f"⚠️ 今日 {TODAY} 数据已存在，跳过写入")
+          else:
+              fieldnames = ["date", "latest_version",
+                            "macos_arm64", "macos_x64",
+                            "linux_appimage", "linux_deb", "linux_rpm",
+                            "windows_exe", "windows_msi",
+                            "total_all_time"]
+
+              write_header = not os.path.exists(CSV_PATH) or not existing_rows
+
+              total_all_time = sum(platform_totals.values())
+
+              new_row = [
+                  TODAY,
+                  latest,
+                  latest_counts.get("macOS Apple Silicon", 0),
+                  latest_counts.get("macOS Intel", 0),
+                  latest_counts.get("Linux AppImage", 0),
+                  latest_counts.get("Linux Debian", 0),
+                  latest_counts.get("Linux RPM", 0),
+                  latest_counts.get("Windows EXE", 0),
+                  latest_counts.get("Windows MSI", 0),
+                  total_all_time,
+              ]
+
+              with open(CSV_PATH, "a", newline="") as f:
+                  writer = csv.writer(f)
+                  if write_header:
+                      writer.writerow(fieldnames)
+                  writer.writerow(new_row)
+
+              print(f"✅ 已记录 {TODAY}: {latest} 版本, 全平台累计 {total_all_time} 次下载")
+              print(f"   macOS arm64={new_row[2]} | x64={new_row[3]}")
+              print(f"   Linux AppImage={new_row[4]} | deb={new_row[5]} | rpm={new_row[6]}")
+              print(f"   Windows EXE={new_row[7]} | MSI={new_row[8]}")
+          EOF
+
+      - name: Commit and push stats
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add stats/downloads.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "📊 Daily download stats $(date -u +%Y-%m-%d)"
+            git push
+            echo "✅ Stats committed and pushed"
+          else
+            echo "ℹ️ No changes to commit"
+          fi
