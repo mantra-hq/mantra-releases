@@ -8,12 +8,12 @@ Replay your entire AI coding session like a video -- watch code evolve along the
 
 [![Latest Release](https://img.shields.io/github/v/release/mantra-hq/mantra-releases?style=flat-square&color=blue)](https://github.com/mantra-hq/mantra-releases/releases/latest)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-brightgreen?style=flat-square)](https://github.com/mantra-hq/mantra-releases/releases/latest)
-[![Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-blueviolet?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility)
-[![Cursor](https://img.shields.io/badge/works%20with-Cursor-blue?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility)
-[![Gemini CLI](https://img.shields.io/badge/works%20with-Gemini%20CLI-orange?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility)
-[![Codex](https://img.shields.io/badge/works%20with-Codex-green?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility)
+[![Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-blueviolet?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility?utm_source=github&utm_medium=badge)
+[![Cursor](https://img.shields.io/badge/works%20with-Cursor-blue?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility?utm_source=github&utm_medium=badge)
+[![Gemini CLI](https://img.shields.io/badge/works%20with-Gemini%20CLI-orange?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility?utm_source=github&utm_medium=badge)
+[![Codex](https://img.shields.io/badge/works%20with-Codex-green?style=flat-square)](https://docs.mantra.gonewx.com/reference/compatibility?utm_source=github&utm_medium=badge)
 
-[Website](https://mantra.gonewx.com) &bull; [Documentation](https://docs.mantra.gonewx.com) &bull; [Changelog](https://docs.mantra.gonewx.com/about/changelog)
+[Website](https://mantra.gonewx.com?utm_source=github&utm_medium=readme) &bull; [Documentation](https://docs.mantra.gonewx.com?utm_source=github&utm_medium=readme) &bull; [Changelog](https://docs.mantra.gonewx.com/about/changelog?utm_source=github&utm_medium=readme)
 
 <!-- TODO: Add a screenshot or GIF demo here -->
 <!-- ![Mantra Demo](https://mantra.gonewx.com/assets/demo.png) -->
@@ -69,7 +69,7 @@ All platforms: 4 GB RAM, 500 MB disk space.
 
 ## Links
 
-- [Website](https://mantra.gonewx.com)
-- [Documentation](https://docs.mantra.gonewx.com)
-- [Changelog](https://docs.mantra.gonewx.com/about/changelog)
+- [Website](https://mantra.gonewx.com?utm_source=github&utm_medium=readme)
+- [Documentation](https://docs.mantra.gonewx.com?utm_source=github&utm_medium=readme)
+- [Changelog](https://docs.mantra.gonewx.com/about/changelog?utm_source=github&utm_medium=readme)
 - [Report an Issue](https://github.com/mantra-hq/mantra-releases/issues)
