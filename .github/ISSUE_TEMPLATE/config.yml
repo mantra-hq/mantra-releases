@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.mantra.gonewx.com/
+    about: Check the documentation before opening an issue.
+  - name: Discord Community
+    url: https://discord.gg/hZ73MMfJxy
+    about: Ask questions and discuss with the community on Discord.
