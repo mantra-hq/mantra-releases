@@ -6,6 +6,54 @@
 
 ---
 
+## [v0.11.0] - 2026-03-03
+
+### Added
+
+- **AI Context Mapping (Epic 18)**:
+    Mantra now understands the "why" behind AI actions by mapping conversation context directly to code changes at the data layer.
+    - **Mentioned Files Extraction**: Enhanced parser intelligence to automatically extract all files referenced by the AI across all four parsers and live watchers, providing richer context for code exploration.
+    - **Reference Content Blocks**: Tool execution results (file reads, searches, etc.) are promoted to standalone reference blocks within the narrative, enabling cross-message context tracking.
+    - **Causality Mapping Engine**: Automatically identifies relationships between AI-read context and resulting code modifications, with a cost-efficient three-tier analysis (heuristic pre-filter, semantic analysis, persistence). Works offline in heuristic mode when no API key is configured.
+
+- **Deterministic Session Replay (Epic 19)**:
+    A powerful "Replay" capability that allows re-executing AI sessions in a controlled environment to verify, understand, and learn from AI coding processes.
+    - **Operation Extraction**: Automatically extracts replayable operations (file creation, modification, deletion, command execution) from session logs into a structured replay plan.
+    - **Git Checkpoint Management**: Automated management of temporary Git shadow repositories to ensure the workspace precisely matches the original session state at every replay step.
+    - **Multi-Level Security Sandbox**: Safe execution environment with three configurable isolation levels (Display-Only, Filesystem Isolation, Full Sandbox) to protect the host system during replay.
+    - **Resilient Diff Execution**: Advanced four-tier matching strategy (Exact, Whitespace-Normalized, Indentation-Agnostic, Hunk-Split) to apply code changes reliably even in evolving codebases.
+    - **Step-by-Step Interactive Mode (Default)**: Each AI operation is previewed before execution — showing the AI's reasoning, the planned change, and a diff preview — allowing manual confirmation or skip before applying. Perfect for learning or auditing complex changes.
+    - **Auto-Play Mode**: Switch to automatic execution with adjustable speed (1x / 2x / 5x), pause at any time to return to step-by-step mode.
+    - **Zero-Friction Entry**: Default workspace is auto-created per session, eliminating the need for manual directory selection. A guided entry card explains what will happen and provides an option to choose a custom directory.
+    - **Workspace Safety Validation**: Multi-layer protection prevents replay from accidentally modifying important directories (system paths, home directory, existing Git repos). Validation runs at both the UI and engine layers for defense in depth.
+    - **Replay Player UI**: Interactive panel with AI reasoning display, live diff preview, step timeline with status indicators (completed/skipped/pending), and a completion summary page with statistics and quick actions.
+    - **Replay Workspace Settings**: Configurable default replay workspace location in the Settings page, with browse and reset-to-default options.
+
+- **Enhanced Telemetry & Privacy Control**:
+    - Expanded telemetry coverage to 14 core events for better feature usage insights.
+    - New privacy-first telemetry consent system, allowing users to opt-in or out of anonymous analytics at any time.
+
+- **Unified App Directory Strategy**:
+    Mantra now follows platform-standard directory conventions on all operating systems, replacing the legacy `~/.mantra/` hardcoded path.
+    - **Platform-Standard Directories**: Data, configuration, cache, and log files are now stored in OS-standard locations (Linux XDG, macOS `~/Library`, Windows `%APPDATA%`), managed by a centralized PathResolver service.
+    - **Automatic Migration**: On first launch after upgrade, existing data in `~/.mantra/` is seamlessly migrated to the new standard locations. Partial failures are retried on next launch.
+    - **Config/Data Separation**: Configuration files (settings, privacy rules) and data files (sessions, skills, backups) are properly separated into distinct directories, following OS conventions.
+
+- **UI/UX Enhancements**:
+    - **Enhanced Mode Switcher**: Support for a four-state mode system (Narrative, Analytics, Compact, Replay).
+    - **Replay Branding**: Replay mode is branded as "Replay" (English) / "推演" (Chinese), distinct from "Playback" / "回放".
+    - **Visual Consistency**: Significant updates to Replay components for a more cohesive and responsive layout.
+    - **Update Visibility**: Improved update badge logic in the TopBar for better visibility of new versions.
+
+### Changed
+
+- **Causality UI Deferred**: The frontend causality highlighting visualization (Epic 18.4) has been deferred for UX redesign. The causality data layer is fully operational and will power an improved visualization in a future release.
+
+### Fixed
+
+- **Replay**: Fixed an issue where the replay engine would fail on files with unconventional indentation.
+- **UI**: Fixed update badge visibility logic in the TopBar.
+
 ## [v0.10.0] - 2026-02-22
 
 ### Added
