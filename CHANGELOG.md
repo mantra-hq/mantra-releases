@@ -6,6 +6,20 @@
 
 ---
 
+## [v0.11.1] - 2026-03-07
+
+### Added
+
+- **Session ID Copy**: Added a copy button for the session ID in the TopBar dropdown, with clipboard support (including fallback for older browsers) and visual feedback via tooltip.
+- **Project List Virtualization**: Implemented virtual scrolling for the project list in the ProjectDrawer component, significantly improving rendering performance for large project collections.
+- **Device ID Telemetry Correlation**: The update checker now sends a device ID header for cross-system telemetry correlation, allowing better insights into update adoption across devices.
+- **i18n**: Added missing translations for DiffModeToggle labels/tooltips and ContentBlockRenderer line count and expand prompts in both English and Chinese.
+
+### Fixed
+
+- **macOS WKWebView Rendering**: Fixed a visual occlusion bug where the backdrop-filter on the Hub page's sticky header caused rendering artifacts during re-paints. Resolved by forcing a separate compositing layer via `transform` style.
+- **Database Migration**: Improved database migration from the root data directory to a subdirectory for Tauri-native installations, ensuring compatibility with older builds and better error handling during the migration process.
+
 ## [v0.11.0] - 2026-03-03
 
 ### Added
