@@ -6,6 +6,16 @@
 
 ---
 
+## [v0.11.3] - 2026-03-10
+
+### Added
+
+- **Built-in Demo Session**: New users are greeted with a pre-loaded demo session on first launch, showcasing Mantra's core features — AI conversation replay, code timeline alignment, and narrative exploration — without needing to import their own sessions first. Demo projects and sessions are visually distinguished in the sidebar with a dedicated badge.
+
+### Fixed
+
+- **Project List Virtualization**: Fixed a rendering issue where the project list could appear empty when re-opening the ProjectDrawer, caused by the virtual scroller not being ready during re-mount.
+
 ## [v0.11.2] - 2026-03-08
 
 ### Improved
