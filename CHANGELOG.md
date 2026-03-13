@@ -6,6 +6,12 @@
 
 ---
 
+## [v0.11.4] - 2026-03-13
+
+### Improved
+
+- **Activation Guidance**: Enhanced first-use onboarding flow — added a horizontal bounce animation to the arrow hint in the empty code state to draw user attention, and auto-navigates to the first imported session after import wizard completes, reducing friction.
+
 ## [v0.11.3] - 2026-03-10
 
 ### Added
