@@ -1,0 +1,91 @@
+name: Sync GitHub Release Downloads to PostHog
+
+on:
+  schedule:
+    # 每天 UTC 2:00 执行（北京时间 10:00）
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch release data and sync to PostHog
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 获取所有 releases
+          releases=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/mantra-hq/mantra-releases/releases?per_page=100")
+          
+          echo "Found $(echo "$releases" | jq 'length') releases"
+          
+          # 遍历每个 release
+          echo "$releases" | jq -c '.[]' | while read -r release; do
+            version=$(echo "$release" | jq -r '.tag_name')
+            published_at=$(echo "$release" | jq -r '.published_at')
+            
+            echo "Processing release: ${version}"
+            
+            # 遍历每个 asset
+            echo "$release" | jq -c '.assets[]' | while read -r asset; do
+              asset_name=$(echo "$asset" | jq -r '.name')
+              download_count=$(echo "$asset" | jq -r '.download_count')
+              asset_created=$(echo "$asset" | jq -r '.created_at')
+              
+              # 跳过签名文件
+              if [[ "$asset_name" == *.sig ]]; then
+                continue
+              fi
+              
+              # 判断平台和架构
+              platform="unknown"
+              arch="unknown"
+              
+              if [[ "$asset_name" == *macos* ]] || [[ "$asset_name" == *app.tar.gz* ]]; then
+                platform="macos"
+                if [[ "$asset_name" == *arm64* ]] || [[ "$asset_name" == *aarch64* ]]; then
+                  arch="arm64"
+                else
+                  arch="x64"
+                fi
+              elif [[ "$asset_name" == *windows* ]] || [[ "$asset_name" == *.exe ]] || [[ "$asset_name" == *.msi ]]; then
+                platform="windows"
+                arch="x64"
+              elif [[ "$asset_name" == *linux* ]] || [[ "$asset_name" == *AppImage* ]] || [[ "$asset_name" == *.deb ]] || [[ "$asset_name" == *.rpm ]]; then
+                platform="linux"
+                arch="x64"
+              fi
+              
+              # 发送到 PostHog
+              response=$(curl -s -w "\n%{http_code}" -X POST "${POSTHOG_HOST}/capture/" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"api_key\": \"${POSTHOG_API_KEY}\",
+                  \"event\": \"github_release_download\",
+                  \"distinct_id\": \"github-release-sync\",
+                  \"timestamp\": \"${asset_created}\",
+                  \"properties\": {
+                    \"version\": \"${version}\",
+                    \"asset_name\": \"${asset_name}\",
+                    \"platform\": \"${platform}\",
+                    \"arch\": \"${arch}\",
+                    \"download_count\": ${download_count},
+                    \"published_at\": \"${published_at}\"
+                  }
+                }")
+              
+              http_code=$(echo "$response" | tail -1)
+              
+              if [ "$http_code" = "200" ]; then
+                echo "  ✓ ${asset_name}: ${download_count} downloads (${platform}/${arch})"
+              else
+                echo "  ✗ Failed: ${asset_name} (HTTP ${http_code})"
+              fi
+            done
+          done
+          
+          echo ""
+          echo "Sync completed!"
