@@ -10,6 +10,17 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore previous sync state
+        uses: actions/cache/restore@v4
+        with:
+          path: .sync-state.json
+          key: posthog-sync-state-${{ github.repository_id }}
+          restore-keys: |
+            posthog-sync-state-
+
       - name: Fetch release data and sync to PostHog
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
@@ -26,6 +37,21 @@ jobs:
             POSTHOG_HOST="https://us.i.posthog.com"
             echo "Using default POSTHOG_HOST: ${POSTHOG_HOST}"
           fi
+
+          # 获取当前同步时间（ISO 8601 格式）
+          sync_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          echo "Sync timestamp: ${sync_timestamp}"
+
+          # 加载上次同步的状态（用于计算增量）
+          if [ -f .sync-state.json ] && [ "$(cat .sync-state.json)" != "{}" ]; then
+            echo "Loaded previous sync state"
+            echo "true" > .has-previous-state
+          else
+            echo '{}' > .sync-state.json
+            echo "false" > .has-previous-state
+            echo "No previous sync state, starting fresh"
+          fi
+
           # 获取所有 releases
           releases=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
             "https://api.github.com/repos/mantra-hq/mantra-releases/releases?per_page=100")
@@ -43,7 +69,6 @@ jobs:
             echo "$release" | jq -c '.assets[]' | while read -r asset; do
               asset_name=$(echo "$asset" | jq -r '.name')
               download_count=$(echo "$asset" | jq -r '.download_count')
-              asset_created=$(echo "$asset" | jq -r '.created_at')
               
               # 跳过签名文件
               if [[ "$asset_name" == *.sig ]]; then
@@ -68,21 +93,38 @@ jobs:
                 platform="linux"
                 arch="x64"
               fi
+
+              # 计算增量下载数
+              asset_key="${version}:${asset_name}"
+              previous_count=$(jq -r --arg key "$asset_key" '.[$key] // 0' .sync-state.json)
+              download_delta=$((download_count - previous_count))
               
-              # 发送到 PostHog
+              # 更新状态文件
+              jq --arg key "$asset_key" --argjson val "$download_count" \
+                '.[$key] = $val' .sync-state.json > .sync-state.tmp && mv .sync-state.tmp .sync-state.json
+
+              # 跳过无增量的记录（首次同步除外）
+              has_previous=$(cat .has-previous-state)
+              if [ "$download_delta" -le 0 ] && [ "$has_previous" = "true" ]; then
+                echo "  - ${asset_name}: no new downloads (total: ${download_count})"
+                continue
+              fi
+
+              # 发送到 PostHog（使用当前同步时间）
               response=$(curl -s -w "\n%{http_code}" -X POST "${POSTHOG_HOST}/capture/" \
                 -H "Content-Type: application/json" \
                 -d "{
                   \"api_key\": \"${POSTHOG_API_KEY}\",
                   \"event\": \"github_release_download\",
                   \"distinct_id\": \"github-release-sync\",
-                  \"timestamp\": \"${asset_created}\",
+                  \"timestamp\": \"${sync_timestamp}\",
                   \"properties\": {
                     \"version\": \"${version}\",
                     \"asset_name\": \"${asset_name}\",
                     \"platform\": \"${platform}\",
                     \"arch\": \"${arch}\",
                     \"download_count\": ${download_count},
+                    \"download_delta\": ${download_delta},
                     \"published_at\": \"${published_at}\"
                   }
                 }")
@@ -91,13 +133,19 @@ jobs:
               response_body=$(echo "$response" | head -n -1)
               
               if [ "$http_code" = "200" ]; then
-                echo "  ✓ ${asset_name}: ${download_count} downloads (${platform}/${arch})"
+                echo "  ✓ ${asset_name}: +${download_delta} new downloads (total: ${download_count}) (${platform}/${arch})"
               else
                 echo "  ✗ Failed: ${asset_name} (HTTP ${http_code})"
                 echo "    Response: ${response_body}"
               fi
             done
           done
-          
+
           echo ""
           echo "Sync completed!"
+
+      - name: Save sync state
+        uses: actions/cache/save@v4
+        with:
+          path: .sync-state.json
+          key: posthog-sync-state-${{ github.repository_id }}
