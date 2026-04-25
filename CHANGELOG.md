@@ -6,6 +6,30 @@
 
 ---
 
+## [v0.11.6] - 2026-04-25
+
+### Added
+
+- **Skills Custom Source Directories (Story 15.22)**: Added a dedicated **Skills Source Path Manager** in Settings → Development that lets users register custom directories as additional skill sources. Users can list, add, update, and remove source paths, with backend validation (`notAccessible`, `notFound` mapped to localized errors). Custom sources participate in the import scan with progress feedback alongside the four built-in adapters.
+- **Skills Canonical Aggregation**: The skill import flow now aggregates detected skills by their **canonical filesystem source**, not just by display name. New `SkillImportUnit` units classify each skill into one of four buckets: `AutoImport` (clean cases), `AutoSkip` (already managed), `NeedsDecision` (ambiguous duplicates), or `Broken` (dangling symlinks / unreadable paths). Symlinks pointing to the same target across multiple tools are recognized as a single unit. The `DetectedSkill` model gains `canonical_source` and `broken` fields surfaced throughout the UI.
+- **Canonical Multi-Source Takeover**: Skill backups now distinguish between `Single` and `Canonical` takeovers via a new `TakeoverKind` enum, and track each discovery location through `OccurrenceRecord` entries. Restoring a canonical takeover now correctly rebuilds **all** original adapter-side junctions/symlinks (verified with a 4-adapter Windows roundtrip test).
+- **Skill Cleanup Confirmation & External Warnings**: New `SkillCleanupConfirmDialog` requires explicit confirmation before cleaning up external sources, and `SkillExternalWarning` highlights skills sourced from system paths or directories outside the managed set. The new `SkillOccurrencesList` shows where each skill was discovered.
+- **MCP Hot-Reload Aggregator**: After adding or importing an MCP service, the gateway aggregator now refreshes and emits `notifications/tools|resources|prompts/list_changed` to active `/mcp` sessions. Connected clients see new tools immediately — **no gateway restart required**. Broadcast uses non-blocking `try_send` with dead-channel pruning so a slow subscriber cannot stall command handling.
+- **Dynamic App Path Resolution**: New `useAppPaths` React hook surfaces real platform-resolved directory paths (backups, data, config) into UI text. `TakeoverStatusCard`, `SkillCleanupConfirmDialog`, and `SkillExternalWarning` now display the actual path instead of hardcoded values, with i18n placeholders for localized formatting.
+
+### Improved
+
+- **MCP Project-Scope Pollution Prevention (Story 11.30)**: Two-layer protection ensures the `mantra-gateway` server entry is **only** written to user-scope configs. Source-side guard (`is_user_scope_config_path` allowlist) rejects writes to project-level configs with `InvalidInput` (no spurious backups). A `ProjectScopeGuard` scans known projects on startup to clean legacy residue, and a `notify::RecommendedWatcher` (300 ms debounced) re-scans when `.cursor` / `.codex` / `.gemini` subdirectories appear at runtime. `sync_active_takeovers` silently skips legacy project-level backups instead of surfacing false-positive failures in the UI.
+- **MCP Service Add/Import Goes Async**: `create_mcp_service` and `execute_mcp_import` are now async, fold in the unified `refresh_aggregator_and_notify` helper, and the import path consolidates DB reads under a single lock to eliminate a TOCTOU window. Env resolver failures degrade to an empty snapshot rather than dropping the freshly written DB row.
+- **Production Build Hardening**: Test-only hooks (`set_test_home_override`, `PathResolver::with_paths`, `atomic_fs::rename_with_cross_fs_fallback`) are now gated behind a `test-hooks` Cargo feature; production builds no longer expose these surfaces. All four `SkillToolAdapter::user_skills_dir()` implementations and `safety::resolve_home` migrated from `dirs::home_dir` to `home::home_dir` so Windows tests honor `USERPROFILE` overrides without polluting the real user profile.
+
+### Fixed
+
+- **Skill Scanning — Absolute Canonical Source**: Fixed an issue where `canonical_source` could be returned as a relative path during skill detection. The scanner now guarantees an absolute path, preventing downstream path-joining bugs.
+- **Skill Backup Validation**: Tightened null-handling in `CreateSkillBackupRequest` so unset optional fields no longer round-trip as the string `"null"`.
+- **Linux AppImage Release Workflow**: Multiple iterations on the AppImage build pipeline — refined icon embedding, improved file handling and error paths, and streamlined the overall workflow. Release builds for Linux are now more reliable.
+- **Release Deployment**: Added interactive GitHub account selection during release deployment to prevent pushing to the wrong remote when multiple accounts are configured.
+
 ## [v0.11.5] - 2026-04-01
 
 ### Fixed
