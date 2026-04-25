@@ -6,6 +6,30 @@
 
 ---
 
+## [v0.11.6] - 2026-04-25
+
+### 新增
+
+- **Skills 自定义源目录管理（Story 15.22）**: 在「设置 → 开发」面板中新增 **Skills 源路径管理器**，允许用户将自定义目录注册为额外的 Skills 来源。支持列表查看、添加、更新、移除源路径，后端校验失败（`notAccessible`、`notFound` 等）会映射为本地化错误提示。自定义源会与四个内置适配器一同参与导入扫描并提供进度反馈。
+- **Skills 规范化聚合（Canonical Aggregation）**: Skills 导入流程现在按文件系统的**规范路径（canonical source）**而非仅按显示名称聚合检测到的 Skills。新的 `SkillImportUnit` 单元将每个 Skill 分类为四种状态之一：`AutoImport`（可直接导入）、`AutoSkip`（已纳管）、`NeedsDecision`（重名待决策）、`Broken`（断链或不可读）。多个工具中指向同一目标的 symlink 会被识别为单个单元。`DetectedSkill` 数据模型新增 `canonical_source` 和 `broken` 字段，并贯穿 UI 显示。
+- **规范化多源接管（Canonical Takeover）**: Skill 备份现在通过新的 `TakeoverKind` 枚举区分单目录接管（`Single`）与规范化多源接管（`Canonical`），并通过 `OccurrenceRecord` 条目记录每个发现位置。还原 Canonical 接管时会正确重建**所有**原始适配器侧的链接/Junction（已通过 4 个适配器的 Windows 端到端测试验证）。
+- **Skill 清理确认与外部源警告**: 新增 `SkillCleanupConfirmDialog`，清理外部源前需用户显式确认；新增 `SkillExternalWarning`，对来自系统路径或纳管范围外目录的 Skills 进行警示。新的 `SkillOccurrencesList` 组件显示每个 Skill 的发现位置。
+- **MCP 网关聚合器热更新**: 添加或导入 MCP 服务后，网关聚合器自动刷新并向活跃的 `/mcp` 会话广播 `notifications/tools|resources|prompts/list_changed` 通知。已连接的客户端**无需重启网关**即可看到新工具。广播采用非阻塞 `try_send` 并自动剔除已死的订阅通道，慢速订阅者无法阻塞命令处理。
+- **应用路径动态解析**: 新增 `useAppPaths` React Hook，将平台实际解析的目录路径（备份、数据、配置）注入 UI 文案。`TakeoverStatusCard`、`SkillCleanupConfirmDialog`、`SkillExternalWarning` 等组件不再使用硬编码路径，而是显示真实路径，并通过 i18n 占位符支持本地化格式化。
+
+### 优化
+
+- **MCP 项目作用域污染防护（Story 11.30）**: 双层防护确保 `mantra-gateway` 服务条目**仅**写入用户级配置。源头阻止：`inject_gateway` / `apply_takeover` / `update_gateway_config` 加入 `is_user_scope_config_path` 白名单，违例直接返回 `InvalidInput` 且不创建备份。历史残留清理 + 实时修正：`ProjectScopeGuard` 启动时扫描所有已知项目清除 `mantra-gateway` 残留，`notify::RecommendedWatcher` 监听 300 ms 防抖后重扫，`sync_watch_dirs` 覆盖运行期新建的 `.cursor` / `.codex` / `.gemini` 子目录。`sync_active_takeovers` 静默跳过遗留的项目级备份，避免在 UI 中误报失败。
+- **MCP 服务添加/导入异步化**: `create_mcp_service` 与 `execute_mcp_import` 改为异步，统一调用 `refresh_aggregator_and_notify` 助手函数；导入路径将多次数据库读取合并到单次锁内以消除 TOCTOU 时序窗口。环境变量解析失败时降级为空快照，而非丢弃刚写入的数据库行。
+- **生产构建强化**: 仅供测试使用的钩子（`set_test_home_override`、`PathResolver::with_paths`、`atomic_fs::rename_with_cross_fs_fallback`）现在通过 `test-hooks` Cargo 特性门控，生产构建不再暴露这些接口。所有四个 `SkillToolAdapter::user_skills_dir()` 实现与 `safety::resolve_home` 已从 `dirs::home_dir` 迁移到 `home::home_dir`，使 Windows 测试能够正确响应 `USERPROFILE` 环境变量覆盖，避免污染真实的用户主目录。
+
+### 修复
+
+- **Skill 扫描 — 规范源路径绝对化**: 修复 Skill 检测过程中 `canonical_source` 可能返回相对路径的问题。扫描器现在确保始终返回绝对路径，避免下游路径拼接 Bug。
+- **Skill 备份字段校验**: 收紧 `CreateSkillBackupRequest` 的空值处理，未设置的可选字段不再以字符串 `"null"` 形式被序列化回传。
+- **Linux AppImage 发布流水线**: 对 AppImage 构建流水线进行多轮迭代——优化图标嵌入、改进文件处理与错误路径、精简整体流程，Linux 平台的发布构建更加稳定。
+- **发布部署**: 在发布部署流程中新增交互式 GitHub 账号选择，避免在配置了多个账号时推送到错误的远端。
+
 ## [v0.11.5] - 2026-04-01
 
 ### 修复
