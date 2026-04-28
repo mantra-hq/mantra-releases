@@ -6,6 +6,20 @@
 
 ---
 
+## [v0.11.7] - 2026-04-28
+
+### Added
+
+- **Skills Tag System**: Users can now attach tags to skills and manage them in bulk via a dedicated **Tag Manager** panel (rename, delete, merge tags; batch-assign tags to multiple skills). Tags declared in a skill's frontmatter are automatically imported as local tag associations on takeover. SkillCards display tag chips (up to 3 + overflow count), and the SkillsHub list can be filtered by one or more tags simultaneously.
+- **Local Skill Ratings & Full-Text Search**: Skills can now be given a private 1–5 star rating that stays local and never leaks into the shared file. A full-text search engine indexes skill names, descriptions, body content, tags, and associated projects, returning highlighted result snippets. The filter sidebar lets users narrow results by tool adapter, tag, rating range, conflict state, and associated project — with active filters shown as dismissible chips.
+- **Skill Version Snapshots & Timeline Rollback**: After a skill is under Mantra management, content changes are automatically captured as passive snapshots. Users can browse the snapshot timeline in the Skill Detail view and roll back to any prior version with a single click.
+- **GitHub Repository Bulk Import**: A new **GitHub Import** tab in the import sheet lets users import all skills from a GitHub repository at once via HTTPS shallow clone. Imported skills are tracked with their remote origin so that future upstream changes can be detected.
+- **Upstream Change Detection & Three-Way Diff**: For GitHub-imported skills, users can check for upstream updates. When the remote version diverges from the local copy, a **Three-Way Compare** dialog presents a line-level diff across the original imported version, the current local state, and the latest remote version. Users can resolve conflicts skill-by-skill or apply a batch strategy (Overwrite / Rename with Suffix / Skip).
+- **Skill Name Disambiguation on Import**: When an imported skill shares a display name with an existing skill, Mantra now automatically appends a suffix to keep the new entry distinct. The original name is preserved and no data is lost.
+- **Skill Source Origin Detection**: During scanning, Mantra reads the Git remote configuration of each skill directory and records its GitHub origin (host / owner / repository). When multiple skills share the same display name, the Skill Card subtitle now shows the origin path to help users distinguish skills cloned from different accounts or forks.
+
+---
+
 ## [v0.11.6] - 2026-04-25
 
 ### Added
