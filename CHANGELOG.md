@@ -6,6 +6,19 @@
 
 ---
 
+## [v0.11.8] - 2026-04-28
+
+### Improved
+
+- **Mode Navigation Rail**: Replaced the compact mode switcher in the toolbar with a dedicated vertical navigation rail on the left edge. Each mode now has its own icon and distinct accent color — green for Analytics, blue for Playback, amber for Compress, and purple for Replay — making modes easier to discover and distinguish at a glance.
+- **Streamlined Context Bar**: The top bar has been slimmed down and refocused on context — breadcrumb navigation, search, and session actions — removing clutter that has moved to the new Mode Rail. The result is a cleaner, less crowded header.
+- **Playback View Refinements**: Message bubbles now display a subtle role label and reveal their timestamp on hover, improving readability during session replay. Tool call cards and tool output blocks received visual polish for better scanability.
+- **Replay Mode Visual Identity**: Replay controls and panels adopt a consistent purple accent palette, giving the mode a distinct look and making playback state (current step, operation type) easier to follow.
+- **Analytics & Compress Mode Polish**: Metric cards, charts, and compress-mode panels received layout and color refinements for improved visual hierarchy and consistency with the new mode identity system.
+- **Filter Bar Responsiveness**: The message filter bar and type filter chips have been updated for better layout behavior across different panel widths.
+
+---
+
 ## [v0.11.7] - 2026-04-28
 
 ### Added
