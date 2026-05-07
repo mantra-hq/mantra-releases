@@ -6,6 +6,18 @@
 
 ---
 
+## [v0.12.0] - 2026-05-07
+
+### Added
+
+- **GitHub Copilot Chat Import**: Mantra now supports importing AI coding sessions from GitHub Copilot Chat. All major VSCode distributions are supported — VS Code, VS Code Insiders, VSCodium, Cursor, and more — and sessions can be imported both locally and via remote SSH. Live session monitoring works for in-progress Copilot Chat conversations, so new messages appear in real time without re-importing.
+
+- **OpenCode Import**: Import AI coding sessions from OpenCode CLI. Both the sst/opencode and opencode-ai/opencode variants are supported via a single parser since they share the same storage layout. Sessions are read directly from the SQLite store on disk with real-time incremental updates — new messages surface in Mantra as you code.
+
+- **Import Wizard — 6 Source Cards**: The import wizard's source selection page now shows all six supported AI tools in a single view: Claude Code, Cursor, Copilot Chat, Codex CLI, Gemini CLI, and OpenCode. Each tool has a dedicated brand icon and a clear distribution label, so you can tell at a glance which VSCode variant or runtime a session came from.
+
+---
+
 ## [v0.11.8] - 2026-04-28
 
 ### Improved
