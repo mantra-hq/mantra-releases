@@ -6,6 +6,18 @@
 
 ---
 
+## [v0.12.0] - 2026-05-07
+
+### 新增
+
+- **GitHub Copilot Chat 导入支持**: Mantra 现在支持从 GitHub Copilot Chat 导入 AI 编程会话。全面兼容主流 VSCode 发行版——VS Code、VS Code Insiders、VSCodium、Cursor 等——支持本地导入与通过 SSH 从远端主机导入。对进行中的 Copilot Chat 会话提供实时监听，新消息无需重新导入即可即时出现。
+
+- **OpenCode 导入支持**: 支持从 OpenCode CLI 导入 AI 编程会话。sst/opencode 与 opencode-ai/opencode 两个版本共享同一存储格式，由统一的解析器覆盖，无需分别配置。会话通过直接读取本地 SQLite 存储获取，并支持实时增量更新——新消息在编程过程中自动出现在 Mantra 中。
+
+- **导入向导扩展至 6 个来源**: 导入向导的来源选择页面现在在单一视图中展示所有六个支持的 AI 工具：Claude Code、Cursor、Copilot Chat、Codex CLI、Gemini CLI 和 OpenCode。每个工具配有专属品牌图标和清晰的发行版标签，让您一眼就能区分会话来自哪个 VSCode 变体或运行环境。
+
+---
+
 ## [v0.11.8] - 2026-04-28
 
 ### 优化
