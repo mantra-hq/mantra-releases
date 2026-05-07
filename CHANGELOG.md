@@ -16,6 +16,12 @@
 
 - **Import Wizard — 6 Source Cards**: The import wizard's source selection page now shows all six supported AI tools in a single view: Claude Code, Cursor, Copilot Chat, Codex CLI, Gemini CLI, and OpenCode. Each tool has a dedicated brand icon and a clear distribution label, so you can tell at a glance which VSCode variant or runtime a session came from.
 
+- **Error Reporting & Feedback**: When the application encounters an unexpected error, a dialog now appears letting you submit a bug report with optional details. A feedback entry in the navigation rail lets you send feedback at any time.
+
+### Fixed
+
+- **Codex Parser — Developer Role**: Sessions containing `developer`-role messages no longer fail to import. These messages are silently skipped, and unknown future roles are handled gracefully.
+
 ---
 
 ## [v0.11.8] - 2026-04-28
