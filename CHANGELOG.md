@@ -6,6 +6,14 @@
 
 ---
 
+## [v0.12.1] - 2026-05-08
+
+### Fixed
+
+- **Multi-byte Character Crash**: Fixed a crash that occurred when parsing AI session logs containing multi-byte UTF-8 characters (e.g., CJK punctuation like `：`). The truncation logic for oversized JSON entries could slice in the middle of a multi-byte character, causing a panic. This affected all parsers (Claude Code, Cursor, Codex, Gemini CLI, OpenCode) and the Replay diff preview. Sessions with non-ASCII content now import and display reliably.
+
+---
+
 ## [v0.12.0] - 2026-05-07
 
 ### Added
