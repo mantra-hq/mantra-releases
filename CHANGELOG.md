@@ -6,6 +6,14 @@
 
 ---
 
+## [v0.12.2] - 2026-05-10
+
+### Fixed
+
+- **Linux AppImage Desktop Integration**: The Linux AppImage now displays its application icon and name correctly in file managers and application launchers after desktop integration.
+
+---
+
 ## [v0.12.1] - 2026-05-08
 
 ### Fixed
