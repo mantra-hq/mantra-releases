@@ -6,6 +6,12 @@
 
 ---
 
+## [v0.12.4] - 2026-05-24
+
+### Improved
+
+- **Feedback Dialog**: When the feedback channel is unavailable, the dialog now shows a clear localized error message instead of failing silently. Also relaxed Content Security Policy to ensure feedback submission works reliably.
+
 ## [v0.12.3] - 2026-05-23
 
 ### Fixed
