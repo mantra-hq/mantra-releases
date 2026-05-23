@@ -6,6 +6,14 @@
 
 ---
 
+## [v0.12.3] - 2026-05-23
+
+### Fixed
+
+- **MCP Tool Lookup**: MCP services now correctly inherit the system PATH when Mantra is launched as a GUI application.
+
+---
+
 ## [v0.12.2] - 2026-05-10
 
 ### Fixed
