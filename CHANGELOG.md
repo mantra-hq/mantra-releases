@@ -6,6 +6,19 @@
 
 ---
 
+## [v0.12.5] - 2026-05-26
+
+### Improved
+
+- **Session Switcher Dropdown**: The session dropdown now uses list virtualization for smooth scrolling on projects with many sessions, with adaptive width and height that respect the viewport. Fixed a brief blank-list flash on the first frame when opening the dropdown.
+
+### Fixed
+
+- **Markdown Preview**: File contents returned by AI tools with leading line-number prefixes (e.g. `   1|...` or `42→...`) now render correctly in Markdown preview. Headings, lists, and tables are no longer broken by the prefix being misread as an indented code block. The raw source view is unchanged and still shows the original content.
+- **Soft Line Breaks in Preview**: Single newlines in Markdown content now produce visible line breaks in preview, matching how the text reads in the source view.
+
+---
+
 ## [v0.12.4] - 2026-05-24
 
 ### Improved
