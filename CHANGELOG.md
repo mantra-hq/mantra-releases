@@ -6,6 +6,16 @@
 
 ---
 
+## [v0.12.6] - 2026-05-29
+
+### Fixed
+
+- **Project Drawer**: Fixed a crash when scrolling the project list, caused by an out-of-bounds index in the virtualized list.
+- **File Dialogs**: Native file open/save dialogs now handle errors gracefully instead of crashing the application.
+- **Session Dropdown**: Fixed the session dropdown appearing blank when reopened.
+
+---
+
 ## [v0.12.5] - 2026-05-26
 
 ### Improved
