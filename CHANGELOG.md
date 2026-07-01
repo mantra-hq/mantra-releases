@@ -6,6 +6,14 @@
 
 ---
 
+## [v0.12.7] - 2026-07-01
+
+### Fixed
+
+- **Older macOS Compatibility**: Fixed a crash that could occur when viewing session details or previewing Markdown/code files on older versions of macOS.
+
+---
+
 ## [v0.12.6] - 2026-05-29
 
 ### Fixed
