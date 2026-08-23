@@ -6,6 +6,20 @@
 
 ---
 
+## [v0.13.0] - 2026-08-23
+
+### Added
+
+- **OpenCode Support**: Skills Hub now supports OpenCode as a fifth tool adapter (user-level `~/.config/opencode/skills/`, project-level `.opencode/skills/`). Skills imported into Mantra can be associated with projects using OpenCode and discovered by it.
+- **Tool Installation Detection**: New `detect_skill_tools` API reports which AI tools are installed on the machine. Skill linking now follows the "only link what's there" convention: user-level fan-out skips tools that are not installed instead of creating their config directories from scratch.
+- **Dangling Link Repair & Cleanup**: Symlinks pointing at Mantra storage that became unreachable (e.g. after the data directory was moved) are now detected and rebuilt during fan-out. A new `cleanup_dangling_skill_links` command sweeps all tool directories and removes dangling Mantra-managed links, while leaving foreign broken links untouched.
+
+### Improved
+
+- **Project Link Guard**: Linking a skill to a project no longer creates `.claude/`-style directories for tools the project doesn't use; adapters without a project config root are skipped silently.
+
+---
+
 ## [v0.12.7] - 2026-07-01
 
 ### Fixed
